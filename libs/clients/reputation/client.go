@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 
@@ -21,6 +22,7 @@ type Client interface {
 	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
 	IsLinkingReputable(ctx context.Context, id uuid.UUID, country string) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
+	CreateReputationSummary(ctx context.Context, walletID, geoLocation string) error
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -305,4 +307,26 @@ func (c *HTTPClient) IsWalletOnPlatform(
 	}
 
 	return resp.IsOnPlatform, nil
+}
+
+type walletsRequest struct {
+	Geolocation string `json:"geo"`
+}
+
+func (c *HTTPClient) CreateReputationSummary(ctx context.Context, walletID, geolocation string) error {
+	b := walletsRequest{
+		Geolocation: geolocation,
+	}
+
+	req, err := c.client.NewRequest(ctx, http.MethodPut, fmt.Sprintf("v1/reputation-summary/%s", walletID), b, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.Do(ctx, req, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

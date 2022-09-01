@@ -165,6 +165,10 @@ const (
 	AWSRegionCTXKey CTXKey = "aws_region"
 	// RequireUpholdCountryCTXKey - the context key for getting the rate limit
 	RequireUpholdCountryCTXKey CTXKey = "require_uphold_country"
+
+	// DisabledWalletGeolocationsCTXKey context key used to retrieve the S3 object name for disabled wallet geolocations.
+	DisabledWalletGeolocationsCTXKey CTXKey = "disabled_wallet_geolocations"
+
 	// PlaystoreJSONKeyCTXKey - the context key for playstore json key
 	PlaystoreJSONKeyCTXKey CTXKey = "playstore_json_key"
 )

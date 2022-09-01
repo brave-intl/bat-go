@@ -2,7 +2,6 @@ package cmd
 
 import (
 	cmdutils "github.com/brave-intl/bat-go/cmd"
-
 	// pprof imports
 	_ "net/http/pprof"
 
@@ -58,4 +57,8 @@ func init() {
 		Bind("enable-link-drain-flag").
 		Require()
 
+	walletsCmdBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
+		"the json file containing disabled geolocations for wallet creation").
+		Env("DISABLED_WALLET_GEOLOCATIONS").
+		Bind("disabled-wallet-geolocations")
 }

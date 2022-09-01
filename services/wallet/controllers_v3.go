@@ -23,9 +23,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// ------------------ V3 Wallet APIs ---------------
-
-// CreateUpholdWalletV3 - produces an http handler for the service s which handles creation of uphold wallets
+// CreateUpholdWalletV3 produces a http handler for the service which handles creation of uphold wallets.
 func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var (
 		ucReq       = new(UpholdCreationRequest)
@@ -600,27 +598,6 @@ func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			}
 			logger.Error().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
 			return handlers.WrapError(err, "error unlinking wallet", http.StatusBadRequest)
-		}
-
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
-	}
-}
-
-// IncreaseLinkingLimitV3 - increase the allowable linking limit for the specified paymentId by one
-func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			ctx         = r.Context()
-			custodianID = chi.URLParam(r, "custodian_id")
-		)
-		// get logger from context
-		logger := logging.Logger(ctx, "wallet.IncreaseLinkingLimitV3")
-
-		logger.Debug().Str("custodianId", custodianID).Msg("increasing linking limit for custodian id")
-		err := s.IncreaseLinkingLimit(ctx, custodianID)
-		if err != nil {
-			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to increase linking limit")
-			return handlers.WrapError(err, "error increasing linking limit", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(ctx, nil, w, http.StatusOK)

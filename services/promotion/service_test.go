@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package promotion
 
@@ -7,23 +6,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
-
 	"math/rand"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/inputs"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
+	"github.com/brave-intl/bat-go/libs/test"
 	"github.com/brave-intl/bat-go/services/wallet"
+	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
+
 	// re-using viper bind-env for wallet env variables
 	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
-	"github.com/brave-intl/bat-go/libs/inputs"
-	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -75,8 +73,10 @@ func TestServiceTestSuite(t *testing.T) {
 
 func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
 	ctx := context.Background()
-	r := chi.NewRouter()
-	r, ctx, walletService := wallet.SetupService(ctx, r)
+	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, test.RandomString())
+	ctx = context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, test.RandomString())
+
+	ctx, walletService := wallet.SetupService(ctx)
 	promotionDB, promotionRODB, err := NewPostgres()
 	suite.Require().NoError(err, "unable connect to promotion db")
 	s, err := InitService(
@@ -86,6 +86,7 @@ func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
 		walletService,
 	)
 	suite.Require().NoError(err)
+
 	return s, ctx
 }
 

@@ -82,9 +82,11 @@ type Datastore interface {
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
 	// InsertWallet inserts the given wallet
 	InsertWallet(ctx context.Context, wallet *walletutils.Info) error
+	// InsertWalletTx inserts the given wallet as part of provided sql.Tx transaction.
+	InsertWalletTx(ctx context.Context, tx *sqlx.Tx, wallet *walletutils.Info) error
 	// InsertBitFlyerRequestID - attempt an insert on a request id
 	InsertBitFlyerRequestID(ctx context.Context, requestID string) error
-	// UpsertWallets inserts a wallet if it does not already exist
+	// UpsertWallet UpsertWallets inserts a wallet if it does not already exist
 	UpsertWallet(ctx context.Context, wallet *walletutils.Info) error
 	// ConnectCustodialWallet - connect the wallet's custodial verified wallet.
 	ConnectCustodialWallet(ctx context.Context, cl *CustodianLink, depositDest string) error
@@ -296,6 +298,25 @@ func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) 
 		return err
 	}
 
+	return nil
+}
+
+// InsertWalletTx inserts the given wallet
+func (pg *Postgres) InsertWalletTx(ctx context.Context, tx *sqlx.Tx, wallet *walletutils.Info) error {
+	statement := `
+	INSERT INTO wallets (id, provider, provider_id, public_key)
+	VALUES ($1, $2, $3, $4)
+	ON CONFLICT DO NOTHING`
+	_, err := tx.ExecContext(ctx,
+		statement,
+		wallet.ID,
+		wallet.Provider,
+		wallet.ProviderID,
+		wallet.PublicKey,
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -754,10 +775,10 @@ func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UU
 
 }
 
-func rollbackFn(ctx context.Context, pg *Postgres, tx *sqlx.Tx) func() {
+func rollbackFn(ctx context.Context, datastore Datastore, tx *sqlx.Tx) func() {
 	return func() {
 		logger(ctx).Debug().Msg("rolling back transaction")
-		pg.RollbackTx(tx)
+		datastore.RollbackTx(tx)
 	}
 }
 
@@ -773,7 +794,7 @@ func commitFn(ctx context.Context, tx *sqlx.Tx) func() error {
 }
 
 // getTx will get or create a tx on the context, if created hands back rollback and commit functions
-func getTx(ctx context.Context, pg *Postgres) (context.Context, *sqlx.Tx, func(), func() error, error) {
+func getTx(ctx context.Context, datastore Datastore) (context.Context, *sqlx.Tx, func(), func() error, error) {
 	// create a sublogger
 	sublogger := logger(ctx)
 	sublogger.Debug().Msg("getting tx from context")
@@ -781,13 +802,13 @@ func getTx(ctx context.Context, pg *Postgres) (context.Context, *sqlx.Tx, func()
 	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
 	if !noContextTx {
 		sublogger.Debug().Msg("no tx in context")
-		tx, err := createTx(ctx, pg)
+		tx, err := createTx(ctx, datastore)
 		if err != nil || tx == nil {
 			sublogger.Error().Err(err).Msg("error creating tx")
 			return ctx, nil, func() {}, func() error { return nil }, fmt.Errorf("failed to create tx: %w", err)
 		}
 		ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
-		return ctx, tx, rollbackFn(ctx, pg, tx), commitFn(ctx, tx), nil
+		return ctx, tx, rollbackFn(ctx, datastore, tx), commitFn(ctx, tx), nil
 	}
 	return ctx, tx, func() {}, func() error { return nil }, nil
 }
@@ -1040,10 +1061,10 @@ func logger(ctx context.Context) *zerolog.Logger {
 }
 
 // helper to create a tx
-func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
+func createTx(ctx context.Context, datastore Datastore) (tx *sqlx.Tx, err error) {
 	logger(ctx).Debug().
 		Msg("creating transaction")
-	tx, err = pg.RawDB().Beginx()
+	tx, err = datastore.RawDB().Beginx()
 	if err != nil {
 		logger(ctx).Error().Err(err).
 			Msg("error creating transaction")

@@ -36,6 +36,20 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// CreateReputationSummary mocks base method.
+func (m *MockClient) CreateReputationSummary(ctx context.Context, walletID, geoLocation string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateReputationSummary", ctx, walletID, geoLocation)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateReputationSummary indicates an expected call of CreateReputationSummary.
+func (mr *MockClientMockRecorder) CreateReputationSummary(ctx, walletID, geoLocation interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateReputationSummary", reflect.TypeOf((*MockClient)(nil).CreateReputationSummary), ctx, walletID, geoLocation)
+}
+
 // IsDrainReputable mocks base method.
 func (m *MockClient) IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error) {
 	m.ctrl.T.Helper()

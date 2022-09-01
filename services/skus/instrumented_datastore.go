@@ -240,7 +240,7 @@ func (_d DatastoreWithPrometheus) GetOrder(orderID uuid.UUID) (op1 *Order, err e
 }
 
 // GetOrderByExternalID implements Datastore
-func (_d DatastoreWithPrometheus) GetOrderByExternalID(s1 string) (op1 *Order, err error) {
+func (_d DatastoreWithPrometheus) GetOrderByExternalID(externalID string) (op1 *Order, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -250,7 +250,7 @@ func (_d DatastoreWithPrometheus) GetOrderByExternalID(s1 string) (op1 *Order, e
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderByExternalID", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetOrderByExternalID(s1)
+	return _d.base.GetOrderByExternalID(externalID)
 }
 
 // GetOrderCreds implements Datastore
