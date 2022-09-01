@@ -58,7 +58,7 @@ func init() {
 		Require()
 
 	walletsCmdBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
-		"the bucket for which parameters are merged into this service").
+		"the json file containing disabled geolocations for wallet creation").
 		Env("DISABLED_WALLET_GEOLOCATIONS").
 		Bind("disabled-wallet-geolocations")
 }
