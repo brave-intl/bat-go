@@ -56,7 +56,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 
 	reputationClient := mockreputation.NewMockClient(ctrl)
 	reputationClient.EXPECT().
-		UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
+		CreateReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	geolocation := "AF"
@@ -165,7 +165,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 	errReputation := errors.New(test.RandomString())
 	reputationClient := mockreputation.NewMockClient(ctrl)
 	reputationClient.EXPECT().
-		UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
+		CreateReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errReputation)
 
 	locationValidator := wallet.NewMockGeoValidator(ctrl)
