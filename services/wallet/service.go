@@ -184,7 +184,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	return ctx, s
 }
 
-func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) {
+func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
@@ -244,6 +244,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) {
 	r.Route("/v4/wallets", func(r chi.Router) {
 		r.Post("/brave", middleware.InstrumentHandlerFunc("CreateBraveWalletV4", CreateBraveWalletV4(s)))
 	})
+
+	return r
 }
 
 // SubmitAnonCardTransaction validates and submits a transaction on behalf of an anonymous card

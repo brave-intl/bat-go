@@ -56,9 +56,4 @@ func init() {
 		Env("ENABLE_LINKING_DRAINING").
 		Bind("enable-link-drain-flag").
 		Require()
-
-	walletsCmdBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
-		"the json file containing disabled geolocations for wallet creation").
-		Env("DISABLED_WALLET_GEOLOCATIONS").
-		Bind("disabled-wallet-geolocations")
 }

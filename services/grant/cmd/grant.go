@@ -99,6 +99,11 @@ func init() {
 		Bind("merge-param-bucket").
 		Env("MERGE_PARAM_BUCKET")
 
+	flagBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
+		"the json file containing disabled geolocations for wallet creation").
+		Env("DISABLED_WALLET_GEOLOCATIONS").
+		Bind("disabled-wallet-geolocations")
+
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
 		Bind("wallet-on-platform-prior-to").
@@ -279,6 +284,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
 	ctx, walletService = wallet.SetupService(ctx)
+	r = wallet.RegisterRoutes(ctx, walletService, r)
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
@@ -501,6 +507,9 @@ func GrantServer(
 
 	// the bucket for the custodian regions
 	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
+
+	// the json file containing disabled wallet geolocations.
+	ctx = context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, viper.Get("disabled-wallet-geolocations"))
 
 	// blacklisted countries
 	ctx = context.WithValue(ctx, appctx.BlacklistedCountryCodesCTXKey, viper.GetStringSlice("country-blacklist"))

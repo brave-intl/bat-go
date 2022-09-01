@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -28,9 +27,6 @@ func WalletRestRun(command *cobra.Command, args []string) {
 
 	logger, err := appctx.GetLogger(ctx)
 	cmdutils.Must(err)
-
-	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
-	ctx = context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, viper.Get("disabled-wallet-geolocations"))
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
