@@ -22,7 +22,7 @@ type Client interface {
 	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
 	IsLinkingReputable(ctx context.Context, id uuid.UUID, country string) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
-	UpdateWallet(ctx context.Context, walletID, geoLocation string) error
+	CreateReputationSummary(ctx context.Context, walletID, geoLocation string) error
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -313,7 +313,7 @@ type walletsRequest struct {
 	Geolocation string `json:"geo"`
 }
 
-func (c *HTTPClient) UpdateWallet(ctx context.Context, walletID, geolocation string) error {
+func (c *HTTPClient) CreateReputationSummary(ctx context.Context, walletID, geolocation string) error {
 	b := walletsRequest{
 		Geolocation: geolocation,
 	}

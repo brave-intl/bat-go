@@ -561,7 +561,7 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 
 	if ReputationGeoEnable {
 		op := func() (interface{}, error) {
-			return nil, service.repClient.UpdateWallet(ctx, info.ID, geolocation)
+			return nil, service.repClient.CreateReputationSummary(ctx, info.ID, geolocation)
 		}
 
 		_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
