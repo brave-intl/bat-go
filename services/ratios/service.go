@@ -20,10 +20,10 @@ import (
 var (
 	countGetRelativeCacheHitRate = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "count_gemini_wallet_account_validation",
-			Help: "Counts the number of gemini wallets requesting account validation partitioned by country code",
+			Name: "count_cg_get_relative_cache_hit_rate",
+			Help: "Counts the cache hits and misses for the GetRelative service that relative rates between currencies from coingecko",
 		},
-		[]string{"country_code", "status"},
+		[]string{"query", "result"},
 	)
 )
 
@@ -165,12 +165,12 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 		updated = time.Now()
 		countGetRelativeCacheHitRate.With(prometheus.Labels{
 			"query":  "coinIDs=" + coinIDs.String() + "&vsCurrencies=" + vsCurrencies.String(),
-			"result": "cache_hit",
+			"result": "cache_miss",
 		}).Inc()
 	} else {
 		countGetRelativeCacheHitRate.With(prometheus.Labels{
 			"query":  "coinIDs=" + coinIDs.String() + "&vsCurrencies=" + vsCurrencies.String(),
-			"result": "cache_miss",
+			"result": "cache_hit",
 		}).Inc()
 	}
 
