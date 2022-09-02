@@ -33,36 +33,33 @@ func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request
 		// perform validation based on public key that the user submits
 		ctx, publicKey, err := verifier.VerifyRequest(r)
 		if err != nil {
-			logging.FromContext(ctx).Error().Err(err).Msg("error creating rewards wallet")
-			return handlers.WrapError(err, "error creating rewards wallet", http.StatusUnauthorized)
+			logging.FromContext(ctx).Error().Err(err).Msg("error creating brave wallet")
+			return handlers.WrapError(err, "error creating brave wallet", http.StatusForbidden)
 		}
 
 		var c CreateBraveWalletV4Request
 		err = json.NewDecoder(r.Body).Decode(&c)
 		if err != nil {
-			logging.FromContext(ctx).Error().Err(err).Msg("error creating rewards wallet")
-			return handlers.WrapError(err, "error creating rewards wallet", http.StatusBadRequest)
+			logging.FromContext(ctx).Error().Err(err).Msg("error creating brave wallet")
+			return handlers.WrapError(err, "error creating brave wallet", http.StatusBadRequest)
 		}
 
 		if !govalidator.IsISO3166Alpha2(c.Geolocation) {
-			logging.FromContext(ctx).Error().Err(errGeolocationFormat).Msg("error creating rewards wallet")
-			return handlers.WrapError(errGeolocationFormat, "error creating rewards wallet", http.StatusBadRequest)
+			logging.FromContext(ctx).Error().Err(errGeolocationFormat).Msg("error creating brave wallet")
+			return handlers.WrapError(errGeolocationFormat, "error creating brave wallet", http.StatusBadRequest)
 		}
 
 		info, err := s.CreateBraveWallet(ctx, publicKey, c.Geolocation)
 		if err != nil {
 			logging.FromContext(ctx).Error().Err(err).
-				Msg("error creating rewards wallet")
+				Msg("error creating brave wallet")
 			switch {
-			case errors.Is(err, errWalletAlreadyExists):
-				return handlers.WrapError(errWalletAlreadyExists,
-					"error creating rewards wallet", http.StatusConflict)
 			case errors.Is(err, errGeoLocationDisabled):
 				return handlers.WrapError(errGeoLocationDisabled,
-					"error creating rewards wallet", http.StatusForbidden)
+					"error creating brave wallet", http.StatusForbidden)
 			default:
 				return handlers.WrapError(errorutils.ErrInternalServerError,
-					"error creating rewards wallet", http.StatusInternalServerError)
+					"error creating brave wallet", http.StatusInternalServerError)
 			}
 		}
 
