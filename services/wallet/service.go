@@ -170,11 +170,6 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		object: object,
 	}
 
-	logger.Debug().
-		Str("bucket", config.bucket).
-		Str("object", config.object).
-		Msg("creating geo validator")
-
 	geolocationValidator := NewGeolocationValidator(awsClient, config)
 
 	s, err := InitService(db, roDB, repClient, geminiClient, geolocationValidator, backoff.Retry)
