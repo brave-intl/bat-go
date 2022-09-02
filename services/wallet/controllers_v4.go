@@ -12,6 +12,8 @@ import (
 	"net/http"
 )
 
+var errGeolocationFormat = errors.New("error gelocation format must be ISO3166Alpha2")
+
 type CreateBraveWalletV4Request struct {
 	Geolocation string `json:"geolocation"`
 }
@@ -31,17 +33,20 @@ func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request
 		// perform validation based on public key that the user submits
 		ctx, publicKey, err := verifier.VerifyRequest(r)
 		if err != nil {
-			return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
+			logging.FromContext(ctx).Error().Err(err).Msg("error creating brave wallet")
+			return handlers.WrapError(err, "error creating brave wallet", http.StatusForbidden)
 		}
 
 		var c CreateBraveWalletV4Request
 		err = json.NewDecoder(r.Body).Decode(&c)
 		if err != nil {
-			return handlers.WrapError(err, "error decoding request body", http.StatusBadRequest)
+			logging.FromContext(ctx).Error().Err(err).Msg("error creating brave wallet")
+			return handlers.WrapError(err, "error creating brave wallet", http.StatusBadRequest)
 		}
 
 		if !govalidator.IsISO3166Alpha2(c.Geolocation) {
-			return handlers.WrapError(err, "error gelocation must be ISO3166Alpha2 format", http.StatusBadRequest)
+			logging.FromContext(ctx).Error().Err(errGeolocationFormat).Msg("error creating brave wallet")
+			return handlers.WrapError(errGeolocationFormat, "error creating brave wallet", http.StatusBadRequest)
 		}
 
 		info, err := s.CreateBraveWallet(ctx, publicKey, c.Geolocation)
