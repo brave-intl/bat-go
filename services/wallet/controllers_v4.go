@@ -34,7 +34,7 @@ func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request
 		ctx, publicKey, err := verifier.VerifyRequest(r)
 		if err != nil {
 			logging.FromContext(ctx).Error().Err(err).Msg("error creating rewards wallet")
-			return handlers.WrapError(err, "error creating rewards wallet", http.StatusForbidden)
+			return handlers.WrapError(err, "error creating rewards wallet", http.StatusUnauthorized)
 		}
 
 		var c CreateBraveWalletV4Request
@@ -54,6 +54,9 @@ func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request
 			logging.FromContext(ctx).Error().Err(err).
 				Msg("error creating rewards wallet")
 			switch {
+			case errors.Is(err, errWalletAlreadyExists):
+				return handlers.WrapError(errWalletAlreadyExists,
+					"error creating rewards wallet", http.StatusConflict)
 			case errors.Is(err, errGeoLocationDisabled):
 				return handlers.WrapError(errGeoLocationDisabled,
 					"error creating rewards wallet", http.StatusForbidden)

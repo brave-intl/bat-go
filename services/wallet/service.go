@@ -5,6 +5,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/backoff"
@@ -22,12 +26,10 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/go-chi/chi"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
-	"net/http"
-	"os"
-	"strconv"
 )
 
 var ReputationGeoEnable = isReputationGeoEnabled()
@@ -55,7 +57,10 @@ var (
 		http.StatusInternalServerError, http.StatusConflict}
 )
 
-var errGeoLocationDisabled = errors.New("geolocation is disabled")
+var (
+	errGeoLocationDisabled = errors.New("geolocation is disabled")
+	errWalletAlreadyExists = errors.New("wallet already exists")
+)
 
 type GeoValidator interface {
 	Validate(ctx context.Context, gelocation string) (bool, error)
@@ -558,6 +563,12 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 
 	err = service.Datastore.InsertWalletTx(ctx, tx, info)
 	if err != nil {
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" { // unique constraint violation
+				return nil, errWalletAlreadyExists
+			}
+		}
 		return nil, fmt.Errorf("error inserting brave wallet: %w", err)
 	}
 
