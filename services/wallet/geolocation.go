@@ -39,7 +39,7 @@ func (g GeolocationValidator) Validate(ctx context.Context, geolocation string) 
 			Key:    &g.config.object,
 		})
 	if err != nil {
-		return false, fmt.Errorf("failed to get payout status: %w", err)
+		return false, fmt.Errorf("error failed to get s3 object: %w", err)
 	}
 	defer func() {
 		err := out.Body.Close()
