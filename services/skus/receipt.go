@@ -56,11 +56,18 @@ func initClients(ctx context.Context) {
 func validateIOSReceipt(ctx context.Context, receipt interface{}) (string, error) {
 	logger := logging.Logger(ctx, "skus").With().Str("func", "validateIOSReceipt").Logger()
 
+	// get the shared key from the context
+	sharedKey, sharedKeyOK := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
+
 	if iosClient != nil {
 		// handle v1 receipt type
 		if v, ok := receipt.(SubmitReceiptRequestV1); ok {
 			req := appstore.IAPRequest{
-				ReceiptData: v.Blob,
+				ReceiptData:            v.Blob,
+				ExcludeOldTransactions: true,
+			}
+			if sharedKeyOK && len(sharedKey) > 0 {
+				req.Password = sharedKey
 			}
 			resp := &appstore.IAPResponse{}
 			if err := iosClient.Verify(ctx, req, resp); err != nil {

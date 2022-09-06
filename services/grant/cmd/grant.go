@@ -233,6 +233,12 @@ func init() {
 		"the playstore json key").
 		Bind("playstore-json-key").
 		Env("PLAYSTORE_JSON_KEY")
+
+	// appstore key
+	flagBuilder.Flag().String("apple-receipt-shared-key", "",
+		"the appstore shared key").
+		Bind("apple-receipt-shared-key").
+		Env("APPLE_RECEIPT_SHARED_KEY")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -527,6 +533,8 @@ func GrantServer(
 			Msg("failed to decode the playstore json key")
 	}
 	ctx = context.WithValue(ctx, appctx.PlaystoreJSONKeyCTXKey, jsonKey)
+
+	ctx = context.WithValue(ctx, appctx.AppleReceiptSharedKeyCTXKey, viper.GetString("apple-receipt-shared-key"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 
