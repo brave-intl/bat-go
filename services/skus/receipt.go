@@ -67,6 +67,7 @@ func validateIOSReceipt(ctx context.Context, receipt interface{}) (string, error
 				logger.Error().Err(err).Msg("failed to verify receipt")
 				return "", fmt.Errorf("failed to verify receipt: %w", err)
 			}
+			logger.Debug().Msg(fmt.Sprintf("%+v", resp))
 			// get the transaction id back
 			if len(resp.Receipt.InApp) < 1 {
 				logger.Error().Msg("failed to verify receipt, no in app info")
