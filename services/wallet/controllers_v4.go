@@ -31,29 +31,30 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			Opts:     crypto.Hash(0),
 		}
 
+		logger := logging.Logger(r.Context(), "wallet.CreateWalletV4")
+
 		// perform validation based on public key that the user submits
 		ctx, publicKey, err := verifier.VerifyRequest(r)
 		if err != nil {
-			logging.FromContext(ctx).Error().Err(err).Msg("error creating rewards wallet")
+			logger.Error().Err(err).Msg("error creating rewards wallet")
 			return handlers.WrapError(err, "error creating rewards wallet", http.StatusUnauthorized)
 		}
 
 		var c CreateWalletV4Request
 		err = json.NewDecoder(r.Body).Decode(&c)
 		if err != nil {
-			logging.FromContext(ctx).Error().Err(err).Msg("error creating rewards wallet")
+			logger.Error().Err(err).Msg("error creating rewards wallet")
 			return handlers.WrapError(err, "error creating rewards wallet", http.StatusBadRequest)
 		}
 
 		if !govalidator.IsISO3166Alpha2(c.GeoCountry) {
-			logging.FromContext(ctx).Error().Err(errGeoCountryFormat).Msg("error creating rewards wallet")
+			logger.Error().Err(errGeoCountryFormat).Msg("error creating rewards wallet")
 			return handlers.WrapError(errGeoCountryFormat, "error creating rewards wallet", http.StatusBadRequest)
 		}
 
 		info, err := s.CreateRewardsWallet(ctx, publicKey, c.GeoCountry)
 		if err != nil {
-			logging.FromContext(ctx).Error().Err(err).
-				Msg("error creating rewards wallet")
+			logger.Error().Err(err).Msg("error creating rewards wallet")
 			switch {
 			case errors.Is(err, errWalletAlreadyExists):
 				return handlers.WrapError(errWalletAlreadyExists,
