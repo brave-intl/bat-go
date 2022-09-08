@@ -81,7 +81,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 
 	rw := httptest.NewRecorder()
 
-	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err)
@@ -130,7 +130,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 
 	rw := httptest.NewRecorder()
 
-	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err)
@@ -188,7 +188,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 
 	rw := httptest.NewRecorder()
 
-	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err)
