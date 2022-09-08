@@ -246,9 +246,7 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 			"GetUpholdWalletBalance", GetUpholdWalletBalanceV3))
 	})
 
-	r.Route("/v4/wallets", func(r chi.Router) {
-		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
-	})
+	r.Post("/v4/wallets", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
 
 	return r
 }
