@@ -153,7 +153,6 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 	// attempt to fetch from cache
 	rates, updated, err := s.GetRelativeFromCache(ctx, vsCurrencies, []CoingeckoCoin(coinIDs)...)
 	if err != nil || rates == nil {
-
 		if err != nil {
 			logger.Debug().Err(err).Msg("failed to fetch cached relative rates")
 		}
@@ -174,12 +173,21 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 		}).Inc()
 	}
 
+	// Example rate object
+	// {
+	// 	"basic-attention-token": {
+	// 		"eth":0.00020012,
+	// 		"eth_24h_change":-2.6022589094564683,
+	// 		"usd":0.327208,
+	// 		"usd_24h_change":1.815019912452554
+	// 	}
+	// }
 	if duration != "1d" {
 		// fill change with 0s ( it's unused for multiple coinIDs and we will overwrite for single )
 		out := map[string]map[string]decimal.Decimal{}
-		for k, v := range *rates {
+		for k, v := range *rates { // k is coinID, v is a map of vsCurrencies and vsCurrency24changes to => decimal
 			innerOut := map[string]decimal.Decimal{}
-			for kk, vv := range v {
+			for kk, vv := range v { // kk is a vsCurrency OR vsCurrency24changes, and v is decimal rate or absolute change value
 				if !strings.HasSuffix(kk, "_24h_change") {
 					innerOut[kk+"_timeframe_change"] = decimal.Zero
 					innerOut[kk] = vv
@@ -188,6 +196,7 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 			out[k] = innerOut
 		}
 
+		// Only need to fetch accurate change over duration values if one coin ID supplied
 		if len(coinIDs) == 1 {
 			// request history for duration to calculate change
 			chart, _, err := s.coingecko.FetchMarketChart(ctx, coinIDs[0].String(), vsCurrencies[0].String(), duration.ToDays())
@@ -196,7 +205,10 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 				return nil, fmt.Errorf("failed to fetch chart from coingecko: %w", err)
 			}
 
+			// TODO: why do we assume only 1 vs currency? We accept multiple
 			current := out[coinIDs[0].String()][vsCurrencies[0].String()]
+			// previous is the second entry in the prices market chart, and can help use calculate the
+			// change
 			previous := chart.Prices[0][1]
 			change := decimal.Zero
 			// division by error when previous is zero

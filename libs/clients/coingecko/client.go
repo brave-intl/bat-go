@@ -121,6 +121,7 @@ func (c *HTTPClient) FetchSimplePrice(ctx context.Context, ids string, vsCurrenc
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("FetchSimplePrice : Making http request to coingecko:", "ids", ids, "vsCurrencies", vsCurrencies)
 
 	var body SimplePriceResponse
 	_, err = c.client.Do(ctx, req, &body)
