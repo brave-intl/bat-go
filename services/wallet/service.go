@@ -58,7 +58,7 @@ var (
 )
 
 var (
-	errGeoLocationDisabled = errors.New("geolocation is disabled")
+	errGeoCountryDisabled  = errors.New("geo country is disabled")
 	errWalletAlreadyExists = errors.New("wallet already exists")
 )
 
@@ -78,14 +78,14 @@ type Service struct {
 
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client,
-	geminiClient gemini.Client, geolocationValidator GeoValidator,
+	geminiClient gemini.Client, geoCountryValidator GeoValidator,
 	retry backoff.RetryFunc) (*Service, error) {
 	service := &Service{
 		Datastore:    datastore,
 		RoDatastore:  roDatastore,
 		repClient:    repClient,
 		geminiClient: geminiClient,
-		geoValidator: geolocationValidator,
+		geoValidator: geoCountryValidator,
 		retry:        retry,
 	}
 	return service, nil
@@ -127,7 +127,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	// setup reputation client
 	repClient, err := reputation.New()
-	// its okay to not fatally fail if this environment is local and we cant make a rep client
+	// it's okay to not fatally fail if this environment is local and we cant make a rep client
 	if err != nil && os.Getenv("ENV") != "local" {
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -159,9 +159,9 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		logger.Fatal().Msg("failed to initialize wallet service, misconfiguration for custodian regions bucket")
 	}
 
-	object, ok := ctx.Value(appctx.DisabledWalletGeolocationsCTXKey).(string)
+	object, ok := ctx.Value(appctx.DisabledWalletGeoCountriesCTXKey).(string)
 	if !ok {
-		logger.Fatal().Err(errors.New("wallet geolocation disabled ctx key value not found")).
+		logger.Fatal().Err(errors.New("wallet geo countries disabled ctx key value not found")).
 			Msg("failed to initialize wallet service")
 	}
 
@@ -170,9 +170,9 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		object: object,
 	}
 
-	geolocationValidator := NewGeolocationValidator(awsClient, config)
+	geoCountryValidator := NewGeoCountryValidator(awsClient, config)
 
-	s, err := InitService(db, roDB, repClient, geminiClient, geolocationValidator, backoff.Retry)
+	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -247,7 +247,7 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 	})
 
 	r.Route("/v4/wallets", func(r chi.Router) {
-		r.Post("/brave", middleware.InstrumentHandlerFunc("CreateBraveWalletV4", CreateBraveWalletV4(s)))
+		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
 	})
 
 	return r
@@ -535,16 +535,16 @@ func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian s
 	return nil
 }
 
-// CreateBraveWallet creates a brave rewards wallet and informs the reputation service.
+// CreateRewardsWallet creates a brave rewards wallet and informs the reputation service.
 // If either the local transaction or call to the reputation service fails then the wallet is not created.
-func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string, geolocation string) (*walletutils.Info, error) {
-	valid, err := service.geoValidator.Validate(ctx, geolocation)
+func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey string, geoCountry string) (*walletutils.Info, error) {
+	valid, err := service.geoValidator.Validate(ctx, geoCountry)
 	if err != nil {
-		return nil, fmt.Errorf("error validating geolocation: %w", err)
+		return nil, fmt.Errorf("error validating geo country: %w", err)
 	}
 
 	if !valid {
-		return nil, errGeoLocationDisabled
+		return nil, errGeoCountryDisabled
 	}
 
 	var altCurrency = altcurrency.BAT
@@ -569,12 +569,12 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 				return nil, errWalletAlreadyExists
 			}
 		}
-		return nil, fmt.Errorf("error inserting brave wallet: %w", err)
+		return nil, fmt.Errorf("error inserting rewards wallet: %w", err)
 	}
 
 	if ReputationGeoEnable {
 		op := func() (interface{}, error) {
-			return nil, service.repClient.CreateReputationSummary(ctx, info.ID, geolocation)
+			return nil, service.repClient.CreateReputationSummary(ctx, info.ID, geoCountry)
 		}
 
 		_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
@@ -585,7 +585,7 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 
 	err = commit()
 	if err != nil {
-		return nil, fmt.Errorf("error comitting brave wallet transaction: %w", err)
+		return nil, fmt.Errorf("error comitting rewards wallet transaction: %w", err)
 	}
 
 	return info, nil

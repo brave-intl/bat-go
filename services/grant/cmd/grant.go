@@ -99,10 +99,10 @@ func init() {
 		Bind("merge-param-bucket").
 		Env("MERGE_PARAM_BUCKET")
 
-	flagBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
-		"the json file containing disabled geolocations for wallet creation").
-		Env("DISABLED_WALLET_GEOLOCATIONS").
-		Bind("disabled-wallet-geolocations")
+	flagBuilder.Flag().String("disabled-wallet-geo-countries", "disabled-wallet-geo-countries.json",
+		"the json file containing disabled geo countries for wallet creation").
+		Env("DISABLED_WALLET_GEO_COUNTRIES").
+		Bind("disabled-wallet-geo-countries")
 
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
@@ -508,8 +508,8 @@ func GrantServer(
 	// the bucket for the custodian regions
 	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
 
-	// the json file containing disabled wallet geolocations.
-	ctx = context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, viper.Get("disabled-wallet-geolocations"))
+	// the json file containing disabled wallet geo countries.
+	ctx = context.WithValue(ctx, appctx.DisabledWalletGeoCountriesCTXKey, viper.Get("disabled-wallet-geo-countries"))
 
 	// blacklisted countries
 	ctx = context.WithValue(ctx, appctx.BlacklistedCountryCodesCTXKey, viper.GetStringSlice("country-blacklist"))
