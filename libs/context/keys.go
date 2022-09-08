@@ -132,7 +132,7 @@ const (
 
 	// RateLimiterBurstCTXKey - context key for allowing a bursting rate limiter
 	RateLimiterBurstCTXKey CTXKey = "rate_limit_burst"
-	// NoUnlinkPriorToDurationCTXKey - the iso duration of time that no unlinkings must have happened
+	// NoUnlinkPriorToDurationCTXKey - the iso duration of time that no unlinking must have happened
 	NoUnlinkPriorToDurationCTXKey CTXKey = "no_unlinkings_prior_to"
 	// CoingeckoServerCTXKey - the context key for getting the coingecko server
 	CoingeckoServerCTXKey CTXKey = "coingecko_server"
@@ -145,7 +145,7 @@ const (
 	CoingeckoSymbolToIDCTXKey CTXKey = "coingecko_symbol_to_id"
 	// CoingeckoContractToIDCTXKey - the context key for getting the mapping from coin contract to id
 	CoingeckoContractToIDCTXKey CTXKey = "coingecko_contract_to_id"
-	// CoingeckoSupportedVsCurrenciesCTXKey - the context key for getting the list of supporved vs currencies
+	// CoingeckoSupportedVsCurrenciesCTXKey - the context key for getting the list of supported vs currencies
 	CoingeckoSupportedVsCurrenciesCTXKey CTXKey = "coingecko_supported_vs_currencies"
 	// CoingeckoCoinLimitCTXKey - the context key for getting the max number of coins
 	CoingeckoCoinLimitCTXKey CTXKey = "coingecko_coin_limit"
@@ -166,8 +166,8 @@ const (
 	// RequireUpholdCountryCTXKey - the context key for getting the rate limit
 	RequireUpholdCountryCTXKey CTXKey = "require_uphold_country"
 
-	// DisabledWalletGeolocationsCTXKey context key used to retrieve the S3 object name for disabled wallet geolocations.
-	DisabledWalletGeolocationsCTXKey CTXKey = "disabled_wallet_geolocations"
+	// DisabledWalletGeoCountriesCTXKey context key used to retrieve the S3 object name for disabled wallet geo countries
+	DisabledWalletGeoCountriesCTXKey CTXKey = "disabled_wallet_geo_countries"
 
 	// PlaystoreJSONKeyCTXKey - the context key for playstore json key
 	PlaystoreJSONKeyCTXKey CTXKey = "playstore_json_key"
@@ -179,6 +179,6 @@ const (
 var (
 	// ErrNotInContext - error you get when you ask for something not in the context.
 	ErrNotInContext = errors.New("failed to get value from context")
-	// ErrValueWrongType - error you get when you ask for something and it is not the type you expected
+	// ErrValueWrongType - error you get when you ask for something, and it is not the type you expected
 	ErrValueWrongType = errors.New("context value of wrong type")
 )

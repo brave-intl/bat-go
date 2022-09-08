@@ -12,14 +12,15 @@ import (
 	"net/http"
 )
 
-var errGeolocationFormat = errors.New("error gelocation format must be ISO3166Alpha2")
+var errGeoCountryFormat = errors.New("error geo country format must be ISO3166Alpha2")
 
-type CreateBraveWalletV4Request struct {
-	Geolocation string `json:"geolocation"`
+type CreateWalletV4Request struct {
+	GeoCountry string `json:"geo_country"`
 }
 
-// CreateBraveWalletV4 creates a brave wallet. This endpoint takes a geolocation as part of the request.
-func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+// CreateWalletV4 creates a brave rewards wallet. This endpoint takes a geo country as part of the request that must
+// be ISO3166Alpha2 format.
+func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		verifier := httpsignature.ParameterizedKeystoreVerifier{
 			SignatureParams: httpsignature.SignatureParams{
@@ -37,19 +38,19 @@ func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request
 			return handlers.WrapError(err, "error creating rewards wallet", http.StatusUnauthorized)
 		}
 
-		var c CreateBraveWalletV4Request
+		var c CreateWalletV4Request
 		err = json.NewDecoder(r.Body).Decode(&c)
 		if err != nil {
 			logging.FromContext(ctx).Error().Err(err).Msg("error creating rewards wallet")
 			return handlers.WrapError(err, "error creating rewards wallet", http.StatusBadRequest)
 		}
 
-		if !govalidator.IsISO3166Alpha2(c.Geolocation) {
-			logging.FromContext(ctx).Error().Err(errGeolocationFormat).Msg("error creating rewards wallet")
-			return handlers.WrapError(errGeolocationFormat, "error creating rewards wallet", http.StatusBadRequest)
+		if !govalidator.IsISO3166Alpha2(c.GeoCountry) {
+			logging.FromContext(ctx).Error().Err(errGeoCountryFormat).Msg("error creating rewards wallet")
+			return handlers.WrapError(errGeoCountryFormat, "error creating rewards wallet", http.StatusBadRequest)
 		}
 
-		info, err := s.CreateBraveWallet(ctx, publicKey, c.Geolocation)
+		info, err := s.CreateRewardsWallet(ctx, publicKey, c.GeoCountry)
 		if err != nil {
 			logging.FromContext(ctx).Error().Err(err).
 				Msg("error creating rewards wallet")
@@ -57,8 +58,8 @@ func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request
 			case errors.Is(err, errWalletAlreadyExists):
 				return handlers.WrapError(errWalletAlreadyExists,
 					"error creating rewards wallet", http.StatusConflict)
-			case errors.Is(err, errGeoLocationDisabled):
-				return handlers.WrapError(errGeoLocationDisabled,
+			case errors.Is(err, errGeoCountryDisabled):
+				return handlers.WrapError(errGeoCountryDisabled,
 					"error creating rewards wallet", http.StatusForbidden)
 			default:
 				return handlers.WrapError(errorutils.ErrInternalServerError,

@@ -41,7 +41,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // CreateReputationSummary implements Client
-func (_d ClientWithPrometheus) CreateReputationSummary(ctx context.Context, walletID string, geoLocation string) (err error) {
+func (_d ClientWithPrometheus) CreateReputationSummary(ctx context.Context, paymentID string, geoCountry string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -51,7 +51,7 @@ func (_d ClientWithPrometheus) CreateReputationSummary(ctx context.Context, wall
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateReputationSummary", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CreateReputationSummary(ctx, walletID, geoLocation)
+	return _d.base.CreateReputationSummary(ctx, paymentID, geoCountry)
 }
 
 // IsDrainReputable implements Client

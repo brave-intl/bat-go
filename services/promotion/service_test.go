@@ -74,7 +74,7 @@ func TestServiceTestSuite(t *testing.T) {
 func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, test.RandomString())
-	ctx = context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, test.RandomString())
+	ctx = context.WithValue(ctx, appctx.DisabledWalletGeoCountriesCTXKey, test.RandomString())
 
 	ctx, walletService := wallet.SetupService(ctx)
 	promotionDB, promotionRODB, err := NewPostgres()

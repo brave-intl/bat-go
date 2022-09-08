@@ -59,11 +59,11 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 		CreateReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
-	geolocation := "AF"
+	geoCountry := "AF"
 
 	locationValidator := wallet.NewMockGeoValidator(ctrl)
 	locationValidator.EXPECT().
-		Validate(gomock.Any(), geolocation).
+		Validate(gomock.Any(), geoCountry).
 		Return(true, nil)
 
 	service, err := wallet.InitService(storage, nil, reputationClient, nil, locationValidator, backoff.Retry)
@@ -72,8 +72,8 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 	router := chi.NewRouter()
 	wallet.RegisterRoutes(ctx, service, router)
 
-	data := wallet.CreateBraveWalletV4Request{
-		Geolocation: geolocation,
+	data := wallet.CreateWalletV4Request{
+		GeoCountry: geoCountry,
 	}
 
 	payload, err := json.Marshal(data)
@@ -81,7 +81,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 
 	rw := httptest.NewRecorder()
 
-	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err)
@@ -102,7 +102,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 	suite.Assert().Equal(walletID.String(), info.ID)
 }
 
-func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoLocationDisabled() {
+func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDisabled() {
 	wallet.ReputationGeoEnable = true
 
 	ctx := context.Background()
@@ -121,8 +121,8 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoLocationDi
 	router := chi.NewRouter()
 	wallet.RegisterRoutes(ctx, service, router)
 
-	data := wallet.CreateBraveWalletV4Request{
-		Geolocation: "AF",
+	data := wallet.CreateWalletV4Request{
+		GeoCountry: "AF",
 	}
 
 	payload, err := json.Marshal(data)
@@ -130,7 +130,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoLocationDi
 
 	rw := httptest.NewRecorder()
 
-	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err)
@@ -179,8 +179,8 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 	router := chi.NewRouter()
 	wallet.RegisterRoutes(ctx, service, router)
 
-	data := wallet.CreateBraveWalletV4Request{
-		Geolocation: "AF",
+	data := wallet.CreateWalletV4Request{
+		GeoCountry: "AF",
 	}
 
 	payload, err := json.Marshal(data)
@@ -188,7 +188,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 
 	rw := httptest.NewRecorder()
 
-	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err)

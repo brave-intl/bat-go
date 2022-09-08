@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGeolocationValidator_Validate_Enabled(t *testing.T) {
+func TestGeoCountryValidator_Validate_Enabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	disabledGeolocations := []string{
+	disabledGeoCountries := []string{
 		test.RandomString(),
 		test.RandomString(),
 		test.RandomString(),
@@ -26,7 +26,7 @@ func TestGeolocationValidator_Validate_Enabled(t *testing.T) {
 		test.RandomString(),
 	}
 
-	b, err := json.Marshal(disabledGeolocations)
+	b, err := json.Marshal(disabledGeoCountries)
 	assert.NoError(t, err)
 
 	buffer := bytes.NewBuffer(b)
@@ -45,7 +45,7 @@ func TestGeolocationValidator_Validate_Enabled(t *testing.T) {
 		object: test.RandomString(),
 	}
 
-	g := NewGeolocationValidator(api, config)
+	g := NewGeoCountryValidator(api, config)
 
 	enabled, err := g.Validate(context.Background(), test.RandomString())
 	assert.NoError(t, err)
@@ -53,11 +53,11 @@ func TestGeolocationValidator_Validate_Enabled(t *testing.T) {
 	assert.True(t, enabled)
 }
 
-func TestGeolocationValidator_Validate_Disabled(t *testing.T) {
+func TestGeoCountryValidator_Validate_Disabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	disabledGeolocations := []string{
+	disabledGeoCountries := []string{
 		test.RandomString(),
 		test.RandomString(),
 		test.RandomString(),
@@ -65,7 +65,7 @@ func TestGeolocationValidator_Validate_Disabled(t *testing.T) {
 		test.RandomString(),
 	}
 
-	b, err := json.Marshal(disabledGeolocations)
+	b, err := json.Marshal(disabledGeoCountries)
 	assert.NoError(t, err)
 
 	buffer := bytes.NewBuffer(b)
@@ -84,9 +84,9 @@ func TestGeolocationValidator_Validate_Disabled(t *testing.T) {
 		object: test.RandomString(),
 	}
 
-	g := NewGeolocationValidator(api, config)
+	g := NewGeoCountryValidator(api, config)
 
-	enabled, err := g.Validate(context.Background(), disabledGeolocations[3])
+	enabled, err := g.Validate(context.Background(), disabledGeoCountries[3])
 	assert.NoError(t, err)
 
 	assert.False(t, enabled)

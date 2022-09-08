@@ -11,28 +11,28 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 )
 
-// Config defines a GeolocationValidator configuration.
+// Config defines a GeoCountryValidator configuration.
 type Config struct {
 	bucket string
 	object string
 }
 
-// GeolocationValidator defines a GeolocationValidator.
-type GeolocationValidator struct {
+// GeoCountryValidator defines a GeoCountryValidator.
+type GeoCountryValidator struct {
 	s3     appaws.S3GetObjectAPI
 	config Config
 }
 
-// NewGeolocationValidator creates a new instance of NewGeolocationValidator.
-func NewGeolocationValidator(s3 appaws.S3GetObjectAPI, config Config) *GeolocationValidator {
-	return &GeolocationValidator{
+// NewGeoCountryValidator creates a new instance of NewGeoCountryValidator.
+func NewGeoCountryValidator(s3 appaws.S3GetObjectAPI, config Config) *GeoCountryValidator {
+	return &GeoCountryValidator{
 		s3:     s3,
 		config: config,
 	}
 }
 
-// Validate is an implementation of the Validate interface and returns true is a given geolocation is valid.
-func (g GeolocationValidator) Validate(ctx context.Context, geolocation string) (bool, error) {
+// Validate is an implementation of the Validate interface and returns true is a given geo country is valid.
+func (g GeoCountryValidator) Validate(ctx context.Context, geoCountry string) (bool, error) {
 	out, err := g.s3.GetObject(
 		ctx, &s3.GetObjectInput{
 			Bucket: &g.config.bucket,
@@ -52,11 +52,11 @@ func (g GeolocationValidator) Validate(ctx context.Context, geolocation string) 
 	var locations []string
 	err = json.NewDecoder(out.Body).Decode(&locations)
 	if err != nil {
-		return false, fmt.Errorf("error decoding geolocations")
+		return false, fmt.Errorf("error decoding geo country s3 list")
 	}
 
 	for _, location := range locations {
-		if strings.EqualFold(location, geolocation) {
+		if strings.EqualFold(location, geoCountry) {
 			return false, nil
 		}
 	}
