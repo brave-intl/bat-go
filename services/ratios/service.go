@@ -98,7 +98,7 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 
 // RunNextRelativeCachePrepopulationJob takes the next job to prepopulate the relative cache and completes it
 func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (bool, error) {
-	topCoins, err := s.GetTopCoins(ctx, 25)
+	topCoins, err := s.GetTopCoins(ctx, 500)
 	if err != nil {
 		return true, fmt.Errorf("failed to retrieve top coins: %w", err)
 	}
