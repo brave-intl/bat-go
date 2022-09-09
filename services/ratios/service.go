@@ -13,23 +13,8 @@ import (
 	logutils "github.com/brave-intl/bat-go/libs/logging"
 	srv "github.com/brave-intl/bat-go/libs/service"
 	"github.com/gomodule/redigo/redis"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shopspring/decimal"
 )
-
-var (
-	countGetRelativeCacheHitRate = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "count_cg_get_relative_cache_hit_rate",
-			Help: "Counts the cache hits and misses for the GetRelative service that relative rates between currencies from coingecko",
-		},
-		[]string{"query", "result"},
-	)
-)
-
-func init() {
-	prometheus.MustRegister(countGetRelativeCacheHitRate)
-}
 
 // NewService - create a new ratios service structure
 func NewService(ctx context.Context, coingecko coingecko.Client, redis *redis.Pool) *Service {
@@ -153,7 +138,6 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 	// attempt to fetch from cache
 	rates, updated, err := s.GetRelativeFromCache(ctx, vsCurrencies, []CoingeckoCoin(coinIDs)...)
 	if err != nil || rates == nil {
-
 		if err != nil {
 			logger.Debug().Err(err).Msg("failed to fetch cached relative rates")
 		}
@@ -163,15 +147,6 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 			return nil, fmt.Errorf("failed to fetch price from coingecko: %w", err)
 		}
 		updated = time.Now()
-		countGetRelativeCacheHitRate.With(prometheus.Labels{
-			"query":  "coinIDs=" + coinIDs.String() + "&vsCurrencies=" + vsCurrencies.String(),
-			"result": "cache_miss",
-		}).Inc()
-	} else {
-		countGetRelativeCacheHitRate.With(prometheus.Labels{
-			"query":  "coinIDs=" + coinIDs.String() + "&vsCurrencies=" + vsCurrencies.String(),
-			"result": "cache_hit",
-		}).Inc()
 	}
 
 	if duration != "1d" {
