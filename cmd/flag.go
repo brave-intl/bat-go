@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -154,4 +156,13 @@ func (fb *FlagBuilder) loopCommands(iterator func(*cobra.Command)) *FlagBuilder 
 		iterator(command)
 	}
 	return fb
+}
+
+// Must helper to make sure there is no errors
+func Must(err error) {
+	if err != nil {
+		log.Printf("failed to initialize: %s\n", err.Error())
+		// exit with failure
+		os.Exit(1)
+	}
 }
