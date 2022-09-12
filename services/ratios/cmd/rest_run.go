@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/throttled/throttled"
 )
 
 // RestRun - Main entrypoint of the REST subcommand
@@ -42,6 +43,10 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, viper.GetInt("coingecko-vs-currency-limit"))
 	ctx = context.WithValue(ctx, appctx.RatiosRedisAddrCTXKey, viper.Get("redis-addr"))
 	ctx = context.WithValue(ctx, appctx.RateLimitPerMinuteCTXKey, viper.GetInt("rate-limit-per-min"))
+	ctx = context.WithValue(ctx, appctx.CustomVaryByCTXKey, &throttled.VaryBy{
+		RemoteAddr: true,
+		Method:     true,
+	})
 
 	// setup the service now
 	ctx, s, err := ratios.InitService(ctx)
