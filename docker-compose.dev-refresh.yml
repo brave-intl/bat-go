@@ -12,7 +12,7 @@ services:
     ports:
       - "3335:3333"
       - "6061:6061"
-    command: "go run main.go serve grant"
+    command: "go run main/main.go serve grant"
     volumes:
       - .:/src
       - ./test/secrets:/etc/kafka/secrets
