@@ -19,7 +19,7 @@ import (
 var (
 	errGeoCountryFormat  = errors.New("error geo country format must be ISO3166Alpha2")
 	errGeoAlreadySet     = errors.New("error geo country has already been set for rewards wallet")
-	errPaymentIDMismatch = errors.New("paymentID does not match http signature key id")
+	errPaymentIDMismatch = errors.New("payment id does not match http signature key id")
 )
 
 var verifier = httpsignature.ParameterizedKeystoreVerifier{
