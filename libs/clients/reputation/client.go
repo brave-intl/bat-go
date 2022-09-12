@@ -23,6 +23,7 @@ type Client interface {
 	IsLinkingReputable(ctx context.Context, id uuid.UUID, country string) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	CreateReputationSummary(ctx context.Context, paymentID, geoCountry string) error
+	UpdateReputationSummary(ctx context.Context, paymentID, geoCountry string) error
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -321,6 +322,24 @@ func (c *HTTPClient) CreateReputationSummary(ctx context.Context, paymentID, geo
 	}
 
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "v1/reputation-summary", b, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.Do(ctx, req, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *HTTPClient) UpdateReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
+	b := reputationSummaryRequest{
+		GeoCountry: geoCountry,
+	}
+
+	req, err := c.client.NewRequest(ctx, http.MethodPatch, fmt.Sprintf("v1/reputation-summary/%s", paymentID), b, nil)
 	if err != nil {
 		return err
 	}

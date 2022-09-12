@@ -248,6 +248,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 
 	r.Route("/v4/wallets", func(r chi.Router) {
 		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
+		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
 	})
 
 	return r

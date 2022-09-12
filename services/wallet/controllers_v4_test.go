@@ -5,16 +5,20 @@ package wallet_test
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
-	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
-	"github.com/brave-intl/bat-go/libs/test"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
+	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/test"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/services/wallet/wallettest"
@@ -72,7 +76,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 	router := chi.NewRouter()
 	wallet.RegisterRoutes(ctx, service, router)
 
-	data := wallet.CreateWalletV4Request{
+	data := wallet.V4Request{
 		GeoCountry: geoCountry,
 	}
 
@@ -121,7 +125,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 	router := chi.NewRouter()
 	wallet.RegisterRoutes(ctx, service, router)
 
-	data := wallet.CreateWalletV4Request{
+	data := wallet.V4Request{
 		GeoCountry: "AF",
 	}
 
@@ -179,7 +183,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 	router := chi.NewRouter()
 	wallet.RegisterRoutes(ctx, service, router)
 
-	data := wallet.CreateWalletV4Request{
+	data := wallet.V4Request{
 		GeoCountry: "AF",
 	}
 
@@ -207,4 +211,71 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 	suite.Require().NoError(err)
 
 	suite.Assert().Nil(info)
+}
+
+func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
+	ctx := context.Background()
+
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	reputationClient := mockreputation.NewMockClient(ctrl)
+	reputationClient.EXPECT().
+		UpdateReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	service, err := wallet.InitService(storage, nil, reputationClient, nil,
+		nil, backoff.Retry)
+	suite.Require().NoError(err)
+
+	// create rewards wallet with public key
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	fmt.Println("paymentID", paymentID)
+	var altCurrency = altcurrency.BAT
+	info := &walletutils.Info{
+		ID:          paymentID,
+		Provider:    "brave",
+		PublicKey:   publicKey.String(),
+		AltCurrency: &altCurrency,
+	}
+
+	err = suite.storage.InsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.V4Request{
+		GeoCountry: "AF",
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
+		bytes.NewBuffer(payload))
+
+	err = signUpdateRequest(request, paymentID, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+}
+
+func signUpdateRequest(req *http.Request, paymentID string, privateKey ed25519.PrivateKey) error {
+	var s httpsignature.SignatureParams
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = paymentID
+	s.Headers = []string{"digest", "(request-target)"}
+	return s.Sign(privateKey, crypto.Hash(0), req)
 }
