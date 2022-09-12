@@ -44,7 +44,7 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 		ctx, publicKey, err := verifier.VerifyRequest(r)
 		if err != nil {
 			logger.Error().Err(err).Msg("error creating rewards wallet")
-			return handlers.WrapError(err, "error creating rewards wallet", http.StatusForbidden)
+			return handlers.WrapError(err, "error creating rewards wallet", http.StatusUnauthorized)
 		}
 
 		var request V4Request
