@@ -27,6 +27,7 @@ func RatiosXBraveHeaderInstrumentHandler(name string, next http.Handler) http.Ha
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("x-brave-key")
 		expectedKey := os.Getenv("X_BRAVE_KEY")
+
 		var present bool
 		if expectedKey == "" {
 			present = key != ""
@@ -38,5 +39,7 @@ func RatiosXBraveHeaderInstrumentHandler(name string, next http.Handler) http.Ha
 			"present": strconv.FormatBool(present),
 			"handler": name,
 		}).Inc()
+
+		next.ServeHTTP(w, r)
 	})
 }
