@@ -30,7 +30,7 @@ require (
 	gotest.tools v2.2.0+incompatible
 )
 
-replace github.com/brave-intl/bat-go => ../
+replace github.com/brave-intl/bat-go/cmd => ../cmd
 
 replace github.com/brave-intl/bat-go/libs => ../libs
 

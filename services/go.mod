@@ -2,7 +2,7 @@ module github.com/brave-intl/bat-go/services
 
 go 1.18
 
-replace github.com/brave-intl/bat-go => ../
+replace github.com/brave-intl/bat-go/cmd => ../cmd
 
 replace github.com/brave-intl/bat-go/libs => ../libs
 

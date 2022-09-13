@@ -1,15 +1,15 @@
-module github.com/brave-intl/bat-go
+module github.com/brave-intl/bat-go/cmd
 
 go 1.18
 
-replace github.com/brave-intl/bat-go/services => ./services
+replace github.com/brave-intl/bat-go/services => ../services
 
-replace github.com/brave-intl/bat-go/libs => ./libs
+replace github.com/brave-intl/bat-go/libs => ../libs
 
-replace github.com/brave-intl/bat-go/tools => ./tools
+replace github.com/brave-intl/bat-go/tools => ../tools
 
 require (
-	github.com/brave-intl/bat-go/libs v1.0.2
+	github.com/brave-intl/bat-go/libs v0.0.0-20220913154833-730f36b772de
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.13.0
