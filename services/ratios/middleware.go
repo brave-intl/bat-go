@@ -27,9 +27,15 @@ func RatiosXBraveHeaderInstrumentHandler(name string, next http.Handler) http.Ha
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("x-brave-key")
 		expectedKey := os.Getenv("X_BRAVE_KEY")
-		matches := key == expectedKey
+		var present bool
+		if expectedKey == "" {
+			present = key != ""
+		} else {
+			present = key == expectedKey
+		}
+
 		xBraveKeyHeaderPresentCounter.With(prometheus.Labels{
-			"present": strconv.FormatBool(matches),
+			"present": strconv.FormatBool(present),
 			"handler": name,
 		}).Inc()
 	})
