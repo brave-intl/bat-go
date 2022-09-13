@@ -134,6 +134,7 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 						return handlers.WrapError(errorutils.ErrBadRequest,
 							"error updating rewards wallet", http.StatusBadRequest)
 					}
+					// TODO move this to service this is for wallets now
 					if httpState.Status == http.StatusNotFound {
 						return handlers.WrapError(errorutils.ErrMissingWallet,
 							"error updating rewards wallet", http.StatusNotFound)

@@ -339,7 +339,7 @@ func (c *HTTPClient) UpdateReputationSummary(ctx context.Context, paymentID, geo
 		GeoCountry: geoCountry,
 	}
 
-	req, err := c.client.NewRequest(ctx, http.MethodPatch, fmt.Sprintf("v1/reputation-summary/%s", paymentID), b, nil)
+	req, err := c.client.NewRequest(ctx, http.MethodPut, fmt.Sprintf("v1/reputation-summary/%s", paymentID), b, nil)
 	if err != nil {
 		return err
 	}
