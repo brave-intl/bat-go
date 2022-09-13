@@ -20,40 +20,38 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: '1.18'
-      - name: golangci-lint
+      - name: golangci-lint-libs
         uses: golangci/golangci-lint-action@v2
         with:
           working-directory: libs
           version: v1.45.2
           args: --timeout 2m
           skip-go-installation: true
-      - name: golangci-lint
+      - name: golangci-lint-services
         uses: golangci/golangci-lint-action@v2
         with:
           working-directory: services
           version: v1.45.2
           args: --timeout 2m
           skip-go-installation: true
-      - name: golangci-lint
+      - name: golangci-lint-tools
         uses: golangci/golangci-lint-action@v2
         with:
           working-directory: tools
           version: v1.45.2
           args: --timeout 2m
           skip-go-installation: true
-      - name: golangci-lint
+      - name: golangci-lint-cmd
         uses: golangci/golangci-lint-action@v2
         with:
           working-directory: cmd
           version: v1.45.2
           args: --timeout 2m
           skip-go-installation: true
-      - name: golangci-lint
+      - name: golangci-lint-main
         uses: golangci/golangci-lint-action@v2
         with:
           working-directory: main
           version: v1.45.2
           args: --timeout 2m
           skip-go-installation: true
-
-
