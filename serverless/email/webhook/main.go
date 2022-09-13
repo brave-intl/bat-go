@@ -56,11 +56,13 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, fmt.Errorf("failed to unmarshal request body: %w", err)
 	}
 
+	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.UUID.String())).String()
+
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: dynamoUnsubscribeTableName,
 		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: uuid.NewSHA1(namespace, []byte(payload.UUID.String()))},
+			"id": &types.AttributeValueMemberS{Value: unsubscribeRef},
 		},
 		ConsistentRead: aws.Bool(true), // consistent read
 	})
@@ -105,6 +107,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			Body:       http.StatusText(http.StatusOK),
 		}, nil
 	}
+
+	payload.Data["unsubscribeRef"] = unsubscribeRef
 
 	// marshal template data into json
 	data, err := json.Marshal(payload.Data)
