@@ -17,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
+	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/test"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
@@ -38,7 +39,7 @@ func TestWalletControllersV4TestSuite(t *testing.T) {
 }
 
 func (suite *WalletControllersV4TestSuite) SetupSuite() {
-	wallettest.Migrate(suite.T())
+	//wallettest.Migrate(suite.T())
 	storage, _ := wallet.NewWritablePostgres("", false, "")
 	suite.storage = storage
 }
@@ -155,6 +156,73 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 	suite.Assert().Nil(info)
 }
 
+func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlreadyExists() {
+	wallet.ReputationGeoEnable = true
+
+	ctx := context.Background()
+
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	geoCountry := "AF"
+
+	locationValidator := wallet.NewMockGeoValidator(ctrl)
+	locationValidator.EXPECT().
+		Validate(gomock.Any(), geoCountry).
+		Return(true, nil)
+
+	service, err := wallet.InitService(storage, nil, nil, nil, locationValidator, nil)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.V4Request{
+		GeoCountry: geoCountry,
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	err = signRequest(request, publicKey, privateKey)
+	suite.Require().NoError(err)
+
+	// create existing wallet
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	var altCurrency = altcurrency.BAT
+	info := &walletutils.Info{
+		ID:          paymentID,
+		Provider:    "brave",
+		PublicKey:   publicKey.String(),
+		AltCurrency: &altCurrency,
+	}
+
+	err = suite.storage.InsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	// execute request
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Require().Equal(http.StatusConflict, rw.Code)
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+	suite.Require().NoError(err)
+
+	suite.Assert().Contains(appError.Message, "rewards wallet already exists")
+}
+
 func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCallFailed() {
 	wallet.ReputationGeoEnable = true
 
@@ -236,7 +304,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 	suite.Require().NoError(err)
 
 	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
-	fmt.Println("paymentID", paymentID)
+
 	var altCurrency = altcurrency.BAT
 	info := &walletutils.Info{
 		ID:          paymentID,

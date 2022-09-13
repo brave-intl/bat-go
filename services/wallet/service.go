@@ -58,8 +58,8 @@ var (
 )
 
 var (
-	errGeoCountryDisabled  = errors.New("geo country is disabled")
-	errWalletAlreadyExists = errors.New("wallet already exists")
+	errGeoCountryDisabled         = errors.New("geo country is disabled")
+	errRewardsWalletAlreadyExists = errors.New("rewards wallet already exists")
 )
 
 type GeoValidator interface {
@@ -568,7 +568,7 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		var pgErr *pq.Error
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == "23505" { // unique constraint violation
-				return nil, errWalletAlreadyExists
+				return nil, errRewardsWalletAlreadyExists
 			}
 		}
 		return nil, fmt.Errorf("error inserting rewards wallet: %w", err)

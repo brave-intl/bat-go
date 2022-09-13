@@ -63,8 +63,8 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 		if err != nil {
 			logger.Error().Err(err).Msg("error creating rewards wallet")
 			switch {
-			case errors.Is(err, errWalletAlreadyExists):
-				return handlers.WrapError(errWalletAlreadyExists,
+			case errors.Is(err, errRewardsWalletAlreadyExists):
+				return handlers.WrapError(errRewardsWalletAlreadyExists,
 					"error creating rewards wallet", http.StatusConflict)
 			case errors.Is(err, errGeoCountryDisabled):
 				return handlers.WrapError(errGeoCountryDisabled,
