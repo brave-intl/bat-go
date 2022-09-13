@@ -314,6 +314,7 @@ type reputationSummaryRequest struct {
 	GeoCountry string `json:"geo_country"`
 }
 
+// CreateReputationSummary - call reputation's create reputation summary for payment id
 func (c *HTTPClient) CreateReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
 	b := reputationSummaryRequest{
 		PaymentID:  paymentID,

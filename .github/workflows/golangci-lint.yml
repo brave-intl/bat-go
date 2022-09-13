@@ -23,7 +23,37 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
+          working-directory: libs
           version: v1.45.2
           args: --timeout 2m
           skip-go-installation: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          working-directory: services
+          version: v1.45.2
+          args: --timeout 2m
+          skip-go-installation: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          working-directory: tools
+          version: v1.45.2
+          args: --timeout 2m
+          skip-go-installation: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          working-directory: cmd
+          version: v1.45.2
+          args: --timeout 2m
+          skip-go-installation: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          working-directory: main
+          version: v1.45.2
+          args: --timeout 2m
+          skip-go-installation: true
+
 

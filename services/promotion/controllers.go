@@ -676,6 +676,7 @@ type ClobberedClaimsRequest struct {
 	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
 }
 
+// Validate - implement validatable
 func (ccr *ClobberedClaimsRequest) Validate(ctx context.Context) error {
 	// govalidator "required" does not always work on arrays, just make sure there
 	// are more than 0 items

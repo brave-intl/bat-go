@@ -4,16 +4,18 @@ import (
 	"crypto"
 	"encoding/json"
 	"errors"
+	"net/http"
+
 	"github.com/asaskevich/govalidator"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"net/http"
 )
 
 var errGeoCountryFormat = errors.New("error geo country format must be ISO3166Alpha2")
 
+// CreateWalletV4Request - request object for creation of a v4 rewards wallet
 type CreateWalletV4Request struct {
 	GeoCountry string `json:"geo_country"`
 }

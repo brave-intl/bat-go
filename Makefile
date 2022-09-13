@@ -174,4 +174,8 @@ format:
 format-lint:
 	make format && make lint
 lint:
-	golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	cd libs && golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	cd services && golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	cd tools && golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	cd cmd && golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	cd main && golangci-lint run -E gofmt -E revive --exclude-use-default=false

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
+	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 )
 
 // SignRequests signs formed requests

@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -24,6 +23,7 @@ import (
 	srv "github.com/brave-intl/bat-go/libs/service"
 	w "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"

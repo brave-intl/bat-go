@@ -32,6 +32,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// ReputationGeoEnable - enable geo reputation check
 var ReputationGeoEnable = isReputationGeoEnabled()
 
 func isReputationGeoEnabled() bool {
@@ -62,8 +63,9 @@ var (
 	errWalletAlreadyExists = errors.New("wallet already exists")
 )
 
+// GeoValidator - interface describing validation of geolocation
 type GeoValidator interface {
-	Validate(ctx context.Context, gelocation string) (bool, error)
+	Validate(ctx context.Context, geolocation string) (bool, error)
 }
 
 // Service contains datastore connections
@@ -99,6 +101,7 @@ func (service *Service) ReadableDatastore() ReadOnlyDatastore {
 	return service.Datastore
 }
 
+// SetupService - create a new wallet service
 func SetupService(ctx context.Context) (context.Context, *Service) {
 	logger := logging.Logger(ctx, "wallet.SetupService")
 
@@ -189,6 +192,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	return ctx, s
 }
 
+// RegisterRoutes - register the wallet api routes given a chi.Mux
 func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
