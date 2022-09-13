@@ -229,24 +229,27 @@ func InitService(
 	logger := logging.Logger(ctx, "promotion.InitService")
 
 	// register metrics with prometheus
-	err := prometheus.Register(countGrantsClaimedBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(countGrantsClaimedBatTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
+	}
+	if err := prometheus.Register(countGrantsClaimedTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 
-	err = prometheus.Register(countGrantsClaimedTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(countContributionsBatTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 
-	err = prometheus.Register(countContributionsBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countContributionsTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(countContributionsTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 
 	cbClient, err := cbr.New()
