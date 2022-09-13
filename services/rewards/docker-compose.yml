@@ -40,7 +40,7 @@ services:
     ports:
       - "3343:3343"
       - "6061:6061"
-    command: "go run main/main.go serve rewards rest"
+    command: "cd main && go run main.go serve rewards rest"
     volumes:
       - ../:/src
     working_dir: /src

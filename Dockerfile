@@ -16,9 +16,9 @@ WORKDIR /src/
 COPY . ./
 RUN go mod download
 
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN cd main && CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
-    -o bat-go main/main.go
+    -o ../bat-go main.go
 
 FROM alpine:3.15 as base
 # put certs in artifact from builder

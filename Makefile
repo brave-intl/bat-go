@@ -14,7 +14,7 @@ all: test create-json-schema buildcmd
 .DEFAULT: buildcmd
 
 buildcmd:
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o bat-go main/main.go
+	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ../bat-go main.go
 
 mock:
 	mockgen -source=./services/promotion/claim.go -destination=services/promotion/mockclaim.go -package=promotion
@@ -101,7 +101,7 @@ docker-test:
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
-	go run main/main.go generate json-schema
+	cd main && go run main.go generate json-schema
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
@@ -157,10 +157,10 @@ vault-clean:
 	rm -rf share-0.gpg target/settlement-tools/vault-data vault-data
 
 json-schema:
-	go run main/main.go generate json-schema --overwrite
+	cd main && go run main.go generate json-schema --overwrite
 
 create-json-schema:
-	go run main/main.go generate json-schema
+	cd main && go run main.go generate json-schema
 
 test:
 	go test -count 1 -v -p 1 $(TEST_FLAGS) github.com/brave-intl/bat-go/...

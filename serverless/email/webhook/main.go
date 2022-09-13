@@ -84,7 +84,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	// check if our idempotency key exists in db
-	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
+	dynGetOut, err = dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: dynamoTableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: payload.UUID.String()},
