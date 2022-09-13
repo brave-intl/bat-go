@@ -80,7 +80,7 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 }
 
 // UpdateWalletV4 updates a brave rewards wallet. This endpoint takes a geo country as part of the request that must
-// be ISO3166Alpha2 format. A reward wallets geo country can only be set once and will error if already set.
+// be ISO3166Alpha2 format.
 func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		logger := logging.Logger(r.Context(), "wallet.UpdateWalletV4")
