@@ -12,7 +12,7 @@ Globals:
 
 Resources:
   EmailWebhookFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
     Properties:
       CodeUri: webhook/
       Handler: webhook
@@ -21,15 +21,13 @@ Resources:
         - x86_64
       Events:
         CatchAll:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Type: Api
           Properties:
-            Path: /email/webhook
+            Path: /webhook
             Method: POST
-      Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
-        Variables:
-          PARAM1: VALUE
+
   EmailUnsubscribeFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
     Properties:
       CodeUri: unsubscribe/
       Handler: unsubscribe
@@ -38,24 +36,28 @@ Resources:
         - x86_64
       Events:
         CatchAll:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Type: Api
           Properties:
-            Path: /unsubscribe/{}
+            Path: /unsubscribe
             Method: GET
-      Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
-        Variables:
-          PARAM1: VALUE
 
 Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
   EmailWebhookAPI:
-    Description: "API Gateway endpoint URL for Prod environment for First Function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+    Description: "API Gateway endpoint URL for Prod environment email webhook"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook/"
   EmailWebhookFunction:
-    Description: "First Lambda Function ARN"
+    Description: "Email Webhook Function ARN"
     Value: !GetAtt EmailWebhookFunction.Arn
   EmailWebhookFunctionIamRole:
     Description: "Implicit IAM Role created for function"
     Value: !GetAtt EmailWebhookFunctionRole.Arn
+
+  EmailUnsubscribeAPI:
+    Description: "API Gateway endpoint URL for Prod environment for unsubscribe"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/unsubscribe/"
+  EmailUnsubscribeFunction:
+    Description: "unsubscribe lambda ARN"
+    Value: !GetAtt EmailUnsubscribeFunction.Arn
+  EmailUnsubscribeFunctionIamRole:
+    Description: "Implicit IAM Role created for function"
+    Value: !GetAtt EmailUnsubscribeFunctionRole.Arn

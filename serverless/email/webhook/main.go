@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -15,13 +16,16 @@ import (
 	sestypes "github.com/aws/aws-sdk-go-v2/service/ses/types"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
 var (
-	ctx, logger     = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
-	dynamoTableName = aws.String("webhook-idempotency")
-	sesSource       = aws.String("noreply@brave.com")
+	ctx, logger                = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
+	dynamoTableName            = aws.String("webhook-idempotency")
+	dynamoUnsubscribeTableName = aws.String("unsubscribe")
+	sesSource                  = aws.String("noreply@brave.com")
+	namespace                  = uuid.MustParse(os.Getenv("EMAIL_NAMESPACE"))
 )
 
 // handler takes the api gateway request and sends a templated email
@@ -50,6 +54,31 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			StatusCode: http.StatusBadRequest,
 			Body:       http.StatusText(http.StatusBadRequest),
 		}, fmt.Errorf("failed to unmarshal request body: %w", err)
+	}
+
+	// check if we are on unsubscribe or bounce list
+	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: dynamoUnsubscribeTableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: uuid.NewSHA1(namespace, []byte(payload.UUID.String()))},
+		},
+		ConsistentRead: aws.Bool(true), // consistent read
+	})
+	if err != nil {
+		// failed to get the base aws config
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       http.StatusText(http.StatusInternalServerError),
+		}, fmt.Errorf("failed to get from dynamodb: %w", err)
+	}
+
+	// check if it exists, if we should not send email, they unsubscribed
+	if len(dynGetOut.Item) > 0 {
+		// return ok
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusOK,
+			Body:       http.StatusText(http.StatusOK),
+		}, nil
 	}
 
 	// check if our idempotency key exists in db
