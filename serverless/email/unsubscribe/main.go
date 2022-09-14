@@ -18,27 +18,27 @@ import (
 var (
 	ctx, logger     = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
 	dynamoTableName = aws.String("unsubscribe")
+	dynamoClient    *dynamodb.Client
 )
 
-// handler takes the api gateway request and sends a templated email
-func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func init() {
 	// setup base aws config
 	config, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
 		// failed to get the base aws config
-		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       http.StatusText(http.StatusInternalServerError),
-		}, fmt.Errorf("failed to get the base aws config: %w", err)
+		panic("failed to create aws config")
 	}
-	// setup dynamodb client
-	dynamoClient := dynamodb.NewFromConfig(config)
+	// setup global dynamodb client
+	dynamoClient = dynamodb.NewFromConfig(config)
+}
 
+// handler takes the api gateway request and sends a templated email
+func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	// /unsubscribe?id=<uuid>
 	identifier := request.QueryStringParameters["id"]
 
 	// uuidv5 from url
-	_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
+	_, err := dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: dynamoTableName,
 		Item: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: identifier},

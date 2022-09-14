@@ -31,28 +31,30 @@ var (
 	// tables
 	idempotencyTable = aws.String("idempotency")
 	unsubscribeTable = aws.String("unsubscribe")
+
+	// clients
+	dynamoClient *dynamodb.Client
+	sesClient    *ses.Client
 )
 
-// handler takes the api gateway request and sends a templated email
-func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func init() {
 	// setup base aws config
 	config, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
-		// failed to get the base aws config
-		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusInternalServerError,
-			Body:       http.StatusText(http.StatusInternalServerError),
-		}, fmt.Errorf("failed to get the base aws config: %w", err)
+		panic("failed to create aws config")
 	}
 	// setup dynamodb client
-	dynamoClient := dynamodb.NewFromConfig(config)
+	dynamoClient = dynamodb.NewFromConfig(config)
 	// setup ses client
-	sesClient := ses.NewFromConfig(config)
+	sesClient = ses.NewFromConfig(config)
+}
 
+// handler takes the api gateway request and sends a templated email
+func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	// handler accepts from the request event the payload
 	// read the payload into our structure
 	payload := new(emailPayload)
-	err = json.Unmarshal([]byte(request.Body), payload)
+	err := json.Unmarshal([]byte(request.Body), payload)
 	if err != nil {
 		// failed to unmarshal request appropriately
 		return events.APIGatewayProxyResponse{
