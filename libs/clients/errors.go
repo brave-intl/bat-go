@@ -28,7 +28,7 @@ type HTTPState struct {
 	Body   interface{}
 }
 
-// NewHTTPError creates a new response state
+// NewHTTPError creates a new errors.ErrorBundle with an HTTPState wrapping the status, path and v.
 func NewHTTPError(err error, path, message string, status int, v interface{}) error {
 	return errorutils.New(err, message, HTTPState{
 		Status: status,

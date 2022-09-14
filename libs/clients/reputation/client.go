@@ -22,7 +22,7 @@ type Client interface {
 	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
 	IsLinkingReputable(ctx context.Context, id uuid.UUID, country string) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
-	CreateReputationSummary(ctx context.Context, paymentID, geoCountry string) error
+	UpsertReputationSummary(ctx context.Context, paymentID, geoCountry string) error
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -310,17 +310,17 @@ func (c *HTTPClient) IsWalletOnPlatform(
 }
 
 type reputationSummaryRequest struct {
-	PaymentID  string `json:"payment_id"`
 	GeoCountry string `json:"geo_country"`
 }
 
-func (c *HTTPClient) CreateReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
+// UpsertReputationSummary calls the reputation summary upsert endpoint and creates or updates the reputation
+// summary identified by the paymentID with the given geo country.
+func (c *HTTPClient) UpsertReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
 	b := reputationSummaryRequest{
-		PaymentID:  paymentID,
 		GeoCountry: geoCountry,
 	}
 
-	req, err := c.client.NewRequest(ctx, http.MethodPost, "v1/reputation-summary", b, nil)
+	req, err := c.client.NewRequest(ctx, http.MethodPut, fmt.Sprintf("v1/reputation-summary/%s", paymentID), b, nil)
 	if err != nil {
 		return err
 	}

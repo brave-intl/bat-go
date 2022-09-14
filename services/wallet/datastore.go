@@ -303,10 +303,7 @@ func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) 
 
 // InsertWalletTx inserts the given wallet
 func (pg *Postgres) InsertWalletTx(ctx context.Context, tx *sqlx.Tx, wallet *walletutils.Info) error {
-	statement := `
-	INSERT INTO wallets (id, provider, provider_id, public_key)
-	VALUES ($1, $2, $3, $4)
-	ON CONFLICT DO NOTHING`
+	statement := `INSERT INTO wallets (id, provider, provider_id, public_key)	VALUES ($1, $2, $3, $4)`
 	_, err := tx.ExecContext(ctx,
 		statement,
 		wallet.ID,

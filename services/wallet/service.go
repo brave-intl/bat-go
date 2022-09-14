@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -32,20 +31,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var ReputationGeoEnable = isReputationGeoEnabled()
-
-func isReputationGeoEnabled() bool {
-	var toggle = false
-	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
 var (
 	// ClaimNamespace uuidv5 namespace for provider linking - exported for tests
 	ClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
@@ -58,8 +43,8 @@ var (
 )
 
 var (
-	errGeoCountryDisabled  = errors.New("geo country is disabled")
-	errWalletAlreadyExists = errors.New("wallet already exists")
+	errGeoCountryDisabled         = errors.New("geo country is disabled")
+	errRewardsWalletAlreadyExists = errors.New("rewards wallet already exists")
 )
 
 type GeoValidator interface {
@@ -248,6 +233,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 
 	r.Route("/v4/wallets", func(r chi.Router) {
 		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
+		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
 	})
 
 	return r
@@ -566,21 +553,19 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		var pgErr *pq.Error
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == "23505" { // unique constraint violation
-				return nil, errWalletAlreadyExists
+				return nil, errRewardsWalletAlreadyExists
 			}
 		}
 		return nil, fmt.Errorf("error inserting rewards wallet: %w", err)
 	}
 
-	if ReputationGeoEnable {
-		op := func() (interface{}, error) {
-			return nil, service.repClient.CreateReputationSummary(ctx, info.ID, geoCountry)
-		}
+	upsertReputationSummary := func() (interface{}, error) {
+		return nil, service.repClient.UpsertReputationSummary(ctx, info.ID, geoCountry)
+	}
 
-		_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
-			return nil, fmt.Errorf("error calling reputation service: %w", err)
-		}
+	_, err = service.retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+	if err != nil {
+		return nil, fmt.Errorf("error calling reputation service: %w", err)
 	}
 
 	err = commit()
