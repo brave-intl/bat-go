@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/go-chi/chi"
-	uuid "github.com/satori/go.uuid"
 )
 
 var (
@@ -86,8 +85,8 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		logger := logging.Logger(r.Context(), "wallet.UpdateWalletV4")
 
-		paymentID, err := uuid.FromString(chi.URLParam(r, "paymentID"))
-		if err != nil {
+		paymentID := chi.URLParam(r, "paymentID")
+		if paymentID == "" {
 			logger.Error().Err(errorutils.ErrBadRequest).Msg("error updating rewards wallet")
 			return handlers.ValidationError("error validating paymentID url parameter",
 				map[string]interface{}{"paymentID": errorutils.ErrBadRequest.Error()})
@@ -100,7 +99,7 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 				map[string]interface{}{"keyID": err.Error()})
 		}
 
-		if paymentID.String() != keyID {
+		if paymentID != keyID {
 			logger.Error().Err(errPaymentIDMismatch).Msg("error updating rewards wallet")
 			return handlers.WrapError(errPaymentIDMismatch, "error updating rewards wallet", http.StatusForbidden)
 		}
@@ -119,7 +118,7 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 
 		// Currently we do not check for the wallet existence as the middleware LookupVerifier covers this.
 		upsertReputationSummary := func() (interface{}, error) {
-			return nil, s.repClient.UpsertReputationSummary(r.Context(), paymentID.String(), request.GeoCountry)
+			return nil, s.repClient.UpsertReputationSummary(r.Context(), paymentID, request.GeoCountry)
 		}
 
 		_, err = s.retry(r.Context(), upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
