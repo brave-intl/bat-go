@@ -22,15 +22,6 @@ var (
 	errPaymentIDMismatch = errors.New("error payment id does not match http signature key id")
 )
 
-var verifier = httpsignature.ParameterizedKeystoreVerifier{
-	SignatureParams: httpsignature.SignatureParams{
-		Algorithm: httpsignature.ED25519,
-		Headers:   []string{"digest", "(request-target)"},
-	},
-	Keystore: &DecodeEd25519Keystore{},
-	Opts:     crypto.Hash(0),
-}
-
 // V4Request contains the fields for making v4 wallet requests.
 type V4Request struct {
 	GeoCountry string `json:"geo_country"`
@@ -41,6 +32,15 @@ type V4Request struct {
 func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		logger := logging.Logger(r.Context(), "wallet.CreateWalletV4")
+
+		verifier := httpsignature.ParameterizedKeystoreVerifier{
+			SignatureParams: httpsignature.SignatureParams{
+				Algorithm: httpsignature.ED25519,
+				Headers:   []string{"digest", "(request-target)"},
+			},
+			Keystore: &DecodeEd25519Keystore{},
+			Opts:     crypto.Hash(0),
+		}
 
 		ctx, publicKey, err := verifier.VerifyRequest(r)
 		if err != nil {
