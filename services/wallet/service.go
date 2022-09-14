@@ -576,29 +576,6 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 	return info, nil
 }
 
-// UpdateRewardsWallet updates a brave rewards wallet and informs the reputation service of the change in geo country.
-func (service *Service) UpdateRewardsWallet(ctx context.Context, paymentID uuid.UUID, geoCountry string) error {
-	w, err := service.Datastore.GetWallet(ctx, paymentID)
-	if err != nil {
-		return fmt.Errorf("error updating rewards wallet: %w", err)
-	}
-
-	if w == nil {
-		return fmt.Errorf("error updating rewards wallet: %w", errorutils.ErrMissingWallet)
-	}
-
-	upsertReputationSummary := func() (interface{}, error) {
-		return nil, service.repClient.UpsertReputationSummary(ctx, paymentID.String(), geoCountry)
-	}
-
-	_, err = service.retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
-	if err != nil {
-		return fmt.Errorf("error updating rewards wallet: %w", err)
-	}
-
-	return nil
-}
-
 func canRetry(nonRetriableErrors []int) func(error) bool {
 	return func(err error) bool {
 		var eb *errorutils.ErrorBundle
