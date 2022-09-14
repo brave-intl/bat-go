@@ -40,20 +40,6 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
-// CreateReputationSummary implements Client
-func (_d ClientWithPrometheus) CreateReputationSummary(ctx context.Context, paymentID string, geoCountry string) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateReputationSummary", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.CreateReputationSummary(ctx, paymentID, geoCountry)
-}
-
 // IsDrainReputable implements Client
 func (_d ClientWithPrometheus) IsDrainReputable(ctx context.Context, id uuid.UUID, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (b1 bool, ia1 []int, err error) {
 	_since := time.Now()
@@ -124,8 +110,8 @@ func (_d ClientWithPrometheus) IsWalletReputable(ctx context.Context, id uuid.UU
 	return _d.base.IsWalletReputable(ctx, id, platform)
 }
 
-// UpdateReputationSummary implements Client
-func (_d ClientWithPrometheus) UpdateReputationSummary(ctx context.Context, paymentID string, geoCountry string) (err error) {
+// UpsertReputationSummary implements Client
+func (_d ClientWithPrometheus) UpsertReputationSummary(ctx context.Context, paymentID string, geoCountry string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -133,7 +119,7 @@ func (_d ClientWithPrometheus) UpdateReputationSummary(ctx context.Context, paym
 			result = "error"
 		}
 
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateReputationSummary", result).Observe(time.Since(_since).Seconds())
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UpsertReputationSummary", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UpdateReputationSummary(ctx, paymentID, geoCountry)
+	return _d.base.UpsertReputationSummary(ctx, paymentID, geoCountry)
 }

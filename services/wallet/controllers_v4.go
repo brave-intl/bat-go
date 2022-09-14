@@ -4,16 +4,17 @@ import (
 	"crypto"
 	"encoding/json"
 	"errors"
-	"github.com/brave-intl/bat-go/libs/clients"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/go-chi/chi"
+	uuid "github.com/satori/go.uuid"
 )
 
 var (
@@ -87,8 +88,8 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 
 		// TODO: cleanup validation errors
 
-		paymentID := chi.URLParam(r, "paymentID")
-		if paymentID == "" {
+		paymentID, err := uuid.FromString(chi.URLParam(r, "paymentID"))
+		if err != nil {
 			logger.Error().Err(errorutils.ErrBadRequest).Msg("error updating rewards wallet")
 			return handlers.ValidationError("error validating paymentID url parameter",
 				map[string]interface{}{"paymentID": errorutils.ErrBadRequest.Error()})
@@ -101,7 +102,7 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 				map[string]interface{}{"keyID": err.Error()})
 		}
 
-		if paymentID != keyID {
+		if paymentID.String() != keyID {
 			logger.Error().Err(errPaymentIDMismatch).Msg("error updating rewards wallet")
 			return handlers.WrapError(errPaymentIDMismatch, "error updating rewards wallet", http.StatusForbidden)
 		}
@@ -120,24 +121,23 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			return handlers.WrapError(errGeoCountryFormat, "error updating rewards wallet", http.StatusBadRequest)
 		}
 
-		updateReputationSummary := func() (interface{}, error) {
-			return nil, s.repClient.UpdateReputationSummary(r.Context(), paymentID, request.GeoCountry)
+		// Currently we do not check for the wallet existence as the middleware LookupVerifier covers this.
+		upsertReputationSummary := func() (interface{}, error) {
+			return nil, s.repClient.UpsertReputationSummary(r.Context(), paymentID.String(), request.GeoCountry)
 		}
 
-		_, err = s.retry(r.Context(), updateReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+		_, err = s.retry(r.Context(), upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
 		if err != nil {
 			logger.Error().Err(err).Msg("error updating rewards wallet")
 			var errorBundle *errorutils.ErrorBundle
 			if errors.As(err, &errorBundle) {
+				logger.Error().
+					Str("error bundle", errorBundle.DataToString()).
+					Msg("error updating rewards wallet")
 				if httpState, ok := errorBundle.Data().(clients.HTTPState); ok {
 					if httpState.Status == http.StatusBadRequest {
 						return handlers.WrapError(errorutils.ErrBadRequest,
 							"error updating rewards wallet", http.StatusBadRequest)
-					}
-					// TODO move this to service this is for wallets now
-					if httpState.Status == http.StatusNotFound {
-						return handlers.WrapError(errorutils.ErrMissingWallet,
-							"error updating rewards wallet", http.StatusNotFound)
 					}
 					if httpState.Status == http.StatusConflict {
 						return handlers.WrapError(errGeoAlreadySet,

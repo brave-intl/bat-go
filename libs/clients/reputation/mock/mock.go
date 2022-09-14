@@ -36,20 +36,6 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// CreateReputationSummary mocks base method.
-func (m *MockClient) CreateReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateReputationSummary", ctx, paymentID, geoCountry)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateReputationSummary indicates an expected call of CreateReputationSummary.
-func (mr *MockClientMockRecorder) CreateReputationSummary(ctx, paymentID, geoCountry interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateReputationSummary", reflect.TypeOf((*MockClient)(nil).CreateReputationSummary), ctx, paymentID, geoCountry)
-}
-
 // IsDrainReputable mocks base method.
 func (m *MockClient) IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error) {
 	m.ctrl.T.Helper()
@@ -127,16 +113,16 @@ func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletReputable", reflect.TypeOf((*MockClient)(nil).IsWalletReputable), ctx, id, platform)
 }
 
-// UpdateReputationSummary mocks base method.
-func (m *MockClient) UpdateReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
+// UpsertReputationSummary mocks base method.
+func (m *MockClient) UpsertReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateReputationSummary", ctx, paymentID, geoCountry)
+	ret := m.ctrl.Call(m, "UpsertReputationSummary", ctx, paymentID, geoCountry)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UpdateReputationSummary indicates an expected call of UpdateReputationSummary.
-func (mr *MockClientMockRecorder) UpdateReputationSummary(ctx, paymentID, geoCountry interface{}) *gomock.Call {
+// UpsertReputationSummary indicates an expected call of UpsertReputationSummary.
+func (mr *MockClientMockRecorder) UpsertReputationSummary(ctx, paymentID, geoCountry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReputationSummary", reflect.TypeOf((*MockClient)(nil).UpdateReputationSummary), ctx, paymentID, geoCountry)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertReputationSummary", reflect.TypeOf((*MockClient)(nil).UpsertReputationSummary), ctx, paymentID, geoCountry)
 }

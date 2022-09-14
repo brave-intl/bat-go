@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -31,20 +30,6 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
 )
-
-var ReputationGeoEnable = isReputationGeoEnabled()
-
-func isReputationGeoEnabled() bool {
-	var toggle = false
-	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
 
 var (
 	// ClaimNamespace uuidv5 namespace for provider linking - exported for tests
@@ -574,15 +559,13 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		return nil, fmt.Errorf("error inserting rewards wallet: %w", err)
 	}
 
-	if ReputationGeoEnable {
-		op := func() (interface{}, error) {
-			return nil, service.repClient.CreateReputationSummary(ctx, info.ID, geoCountry)
-		}
+	upsertReputationSummary := func() (interface{}, error) {
+		return nil, service.repClient.UpsertReputationSummary(ctx, info.ID, geoCountry)
+	}
 
-		_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
-			return nil, fmt.Errorf("error calling reputation service: %w", err)
-		}
+	_, err = service.retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+	if err != nil {
+		return nil, fmt.Errorf("error calling reputation service: %w", err)
 	}
 
 	err = commit()
@@ -591,6 +574,29 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 	}
 
 	return info, nil
+}
+
+// UpdateRewardsWallet updates a brave rewards wallet and informs the reputation service of the change in geo country.
+func (service *Service) UpdateRewardsWallet(ctx context.Context, paymentID uuid.UUID, geoCountry string) error {
+	w, err := service.Datastore.GetWallet(ctx, paymentID)
+	if err != nil {
+		return fmt.Errorf("error updating rewards wallet: %w", err)
+	}
+
+	if w == nil {
+		return fmt.Errorf("error updating rewards wallet: %w", errorutils.ErrMissingWallet)
+	}
+
+	upsertReputationSummary := func() (interface{}, error) {
+		return nil, service.repClient.UpsertReputationSummary(ctx, paymentID.String(), geoCountry)
+	}
+
+	_, err = service.retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+	if err != nil {
+		return fmt.Errorf("error updating rewards wallet: %w", err)
+	}
+
+	return nil
 }
 
 func canRetry(nonRetriableErrors []int) func(error) bool {

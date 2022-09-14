@@ -14,6 +14,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/brave-intl/bat-go/libs/clients"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
@@ -49,8 +51,6 @@ func (suite *WalletControllersV4TestSuite) SetupTest() {
 }
 
 func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
-	wallet.ReputationGeoEnable = true
-
 	ctx := context.Background()
 
 	storage, err := wallet.NewWritablePostgres("", false, "")
@@ -61,7 +61,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 
 	reputationClient := mockreputation.NewMockClient(ctrl)
 	reputationClient.EXPECT().
-		CreateReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
+		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	geoCountry := "AF"
@@ -108,8 +108,6 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 }
 
 func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDisabled() {
-	wallet.ReputationGeoEnable = true
-
 	ctx := context.Background()
 
 	ctrl := gomock.NewController(suite.T())
@@ -157,8 +155,6 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 }
 
 func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlreadyExists() {
-	wallet.ReputationGeoEnable = true
-
 	ctx := context.Background()
 
 	storage, err := wallet.NewWritablePostgres("", false, "")
@@ -224,8 +220,6 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlready
 }
 
 func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCallFailed() {
-	wallet.ReputationGeoEnable = true
-
 	ctx := context.Background()
 
 	storage, err := wallet.NewWritablePostgres("", false, "")
@@ -237,7 +231,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 	errReputation := errors.New(test.RandomString())
 	reputationClient := mockreputation.NewMockClient(ctrl)
 	reputationClient.EXPECT().
-		CreateReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
+		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errReputation)
 
 	locationValidator := wallet.NewMockGeoValidator(ctrl)
@@ -292,7 +286,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 
 	reputationClient := mockreputation.NewMockClient(ctrl)
 	reputationClient.EXPECT().
-		UpdateReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
+		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	service, err := wallet.InitService(storage, nil, reputationClient, nil,
@@ -338,6 +332,173 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 	server.Handler.ServeHTTP(rw, request)
 
 	suite.Require().Equal(http.StatusOK, rw.Code)
+}
+
+func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationMissingWallet() {
+	ctx := context.Background()
+
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	service, err := wallet.InitService(storage, nil, nil, nil,
+		nil, backoff.Retry)
+	suite.Require().NoError(err)
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.V4Request{
+		GeoCountry: "AF",
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
+		bytes.NewBuffer(payload))
+
+	err = signUpdateRequest(request, paymentID, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Require().Equal(http.StatusForbidden, rw.Code)
+}
+
+func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlreadySet() {
+	ctx := context.Background()
+
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	errorBundle := clients.NewHTTPError(errors.New(test.RandomString()), test.RandomString(),
+		test.RandomString(), http.StatusConflict, nil)
+
+	reputationClient := mockreputation.NewMockClient(ctrl)
+	reputationClient.EXPECT().
+		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(errorBundle)
+
+	service, err := wallet.InitService(storage, nil, reputationClient, nil,
+		nil, backoff.Retry)
+	suite.Require().NoError(err)
+
+	// create rewards wallet with public key
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+
+	var altCurrency = altcurrency.BAT
+	info := &walletutils.Info{
+		ID:          paymentID,
+		Provider:    "brave",
+		PublicKey:   publicKey.String(),
+		AltCurrency: &altCurrency,
+	}
+
+	err = suite.storage.InsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.V4Request{
+		GeoCountry: "AF",
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
+		bytes.NewBuffer(payload))
+
+	err = signUpdateRequest(request, paymentID, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Require().Equal(http.StatusConflict, rw.Code)
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+	suite.Require().NoError(err)
+
+	suite.Assert().Contains(appError.Error(), "error geo country has already been set for rewards wallet")
+}
+
+func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_ReputationCallFailed() {
+	ctx := context.Background()
+
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	errReputation := errors.New(test.RandomString())
+	reputationClient := mockreputation.NewMockClient(ctrl)
+	reputationClient.EXPECT().
+		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(errReputation)
+
+	service, err := wallet.InitService(storage, nil, reputationClient, nil,
+		nil, backoff.Retry)
+	suite.Require().NoError(err)
+
+	// create rewards wallet with public key
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+
+	var altCurrency = altcurrency.BAT
+	info := &walletutils.Info{
+		ID:          paymentID,
+		Provider:    "brave",
+		PublicKey:   publicKey.String(),
+		AltCurrency: &altCurrency,
+	}
+
+	err = suite.storage.InsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.V4Request{
+		GeoCountry: "AF",
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
+		bytes.NewBuffer(payload))
+
+	err = signUpdateRequest(request, paymentID, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Require().Equal(http.StatusInternalServerError, rw.Code)
 }
 
 func signUpdateRequest(req *http.Request, paymentID string, privateKey ed25519.PrivateKey) error {
