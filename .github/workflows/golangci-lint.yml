@@ -17,14 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
       - name: golangci-lint-libs
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           working-directory: libs
-          version: v1.45.2
+          version: v1.49.0
           args: --timeout 2m
           skip-go-installation: true
   golangci-services:
@@ -32,14 +32,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
       - name: golangci-lint-services
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           working-directory: services
-          version: v1.45.2
+          version: v1.49.0
           args: --timeout 2m
           skip-go-installation: true
   golangci-tools:
@@ -47,14 +47,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
       - name: golangci-lint-tools
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           working-directory: tools
-          version: v1.45.2
+          version: v1.49.0
           args: --timeout 2m
           skip-go-installation: true
   golangci-cmd:
@@ -62,14 +62,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
       - name: golangci-lint-cmd
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           working-directory: cmd
-          version: v1.45.2
+          version: v1.49.0
           args: --timeout 2m
           skip-go-installation: true
   golangci-main:
@@ -77,13 +77,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
       - name: golangci-lint-main
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           working-directory: main
-          version: v1.45.2
+          version: v1.49.0
           args: --timeout 2m
           skip-go-installation: true
