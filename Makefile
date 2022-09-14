@@ -179,3 +179,5 @@ lint:
 	cd tools && golangci-lint run -E gofmt -E revive --exclude-use-default=false
 	cd cmd && golangci-lint run -E gofmt -E revive --exclude-use-default=false
 	cd main && golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	cd serverless/email/webhook && golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	cd serverless/email/unsubscribe && golangci-lint run -E gofmt -E revive --exclude-use-default=false

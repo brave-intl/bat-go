@@ -4,15 +4,14 @@ import (
 	"github.com/google/uuid"
 )
 
-type resourceType string
-
-const (
-	depositCryptoResourceType resourceType = "DEPOSIT_CRYPTO"
-	supportTicketResourceType resourceType = "SUPPORT_TICKET"
-	kycLevelResourceType      resourceType = "KYC_LEVEL"
-	depositFiatResourceType   resourceType = "DEPOSIT_FIAT"
-	accountFrozenResourceType resourceType = "ACCOUNT_FROZEN"
-)
+/*
+	Supported resource types:
+		DEPOSIT_CRYPTO
+		SUPPORT_TICKET
+		KYC_LEVEL
+		DEPOSIT_FIAT
+		ACCOUNT_FROZEN
+*/
 
 type emailPayload struct {
 	Email        string                 `json:"email"`
@@ -20,6 +19,6 @@ type emailPayload struct {
 	AccountID    int64                  `json:"accountId"`
 	Timestamp    int64                  `json:"timestamp"`
 	UUID         uuid.UUID              `json:"uuid"`
-	ResourceType resourceType           `json:"resourceType"`
+	ResourceType string                 `json:"resourceType"`
 	Data         map[string]interface{} `json:"data"`
 }

@@ -21,11 +21,16 @@ import (
 )
 
 var (
-	ctx, logger                = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
-	dynamoTableName            = aws.String("webhook-idempotency")
-	dynamoUnsubscribeTableName = aws.String("unsubscribe")
-	sesSource                  = aws.String("noreply@brave.com")
-	namespace                  = uuid.MustParse(os.Getenv("EMAIL_NAMESPACE"))
+	// env vars
+	sesSource = aws.String(os.Getenv("SOURCE_EMAIL_ADDR"))
+	namespace = uuid.MustParse(os.Getenv("EMAIL_UUID_NAMESPACE"))
+
+	// setup context/logger
+	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
+
+	// tables
+	idempotencyTable = aws.String("idempotency")
+	unsubscribeTable = aws.String("unsubscribe")
 )
 
 // handler takes the api gateway request and sends a templated email
@@ -60,7 +65,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: dynamoUnsubscribeTableName,
+		TableName: unsubscribeTable,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: unsubscribeRef},
 		},
@@ -85,7 +90,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	// check if our idempotency key exists in db
 	dynGetOut, err = dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: dynamoTableName,
+		TableName: idempotencyTable,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: payload.UUID.String()},
 		},
@@ -127,7 +132,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 				payload.Email,
 			}},
 		Source:       sesSource,
-		Template:     aws.String(string(payload.ResourceType)),
+		Template:     aws.String(payload.ResourceType),
 		TemplateData: aws.String(string(data)),
 	})
 	if err != nil {
@@ -142,7 +147,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	// uuid from payload will be the client idempotency key used with dynamo
 	_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: dynamoTableName,
+		TableName: idempotencyTable,
 		Item: map[string]types.AttributeValue{
 			"id":         &types.AttributeValueMemberS{Value: payload.UUID.String()},
 			"message_id": &types.AttributeValueMemberS{Value: messageID},
