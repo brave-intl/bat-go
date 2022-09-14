@@ -31,6 +31,7 @@ var verifier = httpsignature.ParameterizedKeystoreVerifier{
 	Opts:     crypto.Hash(0),
 }
 
+// V4Request contains the fields for making v4 wallet requests.
 type V4Request struct {
 	GeoCountry string `json:"geo_country"`
 }
