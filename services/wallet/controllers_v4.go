@@ -86,8 +86,6 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		logger := logging.Logger(r.Context(), "wallet.UpdateWalletV4")
 
-		// TODO: cleanup validation errors
-
 		paymentID, err := uuid.FromString(chi.URLParam(r, "paymentID"))
 		if err != nil {
 			logger.Error().Err(errorutils.ErrBadRequest).Msg("error updating rewards wallet")
@@ -106,8 +104,6 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			logger.Error().Err(errPaymentIDMismatch).Msg("error updating rewards wallet")
 			return handlers.WrapError(errPaymentIDMismatch, "error updating rewards wallet", http.StatusForbidden)
 		}
-
-		// TODO: move to decoder
 
 		var request V4Request
 		err = json.NewDecoder(r.Body).Decode(&request)
