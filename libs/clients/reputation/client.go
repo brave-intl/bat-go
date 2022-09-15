@@ -310,7 +310,7 @@ func (c *HTTPClient) IsWalletOnPlatform(
 }
 
 type reputationSummaryRequest struct {
-	GeoCountry string `json:"geo_country"`
+	GeoCountry string `json:"geoCountry"`
 }
 
 // UpsertReputationSummary calls the reputation summary upsert endpoint and creates or updates the reputation

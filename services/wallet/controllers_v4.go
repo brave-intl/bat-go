@@ -24,7 +24,7 @@ var (
 
 // V4Request contains the fields for making v4 wallet requests.
 type V4Request struct {
-	GeoCountry string `json:"geo_country"`
+	GeoCountry string `json:"geoCountry"`
 }
 
 // V4Response contains the fields for v4 wallet responses.
