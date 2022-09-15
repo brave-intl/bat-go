@@ -24,7 +24,12 @@ var (
 
 // V4Request contains the fields for making v4 wallet requests.
 type V4Request struct {
-	GeoCountry string `json:"geo_country"`
+	GeoCountry string `json:"geoCountry"`
+}
+
+// V4Response contains the fields for v4 wallet responses.
+type V4Response struct {
+	PaymentID string `json:"paymentId"`
 }
 
 // CreateWalletV4 creates a brave rewards wallet. This endpoint takes a geo country as part of the request
@@ -76,7 +81,11 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			}
 		}
 
-		return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusCreated)
+		response := V4Response{
+			PaymentID: info.ID,
+		}
+
+		return handlers.RenderContent(ctx, response, w, http.StatusCreated)
 	}
 }
 
