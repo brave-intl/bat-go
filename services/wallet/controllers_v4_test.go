@@ -99,12 +99,12 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 
 	suite.Require().Equal(http.StatusCreated, rw.Code)
 
-	var info walletutils.Info
-	err = json.NewDecoder(rw.Body).Decode(&info)
+	var response wallet.V4Response
+	err = json.NewDecoder(rw.Body).Decode(&response)
 	suite.Require().NoError(err)
 
 	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
-	suite.Assert().Equal(walletID.String(), info.ID)
+	suite.Assert().Equal(walletID.String(), response.PaymentID)
 }
 
 func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDisabled() {
