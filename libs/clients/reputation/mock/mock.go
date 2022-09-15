@@ -36,20 +36,6 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// CreateReputationSummary mocks base method.
-func (m *MockClient) CreateReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateReputationSummary", ctx, paymentID, geoCountry)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateReputationSummary indicates an expected call of CreateReputationSummary.
-func (mr *MockClientMockRecorder) CreateReputationSummary(ctx, paymentID, geoCountry interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateReputationSummary", reflect.TypeOf((*MockClient)(nil).CreateReputationSummary), ctx, paymentID, geoCountry)
-}
-
 // IsDrainReputable mocks base method.
 func (m *MockClient) IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error) {
 	m.ctrl.T.Helper()
@@ -125,4 +111,18 @@ func (m *MockClient) IsWalletReputable(ctx context.Context, id uuid.UUID, platfo
 func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletReputable", reflect.TypeOf((*MockClient)(nil).IsWalletReputable), ctx, id, platform)
+}
+
+// UpsertReputationSummary mocks base method.
+func (m *MockClient) UpsertReputationSummary(ctx context.Context, paymentID, geoCountry string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertReputationSummary", ctx, paymentID, geoCountry)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpsertReputationSummary indicates an expected call of UpsertReputationSummary.
+func (mr *MockClientMockRecorder) UpsertReputationSummary(ctx, paymentID, geoCountry interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertReputationSummary", reflect.TypeOf((*MockClient)(nil).UpsertReputationSummary), ctx, paymentID, geoCountry)
 }

@@ -59,8 +59,8 @@ var (
 )
 
 var (
-	errGeoCountryDisabled  = errors.New("geo country is disabled")
-	errWalletAlreadyExists = errors.New("wallet already exists")
+	errGeoCountryDisabled         = errors.New("geo country is disabled")
+	errRewardsWalletAlreadyExists = errors.New("rewards wallet already exists")
 )
 
 // GeoValidator - interface describing validation of geolocation
@@ -252,6 +252,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 
 	r.Route("/v4/wallets", func(r chi.Router) {
 		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
+		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
 	})
 
 	return r
@@ -570,21 +572,19 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		var pgErr *pq.Error
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == "23505" { // unique constraint violation
-				return nil, errWalletAlreadyExists
+				return nil, errRewardsWalletAlreadyExists
 			}
 		}
 		return nil, fmt.Errorf("error inserting rewards wallet: %w", err)
 	}
 
-	if ReputationGeoEnable {
-		op := func() (interface{}, error) {
-			return nil, service.repClient.CreateReputationSummary(ctx, info.ID, geoCountry)
-		}
+	upsertReputationSummary := func() (interface{}, error) {
+		return nil, service.repClient.UpsertReputationSummary(ctx, info.ID, geoCountry)
+	}
 
-		_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
-			return nil, fmt.Errorf("error calling reputation service: %w", err)
-		}
+	_, err = service.retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+	if err != nil {
+		return nil, fmt.Errorf("error calling reputation service: %w", err)
 	}
 
 	err = commit()

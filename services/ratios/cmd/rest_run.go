@@ -51,7 +51,12 @@ func RestRun(command *cobra.Command, args []string) {
 
 	// do rest endpoints
 	r := cmd.SetupRouter(ctx)
-	r.Get("/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}", middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)).ServeHTTP)
+	r.Get(
+		"/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}",
+		ratios.RatiosXBraveHeaderInstrumentHandler(
+			"GetRelativeHandler",
+			middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)),
+		).ServeHTTP)
 	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
 	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
 	r.Get("/v2/market/provider/coingecko", middleware.InstrumentHandler("GetCoinMarketsHandler", ratios.GetCoinMarketsHandler(s)).ServeHTTP)
