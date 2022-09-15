@@ -12,11 +12,11 @@ ARG VERSION
 ARG BUILD_TIME
 ARG COMMIT
 
-WORKDIR /src/main
-COPY . ../
-RUN go mod download
+WORKDIR /src
+COPY . ./
+RUN cd main && go mod download
 
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN cd main && CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o ../bat-go main.go
 
