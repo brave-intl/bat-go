@@ -27,7 +27,7 @@ type V4Request struct {
 	GeoCountry string `json:"geo_country"`
 }
 
-// V4Response contains the fields for v4 wallet request responses.
+// V4Response contains the fields for v4 wallet responses.
 type V4Response struct {
 	PaymentID string `json:"paymentId"`
 }
