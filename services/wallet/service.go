@@ -114,7 +114,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	repClient, err := reputation.New()
 	// it's okay to not fatally fail if this environment is local and we cant make a rep client
 	if err != nil && os.Getenv("ENV") != "local" {
-		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, repClient)
@@ -130,23 +130,23 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	cfg, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
 	awsClient, err := appaws.NewClient(cfg)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
 	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
 	useCustodianRegions, featureOK := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool)
 	if featureOK && useCustodianRegions && !bucketOK {
-		logger.Fatal().Msg("failed to initialize wallet service, misconfiguration for custodian regions bucket")
+		logger.Panic().Msg("failed to initialize wallet service, misconfiguration for custodian regions bucket")
 	}
 
 	object, ok := ctx.Value(appctx.DisabledWalletGeoCountriesCTXKey).(string)
 	if !ok {
-		logger.Fatal().Err(errors.New("wallet geo countries disabled ctx key value not found")).
+		logger.Panic().Err(errors.New("wallet geo countries disabled ctx key value not found")).
 			Msg("failed to initialize wallet service")
 	}
 
@@ -159,14 +159,14 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
 	if useCustodianRegions {
 		// use client to put the custodian regions on ctx
 		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, awsClient, bucket)
 		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to initialize wallet service, unable to extract custodian regions")
+			logger.Panic().Err(err).Msg("failed to initialize wallet service, unable to extract custodian regions")
 		}
 		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
 	}
