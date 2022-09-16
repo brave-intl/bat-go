@@ -39,6 +39,8 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrInternalServerError internal server error
 	ErrInternalServerError = errors.New("server encountered an internal error and was unable to complete the request")
+	// ErrBadRequest bad request error
+	ErrBadRequest = errors.New("error bad request")
 )
 
 // ErrorBundle creates a new response error
