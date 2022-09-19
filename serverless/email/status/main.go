@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -39,13 +41,33 @@ func init() {
 // We use event publishing to receive delivery status notifications via SNS
 // https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-contents.html
 type sesNotification struct {
-	EventType string `json:"eventType"`
-	Mail      *mail  `json:"mail"`
+	EventType     string         `json:"eventType"`
+	Mail          *mail          `json:"mail"`
+	Bounce        *bounce        `json:"bounce"`
+	Complaint     *complaint     `json:"complaint"`
+	Delivery      *delivery      `json:"delivery"`
+	DeliveryDelay *deliveryDelay `json:"deliveryDelay"`
 }
 
 type mail struct {
 	MessageID string              `json:"messageId"`
 	Tags      []map[string]string `json:"tags"`
+}
+
+type bounce struct {
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type complaint struct {
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type delivery struct {
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type deliveryDelay struct {
+	Timestamp time.Time `json:"timestamp"`
 }
 
 func handler(ctx context.Context, snsEvent events.SNSEvent) {
@@ -61,6 +83,30 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 			continue
 		}
 
+		// Check the status type and get the associated timestamp
+		// Bounce, Complaint, Delivery, Send, Reject, Open, Click, Rendering Failure, DeliveryDelay, or Subscription.
+		var statusTimestamp time.Time
+		switch notification.EventType {
+		case "Bounce":
+			statusTimestamp = notification.Bounce.Timestamp
+		case "Complaint":
+			statusTimestamp = notification.Complaint.Timestamp
+		case "Delivery":
+			statusTimestamp = notification.Delivery.Timestamp
+		case "Send":
+		case "Reject":
+		case "Open":
+			continue // Skip "Open" events
+		case "Click":
+			continue // Skip "Click" events
+		case "Rendering Failure":
+		case "DeliveryDelay":
+			statusTimestamp = notification.DeliveryDelay.Timestamp
+		case "Subscription":
+		default:
+			logger.Warn().Msg("unknown event type " + notification.EventType)
+		}
+
 		// Get Idempotency ID from tags to use as partition key, skip if it is not present
 		var idempotencyID string
 		for _, tag := range notification.Mail.Tags {
@@ -72,16 +118,18 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 			continue
 		}
 
+		// Write status to database
 		_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
 			TableName: statusTable,
 			Item: map[string]types.AttributeValue{
 				"idempotency_id": &types.AttributeValueMemberS{Value: idempotencyID},
-				"status_id":      &types.AttributeValueMemberS{Value: uuid.NewString()},
 				"message_id":     &types.AttributeValueMemberS{Value: notification.Mail.MessageID},
-				"type":           &types.AttributeValueMemberS{Value: notification.EventType},
+				"status_id":      &types.AttributeValueMemberS{Value: uuid.NewString()},
+				"status_type":    &types.AttributeValueMemberS{Value: notification.EventType},
+				"status_ts":      &types.AttributeValueMemberN{Value: strconv.FormatInt(statusTimestamp.Unix(), 10)},
+				"created_at":     &types.AttributeValueMemberN{Value: strconv.FormatInt(time.Now().UTC().Unix(), 10)},
 			},
 		})
-
 		if err != nil {
 			logger.Error().Err(err).Msg(
 				"failed to write status to dynamodb for messageID " + notification.Mail.MessageID,
