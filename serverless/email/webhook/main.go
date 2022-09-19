@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
 	sestypes "github.com/aws/aws-sdk-go-v2/service/ses/types"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -24,10 +24,10 @@ import (
 
 var (
 	// env vars
-	sesSource  = aws.String(os.Getenv("SOURCE_EMAIL_ADDR"))
-	namespace  = uuid.MustParse(os.Getenv("EMAIL_UUID_NAMESPACE"))
-	authTokens = strings.Split(os.Getenv("AUTH_TOKENS"), ",")
-	configSet  = aws.String(os.Getenv("SES_CONFIG_SET"))
+	sesSourceArn  = os.Getenv("SOURCE_EMAIL_ADDR")
+	namespaceArn  = os.Getenv("EMAIL_UUID_NAMESPACE")
+	authTokensArn = os.Getenv("AUTH_TOKENS")
+	configSetArn  = os.Getenv("SES_CONFIG_SET")
 
 	// setup context/logger
 	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
@@ -37,8 +37,9 @@ var (
 	unsubscribeTable = aws.String("unsubscribe")
 
 	// clients
-	dynamoClient *dynamodb.Client
-	sesClient    *ses.Client
+	dynamoClient         *dynamodb.Client
+	sesClient            *ses.Client
+	secretsManagerClient *secretsmanager.Client
 )
 
 func init() {
@@ -51,6 +52,22 @@ func init() {
 	dynamoClient = dynamodb.NewFromConfig(config)
 	// setup ses client
 	sesClient = ses.NewFromConfig(config)
+	// setup secrets manager client
+	secretsManagerClient = secretsmanager.NewFromConfig(config)
+
+	// go get the secret values
+	sesSourceSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+		secretId: sesSourceArn,
+	})
+	namespaceSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+		secretId: namespaceArn,
+	})
+	authTokenSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+		secretId: authTokensArn,
+	})
+	configSetSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+		secretId: configSetArn,
+	})
 }
 
 // handler takes the api gateway request and sends a templated email
@@ -69,7 +86,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	// check auth token
-	for _, token := range authTokens {
+	for _, token := range *authTokensSecretOutput.SecretString {
 		if apiKey == token {
 			authenticated == true
 		}
@@ -95,7 +112,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, fmt.Errorf("failed to unmarshal request body: %w", err)
 	}
 
-	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.Email)).String()
+	unsubscribeRef := uuid.NewSHA1(*namespaceSecretOutput.SecretString, []byte(payload.Email)).String()
 
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
@@ -165,8 +182,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			ToAddresses: []string{
 				payload.Email,
 			}},
-		ConfigurationSetName: configSet,
-		Source:               sesSource,
+		ConfigurationSetName: configSetSecretOutput.SecretString,
+		Source:               sesSourceSecretOutput.SecretString,
 		Template:             aws.String(payload.ResourceType),
 		TemplateData:         aws.String(string(data)),
 	})
