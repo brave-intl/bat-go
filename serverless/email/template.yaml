@@ -141,8 +141,8 @@ Resources:
   SnsEmailNotificationConsumerFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: notification/
-      Handler: notification
+      CodeUri: status/
+      Handler: status
       Runtime: go1.x
       Architectures:
         - x86_64
