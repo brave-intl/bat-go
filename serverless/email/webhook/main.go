@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -22,8 +24,9 @@ import (
 
 var (
 	// env vars
-	sesSource = aws.String(os.Getenv("SOURCE_EMAIL_ADDR"))
-	namespace = uuid.MustParse(os.Getenv("EMAIL_UUID_NAMESPACE"))
+	sesSource  = aws.String(os.Getenv("SOURCE_EMAIL_ADDR"))
+	namespace  = uuid.MustParse(os.Getenv("EMAIL_UUID_NAMESPACE"))
+	authTokens = strings.Split(os.Getenv("AUTH_TOKENS"), ",")
 
 	// setup context/logger
 	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
@@ -51,6 +54,34 @@ func init() {
 
 // handler takes the api gateway request and sends a templated email
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	var (
+		authenticated  bool
+		apiKey, authOK = request.Headers["x-api-key"]
+	)
+
+	// no api key in request
+	if !authOK {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusUnauthenticated,
+			Body:       http.StatusText(http.StatusUnauthenticated),
+		}, errors.New("authentication key missing in request")
+	}
+
+	// check auth token
+	for _, token := range authTokens {
+		if apiKey == token {
+			authenticated == true
+		}
+	}
+
+	// api key in request does not match any configured
+	if !authOK {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusUnauthenticated,
+			Body:       http.StatusText(http.StatusUnauthenticated),
+		}, errors.New("failed to match authentication token")
+	}
+
 	// handler accepts from the request event the payload
 	// read the payload into our structure
 	payload := new(emailPayload)
