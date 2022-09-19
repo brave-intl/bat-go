@@ -56,16 +56,16 @@ func init() {
 	secretsManagerClient = secretsmanager.NewFromConfig(config)
 
 	// go get the secret values
-	sesSourceSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+	sesSourceSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		secretId: sesSourceArn,
 	})
-	namespaceSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+	namespaceSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		secretId: namespaceArn,
 	})
-	authTokenSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+	authTokenSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		secretId: authTokensArn,
 	})
-	configSetSecretOutput, err := secretsMangerClient.GetSecretValue(ctx, &GetSecretValueInput{
+	configSetSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		secretId: configSetArn,
 	})
 }
