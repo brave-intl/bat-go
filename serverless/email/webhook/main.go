@@ -27,6 +27,7 @@ var (
 	sesSource  = aws.String(os.Getenv("SOURCE_EMAIL_ADDR"))
 	namespace  = uuid.MustParse(os.Getenv("EMAIL_UUID_NAMESPACE"))
 	authTokens = strings.Split(os.Getenv("AUTH_TOKENS"), ",")
+	configSet  = aws.String(os.Getenv("SES_CONFIG_SET"))
 
 	// setup context/logger
 	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
@@ -94,7 +95,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, fmt.Errorf("failed to unmarshal request body: %w", err)
 	}
 
-	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.UUID.String())).String()
+	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.Email)).String()
 
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
@@ -164,9 +165,10 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			ToAddresses: []string{
 				payload.Email,
 			}},
-		Source:       sesSource,
-		Template:     aws.String(payload.ResourceType),
-		TemplateData: aws.String(string(data)),
+		ConfigurationSetName: configSet,
+		Source:               sesSource,
+		Template:             aws.String(payload.ResourceType),
+		TemplateData:         aws.String(string(data)),
 	})
 	if err != nil {
 		return events.APIGatewayProxyResponse{
