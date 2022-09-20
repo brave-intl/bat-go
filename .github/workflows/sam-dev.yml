@@ -1,10 +1,11 @@
-name: Deploy to dev
 on:
   workflow_dispatch:
   push:
     branches:
       - master
       - dev
+
+name: Deploy BraveX Development Serverless Infrastructure
 jobs:
   deploy:
     timeout-minutes: 30
@@ -24,15 +25,15 @@ jobs:
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v1
 
-     - name: Configure AWS Credentials 
-       uses: aws-actions/configure-aws-credentials@v1
-       with:
-         role-to-assume: arn:aws:iam::021268868874:role/bravex-lambdas-sbx-github-actions20220920082446554100000003 
-         role-session-name: bravex-sbx-github-actions
-         aws-region: us-west-2
+      - name: Configure AWS Credentials 
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::021268868874:role/bravex-lambdas-sbx-github-actions20220920082446554100000003 
+          role-session-name: bravex-sbx-github-actions
+          aws-region: us-west-2
 
-     - name: Build lambdas inside Docker containers
-       run: sam build --use-container
+      - name: Build lambdas inside Docker containers
+        run: sam build --use-container
 
-     - name: Deploy email lambdas
-       run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name bravex-frontend --s3-bucket bravex-lambda-artifacts-sbx-20220920082445588400000002
+      - name: Deploy email lambdas
+        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name bravex-frontend --s3-bucket bravex-lambda-artifacts-sbx-20220920082445588400000002
