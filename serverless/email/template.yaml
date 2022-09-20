@@ -135,9 +135,6 @@ Outputs:
   EmailWebhookFunction:
     Description: "Email Webhook Function ARN"
     Value: !GetAtt EmailWebhookFunction.Arn
-  EmailWebhookFunctionIamRole:
-    Description: "Implicit IAM Role created for function"
-    Value: !GetAtt EmailWebhookFunctionRole.Arn
 
   EmailUnsubscribeAPI:
     Description: "API Gateway endpoint URL for for unsubscribe"
@@ -145,6 +142,3 @@ Outputs:
   EmailUnsubscribeFunction:
     Description: "unsubscribe lambda ARN"
     Value: !GetAtt EmailUnsubscribeFunction.Arn
-  EmailUnsubscribeFunctionIamRole:
-    Description: "Implicit IAM Role created for function"
-    Value: !GetAtt EmailUnsubscribeFunctionRole.Arn
