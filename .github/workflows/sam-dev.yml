@@ -35,7 +35,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Build lambdas inside Docker containers
-        run: sam build --use-container --base-dir ./serverless/email/ --template-file ./serverless/email/template.yaml --debug
+        run: sam build --use-container --build-dir ./serverless/email/build --base-dir ./serverless/email/ --template-file ./serverless/email/template.yaml --debug
 
       - name: Deploy email lambdas
-        run: sam deploy --no-confirm-changeset --template-file ./serverless/email/template.yaml --no-fail-on-empty-changeset --stack-name bravex-frontend --s3-bucket bravex-lambda-artifacts-sbx-20220920082445588400000002 --debug
+        run: sam deploy --no-confirm-changeset --template-file ./serverless/email/build/template.yaml --no-fail-on-empty-changeset --stack-name bravex-frontend --s3-bucket bravex-lambda-artifacts-sbx-20220920082445588400000002 --debug
