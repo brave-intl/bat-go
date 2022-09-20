@@ -533,7 +533,7 @@ func DrainSuggestionV2(service *Service) handlers.AppHandler {
 				map[string]string{"paymentId": "paymentId must match signature"})
 		}
 
-		resp.DrainID, err = service.Drain(ctx, req.Credentials, req.WalletID)
+		drainID, err := service.Drain(ctx, req.Credentials, req.WalletID)
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
@@ -548,6 +548,7 @@ func DrainSuggestionV2(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
 			}
 		}
+		resp.DrainID = drainID
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
