@@ -30,7 +30,7 @@ func ExtractCustodianRegions(ctx context.Context, client appaws.S3GetObjectAPI, 
 			Key:    &custodianRegionsObj,
 		})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get payout status: %w", err)
+		return nil, fmt.Errorf("failed to get custodian regions: %w", err)
 	}
 	defer func() {
 		if err := out.Body.Close(); err != nil {
@@ -107,8 +107,8 @@ type PayoutStatus struct {
 
 // GeoAllowBlockMap - this is the allow / block list of geos for a custodian
 type GeoAllowBlockMap struct {
-	Allow []string `json:"allow"`
-	Block []string `json:"block"`
+	Allow []string `json:"allow" valid:"-"`
+	Block []string `json:"block" valid:"-"`
 }
 
 // Verdict - get the verdict of the geo allow block map
@@ -148,9 +148,9 @@ OUTER_BLOCK:
 
 // Regions - Supported Regions
 type Regions struct {
-	Uphold   GeoAllowBlockMap `json:"uphold"`
-	Gemini   GeoAllowBlockMap `json:"gemini"`
-	Bitflyer GeoAllowBlockMap `json:"bitflyer"`
+	Uphold   GeoAllowBlockMap `json:"uphold" valid:"-"`
+	Gemini   GeoAllowBlockMap `json:"gemini" valid:"-"`
+	Bitflyer GeoAllowBlockMap `json:"bitflyer" valid:"-"`
 }
 
 // HandleErrors - handle any errors in input
