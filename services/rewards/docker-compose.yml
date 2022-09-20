@@ -17,7 +17,7 @@ services:
       - "3333:3333"
     security_opt:
       - no-new-privileges:true
-      - read_only:true
+    read_only: true
     volumes:
       - ../:/src
     working_dir: /src
