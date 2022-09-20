@@ -10,6 +10,64 @@ Globals:
   Function:
     Timeout: 5
 
+Parameters:
+  EventsDynamoDBRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Events/Variables/DynamoDBRoleArn
+  EventsExecutionRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Events/ExecutionRoleArn
+  UnsubscribeDynamoDBRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Unsubscribe/Variables/DynamoDBRoleArn
+  UnsubscribeExecutionRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Unsubscribe/ExecutionRoleArn
+  WebhookDynamoDBRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Webhook/Variables/DynamoDBRoleArn
+  WebhookExecutionRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Webhook/ExecutionRoleArn
+  VpcSubnetIds:
+    Type: AWS::SSM::Parameter::Value<List<AWS::EC2::Subnet::Id>>
+    Default: /BraveX/VPC/SubnetIds
+  EventsLambdaSgIds:
+    Type: AWS::SSM::Parameter::Value<List<AWS::EC2::SecurityGroup::Id>>
+    Default: /BraveX/VPC/EventsLambda/SecurityGroupIds
+  UnsubscribeLambdaSgIds:
+    Type: AWS::SSM::Parameter::Value<List<AWS::EC2::SecurityGroup::Id>>
+    Default: /BraveX/VPC/UnsubscribeLambda/SecurityGroupIds
+  WebhookLambdaSgIds:
+    Type: AWS::SSM::Parameter::Value<List<AWS::EC2::SecurityGroup::Id>>
+    Default: /BraveX/VPC/WebhookLambda/SecurityGroupIds
+  StatusTopicArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Events/StatusTopic
+  WebhookSourceEmailAddress:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Webhook/Variables/SourceEmailAddress
+  WebhookEmailUuidNamespace:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Webhook/Variables/EmailUUIDNamespace
+  WebhookAuthTokens:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Webhook/Variables/AuthTokens
+  WebhookConfigSet:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Webhook/Variables/ConfigSet
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: bravex-frontend
+    Description: Frontend Deployment for BraveX Integration Service
+    Author: Ben Huson, Nick von Pentz, Harold Spencer Jr.
+    Labels:
+      - 'bravex'
+      - 'webhook'
+    HomeePageUrl: https://github.com/brave-intl/bat-go
+    SourceCodeUrl: https://github.com/brave-intl/bat-go
+
 Resources:
   EmailWebhookFunction:
     Type: AWS::Serverless::Function
@@ -17,8 +75,19 @@ Resources:
       CodeUri: webhook/
       Handler: webhook
       Runtime: go1.x
+      Role: !Ref WebhookExecutionRoleArn
       Architectures:
         - x86_64
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref WebhookLambdaSgIds
+      Environment:
+        Variables:
+          SOURCE_EMAIL_ADDR: !Ref WebhookSourceEmailAddress
+          EMAIL_UUID_NAMESPACE: !Ref WebhookEmailUuidNamespace
+          AUTH_TOKENS: !Ref WebhookAuthTokens
+          SES_CONFIG_SET: !Ref WebhookConfigSet
+          DYNAMODB_ROLE_ARN: !Ref WebhookDynamoDBRoleArn
       Events:
         CatchAll:
           Type: Api
@@ -34,6 +103,13 @@ Resources:
       Runtime: go1.x
       Architectures:
         - x86_64
+      Role: !Ref UnsubscribeExecutionRoleArn
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref UnsubscribeLambdaSgIds
+      Environment:
+        Variables:
+          DYNAMODB_ROLE_ARN: !Ref UnsubscribeDynamoDBRoleArn
       Events:
         CatchAll:
           Type: Api
