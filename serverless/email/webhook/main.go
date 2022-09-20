@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -85,15 +86,15 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, errors.New("authentication key missing in request")
 	}
 
-	// check auth token
-	for _, token := range *authTokensSecretOutput.SecretString {
+	// check auth token against our comma seperated list of valid auth tokens
+	for _, token := range strings.Split(*authTokensSecretOutput.SecretString, ",") {
 		if apiKey == token {
 			authenticated == true
 		}
 	}
 
 	// api key in request does not match any configured
-	if !authOK {
+	if !authenticated {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusUnauthenticated,
 			Body:       http.StatusText(http.StatusUnauthenticated),
