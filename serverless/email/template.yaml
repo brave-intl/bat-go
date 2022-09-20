@@ -11,6 +11,13 @@ Globals:
     Timeout: 5
 
 Parameters:
+  DeploymentEnvironment:
+    Type: String
+    Default: "sbx"
+    AllowedValues: ["sbx", "prod"]
+  DynamoDBEndpoint:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aws/service/global-infrastructure/regions/us-west-2/services/dynamodb/endpoint
   EventsDynamoDBRoleArn:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Events/Variables/DynamoDBRoleArn
@@ -69,10 +76,15 @@ Metadata:
     SourceCodeUrl: https://github.com/brave-intl/bat-go
 
 Resources:
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref DeploymentEnvironment
+
   EmailWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: webhook/
+      CodeUri: ./webhook/
       Handler: webhook
       Runtime: go1.x
       Role: !Ref WebhookExecutionRoleArn
@@ -88,17 +100,19 @@ Resources:
           AUTH_TOKENS: !Ref WebhookAuthTokens
           SES_CONFIG_SET: !Ref WebhookConfigSet
           DYNAMODB_ROLE_ARN: !Ref WebhookDynamoDBRoleArn
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
       Events:
         CatchAll:
           Type: Api
           Properties:
             Path: /webhook
             Method: POST
+            RestApiId: !Ref ApiGatewayApi
 
   EmailUnsubscribeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: unsubscribe/
+      CodeUri: ./unsubscribe/
       Handler: unsubscribe
       Runtime: go1.x
       Architectures:
@@ -110,30 +124,26 @@ Resources:
       Environment:
         Variables:
           DYNAMODB_ROLE_ARN: !Ref UnsubscribeDynamoDBRoleArn
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
       Events:
         CatchAll:
           Type: Api
           Properties:
             Path: /unsubscribe
             Method: GET
+            RestApiId: !Ref ApiGatewayApi
 
 Outputs:
   EmailWebhookAPI:
-    Description: "API Gateway endpoint URL for Prod environment email webhook"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook/"
+    Description: "API Gateway endpoint URL for Email webhook"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${DeploymentEnvironment}/webhook/"
   EmailWebhookFunction:
     Description: "Email Webhook Function ARN"
     Value: !GetAtt EmailWebhookFunction.Arn
-  EmailWebhookFunctionIamRole:
-    Description: "Implicit IAM Role created for function"
-    Value: !GetAtt EmailWebhookFunctionRole.Arn
 
   EmailUnsubscribeAPI:
-    Description: "API Gateway endpoint URL for Prod environment for unsubscribe"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/unsubscribe/"
+    Description: "API Gateway endpoint URL for for unsubscribe"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com//${DeploymentEnvironment}/unsubscribe/"
   EmailUnsubscribeFunction:
     Description: "unsubscribe lambda ARN"
     Value: !GetAtt EmailUnsubscribeFunction.Arn
-  EmailUnsubscribeFunctionIamRole:
-    Description: "Implicit IAM Role created for function"
-    Value: !GetAtt EmailUnsubscribeFunctionRole.Arn

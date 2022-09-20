@@ -22,10 +22,7 @@ jobs:
           python-version: "3.8"
 
       - name: Setup SAM CLI
-        uses: aws-actions/setup-sam@v1
-
-      - name: Setup SAM CLI
-        uses: aws-actions/setup-sam@v1
+        uses: aws-actions/setup-sam@v2
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -35,7 +32,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Build lambdas inside Docker containers
-        run: sam build --use-container --base-dir ./serverless/email/
+        run: sam build --use-container --parameter-overrides 'ParameterKey=DeploymentEnvironment,ParameterValue=sbx' --build-dir ./serverless/email/build --base-dir ./serverless/email/ --template-file ./serverless/email/template.yaml --debug
 
       - name: Deploy email lambdas
-        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name bravex-frontend --s3-bucket bravex-lambda-artifacts-sbx-20220920082445588400000002
+        run: sam deploy --no-confirm-changeset --parameter-overrides 'ParameterKey=DeploymentEnvironment,ParameterValue=sbx' --template-file ./serverless/email/build/template.yaml --no-fail-on-empty-changeset --stack-name bravex-frontend --s3-bucket bravex-lambda-artifacts-sbx-20220920082445588400000002 --debug
