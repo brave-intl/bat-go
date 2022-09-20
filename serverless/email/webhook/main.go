@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -86,6 +87,7 @@ func init() {
 	creds := stscreds.NewAssumeRoleProvider(stsClient, dynamoRoleArn)
 	dynConfig.Credentials = creds
 
+	logger.Info().Str("dynConfig", fmt.Sprintf("%+v", dynConfig)).Msg("the dynamo config")
 	// setup dynamodb client
 	dynamoClient = dynamodb.NewFromConfig(dynConfig)
 
