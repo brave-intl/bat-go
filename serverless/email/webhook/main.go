@@ -72,11 +72,14 @@ func init() {
 		}
 		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
 	})
+
 	dynConfig, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
 		panic("failed to create aws dynamo config")
 	}
+
 	dynConfig.EndpointResolver = customResolver
+	dynConfig.ClientLogMode = aws.LogRequestWithBody | aws.LogResponseWithBody | aws.LogRetries
 
 	// sts assume creds
 	stsClient := sts.NewFromConfig(config)
