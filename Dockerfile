@@ -1,5 +1,6 @@
 FROM golang:1.18-alpine as builder
 
+
 # put certs in builder image
 RUN apk update
 RUN apk add -U --no-cache ca-certificates && update-ca-certificates
@@ -14,6 +15,11 @@ ARG COMMIT
 
 WORKDIR /src
 COPY . ./
+RUN chown -R nobody:nobody /src/
+RUN mkdir /.cache
+RUN chown -R nobody:nobody /.cache
+
+USER nobody
 RUN cd main && go mod download
 
 RUN cd main && CGO_ENABLED=0 GOOS=linux go build \
