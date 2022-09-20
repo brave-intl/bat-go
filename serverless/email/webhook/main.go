@@ -66,23 +66,24 @@ func init() {
 
 	logger.Info().Msg("aws clients are setup")
 
+	logger.Info().Str("arn", sesSourceArn).Msg("getting source")
 	// go get the secret values
 	sesSourceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(sesSourceArn),
 	})
-	logger.Info().Msg("got ses source secret value")
+	logger.Info().Err(err).Msg("got ses source secret value")
 	namespaceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(namespaceArn),
 	})
-	logger.Info().Msg("got namespace secret output")
+	logger.Info().Err(err).Msg("got namespace secret output")
 	authTokenSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(authTokensArn),
 	})
-	logger.Info().Msg("got auth tokens secret output")
+	logger.Info().Err(err).Msg("got auth tokens secret output")
 	configSetSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(configSetArn),
 	})
-	logger.Info().Msg("got config set secret output")
+	logger.Info().Err(err).Msg("got config set secret output")
 }
 
 // handler takes the api gateway request and sends a templated email
