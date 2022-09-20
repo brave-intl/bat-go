@@ -69,6 +69,11 @@ Metadata:
     SourceCodeUrl: https://github.com/brave-intl/bat-go
 
 Resources:
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref DeploymentEnvironment
+
   EmailWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -94,6 +99,7 @@ Resources:
           Properties:
             Path: /webhook
             Method: POST
+            RestApiId: !Ref ApiGatewayApi
 
   EmailUnsubscribeFunction:
     Type: AWS::Serverless::Function
@@ -116,6 +122,7 @@ Resources:
           Properties:
             Path: /unsubscribe
             Method: GET
+            RestApiId: !Ref ApiGatewayApi
 
 Outputs:
   EmailWebhookAPI:
