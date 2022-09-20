@@ -11,6 +11,10 @@ Globals:
     Timeout: 5
 
 Parameters:
+  DeploymentEnvironment:
+    Type: String
+    Default: "sbx"
+    AllowedValues: ["sbx", "prod"]
   EventsDynamoDBRoleArn:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Events/Variables/DynamoDBRoleArn
