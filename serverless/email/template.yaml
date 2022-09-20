@@ -72,7 +72,7 @@ Resources:
   EmailWebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: webhook/
+      CodeUri: ./webhook/
       Handler: webhook
       Runtime: go1.x
       Role: !Ref WebhookExecutionRoleArn
@@ -98,7 +98,7 @@ Resources:
   EmailUnsubscribeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: unsubscribe/
+      CodeUri: ./unsubscribe/
       Handler: unsubscribe
       Runtime: go1.x
       Architectures:
