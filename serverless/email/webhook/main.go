@@ -42,6 +42,11 @@ var (
 	dynamoClient         *dynamodb.Client
 	sesClient            *ses.Client
 	secretsManagerClient *secretsmanager.Client
+
+	sesSourceSecretOutput *secretsmanager.GetSecretValueOutput
+	namespaceSecretOutput *secretsmanager.GetSecretValueOutput
+	authTokenSecretOutput *secretsmanager.GetSecretValueOutput
+	configSetSecretOutput *secretsmanager.GetSecretValueOutput
 )
 
 func init() {
@@ -58,17 +63,17 @@ func init() {
 	secretsManagerClient = secretsmanager.NewFromConfig(config)
 
 	// go get the secret values
-	sesSourceSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		secretId: sesSourceArn,
+	sesSourceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(sesSourceArn),
 	})
-	namespaceSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		secretId: namespaceArn,
+	namespaceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(namespaceArn),
 	})
-	authTokenSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		secretId: authTokensArn,
+	authTokenSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(authTokensArn),
 	})
-	configSetSecretOutput, err := secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		secretId: configSetArn,
+	configSetSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(configSetArn),
 	})
 }
 
@@ -82,23 +87,23 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// no api key in request
 	if !authOK {
 		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusUnauthenticated,
-			Body:       http.StatusText(http.StatusUnauthenticated),
+			StatusCode: http.StatusUnauthorized,
+			Body:       http.StatusText(http.StatusUnauthorized),
 		}, errors.New("authentication key missing in request")
 	}
 
 	// check auth token against our comma seperated list of valid auth tokens
-	for _, token := range strings.Split(*authTokensSecretOutput.SecretString, ",") {
+	for _, token := range strings.Split(*authTokenSecretOutput.SecretString, ",") {
 		if apiKey == token {
-			authenticated == true
+			authenticated = true
 		}
 	}
 
 	// api key in request does not match any configured
 	if !authenticated {
 		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusUnauthenticated,
-			Body:       http.StatusText(http.StatusUnauthenticated),
+			StatusCode: http.StatusUnauthorized,
+			Body:       http.StatusText(http.StatusUnauthorized),
 		}, errors.New("failed to match authentication token")
 	}
 
@@ -130,7 +135,16 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, errors.New("invalid input payload")
 	}
 
-	unsubscribeRef := uuid.NewSHA1(*namespaceSecretOutput.SecretString, []byte(payload.Email)).String()
+	// parse the namespace
+	namespace, err := uuid.Parse(*namespaceSecretOutput.SecretString)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       http.StatusText(http.StatusInternalServerError),
+		}, errors.New("misconfiguration of namespace")
+	}
+
+	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.Email)).String()
 
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
@@ -204,6 +218,12 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		Source:               sesSourceSecretOutput.SecretString,
 		Template:             aws.String(payload.ResourceType),
 		TemplateData:         aws.String(string(data)),
+		Tags: []sestypes.MessageTag{
+			{
+				Name:  aws.String("idempotencyKey"),
+				Value: aws.String(payload.UUID.String()),
+			},
+		},
 	})
 	if err != nil {
 		return events.APIGatewayProxyResponse{
