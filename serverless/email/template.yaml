@@ -131,14 +131,14 @@ Resources:
 Outputs:
   EmailWebhookAPI:
     Description: "API Gateway endpoint URL for Email webhook"
-    Value: !Sub "https://${EmailWebhookFunction.ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${DeploymentEnvironment}/webhook/"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${DeploymentEnvironment}/webhook/"
   EmailWebhookFunction:
     Description: "Email Webhook Function ARN"
     Value: !GetAtt EmailWebhookFunction.Arn
 
   EmailUnsubscribeAPI:
     Description: "API Gateway endpoint URL for for unsubscribe"
-    Value: !Sub "https://${EmailUnsubscribeFunction.ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com//${DeploymentEnvironment}/unsubscribe/"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com//${DeploymentEnvironment}/unsubscribe/"
   EmailUnsubscribeFunction:
     Description: "unsubscribe lambda ARN"
     Value: !GetAtt EmailUnsubscribeFunction.Arn
