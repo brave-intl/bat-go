@@ -26,10 +26,10 @@ import (
 
 var (
 	// env vars
-	sesSourceArn  = os.Getenv("SOURCE_EMAIL_ADDR")
+	sesSource     = os.Getenv("SOURCE_EMAIL_ADDR")
 	namespaceArn  = os.Getenv("EMAIL_UUID_NAMESPACE")
 	authTokensArn = os.Getenv("AUTH_TOKENS")
-	configSetArn  = os.Getenv("SES_CONFIG_SET")
+	configSet     = os.Getenv("SES_CONFIG_SET")
 
 	// setup context/logger
 	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
@@ -43,10 +43,8 @@ var (
 	sesClient            *ses.Client
 	secretsManagerClient *secretsmanager.Client
 
-	sesSourceSecretOutput *secretsmanager.GetSecretValueOutput
 	namespaceSecretOutput *secretsmanager.GetSecretValueOutput
 	authTokenSecretOutput *secretsmanager.GetSecretValueOutput
-	configSetSecretOutput *secretsmanager.GetSecretValueOutput
 )
 
 func init() {
@@ -66,12 +64,6 @@ func init() {
 
 	logger.Info().Msg("aws clients are setup")
 
-	logger.Info().Str("arn", sesSourceArn).Msg("getting source")
-	// go get the secret values
-	sesSourceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(sesSourceArn),
-	})
-	logger.Info().Err(err).Msg("got ses source secret value")
 	namespaceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(namespaceArn),
 	})
@@ -80,10 +72,6 @@ func init() {
 		SecretId: aws.String(authTokensArn),
 	})
 	logger.Info().Err(err).Msg("got auth tokens secret output")
-	configSetSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(configSetArn),
-	})
-	logger.Info().Err(err).Msg("got config set secret output")
 }
 
 // handler takes the api gateway request and sends a templated email
@@ -237,8 +225,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			ToAddresses: []string{
 				payload.Email,
 			}},
-		ConfigurationSetName: configSetSecretOutput.SecretString,
-		Source:               sesSourceSecretOutput.SecretString,
+		ConfigurationSetName: aws.String(configSet),
+		Source:               aws.String(sesSource),
 		Template:             aws.String(payload.ResourceType),
 		TemplateData:         aws.String(string(data)),
 		Tags: []sestypes.MessageTag{
