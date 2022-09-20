@@ -12,6 +12,9 @@ services:
     ports:
       - "3335:3333"
       - "6061:6061"
+    security_opt:
+      - no-new-privileges:true
+      - read_only:true
     command: "cd main && go run main.go serve grant"
     volumes:
       - .:/src

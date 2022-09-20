@@ -4,6 +4,9 @@ services:
   dev:
     volumes:
       - ".:/src"
+    security_opt:
+      - no-new-privileges:true
+      - read_only:true
     environment:
       - "CHALLENGE_BYPASS_DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
       - "VAULT_ADDR=http://vault:8200"

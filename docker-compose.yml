@@ -88,6 +88,9 @@ services:
     ports:
       - "3333:3333"
       - "6061:6061"
+    security_opt:
+      - no-new-privileges:true
+      - read_only:true
     environment:
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
