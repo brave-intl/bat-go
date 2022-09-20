@@ -26,11 +26,12 @@ import (
 
 var (
 	// env vars
-	sesSource     = os.Getenv("SOURCE_EMAIL_ADDR")
-	namespaceArn  = os.Getenv("EMAIL_UUID_NAMESPACE")
-	authTokensArn = os.Getenv("AUTH_TOKENS")
-	configSet     = os.Getenv("SES_CONFIG_SET")
-	dynamoRoleArn = os.Getenv("DYNAMODB_ROLE_ARN")
+	sesSource      = os.Getenv("SOURCE_EMAIL_ADDR")
+	namespaceArn   = os.Getenv("EMAIL_UUID_NAMESPACE")
+	authTokensArn  = os.Getenv("AUTH_TOKENS")
+	configSet      = os.Getenv("SES_CONFIG_SET")
+	dynamoRoleArn  = os.Getenv("DYNAMODB_ROLE_ARN")
+	dynamoEndpoint = os.Getenv("DYNAMODB_ENDPOINT")
 
 	// setup context/logger
 	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
@@ -61,11 +62,21 @@ func init() {
 	// setup secrets manager client
 	secretsManagerClient = secretsmanager.NewFromConfig(config)
 
-	// setup base aws dynamo config
+	customResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
+		if service == dynamodb.ServiceID && region == "us-west-2" {
+			return aws.Endpoint{
+				PartitionID:   "aws",
+				URL:           dynamoEndpoint,
+				SigningRegion: "us-west-2",
+			}, nil
+		}
+		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+	})
 	dynConfig, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
 		panic("failed to create aws dynamo config")
 	}
+	dynConfig.EndpointResolver = customResolver
 
 	// sts assume creds
 	stsClient := sts.NewFromConfig(config)
@@ -163,7 +174,6 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.Email)).String()
 
-	logger.Info().Msg("checking unsubscribe")
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: unsubscribeTable,
