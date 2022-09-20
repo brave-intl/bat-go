@@ -86,6 +86,8 @@ func init() {
 	// setup dynamodb client
 	dynamoClient = dynamodb.NewFromConfig(dynConfig)
 
+	logger.Info().Msg("aws clients setup")
+
 	namespaceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(namespaceArn),
 	})
@@ -100,6 +102,7 @@ func init() {
 		logger.Error().Err(err).Msg("failed to get auth token from secrets manager")
 		panic("failed to get auth tokens cannot start service")
 	}
+	logger.Info().Msg("secrets retreived")
 }
 
 // handler takes the api gateway request and sends a templated email
@@ -132,6 +135,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
+	logger.Info().Msg("passes auth check")
+
 	// handler accepts from the request event the payload
 	// read the payload into our structure
 	payload := new(emailPayload)
@@ -162,6 +167,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
+	logger.Info().Msg("passes input validation")
+
 	// parse the namespace
 	namespace, err := uuid.Parse(*namespaceSecretOutput.SecretString)
 	if err != nil {
@@ -173,6 +180,11 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.Email)).String()
+
+	logger.Info().
+		Str("endpoint", dynamoEndpoint).
+		Str("role", dynamoRoleArn).
+		Msg("performing get item from dynamo")
 
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
@@ -190,6 +202,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			Body:       http.StatusText(http.StatusInternalServerError),
 		}, nil
 	}
+	logger.Info().Msg("got past the get item call")
 
 	// check if it exists, if we should not send email, they unsubscribed
 	if len(dynGetOut.Item) > 0 {
