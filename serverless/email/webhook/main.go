@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -111,6 +112,22 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			StatusCode: http.StatusBadRequest,
 			Body:       http.StatusText(http.StatusBadRequest),
 		}, fmt.Errorf("failed to unmarshal request body: %w", err)
+	}
+
+	// perform input payload validation
+	valid, err := govalidator.ValidateStruct(payload)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       http.StatusText(http.StatusInternalServerError),
+		}, fmt.Errorf("failed to validate input payload: %w", err)
+	}
+
+	if !valid {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadRequest,
+			Body:       http.StatusText(http.StatusBadRequest),
+		}, errors.New("invalid input payload")
 	}
 
 	unsubscribeRef := uuid.NewSHA1(*namespaceSecretOutput.SecretString, []byte(payload.Email)).String()
