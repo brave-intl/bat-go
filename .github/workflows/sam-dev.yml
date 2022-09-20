@@ -22,10 +22,7 @@ jobs:
           python-version: "3.8"
 
       - name: Setup SAM CLI
-        uses: aws-actions/setup-sam@v1
-
-      - name: Setup SAM CLI
-        uses: aws-actions/setup-sam@v1
+        uses: aws-actions/setup-sam@v2
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
