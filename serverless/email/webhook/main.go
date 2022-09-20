@@ -50,6 +50,8 @@ var (
 )
 
 func init() {
+	logger.Info().Msg("init lambda")
+
 	// setup base aws config
 	config, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
@@ -62,19 +64,25 @@ func init() {
 	// setup secrets manager client
 	secretsManagerClient = secretsmanager.NewFromConfig(config)
 
+	logger.Info().Msg("aws clients are setup")
+
 	// go get the secret values
 	sesSourceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(sesSourceArn),
 	})
+	logger.Info().Msg("got ses source secret value")
 	namespaceSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(namespaceArn),
 	})
+	logger.Info().Msg("got namespace secret output")
 	authTokenSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(authTokensArn),
 	})
+	logger.Info().Msg("got auth tokens secret output")
 	configSetSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(configSetArn),
 	})
+	logger.Info().Msg("got config set secret output")
 }
 
 // handler takes the api gateway request and sends a templated email
@@ -86,6 +94,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	// no api key in request
 	if !authOK {
+		logger.Info().Msg("there is no api key in request, returning unauthorized")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusUnauthorized,
 			Body:       http.StatusText(http.StatusUnauthorized),
@@ -95,12 +104,14 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// check auth token against our comma seperated list of valid auth tokens
 	for _, token := range strings.Split(*authTokenSecretOutput.SecretString, ",") {
 		if apiKey == token {
+			logger.Info().Msg("successfully matched the token")
 			authenticated = true
 		}
 	}
 
 	// api key in request does not match any configured
 	if !authenticated {
+		logger.Info().Msg("request is not authenticated")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusUnauthorized,
 			Body:       http.StatusText(http.StatusUnauthorized),
@@ -112,6 +123,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	payload := new(emailPayload)
 	err := json.Unmarshal([]byte(request.Body), payload)
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to unmarshal request body")
 		// failed to unmarshal request appropriately
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusBadRequest,
@@ -122,6 +134,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// perform input payload validation
 	valid, err := govalidator.ValidateStruct(payload)
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to validate the body structure")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       http.StatusText(http.StatusInternalServerError),
@@ -129,6 +142,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	if !valid {
+		logger.Info().Msg("request payload is invalid")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       http.StatusText(http.StatusBadRequest),
@@ -138,6 +152,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// parse the namespace
 	namespace, err := uuid.Parse(*namespaceSecretOutput.SecretString)
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to parse the namespace into a uuid")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       http.StatusText(http.StatusInternalServerError),
@@ -146,6 +161,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	unsubscribeRef := uuid.NewSHA1(namespace, []byte(payload.Email)).String()
 
+	logger.Info().Msg("checking unsubscribe")
 	// check if we are on unsubscribe or bounce list
 	dynGetOut, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: unsubscribeTable,
@@ -155,6 +171,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		ConsistentRead: aws.Bool(true), // consistent read
 	})
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to get item from dynamodb")
 		// failed to get the base aws config
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -164,6 +181,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	// check if it exists, if we should not send email, they unsubscribed
 	if len(dynGetOut.Item) > 0 {
+		logger.Info().Msg("found an unsubscriber")
 		// return ok
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusOK,
@@ -180,6 +198,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		ConsistentRead: aws.Bool(true), // consistent read
 	})
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to get idempotency key from dynamodb")
 		// failed to get the base aws config
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -190,6 +209,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// check if it exists, if so we already processed
 	if len(dynGetOut.Item) > 0 {
 		// return ok
+		logger.Info().Msg("already processed this request")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusOK,
 			Body:       http.StatusText(http.StatusOK),
@@ -201,6 +221,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	// marshal template data into json
 	data, err := json.Marshal(payload.Data)
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to marshal data from payload")
 		// failed to unmarshal request appropriately
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusBadRequest,
@@ -208,6 +229,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, fmt.Errorf("failed to marshal ses template: %w", err)
 	}
 
+	logger.Info().Msg("attempting to send email")
 	// send email get ses message id
 	sesOut, err := sesClient.SendTemplatedEmail(ctx, &ses.SendTemplatedEmailInput{
 		Destination: &sestypes.Destination{
@@ -226,6 +248,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		},
 	})
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to send templated email")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       http.StatusText(http.StatusInternalServerError),
@@ -244,12 +267,14 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		},
 	})
 	if err != nil {
+		logger.Info().Err(err).Msg("failed to put idempotency key in dynamo")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       http.StatusText(http.StatusInternalServerError),
 		}, fmt.Errorf("failed to write to dynamodb: %w", err)
 	}
 
+	logger.Info().Msg("successful response")
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
 		Body:       http.StatusText(http.StatusOK),
