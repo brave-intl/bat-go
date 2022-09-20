@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -80,14 +79,14 @@ func init() {
 	}
 
 	dynConfig.EndpointResolver = customResolver
-	dynConfig.ClientLogMode = aws.LogRequestWithBody | aws.LogResponseWithBody | aws.LogRetries
+	logMode := aws.LogRequestWithBody | aws.LogResponseWithBody | aws.LogRetries
 
 	// sts assume creds
 	stsClient := sts.NewFromConfig(config)
 	creds := stscreds.NewAssumeRoleProvider(stsClient, dynamoRoleArn)
 	dynConfig.Credentials = creds
+	dynConfig.ClientLogMode = logMode
 
-	logger.Info().Str("dynConfig", fmt.Sprintf("%+v", dynConfig)).Msg("the dynamo config")
 	// setup dynamodb client
 	dynamoClient = dynamodb.NewFromConfig(dynConfig)
 
