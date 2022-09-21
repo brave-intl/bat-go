@@ -18,3 +18,21 @@ type emailPayload struct {
 	ResourceType string                 `json:"resourceType" valid:"in(DEPOSIT_CRYPTO|SUPPORT_TICKET|KYC_LEVEL|DEPOSIT_FIAT|ACCOUNT_FROZEN)"`
 	Data         map[string]interface{} `json:"data" valid:"-"`
 }
+
+func (ep *emailPayload) SesTemplateFromResourceType() string {
+	switch ep.ResourceType {
+	case "DEPOSIT_CRYPTO":
+		return "Deposit_Crypto"
+	case "SUPPORT_TICKET":
+		return "Support_Ticket"
+	case "KYC_LEVEL":
+		return "KYC_Level"
+	case "DEPOSIT_FIAT":
+		return "Deposit_Fiat"
+	case "ACCOUNT_FROZEN":
+		return "Account_Frozen"
+	default:
+		return ""
+	}
+
+}
