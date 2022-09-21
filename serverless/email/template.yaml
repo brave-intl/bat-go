@@ -15,6 +15,10 @@ Parameters:
     Type: String
     Default: "sbx"
     AllowedValues: ["sbx", "prod"]
+  WebhookLambdaTracing:
+    Type: String
+    Default: PassThrough
+    AllowedValues: ["Active", "PassThrough"]
   DynamoDBEndpoint:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /aws/service/global-infrastructure/regions/us-west-2/services/dynamodb/endpoint
@@ -101,6 +105,7 @@ Resources:
           SES_CONFIG_SET: !Ref WebhookConfigSet
           DYNAMODB_ROLE_ARN: !Ref WebhookDynamoDBRoleArn
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+      Tracing: !Ref WebhookLambdaTracing
       Events:
         CatchAll:
           Type: Api
