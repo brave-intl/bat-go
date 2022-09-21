@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -66,7 +67,7 @@ func init() {
 		if service == dynamodb.ServiceID && region == "us-west-2" {
 			return aws.Endpoint{
 				PartitionID:   "aws",
-				URL:           dynamoEndpoint,
+				URL:           fmt.Sprintf("https://%s", dynamoEndpoint),
 				SigningRegion: "us-west-2",
 			}, nil
 		}
