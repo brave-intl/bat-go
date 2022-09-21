@@ -27,12 +27,15 @@ import (
 
 var (
 	// env vars
-	sesSource      = os.Getenv("SOURCE_EMAIL_ADDR")
-	namespaceArn   = os.Getenv("EMAIL_UUID_NAMESPACE")
-	authTokensArn  = os.Getenv("AUTH_TOKENS")
-	configSet      = os.Getenv("SES_CONFIG_SET")
-	dynamoRoleArn  = os.Getenv("DYNAMODB_ROLE_ARN")
-	dynamoEndpoint = os.Getenv("DYNAMODB_ENDPOINT")
+	sesSource              = os.Getenv("SOURCE_EMAIL_ADDR")
+	namespaceArn           = os.Getenv("EMAIL_UUID_NAMESPACE")
+	authTokensArn          = os.Getenv("AUTH_TOKENS")
+	configSet              = os.Getenv("SES_CONFIG_SET")
+	dynamoRoleArn          = os.Getenv("DYNAMODB_ROLE_ARN")
+	dynamoEndpoint         = os.Getenv("DYNAMODB_ENDPOINT")
+	sesDomainSourceArn     = os.Getenv("SES_DOMAIN_SOURCE_ARN")
+	sesDomainFromArn       = os.Getenv("SES_DOMAIN_FROM_ARN")
+	sesDomainReturnPathArn = os.Getenv("SES_DOMAIN_RETURN_PATH_ARN")
 
 	// setup context/logger
 	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
@@ -254,6 +257,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			}},
 		ConfigurationSetName: aws.String(configSet),
 		Source:               aws.String(sesSource),
+		SourceArn:            aws.String(sesDomainSourceArn),
+		ReturnPathArn:        aws.String(sesDomainReturnPathArn),
 		Template:             aws.String(payload.SesTemplateFromResourceType()),
 		TemplateData:         aws.String(string(data)),
 		Tags: []sestypes.MessageTag{
