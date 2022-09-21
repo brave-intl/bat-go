@@ -94,9 +94,6 @@ Resources:
       Role: !Ref WebhookExecutionRoleArn
       Architectures:
         - x86_64
-      VpcConfig:
-        SubnetIds: !Ref VpcSubnetIds
-        SecurityGroupIds: !Ref WebhookLambdaSgIds
       Environment:
         Variables:
           SOURCE_EMAIL_ADDR: !Ref WebhookSourceEmailAddress
@@ -123,9 +120,6 @@ Resources:
       Architectures:
         - x86_64
       Role: !Ref UnsubscribeExecutionRoleArn
-      VpcConfig:
-        SubnetIds: !Ref VpcSubnetIds
-        SecurityGroupIds: !Ref UnsubscribeLambdaSgIds
       Environment:
         Variables:
           DYNAMODB_ROLE_ARN: !Ref UnsubscribeDynamoDBRoleArn
