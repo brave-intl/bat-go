@@ -373,6 +373,63 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationM
 	suite.Require().Equal(http.StatusForbidden, rw.Code)
 }
 
+func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_PaymentIDMismatch() {
+	ctx := context.Background()
+
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	service, err := wallet.InitService(storage, nil, nil, nil,
+		nil, backoff.Retry)
+	suite.Require().NoError(err)
+
+	// create rewards wallet with public key
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+
+	var altCurrency = altcurrency.BAT
+	info := &walletutils.Info{
+		ID:          paymentID,
+		Provider:    "brave",
+		PublicKey:   publicKey.String(),
+		AltCurrency: &altCurrency,
+	}
+
+	err = suite.storage.InsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.V4Request{
+		GeoCountry: "AF",
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", uuid.NewV4()),
+		bytes.NewBuffer(payload))
+
+	err = signUpdateRequest(request, paymentID, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Require().Equal(http.StatusForbidden, rw.Code)
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+	suite.Require().NoError(err)
+
+	suite.Assert().Contains(appError.Message, "error payment id does not match http signature key id")
+}
+
 func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlreadySet() {
 	ctx := context.Background()
 
