@@ -230,7 +230,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 
 	if payload.Data == nil {
-		payload.Data = map[string]string{}
+		payload.Data = map[string]interface{}{}
 	}
 
 	payload.Data["unsubscribeRef"] = unsubscribeRef
