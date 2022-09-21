@@ -258,7 +258,6 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		ConfigurationSetName: aws.String(configSet),
 		Source:               aws.String(sesSource),
 		SourceArn:            aws.String(sesDomainSourceArn),
-		ReturnPathArn:        aws.String(sesDomainReturnPathArn),
 		Template:             aws.String(payload.SesTemplateFromResourceType()),
 		TemplateData:         aws.String(string(data)),
 		Tags: []sestypes.MessageTag{
