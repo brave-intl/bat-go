@@ -223,7 +223,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	dynGetOut, err = dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: idempotencyTable,
 		Key: map[string]types.AttributeValue{
-			"uuid": &types.AttributeValueMemberS{Value: payload.UUID},
+			"FtxIdempotencyKey": &types.AttributeValueMemberS{Value: payload.UUID},
 		},
 		ConsistentRead: aws.Bool(true), // consistent read
 	})
@@ -291,8 +291,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: idempotencyTable,
 		Item: map[string]types.AttributeValue{
-			"id":         &types.AttributeValueMemberS{Value: payload.UUID},
-			"message_id": &types.AttributeValueMemberS{Value: messageID},
+			"FtxIdempotencyKey": &types.AttributeValueMemberS{Value: payload.UUID},
+			"SesMessageId":      &types.AttributeValueMemberS{Value: messageID},
 		},
 	})
 	if err != nil {
