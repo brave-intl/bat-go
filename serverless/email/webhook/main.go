@@ -206,7 +206,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	dynGetOut, err = dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: idempotencyTable,
 		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: payload.UUID},
+			"uuid": &types.AttributeValueMemberS{Value: payload.UUID},
 		},
 		ConsistentRead: aws.Bool(true), // consistent read
 	})
