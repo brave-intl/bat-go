@@ -34,6 +34,9 @@ Parameters:
   UnsubscribeExecutionRoleArn:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Unsubscribe/ExecutionRoleArn
+  WebhookSESDomainIdentityArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/SES/DomainIdentityArn
   WebhookDynamoDBRoleArn:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Webhook/Variables/DynamoDBRoleArn
@@ -102,6 +105,9 @@ Resources:
           SES_CONFIG_SET: !Ref WebhookConfigSet
           DYNAMODB_ROLE_ARN: !Ref WebhookDynamoDBRoleArn
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+          SES_DOMAIN_SOURCE_ARN: !Ref WebhookSESDomainIdentityArn
+          SES_DOMAIN_FROM_ARN: !Ref WebhookSESDomainIdentityArn
+          SES_DOMAIN_RETURN_PATH_ARN: !Ref WebhookSESDomainIdentityArn
       Tracing: !Ref WebhookLambdaTracing
       Events:
         CatchAll:
