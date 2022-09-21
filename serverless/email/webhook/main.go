@@ -272,7 +272,6 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			ToAddresses: []string{
 				payload.Email,
 			}},
-		ConfigurationSetName: aws.String(configSet),
 		Source:               aws.String(sesSource),
 		SourceArn:            aws.String(sesDomainSourceArn),
 		Template:             aws.String(payload.SesTemplateFromResourceType()),
