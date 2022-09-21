@@ -246,6 +246,10 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
+	if payload.Data == nil {
+		payload.Data = map[string]string{}
+	}
+
 	payload.Data["unsubscribeRef"] = unsubscribeRef
 
 	// marshal template data into json
