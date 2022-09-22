@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -111,6 +113,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	var (
 		authenticated  bool
 		apiKey, authOK = request.Headers["x-api-key"]
+		apiKeyHash     = sha256.Sum256([]byte(apiKey))
 	)
 
 	// no api key in request
@@ -123,7 +126,8 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	// check auth token against our comma seperated list of valid auth tokens
 	for _, token := range strings.Split(*authTokenSecretOutput.SecretString, ",") {
-		if apiKey == token {
+		tokenHash := sha256.Sum256([]byte(token))
+		if subtle.ConstantTimeCompare(apiKeyHash[:], tokenHash[:]) == 1 {
 			authenticated = true
 		}
 	}
