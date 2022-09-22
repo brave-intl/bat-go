@@ -107,13 +107,13 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 			logger.Warn().Msg("unknown event type " + notification.EventType)
 		}
 
-		// Get Idempotency ID from tags to use as partition key, skip if it is not present
-		var idempotencyID string
+		// Get Idempotency key from tags to use as partition key, skip if it is not present
+		var idempotencyKey string
 		for _, tag := range notification.Mail.Tags {
-			idempotencyID, _ = tag["idempotencyID"]
+			idempotencyKey, _ = tag["idempotencyKey"]
 		}
 
-		if idempotencyID == "" {
+		if idempotencyKey == "" {
 			logger.Warn().Msg("missing idempotency ID from email " + notification.Mail.MessageID)
 			continue
 		}
@@ -122,12 +122,12 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 		_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
 			TableName: statusTable,
 			Item: map[string]types.AttributeValue{
-				"idempotency_id": &types.AttributeValueMemberS{Value: idempotencyID},
-				"message_id":     &types.AttributeValueMemberS{Value: notification.Mail.MessageID},
-				"status_id":      &types.AttributeValueMemberS{Value: uuid.NewString()},
-				"status_type":    &types.AttributeValueMemberS{Value: notification.EventType},
-				"status_ts":      &types.AttributeValueMemberN{Value: strconv.FormatInt(statusTimestamp.Unix(), 10)},
-				"created_at":     &types.AttributeValueMemberN{Value: strconv.FormatInt(time.Now().UTC().Unix(), 10)},
+				"FtxIdempotencyKey": &types.AttributeValueMemberS{Value: idempotencyKey},
+				"SesMessageId":      &types.AttributeValueMemberS{Value: notification.Mail.MessageID},
+				"StatusId":          &types.AttributeValueMemberS{Value: uuid.NewString()},
+				"StatusType":        &types.AttributeValueMemberS{Value: notification.EventType},
+				"StatusTs":          &types.AttributeValueMemberN{Value: strconv.FormatInt(statusTimestamp.Unix(), 10)},
+				"CreatedAt":         &types.AttributeValueMemberN{Value: strconv.FormatInt(time.Now().UTC().Unix(), 10)},
 			},
 		})
 		if err != nil {
