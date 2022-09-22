@@ -78,11 +78,13 @@ func jsonSchemaRun(command *cobra.Command, args []string) error {
 			}
 		}
 
-		err = ioutil.WriteFile(
-			fmt.Sprintf("../schema/%s/%s", parts[0], parts[1]),
-			schema, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to generate json schema: %w", err)
+		if overwrite {
+			err = ioutil.WriteFile(
+				fmt.Sprintf("../schema/%s/%s", parts[0], parts[1]),
+				schema, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to generate json schema: %w", err)
+			}
 		}
 
 		fmt.Fprintf(os.Stdout, "%s\n", schema)
