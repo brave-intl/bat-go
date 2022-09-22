@@ -1,5 +1,11 @@
 version: "3.4"
 
+volumes:
+  out:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+
 networks:
   grant:
     driver: bridge
@@ -68,6 +74,7 @@ services:
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
+      - "out:/out"
     depends_on:
       - redis
       - kafka
@@ -91,6 +98,7 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
+      - OUTPUT_DIR="/out"
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
       - DRAIN_RETRY_JOB_ENABLED=true

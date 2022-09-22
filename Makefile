@@ -1,6 +1,14 @@
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_TIME := $(shell date +%s)
+
+ifeq (${OUTPUT_DIR},)
+	OUTPUT := ..
+else
+	OUTPUT := ${OUTPUT_DIR}
+endif
+
+
 VAULT_VERSION=0.10.1
 TEST_PKG?=./...
 TEST_FLAGS= --tags=$(TEST_TAGS) $(TEST_PKG)
@@ -14,7 +22,7 @@ all: test create-json-schema buildcmd
 .DEFAULT: buildcmd
 
 buildcmd:
-	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ../bat-go main.go
+	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
 
 mock:
 	mockgen -source=./services/promotion/claim.go -destination=services/promotion/mockclaim.go -package=promotion
