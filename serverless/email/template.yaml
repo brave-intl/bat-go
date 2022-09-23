@@ -49,12 +49,6 @@ Parameters:
   EventsLambdaSgIds:
     Type: AWS::SSM::Parameter::Value<List<AWS::EC2::SecurityGroup::Id>>
     Default: /BraveX/VPC/EventsLambda/SecurityGroupIds
-  UnsubscribeLambdaSgIds:
-    Type: AWS::SSM::Parameter::Value<List<AWS::EC2::SecurityGroup::Id>>
-    Default: /BraveX/VPC/UnsubscribeLambda/SecurityGroupIds
-  WebhookLambdaSgIds:
-    Type: AWS::SSM::Parameter::Value<List<AWS::EC2::SecurityGroup::Id>>
-    Default: /BraveX/VPC/WebhookLambda/SecurityGroupIds
   StatusTopicArn:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Events/StatusTopic
