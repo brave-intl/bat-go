@@ -174,7 +174,7 @@ Outputs:
   EmailUnsubscribeFunction:
     Description: "Unsubscribe Lambda Function ARN"
     Value: !GetAtt EmailUnsubscribeFunction.Arn
-    Value: !Ref EmailUnsubscribeFunctionRole
 
   SnsEmailNotificationConsumerFunction:
+    Description: "Status/Notification Lambda Function ARN"
     Value: !GetAtt SnsEmailNotificationConsumerFunction.Arn
