@@ -1,0 +1,10 @@
+go 1.18
+
+use (
+	./libs
+	./main
+	./serverless/email/unsubscribe
+	./serverless/email/webhook
+	./services
+	./tools
+)
