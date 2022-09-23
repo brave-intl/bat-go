@@ -138,6 +138,20 @@ Resources:
             Method: GET
             RestApiId: !Ref ApiGatewayApi
 
+  SnsEmailNotificationConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: status/
+      Handler: status
+      Runtime: go1.x
+      Architectures:
+        - x86_64
+      Events:
+        CatchAll:
+          Type: SNS
+          Properties:
+            Topic: arn:aws:sns:us-west-2:123456789:topic # TODO
+
 Outputs:
   EmailWebhookAPI:
     Description: "API Gateway endpoint URL for Email webhook"
@@ -152,3 +166,8 @@ Outputs:
   EmailUnsubscribeFunction:
     Description: "unsubscribe lambda ARN"
     Value: !GetAtt EmailUnsubscribeFunction.Arn
+  EmailUnsubscribeFunctionIamRole:
+    Description: "Implicit IAM Role created for function"
+    Value: !GetAtt EmailUnsubscribeFunctionRole.Arn
+  SnsEmailNotificationConsumerFunction:
+    Value: !GetAtt SnsEmailNotificationConsumerFunction.Arn
