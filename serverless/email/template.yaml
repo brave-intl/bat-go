@@ -146,11 +146,14 @@ Resources:
       Runtime: go1.x
       Architectures:
         - x86_64
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref EventsLambdaSgIds
       Events:
         CatchAll:
           Type: SNS
           Properties:
-            Topic: arn:aws:sns:us-west-2:123456789:topic # TODO
+            Topic: !Ref StatusTopicArn
 
 Outputs:
   EmailWebhookAPI:
