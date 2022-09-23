@@ -146,9 +146,14 @@ Resources:
       Runtime: go1.x
       Architectures:
         - x86_64
+      Role: !Ref EventsExecutionRoleArn
       VpcConfig:
         SubnetIds: !Ref VpcSubnetIds
         SecurityGroupIds: !Ref EventsLambdaSgIds
+      Environment:
+        Variables:
+          DYNAMODB_ROLE_ARN: !Ref EventsDynamoDBRoleArn
+          DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
       Events:
         CatchAll:
           Type: SNS
@@ -160,17 +165,16 @@ Outputs:
     Description: "API Gateway endpoint URL for Email webhook"
     Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${DeploymentEnvironment}/webhook/"
   EmailWebhookFunction:
-    Description: "Email Webhook Function ARN"
+    Description: "Email Webhook Lambda Function ARN"
     Value: !GetAtt EmailWebhookFunction.Arn
 
   EmailUnsubscribeAPI:
     Description: "API Gateway endpoint URL for for unsubscribe"
     Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com//${DeploymentEnvironment}/unsubscribe/"
   EmailUnsubscribeFunction:
-    Description: "unsubscribe lambda ARN"
+    Description: "Unsubscribe Lambda Function ARN"
     Value: !GetAtt EmailUnsubscribeFunction.Arn
-  EmailUnsubscribeFunctionIamRole:
-    Description: "Implicit IAM Role created for function"
-    Value: !GetAtt EmailUnsubscribeFunctionRole.Arn
+    Value: !Ref EmailUnsubscribeFunctionRole
+
   SnsEmailNotificationConsumerFunction:
     Value: !GetAtt SnsEmailNotificationConsumerFunction.Arn
