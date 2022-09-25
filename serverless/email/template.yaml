@@ -14,23 +14,33 @@ Parameters:
   DeploymentEnvironment:
     Type: String
     Default: "sbx"
-    AllowedValues: ["sbx", "prod"]
+    AllowedValues:
+      - "sbx"
+      - "prod"
   APIGatewayTracing:
     Type: String
     Default: PassThrough
-    AllowedValues: ["Active", "PassThrough"]
+    AllowedValues:
+      - "Active"
+      - "PassThrough"
   EventLambdaTracing:
     Type: String
     Default: PassThrough
-    AllowedValues: ["Active", "PassThrough"]
+    AllowedValues:
+      - "Active"
+      - "PassThrough"
   UnsubscribeLambdaTracing:
     Type: String
     Default: PassThrough
-    AllowedValues: ["Active", "PassThrough"]
+    AllowedValues:
+      - "Active"
+      - "PassThrough"
   WebhookLambdaTracing:
     Type: String
     Default: PassThrough
-    AllowedValues: ["Active", "PassThrough"]
+    AllowedValues:
+      - "Active"
+      - "PassThrough"
   DynamoDBEndpoint:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /aws/service/global-infrastructure/regions/us-west-2/services/dynamodb/endpoint
