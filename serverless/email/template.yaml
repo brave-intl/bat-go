@@ -15,6 +15,18 @@ Parameters:
     Type: String
     Default: "sbx"
     AllowedValues: ["sbx", "prod"]
+  APIGatewayTracing:
+    Type: String
+    Default: PassThrough
+    AllowedValues: ["Active", "PassThrough"]
+  EventLambdaTracing:
+    Type: String
+    Default: PassThrough
+    AllowedValues: ["Active", "PassThrough"]
+  UnsubscribeLambdaTracing:
+    Type: String
+    Default: PassThrough
+    AllowedValues: ["Active", "PassThrough"]
   WebhookLambdaTracing:
     Type: String
     Default: PassThrough
@@ -81,6 +93,7 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: !Ref DeploymentEnvironment
+      TracingEnabled: !Ref APIGatewayTracing
 
   EmailWebhookFunction:
     Type: AWS::Serverless::Function
@@ -124,6 +137,7 @@ Resources:
         Variables:
           DYNAMODB_ROLE_ARN: !Ref UnsubscribeDynamoDBRoleArn
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+      Tracing: !Ref UnsubscribeLambdaTracing
       Events:
         CatchAll:
           Type: Api
@@ -148,6 +162,7 @@ Resources:
         Variables:
           DYNAMODB_ROLE_ARN: !Ref EventsDynamoDBRoleArn
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
+      Tracing: !Ref EventLambdaTracing
       Events:
         CatchAll:
           Type: SNS
