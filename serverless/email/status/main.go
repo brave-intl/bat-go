@@ -10,11 +10,9 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	sestypes "github.com/aws/aws-sdk-go-v2/service/ses/types"
 	"github.com/aws/aws-sdk-go/aws"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -52,8 +50,8 @@ type sesNotification struct {
 }
 
 type mail struct {
-	MessageID string                `json:"messageId"`
-	Tags      []sestypes.MessageTag `json:"tags"`
+	MessageID string              `json:"messageId"`
+	Tags      map[string][]string `json:"tags"`
 }
 
 type bounce struct {
@@ -110,17 +108,16 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 		}
 
 		// Get Idempotency key from tags to use as partition key, skip if it is not present
-		var idempotencyKey string
-		for _, tag := range notification.Mail.Tags {
-			if ptr.String(tag.Name) == "idempotencyKey" {
-				idempotencyKey = ptr.String(tag.Value)
-				break
-			}
-		}
-		if idempotencyKey == "" {
+		idempotencyKeyList, found := notification.Mail.Tags["idempotencyKey"]
+		if !found {
 			logger.Warn().Msgf("missing idempotency ID from email %s", notification.Mail.MessageID)
 			continue
 		}
+		if len(idempotencyKeyList) != 1 {
+			logger.Warn().Msgf("missing idempotency ID from email %s", notification.Mail.MessageID)
+			continue
+		}
+		idempotencyKey := idempotencyKeyList[0]
 
 		// Write status to database
 		item := map[string]types.AttributeValue{
