@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -105,19 +106,19 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 			statusTimestamp = notification.DeliveryDelay.Timestamp
 		case "Subscription":
 		default:
-			logger.Warn().Msg("unknown event type " + notification.EventType)
+			logger.Warn().Msgf("unknown event type %s", notification.EventType)
 		}
 
 		// Get Idempotency key from tags to use as partition key, skip if it is not present
 		var idempotencyKey string
 		for _, tag := range notification.Mail.Tags {
-			if *(tag.Name) == "idempotencyKey" {
-				idempotencyKey = *(tag.Value)
+			if ptr.String(tag.Name) == "idempotencyKey" {
+				idempotencyKey = ptr.String(tag.Value)
 				break
 			}
 		}
 		if idempotencyKey == "" {
-			logger.Warn().Msg("missing idempotency ID from email " + notification.Mail.MessageID)
+			logger.Warn().Msgf("missing idempotency ID from email %s", notification.Mail.MessageID)
 			continue
 		}
 
@@ -138,8 +139,8 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 			Item:      item,
 		})
 		if err != nil {
-			logger.Error().Err(err).Msg(
-				"failed to write status to dynamodb for messageID " + notification.Mail.MessageID,
+			logger.Error().Err(err).Msgf(
+				"failed to write status to dynamodb for messageID %s", notification.Mail.MessageID,
 			)
 		}
 	}
