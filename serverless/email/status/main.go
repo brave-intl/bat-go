@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	sestypes "github.com/aws/aws-sdk-go-v2/service/ses/types"
 	"github.com/aws/aws-sdk-go/aws"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -50,8 +51,8 @@ type sesNotification struct {
 }
 
 type mail struct {
-	MessageID string              `json:"messageId"`
-	Tags      []map[string]string `json:"tags"`
+	MessageID string                `json:"messageId"`
+	Tags      []sestypes.MessageTag `json:"tags"`
 }
 
 type bounce struct {
@@ -110,25 +111,31 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 		// Get Idempotency key from tags to use as partition key, skip if it is not present
 		var idempotencyKey string
 		for _, tag := range notification.Mail.Tags {
-			idempotencyKey, _ = tag["idempotencyKey"]
+			if *(tag.Name) == "idempotencyKey" {
+				idempotencyKey = *(tag.Value)
+				break
+			}
 		}
-
 		if idempotencyKey == "" {
 			logger.Warn().Msg("missing idempotency ID from email " + notification.Mail.MessageID)
 			continue
 		}
 
 		// Write status to database
+		item := map[string]types.AttributeValue{
+			"FtxIdempotencyKey": &types.AttributeValueMemberS{Value: idempotencyKey},
+			"SesMessageId":      &types.AttributeValueMemberS{Value: notification.Mail.MessageID},
+			"StatusId":          &types.AttributeValueMemberS{Value: uuid.NewString()},
+			"StatusType":        &types.AttributeValueMemberS{Value: notification.EventType},
+			"CreatedAt":         &types.AttributeValueMemberN{Value: strconv.FormatInt(time.Now().UTC().Unix(), 10)},
+		}
+		// Include StatusTs only if it has a value
+		if !statusTimestamp.IsZero() {
+			item["StatusTs"] = &types.AttributeValueMemberN{Value: strconv.FormatInt(statusTimestamp.Unix(), 10)}
+		}
 		_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
 			TableName: statusTable,
-			Item: map[string]types.AttributeValue{
-				"FtxIdempotencyKey": &types.AttributeValueMemberS{Value: idempotencyKey},
-				"SesMessageId":      &types.AttributeValueMemberS{Value: notification.Mail.MessageID},
-				"StatusId":          &types.AttributeValueMemberS{Value: uuid.NewString()},
-				"StatusType":        &types.AttributeValueMemberS{Value: notification.EventType},
-				"StatusTs":          &types.AttributeValueMemberN{Value: strconv.FormatInt(statusTimestamp.Unix(), 10)},
-				"CreatedAt":         &types.AttributeValueMemberN{Value: strconv.FormatInt(time.Now().UTC().Unix(), 10)},
-			},
+			Item:      item,
 		})
 		if err != nil {
 			logger.Error().Err(err).Msg(
