@@ -3,14 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/google/uuid"
@@ -18,6 +22,10 @@ import (
 )
 
 var (
+	// env vars
+	dynamoRoleArn  = os.Getenv("DYNAMODB_ROLE_ARN")
+	dynamoEndpoint = os.Getenv("DYNAMODB_ENDPOINT")
+
 	// setup context/logger
 	ctx, logger = logging.SetupLoggerWithLevel(context.Background(), zerolog.InfoLevel)
 
@@ -29,13 +37,38 @@ var (
 )
 
 func init() {
+	// setup ctx and logger for application
+	logger.Info().Msg("initializing status lambda")
+
 	// setup base aws config
 	config, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
 		panic("failed to create aws config")
 	}
+
+	customResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
+		if service == dynamodb.ServiceID && region == "us-west-2" {
+			return aws.Endpoint{
+				PartitionID:   "aws",
+				URL:           fmt.Sprintf("https://%s", dynamoEndpoint),
+				SigningRegion: "us-west-2",
+			}, nil
+		}
+		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+	})
+	dynConfig, err := appaws.BaseAWSConfig(ctx, logger)
+	if err != nil {
+		panic("failed to create aws dynamo config")
+	}
+	dynConfig.EndpointResolver = customResolver
+
+	// sts assume creds
+	stsClient := sts.NewFromConfig(config)
+	creds := stscreds.NewAssumeRoleProvider(stsClient, dynamoRoleArn)
+	dynConfig.Credentials = creds
+
 	// setup dynamodb client
-	dynamoClient = dynamodb.NewFromConfig(config)
+	dynamoClient = dynamodb.NewFromConfig(dynConfig)
 }
 
 // We use event publishing to receive delivery status notifications via SNS
