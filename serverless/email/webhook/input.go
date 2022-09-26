@@ -15,7 +15,7 @@ type emailPayload struct {
 	AccountID    int64                  `json:"accountId" valid:"-"`
 	Timestamp    int64                  `json:"timestamp" valid:"-"`
 	UUID         string                 `json:"uuid" valid:"uuid"`
-	ResourceType string                 `json:"resourceType" valid:"in(DEPOSIT_CRYPTO|SUPPORT_TICKET|KYC_LEVEL|DEPOSIT_FIAT|ACCOUNT_FROZEN)"`
+	ResourceType string                 `json:"resourceType" valid:"in(DEPOSIT_CRYPTO|SUPPORT_TICKET|KYC_LEVEL|DEPOSIT_FIAT|ACCOUNT_FROZEN|PASSWORD_RESET)"`
 	Data         map[string]interface{} `json:"data" valid:"-"`
 }
 
@@ -31,6 +31,8 @@ func (ep *emailPayload) SesTemplateFromResourceType() string {
 		return "Deposit_Fiat"
 	case "ACCOUNT_FROZEN":
 		return "Account_Frozen"
+	case "PASSWORD_RESET":
+		return "Password_Reset"
 	default:
 		return ""
 	}
