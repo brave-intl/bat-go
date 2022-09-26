@@ -19,10 +19,10 @@ Parameters:
       - "prod"
   APIGatewayTracing:
     Type: String
-    Default: PassThrough
+    Default: "false"
     AllowedValues:
-      - "Active"
-      - "PassThrough"
+      - "true"
+      - "false"
   EventLambdaTracing:
     Type: String
     Default: PassThrough
