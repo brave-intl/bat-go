@@ -112,37 +112,37 @@ type GeoAllowBlockMap struct {
 }
 
 func (gabm GeoAllowBlockMap) Verdict(countries ...string) bool {
-
 	var (
 		allow bool
 		block bool
 	)
-
-OUTER_ALLOW:
-	for _, ac := range gabm.Allow {
-		for _, country := range countries {
-			if strings.EqualFold(ac, country) {
-				// in allow list
-				allow = true
-				break OUTER_ALLOW
+	if len(gabm.Allow) > 0 {
+	OUTER_ALLOW:
+		for _, ac := range gabm.Allow {
+			for _, country := range countries {
+				if strings.EqualFold(ac, country) {
+					// in allow list
+					allow = true
+					break OUTER_ALLOW
+				}
 			}
 		}
-	}
-	if allow {
 		return allow
 	}
-
-OUTER_BLOCK:
-	for _, bc := range gabm.Block {
-		for _, country := range countries {
-			if strings.EqualFold(bc, country) {
-				// in block list
-				block = true
-				break OUTER_BLOCK
+	if len(gabm.Block) > 0 {
+	OUTER_BLOCK:
+		for _, bc := range gabm.Block {
+			for _, country := range countries {
+				if strings.EqualFold(bc, country) {
+					// in block list
+					block = true
+					break OUTER_BLOCK
+				}
 			}
 		}
+		return !block
 	}
-	return !block
+	return false
 }
 
 // CustodianRegions - Supported Regions
