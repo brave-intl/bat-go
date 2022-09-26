@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/skus/skustest"
-	"github.com/brave-intl/bat-go/utils/test"
-	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/brave-intl/bat-go/libs/test"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
+	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
 )
 
 type ServiceTestSuite struct {

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	mockdialer "github.com/brave-intl/bat-go/utils/kafka/mock"
+	mockdialer "github.com/brave-intl/bat-go/libs/kafka/mock"
 	"math/rand"
 	"net/http"
 	"testing"

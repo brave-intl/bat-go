@@ -24,6 +24,7 @@ mock:
 	mockgen -source=./services/grant/datastore.go -destination=services/grant/mockdatastore.go -package=grant
 	mockgen -source=./services/wallet/service.go -destination=services/wallet/mockservice.go -package=wallet
 	mockgen -source=./services/skus/datastore.go -destination=services/skus/mockdatastore.go -package=skus
+	mockgen -source=./services/skus/credentials.go -destination=services/skus/mockcredentials.go -package=skus
 	mockgen -source=./libs/clients/ratios/client.go -destination=libs/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./libs/clients/cbr/client.go -destination=libs/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./libs/clients/reputation/client.go -destination=libs/clients/reputation/mock/mock.go -package=mock_reputation
@@ -32,6 +33,7 @@ mock:
 	mockgen -source=./libs/clients/coingecko/client.go -destination=libs/clients/coingecko/mock/mock.go -package=mock_coingecko
 	mockgen -source=./libs/backoff/retrypolicy/retrypolicy.go -destination=libs/backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
 	mockgen -source=./libs/aws/s3.go -destination=libs/aws/mock/mock.go -package=mockaws
+	mockgen -source=./libs/kafka/dialer.go -destination=libs/kafka/mock/dialer.go -package=mockdialer
 
 instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/services/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./services/grant/instrumented_datastore.go

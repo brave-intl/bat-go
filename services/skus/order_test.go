@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brave-intl/bat-go/utils/test"
+	"github.com/brave-intl/bat-go/libs/test"
 
 	"github.com/asaskevich/govalidator"
-	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
+	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 	"github.com/stretchr/testify/suite"
 )
 

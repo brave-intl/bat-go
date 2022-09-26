@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/libs/ptr"
 	uuid "github.com/satori/go.uuid"
 )
 
