@@ -246,7 +246,7 @@ func (anm *AndroidNotificationMessage) Decode(ctx context.Context, data []byte) 
 	return nil
 }
 
-// Validate - implement Validable interface
+// Validate - implement Validatable interface
 func (anm *AndroidNotificationMessage) Validate(ctx context.Context) error {
 	logger := logging.Logger(ctx, "AndroidNotificationMessage.Validate")
 	if _, err := govalidator.ValidateStruct(anm); err != nil {

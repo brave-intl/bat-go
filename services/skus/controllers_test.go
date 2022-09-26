@@ -17,6 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/segmentio/kafka-go"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
@@ -1587,4 +1590,28 @@ func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string 
 	skuMap["development"][mac] = true
 
 	return mac
+}
+
+func writeSigningOrderResultMessage(t *testing.T, ctx context.Context, signingOrderResult SigningOrderResult, topic string) {
+	codec, err := goavro.NewCodec(signingOrderResultSchema)
+	assert.NoError(t, err)
+
+	textual, err := json.Marshal(signingOrderResult)
+	assert.NoError(t, err)
+
+	native, _, err := codec.NativeFromTextual(textual)
+	assert.NoError(t, err)
+
+	binary, err := codec.BinaryFromNative(nil, native)
+	assert.NoError(t, err)
+
+	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, "")
+	assert.NoError(t, err)
+
+	err = kafkaWriter.WriteMessages(ctx, kafka.Message{
+		Topic: topic,
+		Key:   []byte(signingOrderResult.RequestID),
+		Value: binary,
+	})
+	assert.NoError(t, err)
 }

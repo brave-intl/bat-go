@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brave-intl/bat-go/datastore/grantserver"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	"github.com/jmoiron/sqlx"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +20,7 @@ var tables = []string{"vote_drain", "api_keys", "transactions", "signing_order_r
 
 // Migrate - perform a migration for skus
 func Migrate(t *testing.T) {
-	postgres, err := grantserver.NewPostgres("", false, "skus_db")
+	postgres, err := datastore.NewPostgres("", false, "skus_db")
 	assert.NoError(t, err)
 
 	migrate, err := postgres.NewMigrate()
