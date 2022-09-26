@@ -25,7 +25,6 @@ jobs:
         uses: aws-actions/setup-sam@v2
 
       - name: Configure AWS Credentials
-        env:
         uses: aws-actions/configure-aws-credentials@v1
         with:
           role-to-assume: arn:aws:iam::021268868874:role/bravex-lambdas-sbx-github-actions20220920082446554100000003
