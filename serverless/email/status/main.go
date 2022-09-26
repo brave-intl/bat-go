@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -111,8 +112,8 @@ func handler(ctx context.Context, snsEvent events.SNSEvent) {
 		// Get Idempotency key from tags to use as partition key, skip if it is not present
 		var idempotencyKey string
 		for _, tag := range notification.Mail.Tags {
-			if *(tag.Name) == "idempotencyKey" {
-				idempotencyKey = *(tag.Value)
+			if ptr.String(tag.Name) == "idempotencyKey" {
+				idempotencyKey = ptr.String(tag.Value)
 				break
 			}
 		}
