@@ -24,6 +24,63 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCreateIssuer_NewIssuer(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	merchantID := "brave.com"
+
+	orderItem := OrderItem{
+		ID:          uuid.NewV4(),
+		SKU:         test.RandomString(),
+		ValidForISO: ptr.FromString("P1M"),
+	}
+
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	assert.NoError(t, err)
+
+	// mock issuer calls
+	cbrClient := mock_cbr.NewMockClient(ctrl)
+	cbrClient.EXPECT().
+		CreateIssuer(ctx, issuerID, defaultMaxTokensPerIssuer).
+		Return(nil)
+
+	issuerResponse := &cbr.IssuerResponse{
+		Name:      issuerID,
+		PublicKey: test.RandomString(),
+	}
+	cbrClient.EXPECT().
+		GetIssuer(ctx, issuerID).
+		Return(issuerResponse, nil)
+
+	// mock datastore
+	datastore := NewMockDatastore(ctrl)
+
+	datastore.EXPECT().
+		GetIssuer(issuerID).
+		Return(nil, nil)
+
+	issuer := &Issuer{
+		MerchantID: issuerResponse.Name,
+		PublicKey:  issuerResponse.PublicKey,
+	}
+	datastore.EXPECT().
+		InsertIssuer(issuer).
+		Return(issuer, nil)
+
+	// act, assert
+	s := Service{
+		cbClient:  cbrClient,
+		Datastore: datastore,
+		retry:     backoff.Retry,
+	}
+
+	err = s.CreateIssuer(ctx, merchantID, orderItem)
+	assert.NoError(t, err)
+}
+
 func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -96,6 +153,42 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestCreateIssuer_AlreadyExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	merchantID := "brave.com"
+
+	orderItem := OrderItem{
+		ID:          uuid.NewV4(),
+		SKU:         test.RandomString(),
+		ValidForISO: ptr.FromString("P1M"),
+	}
+
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	assert.NoError(t, err)
+
+	// mock datastore
+	datastore := NewMockDatastore(ctrl)
+
+	issuer := &Issuer{
+		MerchantID: test.RandomString(),
+		PublicKey:  test.RandomString(),
+	}
+	datastore.EXPECT().
+		GetIssuer(issuerID).
+		Return(issuer, nil)
+
+	s := Service{
+		Datastore: datastore,
+	}
+
+	err = s.CreateIssuer(ctx, merchantID, orderItem)
+	assert.NoError(t, err)
+}
+
 func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -149,6 +242,47 @@ func TestCanRetry_False(t *testing.T) {
 		test.RandomString(), http.StatusForbidden, nil)
 	f := canRetry(nonRetriableErrors)
 	assert.False(t, f(httpError))
+}
+
+func TestCreateOrderCredentials(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	merchantID := "brave.com"
+
+	orderItem := OrderItem{
+		ID:          uuid.NewV4(),
+		SKU:         test.RandomString(),
+		ValidForISO: ptr.FromString("P1M"),
+	}
+
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	assert.NoError(t, err)
+
+	issuerConfig := IssuerConfig{
+		buffer:  test.RandomInt(),
+		overlap: test.RandomInt(),
+	}
+
+	// mock datastore
+	datastore := NewMockDatastore(ctrl)
+
+	issuer := &Issuer{
+		MerchantID: test.RandomString(),
+		PublicKey:  test.RandomString(),
+	}
+	datastore.EXPECT().
+		GetIssuer(issuerID).
+		Return(issuer, nil)
+
+	s := Service{
+		Datastore: datastore,
+	}
+
+	err = s.CreateIssuerV3(ctx, merchantID, orderItem, issuerConfig)
+	assert.NoError(t, err)
 }
 
 func TestDeduplicateCredentialBindings(t *testing.T) {

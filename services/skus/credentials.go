@@ -30,7 +30,8 @@ const (
 
 var (
 	retryPolicy        = retrypolicy.DefaultRetry
-	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError, http.StatusConflict}
+	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden,
+		http.StatusInternalServerError, http.StatusConflict}
 )
 
 // ErrOrderUnpaid - unpaid order variable
@@ -86,7 +87,7 @@ func (s *Service) CreateIssuer(ctx context.Context, merchantID string, orderItem
 
 		issuerResponse, ok := response.(*cbr.IssuerResponse)
 		if !ok {
-			return fmt.Errorf("error converting issuer response: %w", err)
+			return errors.New("error converting response to type issuer response")
 		}
 
 		_, err = s.Datastore.InsertIssuer(&Issuer{
@@ -153,7 +154,7 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 
 		issuerResponse, ok := response.(*cbr.IssuerResponse)
 		if !ok {
-			return fmt.Errorf("error converting issuer response: %w", err)
+			return fmt.Errorf("error converting v3 response to type issuer response")
 		}
 
 		_, err = s.Datastore.InsertIssuer(&Issuer{
@@ -216,7 +217,8 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
-// CreateOrderCredentials - create the order credentials if order is paid
+// CreateOrderCredentials creates the order credentials for the given order id using the supplied blinded credentials.
+// If the order is unpaid an error ErrOrderUnpaid is returned.
 func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
