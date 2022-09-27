@@ -1,14 +1,29 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  email-webhook
+  BraveX Frontend Email Notification Infrastructure
   
-  Sample SAM Template for email-webhook
+  AWS Serverless Application Model (SAM) Template responsible for the frontend resources needed to support BraveX Email Notification APIs. 
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
     Timeout: 5
+    Tags:
+      ApplicationID: bravex-email-notification
+      Security: private
+      Owner: payment-services
+      Pod: bsg-infrastructure
+      Environment: !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+      BusinessUnit: bsg-infrastructure
+      Project: "https://github.com/orgs/brave-intl/projects/15"
+      RequestID: "https://github.com/brave-intl/internal/issues/331"
+
+Mappings:
+  EnvMap:
+    deployment:
+      sbx: sandbox
+      prod: production
 
 Parameters:
   DeploymentEnvironment:
@@ -102,8 +117,19 @@ Resources:
   ApiGatewayApi:
     Type: AWS::Serverless::Api
     Properties:
+      Description: "BraveX Event Email Notifications API Endpoints"
       StageName: !Ref DeploymentEnvironment
       TracingEnabled: !Ref APIGatewayTracing
+      Tags:
+        ApplicationID: bravex-email-notification
+        Security: private
+        Owner: payment-services
+        Pod: bsg-infrastructure
+        Environment: !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+        BusinessUnit: bsg-infrastructure
+        Project: "https://github.com/orgs/brave-intl/projects/15"
+        RequestID: "https://github.com/brave-intl/internal/issues/331"
+
 
   EmailWebhookFunction:
     Type: AWS::Serverless::Function
@@ -134,6 +160,34 @@ Resources:
             Method: POST
             RestApiId: !Ref ApiGatewayApi
 
+  EmailWebhookLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: EmailWebhookFunction
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - ''
+          - - '/aws/lambda/'
+            - !Ref EmailWebhookFunction
+      RetentionInDays: 14
+      Tags:
+        - Key: ApplicationID
+          Value: bravex-email-notification
+        - Key: Security
+          Value: private
+        - Key: Owner
+          Value: payment-services
+        - Key: Pod
+          Value: bsg-infrastructure
+        - Key: Environment
+          Value: !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+        - Key: BusinessUnit
+          Value: bsg-infrastructure
+        - Key: Project
+          Value: "https://github.com/orgs/brave-intl/projects/15"
+        - Key: RequestID
+          Value: "https://github.com/brave-intl/internal/issues/331"
+
   EmailUnsubscribeFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -155,6 +209,34 @@ Resources:
             Path: /unsubscribe
             Method: GET
             RestApiId: !Ref ApiGatewayApi
+
+  EmailUnsubscribeLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: EmailUnsubscribeFunction
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - ''
+          - - '/aws/lambda/'
+            - !Ref EmailUnsubscribeFunction
+      RetentionInDays: 14
+      Tags:
+        - Key: ApplicationID
+          Value: bravex-email-notification
+        - Key: Security
+          Value: private
+        - Key: Owner
+          Value: payment-services
+        - Key: Pod
+          Value: bsg-infrastructure
+        - Key: Environment
+          Value: !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+        - Key: BusinessUnit
+          Value: bsg-infrastructure
+        - Key: Project
+          Value: "https://github.com/orgs/brave-intl/projects/15"
+        - Key: RequestID
+          Value: "https://github.com/brave-intl/internal/issues/331"
 
   SnsEmailNotificationConsumerFunction:
     Type: AWS::Serverless::Function
@@ -178,6 +260,34 @@ Resources:
           Type: SNS
           Properties:
             Topic: !Ref StatusTopicArn
+
+  SnsEmailNotificationConsumerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: SnsEmailNotificationConsumerFunction
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - ''
+          - - '/aws/lambda/'
+            - !Ref SnsEmailNotificationConsumerFunction
+      RetentionInDays: 14
+      Tags:
+        - Key: ApplicationID
+          Value: bravex-email-notification
+        - Key: Security
+          Value: private
+        - Key: Owner
+          Value: payment-services
+        - Key: Pod
+          Value: bsg-infrastructure
+        - Key: Environment
+          Value: !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+        - Key: BusinessUnit
+          Value: bsg-infrastructure
+        - Key: Project
+          Value: "https://github.com/orgs/brave-intl/projects/15"
+        - Key: RequestID
+          Value: "https://github.com/brave-intl/internal/issues/331"
 
 Outputs:
   EmailWebhookAPI:
