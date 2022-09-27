@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/awa/go-iap/appstore"
 	"github.com/awa/go-iap/playstore"
@@ -16,6 +17,11 @@ const (
 	androidPaymentStatePaid
 	androidPaymentStateTrial
 	androidPaymentStatePendingDeferred
+
+	androidCancelReasonUser      int64 = 0
+	androidCancelReasonSystem    int64 = 1
+	androidCancelReasonReplaced  int64 = 2
+	androidCancelReasonDeveloper int64 = 3
 )
 
 var (
@@ -27,10 +33,17 @@ var (
 	androidClient          *playstore.Client
 	errClientMisconfigured = errors.New("misconfigured client")
 
+	errPurchaseUserCanceled      = errors.New("purchase is canceled by user")
+	errPurchaseSystemCanceled    = errors.New("purchase is canceled by google playstore")
+	errPurchaseReplacedCanceled  = errors.New("purchase is canceled and replaced")
+	errPurchaseDeveloperCanceled = errors.New("purchase is canceled by developer")
+
 	errPurchasePending       = errors.New("purchase is pending")
 	errPurchaseDeferred      = errors.New("purchase is deferred")
 	errPurchaseStatusUnknown = errors.New("purchase status is unknown")
 	errPurchaseFailed        = errors.New("purchase failed")
+
+	errPurchaseExpired = errors.New("purchase expired")
 
 	purchasePendingErrCode       = "purchase_pending"
 	purchaseDeferredErrCode      = "purchase_deferred"
@@ -91,7 +104,6 @@ func validateIOSReceipt(ctx context.Context, receipt interface{}) (string, error
 func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, error) {
 	logger := logging.Logger(ctx, "skus").With().Str("func", "validateAndroidReceipt").Logger()
 	if androidClient != nil {
-		// FIXME: what is package and subscription id
 		if v, ok := receipt.(SubmitReceiptRequestV1); ok {
 			logger.Debug().Str("receipt", fmt.Sprintf("%+v", v)).Msg("about to verify subscription")
 			// handle v1 receipt type
@@ -99,6 +111,23 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to verify subscription")
 				return "", errPurchaseFailed
+			}
+
+			// is order expired?
+			if time.Unix(0, resp.ExpiryTimeMillis*int64(time.Millisecond)).Before(time.Now()) {
+				return "", errPurchaseExpired
+			}
+
+			// is there a cancel reason?
+			switch resp.CancelReason {
+			case androidCancelReasonUser:
+				return "", errPurchaseUserCanceled
+			case androidCancelReasonSystem:
+				return "", errPurchaseSystemCanceled
+			case androidCancelReasonReplaced:
+				return "", errPurchaseReplacedCanceled
+			case androidCancelReasonDeveloper:
+				return "", errPurchaseDeveloperCanceled
 			}
 
 			logger.Debug().Msgf("resp: %+v", resp)
