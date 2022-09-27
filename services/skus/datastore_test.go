@@ -285,13 +285,12 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 	err := suite.storage.SendSigningRequest(ctx, signingRequestWriter)
 	suite.Require().NoError(err)
 
-	// Use OutboxMessage as we don't want to expose certain fields in production code
-	type OutboxMessage struct {
-		ProcessedAt time.Time `db:"processed_at"`
-		OrderID     uuid.UUID `db:"order_id"`
+	type outboxMessage struct {
+		ProcessedAt *time.Time `db:"processed_at"`
+		OrderID     uuid.UUID  `db:"order_id"`
 	}
 
-	var oms []OutboxMessage
+	var oms []outboxMessage
 	err = suite.storage.RawDB().SelectContext(ctx, &oms,
 		`select order_id, processed_at from signing_order_request_outbox where order_id = $1`, orderID)
 	suite.Require().NoError(err)
