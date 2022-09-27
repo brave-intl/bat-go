@@ -871,6 +871,7 @@ func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
+	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
 	return r
 }
 
@@ -917,6 +918,61 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 
 		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
 			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+		}
+		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+	})
+}
+
+// HandleIOSWebhook is the handler for ios iap webhooks
+func HandleIOSWebhook(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var (
+			ctx              = r.Context()
+			req              = new(IOSNotification)
+			validationErrMap = map[string]interface{}{} // for tracking our validation errors
+		)
+
+		// get logger
+		logger := logging.Logger(ctx, "payments").With().
+			Str("func", "HandleIOSWebhook").
+			Logger()
+
+		// read the payload
+		payload, err := requestutils.Read(r.Context(), r.Body)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to read the payload")
+			validationErrMap["request-body"] = err.Error()
+		}
+
+		// validate the payload
+		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
+			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
+			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
+			validationErrMap["request-body-decode"] = err.Error()
+		}
+
+		// transaction info
+		txInfo, err := req.GetTransactionInfo(ctx)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to get renewal info from message")
+			validationErrMap["invalid-renewal-info"] = err.Error()
+		}
+
+		// renewal info
+		renewalInfo, err := req.GetRenewalInfo(ctx)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to get transaction info from message")
+			validationErrMap["invalid-transaction-info"] = err.Error()
+		}
+
+		// if we had any validation errors, return the validation error map to the caller
+		if len(validationErrMap) != 0 {
+			return handlers.ValidationError("Error validating request url", validationErrMap)
+		}
+
+		if err := service.verifyIOSNotification(ctx, txInfo, renewalInfo); err != nil {
+			return handlers.WrapError(err, "failed to verify ios notification", http.StatusInternalServerError)
 		}
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
 	})

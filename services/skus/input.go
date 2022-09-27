@@ -8,8 +8,10 @@ import (
 	"fmt"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/awa/go-iap/appstore"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/square/go-jose"
 )
 
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob
@@ -299,4 +301,128 @@ func (an *AndroidNotification) Validate(ctx context.Context) error {
 		return fmt.Errorf("failed to validate android notification: %w", err)
 	}
 	return nil
+}
+
+// IOSNotification - wrapping structure of an android notification
+type IOSNotification struct {
+	payload       []byte                 `json:"-" valid:"-"`
+	payloadJWS    *jose.JSONWebSignature `json:"-" valid:"-"`
+	SignedPayload string                 `json:"signedPayload" valid:"-"`
+	// signed payload is a JWS the payload of which is a base64 encoded
+	// responseBodyV2DecodedPayload.  The data attribute of this payload is the JWSTransaction
+}
+
+// Decode - implement Decodable interface
+func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
+	logger := logging.Logger(ctx, "IOSNotification.Decode")
+	logger.Debug().Msg("starting IOSNotification.Decode")
+
+	// parse the jws into payloadJWS
+	payload, err := jose.ParseSigned(iosn.SignedPayload)
+	if err != nil {
+		return fmt.Errorf("failed to parse ios notification: %w", err)
+	}
+
+	iosn.payloadJWS = payload
+
+	return nil
+}
+
+// Validate - implement Validable interface
+func (iosn *IOSNotification) Validate(ctx context.Context) error {
+	logger := logging.Logger(ctx, "IOSNotification.Validate")
+	// validate the payloadJWS
+	payload, err := iosn.payloadJWS.Verify("TODO")
+	if err != nil {
+		return fmt.Errorf("failed to verify jws payload in request: %w", err)
+	}
+	logger.Debug().Msg("validated ios notification")
+
+	iosn.payload = payload
+
+	return nil
+}
+
+// GetRenewalInfo - from request get renewal information
+func (iosn *IOSNotification) GetRenewalInfo(ctx context.Context) (*appstore.JWSRenewalInfoDecodedPayload, error) {
+	var (
+		resp   = new(appstore.JWSRenewalInfoDecodedPayload)
+		logger = logging.Logger(ctx, "IOSNotification.GetRenewalInfo")
+	)
+
+	// first get the subscription notification payload decoded
+	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
+	var snv2dp = new(appstore.SubscriptionNotificationV2DecodedPayload)
+	if err := json.Unmarshal(iosn.payload, snv2dp); err != nil {
+		logger.Warn().Err(err).Msg("failed to unmarshal notification")
+		return nil, fmt.Errorf("failed to unmarshal subscription notification v2 decoded: %w", err)
+	}
+	// second base64 decode snv2dp.Data.SignedRenewalInfo and parse the resulting jws and verify the signature
+	signedRenewalInfoJWS, err := base64.StdEncoding.DecodeString(string(snv2dp.Data.SignedRenewalInfo))
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to b64 decode signed info")
+		return nil, fmt.Errorf("failed to decode signed renewal info: %w", err)
+	}
+	signedRenewalInfo, err := jose.ParseSigned(string(signedRenewalInfoJWS))
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to parse jws")
+		return nil, fmt.Errorf("failed to parse the Signed Renewal Info JWS: %w", err)
+	}
+
+	// verify
+	signedRenewalBytes, err := signedRenewalInfo.Verify("TODO")
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to verify renewal info")
+		return nil, fmt.Errorf("failed to verify the Signed Renewal Info JWS: %w", err)
+	}
+
+	// third json unmarshal the resulting output of the jws into a JWSRenewalInfoDecodedPayload (resp)
+	if err := json.Unmarshal(signedRenewalBytes, resp); err != nil {
+		logger.Warn().Err(err).Msg("failed to json parse renewal info")
+		return nil, fmt.Errorf("failed to json parse the Signed Renewal Info JWS: %w", err)
+	}
+
+	return resp, nil
+}
+
+// GetTransactionInfo - from request get renewal information
+func (iosn *IOSNotification) GetTransactionInfo(ctx context.Context) (*appstore.JWSTransactionDecodedPayload, error) {
+	var (
+		resp   = new(appstore.JWSTransactionDecodedPayload)
+		logger = logging.Logger(ctx, "IOSNotification.GetTransactionInfo")
+	)
+
+	// first get the subscription notification payload decoded
+	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
+	var snv2dp = new(appstore.SubscriptionNotificationV2DecodedPayload)
+	if err := json.Unmarshal(iosn.payload, snv2dp); err != nil {
+		logger.Warn().Err(err).Msg("failed to unmarshal notification")
+		return nil, fmt.Errorf("failed to unmarshal subscription notification v2 decoded: %w", err)
+	}
+	// second base64 decode snv2dp.Data.SignedTransactionInfo and parse the resulting jws and verify the signature
+	signedTransactionInfoJWS, err := base64.StdEncoding.DecodeString(string(snv2dp.Data.SignedTransactionInfo))
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to b64 decode transaction blob")
+		return nil, fmt.Errorf("failed to decode signed transaction info: %w", err)
+	}
+	signedTransactionInfo, err := jose.ParseSigned(string(signedTransactionInfoJWS))
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to parse transaction jws")
+		return nil, fmt.Errorf("failed to parse the Signed Transaction Info JWS: %w", err)
+	}
+
+	// verify
+	signedTransactionBytes, err := signedTransactionInfo.Verify("TODO")
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to verify transaction jws")
+		return nil, fmt.Errorf("failed to verify the Signed Transaction Info JWS: %w", err)
+	}
+
+	// third json unmarshal the resulting output of the jws into a JWSTransactionDecodedPayload (resp)
+	if err := json.Unmarshal(signedTransactionBytes, resp); err != nil {
+		logger.Warn().Err(err).Msg("failed to json parse the transaction")
+		return nil, fmt.Errorf("failed to json parse the Signed Transaction Info JWS: %w", err)
+	}
+
+	return resp, nil
 }

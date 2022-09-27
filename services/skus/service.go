@@ -19,6 +19,8 @@ import (
 
 	"errors"
 
+	"github.com/awa/go-iap/appstore"
+
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -1172,6 +1174,37 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		return handlers.RenderContent(ctx, "Credentials could not be verified", w, http.StatusForbidden)
 	}
 	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
+}
+
+// verifyIOSNotification - verify the developer notification from appstore
+func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JWSTransactionDecodedPayload, renewalInfo *appstore.JWSRenewalInfoDecodedPayload) error {
+	if txInfo == nil || renewalInfo == nil {
+		return errors.New("notification has no tx or renewal")
+	}
+
+	// lookup the order based on the token as externalID
+	o, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
+	if err != nil {
+		return fmt.Errorf("failed to get order from db: %w", err)
+	}
+
+	if o == nil {
+		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+	}
+
+	// check if we are past the expiration date on transaction or the order was revoked
+	if time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond)).Before(time.Now()) ||
+		time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)).Before(time.Now()) {
+		// past our tx expires/renewal time
+		if err = s.CancelOrder(o.ID); err != nil {
+			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
+		}
+	} else {
+		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+		}
+	}
+	return nil
 }
 
 // verifyDeveloperNotification - verify the developer notification from playstore

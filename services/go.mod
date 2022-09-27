@@ -32,6 +32,7 @@ require (
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.12.0
+	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.8.0
 	github.com/stripe/stripe-go/v72 v72.122.0
 	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
@@ -94,7 +95,6 @@ require (
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/square/go-jose v2.6.0+incompatible // indirect
 	github.com/subosito/gotenv v1.3.0 // indirect
 	github.com/throttled/throttled v2.2.5+incompatible // indirect
 	go.opencensus.io v0.23.0 // indirect
