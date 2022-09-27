@@ -100,6 +100,8 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 				logger.Error().Err(err).Msg("failed to verify subscription")
 				return "", errPurchaseFailed
 			}
+
+			logger.Debug().Msgf("resp: %+v", resp)
 			// check that the order was paid
 			switch resp.PaymentState {
 			case androidPaymentStatePaid, androidPaymentStateTrial:
