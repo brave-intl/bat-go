@@ -147,24 +147,23 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 				return "", errPurchaseExpired
 			}
 
-			// is there a cancel reason?
-			switch resp.CancelReason {
-			case androidCancelReasonUser:
-				return "", errPurchaseUserCanceled
-			case androidCancelReasonSystem:
-				return "", errPurchaseSystemCanceled
-			case androidCancelReasonReplaced:
-				return "", errPurchaseReplacedCanceled
-			case androidCancelReasonDeveloper:
-				return "", errPurchaseDeveloperCanceled
-			}
-
 			logger.Debug().Msgf("resp: %+v", resp)
 			// check that the order was paid
 			switch resp.PaymentState {
 			case androidPaymentStatePaid, androidPaymentStateTrial:
 				break
 			case androidPaymentStatePending:
+				// is there a cancel reason?
+				switch resp.CancelReason {
+				case androidCancelReasonUser:
+					return "", errPurchaseUserCanceled
+				case androidCancelReasonSystem:
+					return "", errPurchaseSystemCanceled
+				case androidCancelReasonReplaced:
+					return "", errPurchaseReplacedCanceled
+				case androidCancelReasonDeveloper:
+					return "", errPurchaseDeveloperCanceled
+				}
 				return "", errPurchasePending
 			case androidPaymentStatePendingDeferred:
 				return "", errPurchaseDeferred
