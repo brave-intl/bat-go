@@ -1231,7 +1231,7 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 Time
 		return err
 	}
 
-	SignedCredsJSON, err := json.Marshal(tlv2.SignedCreds)
+	signedCredsJSON, err := json.Marshal(tlv2.SignedCreds)
 	if err != nil {
 		return err
 	}
@@ -1241,7 +1241,7 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 Time
                     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
 	_, err = pg.ExecContext(ctx, query, tlv2.ItemID, tlv2.OrderID, tlv2.IssuerID, blindedCredsJSON,
-		SignedCredsJSON, tlv2.BatchProof, tlv2.PublicKey, tlv2.ValidTo, tlv2.ValidFrom)
+		signedCredsJSON, tlv2.BatchProof, tlv2.PublicKey, tlv2.ValidTo, tlv2.ValidFrom)
 	if err != nil {
 		return fmt.Errorf("error inserting row: %w", err)
 	}
