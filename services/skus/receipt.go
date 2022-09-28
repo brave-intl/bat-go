@@ -54,9 +54,7 @@ var (
 	purchaseValidationErrCode    = "validation_failed"
 )
 
-type dumpTransport struct {
-	r http.RoundTripper
-}
+type dumpTransport struct{}
 
 func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	logger := logging.Logger(r.Context(), "skus").With().Str("func", "RoundTrip").Logger()
@@ -67,7 +65,7 @@ func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	logger.Debug().Msgf("****REQUEST****\n%q\n", dump)
 
-	resp, rtErr := dt.r.RoundTrip(r)
+	resp, rtErr := http.DefaultTransport.RoundTrip(r)
 
 	dump, err = httputil.DumpResponse(resp, true)
 	if err != nil {
