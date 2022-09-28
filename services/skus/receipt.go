@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httputil"
 	"time"
 
 	"github.com/awa/go-iap/appstore"
@@ -52,13 +54,42 @@ var (
 	purchaseValidationErrCode    = "validation_failed"
 )
 
+type dumpTransport struct {
+	r http.RoundTripper
+}
+
+func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	logger := logging.Logger(r.Context(), "skus").With().Str("func", "RoundTrip").Logger()
+
+	dump, err := httputil.DumpRequestOut(r, true)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to dump request")
+	}
+	logger.Debug().Msgf("****REQUEST****\n%q\n", dump)
+
+	resp, rtErr := dt.r.RoundTrip(r)
+
+	dump, err = httputil.DumpResponse(resp, true)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to dump response")
+	}
+	logger.Debug().Msgf("****RESPONSE****\n%q\n****************\n\n", dump)
+
+	return resp, rtErr
+}
+
 func initClients(ctx context.Context) {
+
+	var logClient = &http.Client{
+		Transport: &dumpTransport{},
+	}
+
 	logger := logging.Logger(ctx, "skus").With().Str("func", "initClients").Logger()
 	iosClient = appstore.New()
 
 	if jsonKey, ok := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte); ok {
 		var err error
-		androidClient, err = playstore.New(jsonKey)
+		androidClient, err = playstore.NewWithClient(jsonKey, logClient)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to initialize android client")
 		}
