@@ -116,6 +116,7 @@ func contains(countries, allowblock []string) bool {
 	for _, ab := range allowblock {
 		for _, country := range countries {
 			if strings.EqualFold(ab, country) {
+				fmt.Println("contains ", ab, country)
 				return true
 			}
 		}
@@ -130,7 +131,7 @@ func (gabm GeoAllowBlockMap) Verdict(countries ...string) bool {
 		return contains(countries, gabm.Allow)
 	}
 	// check if any block list countries exist in our list of countries
-	return contains(gabm.Block, countries)
+	return !contains(gabm.Block, countries)
 }
 
 // CustodianRegions - Supported Regions
