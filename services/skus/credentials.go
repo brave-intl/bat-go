@@ -378,6 +378,7 @@ func (s *Service) WriteMessages(ctx context.Context, messages []SigningOrderRequ
 type SigningResultReader interface {
 	FetchMessage(ctx context.Context) (kafka.Message, error)
 	CommitMessages(ctx context.Context, messages ...kafka.Message) error
+	DeadLetter(ctx context.Context, message kafka.Message, errorMessage error) error
 	Decode(message kafka.Message) (*SigningOrderResult, error)
 }
 
@@ -392,7 +393,7 @@ func (s *Service) CommitMessages(ctx context.Context, messages ...kafka.Message)
 	return s.kafkaSignedRequestReader.CommitMessages(ctx, messages...)
 }
 
-// Decode - perform a kafka message decode
+// Decode decodes the kafka message using from the avro schema.
 func (s *Service) Decode(message kafka.Message) (*SigningOrderResult, error) {
 	codec, ok := s.codecs[kafkaSignedOrderCredsTopic]
 	if !ok {
@@ -416,6 +417,20 @@ func (s *Service) Decode(message kafka.Message) (*SigningOrderResult, error) {
 	}
 
 	return &signedOrderResult, nil
+}
+
+// DeadLetter writes messages the SigningResultReader's dead letter queue.
+func (s *Service) DeadLetter(ctx context.Context, message kafka.Message, errorMessage error) error {
+	message.Headers = append(message.Headers, kafka.Header{
+		Key:   "error-message",
+		Value: []byte(errorMessage.Error()),
+	})
+	message.Topic = kafkaSignedOrderCredsDLQTopic
+	err := s.kafkaWriter.WriteMessages(ctx, message)
+	if err != nil {
+		return fmt.Errorf("error writting message to signing result reader dlq: %w", err)
+	}
+	return nil
 }
 
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings

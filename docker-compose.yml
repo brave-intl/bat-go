@@ -47,6 +47,7 @@ services:
       - KAFKA_CONSUMER_GROUP_PROMOTIONS=grant-bat-promotions-local
       - KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS=grant-bat-skus-local
       - GRANT_CBP_SIGN_CONSUMER_TOPIC=sign.consumer # unsigned order creds request
+      - GRANT_CBP_SIGN_CONSUMER_TOPIC_DLQ=sign.consumer.dlq # unsigned order creds request dlq
       - GRANT_CBP_SIGN_PRODUCER_TOPIC=sign.producer # signed orders creds result
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN

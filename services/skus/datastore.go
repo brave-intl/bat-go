@@ -1380,6 +1380,18 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 			string(message.Key), message.Partition, message.Offset, err)
 	}
 	defer func() {
+		if err != nil {
+			err := reader.DeadLetter(ctx, message, err)
+			if err != nil {
+				logging.FromContext(ctx).Err(err).
+					Str("key", string(message.Key)).
+					Int("partition", message.Partition).
+					Int64("offset", message.Offset).
+					Msg("error writing message to dlq")
+				sentry.CaptureException(err)
+				return // do not commit message
+			}
+		}
 		err := reader.CommitMessages(ctx, message)
 		if err != nil {
 			logging.FromContext(ctx).Err(err).

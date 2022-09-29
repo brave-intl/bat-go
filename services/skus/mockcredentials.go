@@ -144,6 +144,20 @@ func (mr *MockSigningResultReaderMockRecorder) CommitMessages(ctx interface{}, m
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitMessages", reflect.TypeOf((*MockSigningResultReader)(nil).CommitMessages), varargs...)
 }
 
+// DeadLetter mocks base method.
+func (m *MockSigningResultReader) DeadLetter(ctx context.Context, message kafka_go.Message, errorMessage error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeadLetter", ctx, message, errorMessage)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeadLetter indicates an expected call of DeadLetter.
+func (mr *MockSigningResultReaderMockRecorder) DeadLetter(ctx, message, errorMessage interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeadLetter", reflect.TypeOf((*MockSigningResultReader)(nil).DeadLetter), ctx, message, errorMessage)
+}
+
 // Decode mocks base method.
 func (m *MockSigningResultReader) Decode(message kafka_go.Message) (*SigningOrderResult, error) {
 	m.ctrl.T.Helper()

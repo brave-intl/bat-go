@@ -50,6 +50,7 @@ var (
 
 	// kafka topic which receives order creds once they have been signed, read by sku service
 	kafkaSignedOrderCredsTopic      = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaSignedOrderCredsDLQTopic   = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC_DLQ")
 	kafkaSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
 )
 
