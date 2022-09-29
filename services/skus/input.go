@@ -331,8 +331,11 @@ func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
 // Validate - implement Validable interface
 func (iosn *IOSNotification) Validate(ctx context.Context) error {
 	logger := logging.Logger(ctx, "IOSNotification.Validate")
+
+	// extract the public key from the jws
+	pk, err := extractPublicKey(iosn.SignedPayload)
 	// validate the payloadJWS
-	payload, err := iosn.payloadJWS.Verify("TODO")
+	payload, err := iosn.payloadJWS.Verify(pk)
 	if err != nil {
 		return fmt.Errorf("failed to verify jws payload in request: %w", err)
 	}
@@ -349,6 +352,22 @@ func (iosn *IOSNotification) GetRenewalInfo(ctx context.Context) (*appstore.JWSR
 		resp   = new(appstore.JWSRenewalInfoDecodedPayload)
 		logger = logging.Logger(ctx, "IOSNotification.GetRenewalInfo")
 	)
+	// get the cert from jws header
+	rootCertStr, err := extractHeaderByIndex(tokenStr, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	// verify the cert and intermediates with known root
+	if err = verifyCert(rootCertStr); err != nil {
+		return nil, err
+	}
+
+	// cert is good, extract the public key
+	pk, err = extractPublicKey(iosn.SignedPayload)
+	if err != nil {
+		return nil, err
+	}
 
 	// first get the subscription notification payload decoded
 	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
@@ -370,7 +389,7 @@ func (iosn *IOSNotification) GetRenewalInfo(ctx context.Context) (*appstore.JWSR
 	}
 
 	// verify
-	signedRenewalBytes, err := signedRenewalInfo.Verify("TODO")
+	signedRenewalBytes, err := signedRenewalInfo.Verify(pk)
 	if err != nil {
 		logger.Warn().Err(err).Msg("failed to verify renewal info")
 		return nil, fmt.Errorf("failed to verify the Signed Renewal Info JWS: %w", err)
@@ -392,6 +411,23 @@ func (iosn *IOSNotification) GetTransactionInfo(ctx context.Context) (*appstore.
 		logger = logging.Logger(ctx, "IOSNotification.GetTransactionInfo")
 	)
 
+	// get the cert from jws header
+	rootCertStr, err := extractHeaderByIndex(tokenStr, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	// verify the cert and intermediates with known root
+	if err = verifyCert(rootCertStr); err != nil {
+		return nil, err
+	}
+
+	// cert is good, extract the public key
+	pk, err = extractPublicKey(iosn.SignedPayload)
+	if err != nil {
+		return nil, err
+	}
+
 	// first get the subscription notification payload decoded
 	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
 	var snv2dp = new(appstore.SubscriptionNotificationV2DecodedPayload)
@@ -412,7 +448,7 @@ func (iosn *IOSNotification) GetTransactionInfo(ctx context.Context) (*appstore.
 	}
 
 	// verify
-	signedTransactionBytes, err := signedTransactionInfo.Verify("TODO")
+	signedTransactionBytes, err := signedTransactionInfo.Verify(pk)
 	if err != nil {
 		logger.Warn().Err(err).Msg("failed to verify transaction jws")
 		return nil, fmt.Errorf("failed to verify the Signed Transaction Info JWS: %w", err)
