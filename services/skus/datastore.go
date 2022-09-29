@@ -82,7 +82,7 @@ type Datastore interface {
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
-	StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error
+	StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) (err error)
 	GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) error
 	SetOrderPaid(context.Context, *uuid.UUID) error
@@ -1373,7 +1373,7 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 
 // StoreSignedOrderCredentials stores signed order requests and handles
 // both TimeLimitedV2Creds and SingleUse credentials.
-func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error {
+func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) (err error) {
 	message, err := reader.FetchMessage(ctx)
 	if err != nil {
 		return fmt.Errorf("error fetching message key %s partition %d offset %d: %w",

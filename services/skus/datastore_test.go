@@ -5,6 +5,7 @@ package skus
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -457,7 +458,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAwareV2_Succ
 	suite.Assert().Equal(*from, actual.Credentials[0].ValidFrom)
 }
 
-func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatus_Error() {
+func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatusError_DeadLetter() {
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
@@ -497,6 +498,10 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 		Return(signingOrderResult, nil)
 
 	reader.EXPECT().
+		DeadLetter(ctx, message, gomock.Any()).
+		Return(nil)
+
+	reader.EXPECT().
 		CommitMessages(ctx, message).
 		Return(nil)
 
@@ -504,6 +509,53 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 
 	suite.Assert().EqualError(err, fmt.Sprintf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
 		metadata.OrderID, metadata.ItemID, metadata.IssuerID, SignedOrderStatusError.String()))
+}
+
+func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatusError_DeadLetter_Fail() {
+	// This tests to make sure we do not commit the message if we fail to write to dlq.
+	// The message should be reprocessed and sent to dlq if it fails a second time.
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	message := kafka.Message{}
+	reader := NewMockSigningResultReader(ctrl)
+	reader.EXPECT().
+		FetchMessage(ctx).
+		Return(message, nil).
+		Times(2)
+
+	decodeError := errors.New(test.RandomString())
+	reader.EXPECT().
+		Decode(message).
+		Return(nil, decodeError).
+		Times(2)
+
+	// first dlq call fails
+	reader.EXPECT().
+		DeadLetter(ctx, message, gomock.Any()).
+		Return(errors.New(test.RandomString()))
+
+	err := suite.storage.StoreSignedOrderCredentials(ctx, reader)
+	suite.Assert().NotNil(err)
+
+	// second dlq call succeeds
+	reader.EXPECT().
+		DeadLetter(ctx, message, gomock.Any()).
+		Return(nil).
+		Times(1)
+
+	reader.EXPECT().
+		CommitMessages(ctx, message).
+		Return(nil)
+
+	err = suite.storage.StoreSignedOrderCredentials(ctx, reader)
+
+	// we maintain the original failure message and log the dlq error.
+	suite.Assert().EqualError(err, fmt.Errorf("error decoding message key %s partition %d offset %d: %w",
+		string(message.Key), message.Partition, message.Offset, decodeError).Error())
 }
 
 // helper to set up a paid order, order items and issuer.
