@@ -1376,7 +1376,8 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error {
 	message, err := reader.FetchMessage(ctx)
 	if err != nil {
-		return fmt.Errorf("error fetching signed order request: %w", err)
+		return fmt.Errorf("error fetching message key %s partition %d offset %d: %w",
+			string(message.Key), message.Partition, message.Offset, err)
 	}
 	defer func() {
 		err := reader.CommitMessages(ctx, message)
@@ -1392,7 +1393,8 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 
 	signedOrderResult, err := reader.Decode(message)
 	if err != nil {
-		return fmt.Errorf("error fetching signed order request: %w", err)
+		return fmt.Errorf("error decoding message key %s partition %d offset %d: %w",
+			string(message.Key), message.Partition, message.Offset, err)
 	}
 
 	if len(signedOrderResult.Data) == 0 {
@@ -1442,7 +1444,8 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 
 			err = pg.InsertOrderCreds(ctx, cred)
 			if err != nil {
-				return fmt.Errorf("error inserting single use order credential: %w", err)
+				return fmt.Errorf("error inserting single use order credential orderID %s itemID %s: %w",
+					metadata.OrderID, metadata.ItemID, err)
 			}
 
 		case timeLimitedV2:
@@ -1473,11 +1476,13 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 
 			err = pg.InsertTimeLimitedV2OrderCreds(ctx, cred)
 			if err != nil {
-				return fmt.Errorf("error inserting time limited order credential: %w", err)
+				return fmt.Errorf("error inserting time limited order credential orderID %s itemID %s: %w",
+					metadata.OrderID, metadata.ItemID, err)
 			}
 
 		default:
-			return fmt.Errorf("error unknown credential type %s", metadata.CredentialType)
+			return fmt.Errorf("error unknown credential type %s for message key %s partition %d offset %d",
+				metadata.CredentialType, string(message.Key), message.Partition, message.Offset)
 		}
 	}
 
