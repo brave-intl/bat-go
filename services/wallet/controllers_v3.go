@@ -347,6 +347,9 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		err = s.LinkWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)
 		if err != nil {
+			if errors.Is(err, errorutils.ErrInvalidCountry) {
+				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
+			}
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 
