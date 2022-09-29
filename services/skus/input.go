@@ -353,18 +353,23 @@ func (iosn *IOSNotification) GetRenewalInfo(ctx context.Context) (*appstore.JWSR
 		logger = logging.Logger(ctx, "IOSNotification.GetRenewalInfo")
 	)
 	// get the cert from jws header
-	rootCertStr, err := extractHeaderByIndex(tokenStr, 2)
+	rootCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	intermediaCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 1)
 	if err != nil {
 		return nil, err
 	}
 
 	// verify the cert and intermediates with known root
-	if err = verifyCert(rootCertStr); err != nil {
+	if err = verifyCert(rootCertStr, intermediaCertStr); err != nil {
 		return nil, err
 	}
 
 	// cert is good, extract the public key
-	pk, err = extractPublicKey(iosn.SignedPayload)
+	pk, err := extractPublicKey(iosn.SignedPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -412,18 +417,23 @@ func (iosn *IOSNotification) GetTransactionInfo(ctx context.Context) (*appstore.
 	)
 
 	// get the cert from jws header
-	rootCertStr, err := extractHeaderByIndex(tokenStr, 2)
+	rootCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	intermediaCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 1)
 	if err != nil {
 		return nil, err
 	}
 
 	// verify the cert and intermediates with known root
-	if err = verifyCert(rootCertStr); err != nil {
+	if err = verifyCert(rootCertStr, intermediaCertStr); err != nil {
 		return nil, err
 	}
 
 	// cert is good, extract the public key
-	pk, err = extractPublicKey(iosn.SignedPayload)
+	pk, err := extractPublicKey(iosn.SignedPayload)
 	if err != nil {
 		return nil, err
 	}

@@ -184,7 +184,7 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 
 // get the public key from the jws header
 func extractPublicKey(jwsToken string) (*ecdsa.PublicKey, error) {
-	cert, err := extractHeaderByIndex(jwsToken, 0)
+	certStr, err := extractHeaderByIndex(jwsToken, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func verifyCert(certByte, intermediaCertStr []byte) error {
 		Intermediates: intermedia,
 	}
 
-	chains, err := cert.Verify(opts)
+	_, err = cert.Verify(opts)
 	if err != nil {
 		return err
 	}
