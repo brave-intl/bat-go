@@ -74,7 +74,7 @@ func validateSignature(request events.APIGatewayProxyRequest) error {
 
 	var valid bool
 	// sha256 hmac(apiSecret, signingString)
-	for _, apiSecret := range strings.Split(*authTokenSecretOutput.SecretString, ",") {
+	for _, apiSecret := range strings.Split(*authSecretsSecretOutput.SecretString, ",") {
 		mac := hmac.New(sha256.New, []byte(apiSecret))
 		mac.Write([]byte(signingString))
 		expectedMAC := mac.Sum(nil)
@@ -360,6 +360,11 @@ func main() {
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to get auth secrets from secrets manager")
 		panic("failed to get auth secrets cannot start service")
+	}
+
+	if len(strings.Split(*authSecretsSecretOutput.SecretString, ",")) > 2 {
+		logger.Error().Msg("there should be no more than two secret strings at a time configured")
+		panic("misconfigured auth secrets, can only configure two at a time, cannot start service")
 	}
 
 	// start the lambda handler
