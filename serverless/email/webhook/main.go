@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -32,6 +35,7 @@ var (
 	sesSource              = os.Getenv("SOURCE_EMAIL_ADDR")
 	namespaceArn           = os.Getenv("EMAIL_UUID_NAMESPACE")
 	authTokensArn          = os.Getenv("AUTH_TOKENS")
+	authSecretsArn         = os.Getenv("AUTH_SECRETS")
 	configSet              = os.Getenv("SES_CONFIG_SET")
 	dynamoRoleArn          = os.Getenv("DYNAMODB_ROLE_ARN")
 	dynamoEndpoint         = os.Getenv("DYNAMODB_ENDPOINT")
@@ -48,9 +52,44 @@ var (
 	sesClient            *ses.Client
 	secretsManagerClient *secretsmanager.Client
 
-	namespaceSecretOutput *secretsmanager.GetSecretValueOutput
-	authTokenSecretOutput *secretsmanager.GetSecretValueOutput
+	namespaceSecretOutput   *secretsmanager.GetSecretValueOutput
+	authTokenSecretOutput   *secretsmanager.GetSecretValueOutput
+	authSecretsSecretOutput *secretsmanager.GetSecretValueOutput
+
+	// header names
+	tsHeaderName  = os.Getenv("TS_HEADER_NAME")
+	sigHeaderName = os.Getenv("SIG_HEADER_NAME")
+	keyHeaderName = os.Getenv("KEY_HEADER_NAME")
 )
+
+// validateSignature - validate the signature provided from partner
+func validateSignature(request events.APIGatewayProxyRequest) error {
+	// signingString => {ts}{method}{path}{body}
+	signingString := fmt.Sprintf("%s%s%s%s",
+		request.Headers[tsHeaderName], request.HTTPMethod, request.Path, request.Body)
+	signatureBytes, err := hex.DecodeString(request.Headers[sigHeaderName])
+	if err != nil {
+		return fmt.Errorf("failed to decode signature from headers: %w", err)
+	}
+
+	var valid bool
+	// sha256 hmac(apiSecret, signingString)
+	for _, apiSecret := range strings.Split(*authTokenSecretOutput.SecretString, ",") {
+		mac := hmac.New(sha256.New, []byte(apiSecret))
+		mac.Write([]byte(signingString))
+		expectedMAC := mac.Sum(nil)
+		if hmac.Equal(signatureBytes, expectedMAC) {
+			valid = true
+			break
+		}
+	}
+
+	if !valid {
+		// invalid signature
+		return errors.New("invalid signature for webhook")
+	}
+	return nil
+}
 
 // handler takes the api gateway request and sends a templated email
 func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -58,7 +97,7 @@ func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (e
 	return func(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 		var (
 			authenticated  bool
-			apiKey, authOK = request.Headers["x-api-key"]
+			apiKey, authOK = request.Headers[keyHeaderName]
 			apiKeyHash     = sha256.Sum256([]byte(apiKey))
 		)
 
@@ -80,6 +119,14 @@ func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (e
 
 		// api key in request does not match any configured
 		if !authenticated {
+			return events.APIGatewayProxyResponse{
+				StatusCode: http.StatusUnauthorized,
+				Body:       http.StatusText(http.StatusUnauthorized),
+			}, nil
+		}
+
+		// validate the request signature
+		if err := validateSignature(request); err != nil {
 			return events.APIGatewayProxyResponse{
 				StatusCode: http.StatusUnauthorized,
 				Body:       http.StatusText(http.StatusUnauthorized),
@@ -305,6 +352,14 @@ func main() {
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to get auth token from secrets manager")
 		panic("failed to get auth tokens cannot start service")
+	}
+
+	authSecretsSecretOutput, err = secretsManagerClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(authSecretsArn),
+	})
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get auth secrets from secrets manager")
+		panic("failed to get auth secrets cannot start service")
 	}
 
 	// start the lambda handler
