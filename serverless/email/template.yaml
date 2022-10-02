@@ -117,7 +117,6 @@ Metadata:
       - 'bravex'
       - 'webhook'
     HomePageUrl: https://github.com/brave-intl/bat-go
-    ReadmeUrl: https://github.com/brave-intl/bat-go/blob/serverless-service/serverless/email/README.md
     SourceCodeUrl: https://github.com/brave-intl/bat-go
 
 Resources:
