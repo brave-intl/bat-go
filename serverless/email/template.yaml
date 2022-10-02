@@ -59,6 +59,12 @@ Parameters:
   DynamoDBEndpoint:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /aws/service/global-infrastructure/regions/us-west-2/services/dynamodb/endpoint
+  BraveXAlertSNSArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/AlertSNSArn
+  BraveXLambdaDeployRoleArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/CodeDeployRoleArn
   EventsDynamoDBRoleArn:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Events/Variables/DynamoDBRoleArn
@@ -110,7 +116,8 @@ Metadata:
     Labels:
       - 'bravex'
       - 'webhook'
-    HomeePageUrl: https://github.com/brave-intl/bat-go
+    HomePageUrl: https://github.com/brave-intl/bat-go
+    ReadmeUrl: https://github.com/brave-intl/bat-go/blob/serverless-service/serverless/email/README.md
     SourceCodeUrl: https://github.com/brave-intl/bat-go
 
 Resources:
@@ -129,7 +136,6 @@ Resources:
         BusinessUnit: bsg-infrastructure
         Project: "https://github.com/orgs/brave-intl/projects/15"
         RequestID: "https://github.com/brave-intl/internal/issues/331"
-
 
   EmailWebhookFunction:
     Type: AWS::Serverless::Function
@@ -159,6 +165,13 @@ Resources:
             Path: /webhook
             Method: POST
             RestApiId: !Ref ApiGatewayApi
+      AutoPublishAlias: !Ref DeploymentEnvironment
+      DeploymentPreference:
+        Type: AllAtOnce
+        Alarms:
+          - !Ref AliasEmailWebhookErrorMetricGreaterThanZeroAlarm
+          - !Ref LatestVersionEmailWebhookErrorMetricGreaterThanZeroAlarm
+        Role: !Ref BraveXLambdaDeployRoleArn
 
   EmailWebhookLogGroup:
     Type: AWS::Logs::LogGroup
@@ -188,6 +201,66 @@ Resources:
         - Key: RequestID
           Value: "https://github.com/brave-intl/internal/issues/331"
 
+  AliasEmailWebhookErrorMetricGreaterThanZeroAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription:
+        Fn::Join:
+          - ' '
+          - - "Alias BraveX"
+            - !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+            - "Email Webhook"
+            - "Lambda Function Error > 0"
+      AlarmActions:
+        - !Ref BraveXAlertSNSArn
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Resource
+          Value: !Join
+            - ':'
+            - - !Sub "${EmailWebhookFunction}"
+              - !Ref DeploymentEnvironment
+        - Name: FunctionName
+          Value: !Ref EmailWebhookFunction
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      TreatMissingData: notBreaching
+      Threshold: 0
+
+  LatestVersionEmailWebhookErrorMetricGreaterThanZeroAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription:
+        Fn::Join:
+          - ' '
+          - - "Latest Version BraveX"
+            - !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+            - "Email Webhook"
+            - "Lambda Function Error > 0"
+      AlarmActions:
+        - !Ref BraveXAlertSNSArn
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Resource
+          Value: !Join
+            - ':'
+            - - !Sub "${EmailWebhookFunction}"
+              - !Ref DeploymentEnvironment
+        - Name: FunctionName
+          Value: !Ref EmailWebhookFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt EmailWebhookFunction.Version.Version
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      TreatMissingData: notBreaching
+      Threshold: 0
+
   EmailUnsubscribeFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -209,6 +282,14 @@ Resources:
             Path: /unsubscribe
             Method: GET
             RestApiId: !Ref ApiGatewayApi
+      AutoPublishAlias: !Ref DeploymentEnvironment
+      DeploymentPreference:
+        Type: AllAtOnce
+        Alarms:
+          - !Ref AliasEmailUnsubscribeErrorMetricGreaterThanZeroAlarm
+          - !Ref LatestVersionEmailUnsubscribeErrorMetricGreaterThanZeroAlarm
+        Role: !Ref BraveXLambdaDeployRoleArn
+
 
   EmailUnsubscribeLogGroup:
     Type: AWS::Logs::LogGroup
@@ -238,6 +319,66 @@ Resources:
         - Key: RequestID
           Value: "https://github.com/brave-intl/internal/issues/331"
 
+  AliasEmailUnsubscribeErrorMetricGreaterThanZeroAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription:
+        Fn::Join:
+          - ' '
+          - - "Alias BraveX"
+            - !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+            - "Unsubscribe Email"
+            - "Lambda Function Error > 0"
+      AlarmActions:
+        - !Ref BraveXAlertSNSArn
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Resource
+          Value: !Join
+            - ':'
+            - - !Sub "${EmailUnsubscribeFunction}"
+              - !Ref DeploymentEnvironment
+        - Name: FunctionName
+          Value: !Ref EmailUnsubscribeFunction
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      TreatMissingData: notBreaching
+      Threshold: 0
+
+  LatestVersionEmailUnsubscribeErrorMetricGreaterThanZeroAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription:
+        Fn::Join:
+          - ' '
+          - - "Latest Version BraveX"
+            - !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+            - "Unsubscribe Email"
+            - "Lambda Function Error > 0"
+      AlarmActions:
+        - !Ref BraveXAlertSNSArn
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Resource
+          Value: !Join
+            - ':'
+            - - !Sub "${EmailUnsubscribeFunction}"
+              - !Ref DeploymentEnvironment
+        - Name: FunctionName
+          Value: !Ref EmailUnsubscribeFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt EmailUnsubscribeFunction.Version.Version
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      TreatMissingData: notBreaching
+      Threshold: 0
+
   SnsEmailNotificationConsumerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -260,6 +401,13 @@ Resources:
           Type: SNS
           Properties:
             Topic: !Ref StatusTopicArn
+      AutoPublishAlias: !Ref DeploymentEnvironment
+      DeploymentPreference:
+        Type: AllAtOnce
+        Alarms:
+          - !Ref AliasSnsEmailNotificationErrorMetricGreaterThanZeroAlarm
+          - !Ref LatestVersionSnsEmailNotificationErrorMetricGreaterThanZeroAlarm
+        Role: !Ref BraveXLambdaDeployRoleArn
 
   SnsEmailNotificationConsumerLogGroup:
     Type: AWS::Logs::LogGroup
@@ -288,6 +436,66 @@ Resources:
           Value: "https://github.com/orgs/brave-intl/projects/15"
         - Key: RequestID
           Value: "https://github.com/brave-intl/internal/issues/331"
+
+  AliasSnsEmailNotificationErrorMetricGreaterThanZeroAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription:
+        Fn::Join:
+          - ' '
+          - - "Alias BraveX"
+            - !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+            - "Status Configuration Set Event Destination SNS Topic"
+            - "Lambda Function Error > 0"
+      AlarmActions:
+        - !Ref BraveXAlertSNSArn
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Resource
+          Value: !Join
+            - ':'
+            - - !Sub "${SnsEmailNotificationConsumerFunction}"
+              - !Ref DeploymentEnvironment
+        - Name: FunctionName
+          Value: !Ref SnsEmailNotificationConsumerFunction
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      TreatMissingData: notBreaching
+      Threshold: 0
+
+  LatestVersionSnsEmailNotificationErrorMetricGreaterThanZeroAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription:
+        Fn::Join:
+          - ' '
+          - - "Latest Version BraveX"
+            - !FindInMap [EnvMap, deployment, !Ref DeploymentEnvironment]
+            - "Status Configuration Set Event Destination SNS Topic"
+            - "Lambda Function Error > 0"
+      AlarmActions:
+        - !Ref BraveXAlertSNSArn
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Resource
+          Value: !Join
+            - ':'
+            - - !Sub "${SnsEmailNotificationConsumerFunction}"
+              - !Ref DeploymentEnvironment
+        - Name: FunctionName
+          Value: !Ref SnsEmailNotificationConsumerFunction
+        - Name: ExecutedVersion
+          Value: !GetAtt SnsEmailNotificationConsumerFunction.Version.Version
+      EvaluationPeriods: 2
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      TreatMissingData: notBreaching
+      Threshold: 0
 
 Outputs:
   EmailWebhookAPI:
