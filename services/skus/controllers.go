@@ -943,6 +943,8 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to read the payload")
 			validationErrMap["request-body"] = err.Error()
+			// no need to go further
+			return handlers.ValidationError("Error validating request url", validationErrMap)
 		}
 
 		// validate the payload
@@ -971,8 +973,17 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 			return handlers.ValidationError("Error validating request url", validationErrMap)
 		}
 
-		if err := service.verifyIOSNotification(ctx, txInfo, renewalInfo); err != nil {
-			return handlers.WrapError(err, "failed to verify ios notification", http.StatusInternalServerError)
+		err = service.verifyIOSNotification(ctx, txInfo, renewalInfo)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to verify ios subscription notification")
+			switch {
+			case errors.Is(err, errNotFound):
+				return handlers.WrapError(err, "failed to verify ios subscription notification",
+					http.StatusNotFound)
+			default:
+				return handlers.WrapError(err, "failed to verify ios subscription notification",
+					http.StatusInternalServerError)
+			}
 		}
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
 	})
