@@ -916,6 +916,9 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 		}
 
 		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
+			if errors.Is(errNotFound) {
+				return handlers.WrapError(err, "failed to verify notification, order not found", http.StatusNotFound)
+			}
 			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
 		}
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
