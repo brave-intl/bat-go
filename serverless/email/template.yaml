@@ -104,6 +104,9 @@ Parameters:
   WebhookAuthTokens:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Webhook/Variables/AuthTokens
+  WebhookAuthSecrets:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /BraveX/Lambda/Webhook/Variables/AuthSecrets
   WebhookConfigSet:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /BraveX/Lambda/Webhook/Variables/ConfigSet
@@ -150,6 +153,10 @@ Resources:
           SOURCE_EMAIL_ADDR: !Ref WebhookSourceEmailAddress
           EMAIL_UUID_NAMESPACE: !Ref WebhookEmailUuidNamespace
           AUTH_TOKENS: !Ref WebhookAuthTokens
+          AUTH_SECRETS: !Ref WebhookAuthSecrets
+          TS_HEADER_NAME: "FTXUS-TS"
+          SIG_HEADER_NAME: "FTXUS-SIGN"
+          KEY_HEADER_NAME: "FTXUS-TS"
           SES_CONFIG_SET: !Ref WebhookConfigSet
           DYNAMODB_ROLE_ARN: !Ref WebhookDynamoDBRoleArn
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
