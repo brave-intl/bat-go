@@ -941,30 +941,29 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 		// read the payload
 		payload, err := requestutils.Read(r.Context(), r.Body)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
-			validationErrMap["request-body"] = err.Error()
+			logger.Error().Err(err).Msg("failed to read the payload")
 			// no need to go further
-			return handlers.ValidationError("Error validating request url", validationErrMap)
+			return handlers.WrapValidationError(err)
 		}
 
 		// validate the payload
 		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
+			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
+			logger.Warn().Err(err).Msg("failed to decode and validate the payload")
 			validationErrMap["request-body-decode"] = err.Error()
 		}
 
 		// transaction info
 		txInfo, err := req.GetTransactionInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to get renewal info from message")
+			logger.Warn().Err(err).Msg("failed to get renewal info from message")
 			validationErrMap["invalid-renewal-info"] = err.Error()
 		}
 
 		// renewal info
 		renewalInfo, err := req.GetRenewalInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to get transaction info from message")
+			logger.Warn().Err(err).Msg("failed to get transaction info from message")
 			validationErrMap["invalid-transaction-info"] = err.Error()
 		}
 
