@@ -63,14 +63,28 @@ var (
 )
 
 // validateSignature - validate the signature provided from partner
-func validateSignature(request events.APIGatewayProxyRequest) error {
-	// signingString => {ts}{method}{path}{body}
+func validateSignature(ctx context.Context, request events.APIGatewayProxyRequest) error {
+	logger := logging.Logger(ctx, "webhook.validateSignature")
+
+	// signingString => {ts}{method}/sbx/{path}{body}
 	signingString := fmt.Sprintf("%s%s%s%s",
-		request.Headers[tsHeaderName], request.HTTPMethod, request.Path, request.Body)
+		request.Headers[tsHeaderName], request.HTTPMethod, fmt.Sprintf("/sbx%s", request.Path), request.Body)
+
+	logger.Debug().
+		Str("signingString", signingString).
+		Str("tsHeaderName", tsHeaderName).
+		Str("sigHeaderName", sigHeaderName).
+		Str("keyHeaderName", keyHeaderName).
+		Msg("validateSignature details")
+
 	signatureBytes, err := hex.DecodeString(request.Headers[sigHeaderName])
 	if err != nil {
 		return fmt.Errorf("failed to decode signature from headers: %w", err)
 	}
+
+	logger.Debug().
+		Str("signature", request.Headers[sigHeaderName]).
+		Msg("the signature")
 
 	var valid bool
 	// sha256 hmac(apiSecret, signingString)
@@ -78,6 +92,12 @@ func validateSignature(request events.APIGatewayProxyRequest) error {
 		mac := hmac.New(sha256.New, []byte(apiSecret))
 		mac.Write([]byte(signingString))
 		expectedMAC := mac.Sum(nil)
+
+		logger.Debug().
+			Str("signature", request.Headers[sigHeaderName]).
+			Str("generated", hex.EncodeToString(expectedMAC)).
+			Msg("the signature")
+
 		if hmac.Equal(signatureBytes, expectedMAC) {
 			valid = true
 			break
@@ -86,6 +106,8 @@ func validateSignature(request events.APIGatewayProxyRequest) error {
 
 	if !valid {
 		// invalid signature
+		logger.Warn().
+			Msg("signature is invalid for the request")
 		return errors.New("invalid signature for webhook")
 	}
 	return nil
@@ -103,6 +125,7 @@ func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (e
 
 		// no api key in request
 		if !authOK {
+			logger.Warn().Msg("no api key in headers")
 			return events.APIGatewayProxyResponse{
 				StatusCode: http.StatusUnauthorized,
 				Body:       http.StatusText(http.StatusUnauthorized),
@@ -119,6 +142,7 @@ func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (e
 
 		// api key in request does not match any configured
 		if !authenticated {
+			logger.Warn().Msg("no token matches configuration")
 			return events.APIGatewayProxyResponse{
 				StatusCode: http.StatusUnauthorized,
 				Body:       http.StatusText(http.StatusUnauthorized),
@@ -126,7 +150,7 @@ func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (e
 		}
 
 		// validate the request signature
-		if err := validateSignature(request); err != nil {
+		if err := validateSignature(ctx, request); err != nil {
 			return events.APIGatewayProxyResponse{
 				StatusCode: http.StatusUnauthorized,
 				Body:       http.StatusText(http.StatusUnauthorized),
