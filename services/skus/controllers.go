@@ -898,16 +898,21 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 
 		// validate the payload
 		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
+			logger.Debug().Str("payload", string(payload)).
+				Msg("failed to decode and validate the payload")
 			validationErrMap["request-body-decode"] = err.Error()
 		}
 
 		// extract out the Developer notification
 		dn, err := req.Message.GetDeveloperNotification()
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get developer notification from message")
 			validationErrMap["invalid-developer-notification"] = err.Error()
+		}
+
+		if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
+			logger.Error().Interface("validation-errors", validationErrMap).
+				Msg("failed to get developer notification from message")
+			validationErrMap["invalid-developer-notification-token"] = "notification has no purchase token"
 		}
 
 		// if we had any validation errors, return the validation error map to the caller

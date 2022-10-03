@@ -1176,10 +1176,6 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 
 // verifyDeveloperNotification - verify the developer notification from playstore
 func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
-	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-		return errors.New("notification has no purchase token")
-	}
-
 	// lookup the order based on the token as externalID
 	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
 	if err != nil {
