@@ -156,7 +156,7 @@ Resources:
           AUTH_SECRETS: !Ref WebhookAuthSecrets
           TS_HEADER_NAME: "FTXUS-TS"
           SIG_HEADER_NAME: "FTXUS-SIGN"
-          KEY_HEADER_NAME: "FTXUS-TS"
+          KEY_HEADER_NAME: "FTXUS-KEY"
           SES_CONFIG_SET: !Ref WebhookConfigSet
           DYNAMODB_ROLE_ARN: !Ref WebhookDynamoDBRoleArn
           DYNAMODB_ENDPOINT: !Ref DynamoDBEndpoint
