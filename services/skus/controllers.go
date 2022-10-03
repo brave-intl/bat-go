@@ -874,7 +874,7 @@ func WebhookRouter(service *Service) chi.Router {
 	return r
 }
 
-// HandleAndroidWebhook is the handler for stripe checkout session webhooks
+// HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
