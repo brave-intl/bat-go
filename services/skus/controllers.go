@@ -892,13 +892,13 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 		// read the payload
 		payload, err := requestutils.Read(r.Context(), r.Body)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
-			validationErrMap["request-body"] = err.Error()
+			logger.Error().Err(err).Msg("failed to read the payload")
+			return handlers.WrapValidationError(err)
 		}
 
 		// validate the payload
 		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
+			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
 			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
 			validationErrMap["request-body-decode"] = err.Error()
 		}
@@ -906,7 +906,7 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 		// extract out the Developer notification
 		dn, err := req.Message.GetDeveloperNotification()
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to get developer notification from message")
+			logger.Warn().Err(err).Msg("failed to get developer notification from message")
 			validationErrMap["invalid-developer-notification"] = err.Error()
 		}
 
