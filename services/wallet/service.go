@@ -436,7 +436,12 @@ func (service *Service) LinkWallet(
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
 	if uID, ok, c, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
-		// there was an error
+		// region not supported is an expected error
+		if errors.Is(err, errorutils.ErrInvalidCountry) {
+			// we handle the status code and response data in the handler
+			return err
+		}
+		// there was an unexpected error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
 			http.StatusInternalServerError,

@@ -111,39 +111,27 @@ type GeoAllowBlockMap struct {
 	Block []string `json:"block" valid:"-"`
 }
 
-// Verdict - get the verdict of the geo allow block map
+// check if passed in countries exist in an allow or block list
+func contains(countries, allowblock []string) bool {
+	for _, ab := range allowblock {
+		for _, country := range countries {
+			if strings.EqualFold(ab, country) {
+				fmt.Println("contains ", ab, country)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Verdict - test is countries exist in allow list, or do not exist in block list
 func (gabm GeoAllowBlockMap) Verdict(countries ...string) bool {
-
-	var (
-		allow bool
-		block bool
-	)
-
-OUTER_ALLOW:
-	for _, ac := range gabm.Allow {
-		for _, country := range countries {
-			if strings.EqualFold(ac, country) {
-				// in allow list
-				allow = true
-				break OUTER_ALLOW
-			}
-		}
+	if len(gabm.Allow) > 0 {
+		// allow list exists, use it to check if any countries exist in allow
+		return contains(countries, gabm.Allow)
 	}
-	if allow {
-		return allow
-	}
-
-OUTER_BLOCK:
-	for _, bc := range gabm.Block {
-		for _, country := range countries {
-			if strings.EqualFold(bc, country) {
-				// in block list
-				block = true
-				break OUTER_BLOCK
-			}
-		}
-	}
-	return !block
+	// check if any block list countries exist in our list of countries
+	return !contains(gabm.Block, countries)
 }
 
 // Regions - Supported Regions
