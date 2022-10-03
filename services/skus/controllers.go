@@ -915,9 +915,19 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 			return handlers.ValidationError("Error validating request url", validationErrMap)
 		}
 
-		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
-			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+		err = service.verifyDeveloperNotification(ctx, dn)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to verify subscription notification")
+			switch {
+			case errors.Is(err, errNotFound):
+				return handlers.WrapError(err, "failed to verify subscription notification",
+					http.StatusNotFound)
+			default:
+				return handlers.WrapError(err, "failed to verify subscription notification",
+					http.StatusInternalServerError)
+			}
 		}
+
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
 	})
 }
