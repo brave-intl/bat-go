@@ -72,6 +72,12 @@ func (pm *Methods) Value() (driver.Value, error) {
 	return pq.Array(pm), nil
 }
 
+const (
+	stripePaymentProcessor  = "stripe"
+	iOSPaymentProcessor     = "ios"
+	androidPaymentProcessor = "android"
+)
+
 // Order includes information about a particular order
 type Order struct {
 	ID                    uuid.UUID            `json:"id" db:"id"`
@@ -82,6 +88,7 @@ type Order struct {
 	MerchantID            string               `json:"merchantId" db:"merchant_id"`
 	Location              datastore.NullString `json:"location" db:"location"`
 	Status                string               `json:"status" db:"status"`
+	PaymentProcessor      string               `json:"paymentProcessor" db:"payment_processor"`
 	Items                 []OrderItem          `json:"items"`
 	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`

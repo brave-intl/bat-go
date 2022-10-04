@@ -1012,7 +1012,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				}
 				if ok && subID != "" {
 					// okay, this is a subscription renewal, not first time,
-					err = service.Datastore.RenewOrder(ctx, orderID)
+					err = service.Datastore.RenewOrder(ctx, orderID, stripePaymentProcessor)
 					if err != nil {
 						sublogger.Error().Err(err).Msg("failed to renew the order")
 						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
@@ -1023,7 +1023,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 				// not a renewal, first time
 				// and update the order's expires at as it was just paid
-				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
+				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid, stripePaymentProcessor)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
@@ -1040,7 +1040,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 			sublogger.Debug().
 				Str("orderID", orderID.String()).Msg("order not paid, set pending")
-			err = service.Datastore.UpdateOrder(orderID, "pending")
+			err = service.Datastore.UpdateOrder(orderID, "pending", stripePaymentProcessor)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to update order status")
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
@@ -1068,7 +1068,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			if err != nil {
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-			err = service.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+			err = service.Datastore.UpdateOrder(orderID, OrderStatusCanceled, stripePaymentProcessor)
 			if err != nil {
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
@@ -1144,7 +1144,7 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
 			"vendor":     req.Type.String(),
 			"externalID": externalID,
-		}); err != nil {
+		}, req.Type.String()); err != nil {
 			logger.Warn().Err(err).Msg("Failed to update the order with appropriate metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
 		}

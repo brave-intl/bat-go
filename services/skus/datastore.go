@@ -40,9 +40,9 @@ type Datastore interface {
 	// GetOrderByExternalID by the external id from the purchase vendor
 	GetOrderByExternalID(externalID string) (*Order, error)
 	// RenewOrder - renew the order with this id
-	RenewOrder(ctx context.Context, orderID uuid.UUID) error
+	RenewOrder(ctx context.Context, orderID uuid.UUID, paymentProcessor string) error
 	// UpdateOrder updates an order when it has been paid
-	UpdateOrder(orderID uuid.UUID, status string) error
+	UpdateOrder(orderID uuid.UUID, status, paymentProcessor string) error
 	// UpdateOrderMetadata adds a key value pair to an order's metadata
 	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
@@ -91,7 +91,7 @@ type Datastore interface {
 
 	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
 	IsStripeSub(uuid.UUID) (bool, string, error)
-	SetOrderPaid(context.Context, *uuid.UUID) error
+	SetOrderPaid(context.Context, *uuid.UUID, string) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 }
 
@@ -587,11 +587,11 @@ func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, order
 
 // RenewOrder updates the orders status to paid and paid at time, inserts record of this order
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
+func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID, paymentProcessor string) error {
 
 	// renew order is an update order with paid status
 	// and an update order expires at with the new expiry time of the order
-	err := pg.UpdateOrder(orderID, OrderStatusPaid) // this performs a record order payment
+	err := pg.UpdateOrder(orderID, OrderStatusPaid, paymentProcessor) // this performs a record order payment
 	if err != nil {
 		return fmt.Errorf("failed to set order status to paid: %w", err)
 	}
@@ -646,7 +646,7 @@ func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.T
 
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status, paymentProcessor string) error {
 	ctx := context.Background()
 	// create tx
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
@@ -655,7 +655,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	}
 	defer pg.RollbackTx(tx)
 
-	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	result, err := tx.Exec(`UPDATE orders set status = $1, payment_processor=$2, updated_at = CURRENT_TIMESTAMP where id = $3`, status, paymentProcessor, orderID)
 
 	if err != nil {
 		return err
@@ -1108,14 +1108,14 @@ func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID,
 }
 
 // SetOrderPaid - set the order as paid
-func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error {
+func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID, paymentProcessor string) error {
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
 	defer rollback() // doesnt hurt to rollback incase we panic
 	if err != nil {
 		return fmt.Errorf("failed to get db transaction: %w", err)
 	}
 
-	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, OrderStatusPaid, *orderID)
+	result, err := tx.Exec(`UPDATE orders set status = $1, payment_processor = $2, updated_at = CURRENT_TIMESTAMP where id = $3`, OrderStatusPaid, paymentProcessor, *orderID)
 	if err != nil {
 		return err
 	}

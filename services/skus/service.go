@@ -353,7 +353,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
 		if stripeSession.PaymentStatus == "paid" {
 			// if the session is actually paid, then set the subscription id and order to paid
-			if err = s.Datastore.UpdateOrder(order.ID, "paid"); err != nil {
+			if err = s.Datastore.UpdateOrder(order.ID, "paid", stripePaymentProcessor); err != nil {
 				return nil, fmt.Errorf("failed to update order to paid status: %w", err)
 			}
 			err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeSubscriptionId", stripeSession.Subscription.ID)
@@ -385,7 +385,7 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
 		}
 	}
-	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled, stripePaymentProcessor)
 }
 
 // SetOrderTrialDays set the order's free trial days
@@ -437,7 +437,7 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 	}
 
 	if sum.GreaterThanOrEqual(order.TotalPrice) {
-		err = s.Datastore.UpdateOrder(orderID, "paid")
+		err = s.Datastore.UpdateOrder(orderID, "paid", order.PaymentProcessor)
 		if err != nil {
 			return err
 		}
@@ -611,7 +611,7 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
-		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
+		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid", kind)
 		if err != nil {
 			sublogger.Error().Err(err).Msg("failed to set the status to paid")
 			return nil, errorutils.Wrap(err, "error updating order status")
@@ -649,7 +649,7 @@ func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTr
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
-		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
+		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid", kind)
 		if err != nil {
 			sublogger.Error().Err(err).Msg("failed to set the status to paid")
 			return nil, errorutils.Wrap(err, "error updating order status")
@@ -1204,7 +1204,7 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 		androidSubscriptionRestarted,
 		androidSubscriptionInGracePeriod,
 		androidSubscriptionPriceChangeConfirmed:
-		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+		if err = s.Datastore.RenewOrder(ctx, o.ID, androidPaymentProcessor); err != nil {
 			return fmt.Errorf("failed to renew subscription in skus: %w", err)
 		}
 	case androidSubscriptionExpired,
@@ -1239,7 +1239,7 @@ func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, recei
 }
 
 // UpdateOrderStatusPaidWithMetadata - update the order status with metadata
-func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
+func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata, paymentProcessor string) error {
 	// create a tx for use in all datastore calls
 	ctx, _, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
 	defer rollback() // doesnt hurt to rollback incase we panic
@@ -1253,7 +1253,7 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 			return fmt.Errorf("failed to append order metadata: %w", err)
 		}
 	}
-	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {
+	if err := s.Datastore.SetOrderPaid(ctx, orderID, paymentProcessor); err != nil {
 		return fmt.Errorf("failed to set order paid: %w", err)
 	}
 

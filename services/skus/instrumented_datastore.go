@@ -460,7 +460,7 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 }
 
 // RenewOrder implements Datastore
-func (_d DatastoreWithPrometheus) RenewOrder(ctx context.Context, orderID uuid.UUID) (err error) {
+func (_d DatastoreWithPrometheus) RenewOrder(ctx context.Context, orderID uuid.UUID, paymentProcessor string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -470,7 +470,7 @@ func (_d DatastoreWithPrometheus) RenewOrder(ctx context.Context, orderID uuid.U
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RenewOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.RenewOrder(ctx, orderID)
+	return _d.base.RenewOrder(ctx, orderID, paymentProcessor)
 }
 
 // RollbackTx implements Datastore
@@ -513,7 +513,7 @@ func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker Or
 }
 
 // SetOrderPaid implements Datastore
-func (_d DatastoreWithPrometheus) SetOrderPaid(ctx context.Context, up1 *uuid.UUID) (err error) {
+func (_d DatastoreWithPrometheus) SetOrderPaid(ctx context.Context, up1 *uuid.UUID, s1 string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -523,7 +523,7 @@ func (_d DatastoreWithPrometheus) SetOrderPaid(ctx context.Context, up1 *uuid.UU
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetOrderPaid", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.SetOrderPaid(ctx, up1)
+	return _d.base.SetOrderPaid(ctx, up1, s1)
 }
 
 // SetOrderTrialDays implements Datastore
@@ -541,7 +541,7 @@ func (_d DatastoreWithPrometheus) SetOrderTrialDays(ctx context.Context, orderID
 }
 
 // UpdateOrder implements Datastore
-func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) (err error) {
+func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string, paymentProcessor string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -551,7 +551,7 @@ func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) 
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UpdateOrder(orderID, status)
+	return _d.base.UpdateOrder(orderID, status, paymentProcessor)
 }
 
 // UpdateOrderMetadata implements Datastore
