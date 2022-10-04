@@ -247,6 +247,15 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	version := ctx.Value(appctx.VersionCTXKey).(string)
 	env := ctx.Value(appctx.EnvironmentCTXKey).(string)
 
+	// health check status of all services
+	serviceStatus := map[string]interface{}{}
+
+	serviceStatus["wallet"] = map[string]bool{
+		"uphold":   !(ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool)),
+		"gemini":   !(ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)),
+		"bitflyer": !(ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)),
+	}
+
 	// runnable jobs for the services created
 	jobs := []srv.Job{}
 
@@ -413,7 +422,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		Str("buildTime", buildTime).
 		Msg("server starting up")
 
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
+	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus))
 
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
