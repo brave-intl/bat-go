@@ -318,7 +318,7 @@ func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
 		SELECT 
 			id, created_at, currency, updated_at, total_price, 
 			merchant_id, location, status, allowed_payment_methods, 
-			metadata, valid_for, last_paid_at, expires_at, trial_days
+			metadata, valid_for, last_paid_at, expires_at, trial_days, payment_processor
 		FROM orders WHERE metadata->>'externalID' = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, externalID)
@@ -347,7 +347,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 		SELECT 
 			id, created_at, currency, updated_at, total_price, 
 			merchant_id, location, status, allowed_payment_methods, 
-			metadata, valid_for, last_paid_at, expires_at, trial_days
+			metadata, valid_for, last_paid_at, expires_at, trial_days, payment_processor
 		FROM orders WHERE id = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, orderID)
