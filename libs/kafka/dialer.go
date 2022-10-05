@@ -46,8 +46,7 @@ func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader,
 		GroupID:       groupID,
 		Topic:         topic,
 		Dialer:        dialer,
-		StartOffset:   0,
-		RetentionTime: 2 * time.Hour,
+		RetentionTime: 168 * time.Hour,                 // 7 days
 		Logger:        kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
