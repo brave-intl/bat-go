@@ -22,7 +22,7 @@ type Order struct {
 	MerchantID            string               `json:"merchantId" db:"merchant_id"`
 	Location              datastore.NullString `json:"location" db:"location"`
 	Status                string               `json:"status" db:"status"`
-	PaymentProcessor      string               `json:"paymentProcessor" db:"payment_processor"`
+	PaymentProcessor      *string              `json:"paymentProcessor" db:"payment_processor"`
 	Items                 []OrderItem          `json:"items"`
 	AllowedPaymentMethods skus.Methods         `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
