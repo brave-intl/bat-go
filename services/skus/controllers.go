@@ -877,7 +877,7 @@ func WebhookRouter(service *Service) chi.Router {
 
 // HandleAndroidWebhook is the handler for stripe checkout session webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		var (
 			ctx              = r.Context()
@@ -920,12 +920,12 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
 		}
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
-	})
+	}
 }
 
 // HandleIOSWebhook is the handler for ios iap webhooks
 func HandleIOSWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		var (
 			ctx              = r.Context()
@@ -956,14 +956,14 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 		// transaction info
 		txInfo, err := req.GetTransactionInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get renewal info from message")
+			logger.Warn().Err(err).Msg("failed to get transaction info from message")
 			validationErrMap["invalid-renewal-info"] = err.Error()
 		}
 
 		// renewal info
 		renewalInfo, err := req.GetRenewalInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get transaction info from message")
+			logger.Warn().Err(err).Msg("failed to get renewal info from message")
 			validationErrMap["invalid-transaction-info"] = err.Error()
 		}
 
@@ -985,12 +985,12 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 			}
 		}
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
-	})
+	}
 }
 
 // HandleStripeWebhook is the handler for stripe checkout session webhooks
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 		// get logger
 		sublogger := logging.Logger(ctx, "payments").With().
@@ -1127,7 +1127,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
-	})
+	}
 }
 
 // SubmitReceipt submit a vendor verifiable receipt that proves order is paid

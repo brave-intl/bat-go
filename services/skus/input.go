@@ -334,6 +334,9 @@ func (iosn *IOSNotification) Validate(ctx context.Context) error {
 
 	// extract the public key from the jws
 	pk, err := extractPublicKey(iosn.SignedPayload)
+	if err != nil {
+		return fmt.Errorf("failed to extract public key in request: %w", err)
+	}
 	// validate the payloadJWS
 	payload, err := iosn.payloadJWS.Verify(pk)
 	if err != nil {
