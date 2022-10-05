@@ -25,6 +25,12 @@ import (
 	macaroon "gopkg.in/macaroon.v2"
 )
 
+const (
+	paymentProcessor     = "paymentProcessor"
+	IOSPaymentMethod     = "ios"
+	AndroidPaymentMethod = "android"
+)
+
 //StripePaymentMethod - the label for stripe payment method
 const (
 	StripePaymentMethod               = "stripe"
