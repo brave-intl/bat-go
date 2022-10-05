@@ -42,12 +42,11 @@ func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader,
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:       strings.Split(kafkaBrokers, ","),
-		GroupID:       groupID,
-		Topic:         topic,
-		Dialer:        dialer,
-		RetentionTime: 168 * time.Hour,                 // 7 days
-		Logger:        kafka.LoggerFunc(logger.Printf), // FIXME
+		Brokers: strings.Split(kafkaBrokers, ","),
+		GroupID: groupID,
+		Topic:   topic,
+		Dialer:  dialer,
+		Logger:  kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	return &Reader{
