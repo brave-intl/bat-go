@@ -957,14 +957,14 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 		txInfo, err := req.GetTransactionInfo(ctx)
 		if err != nil {
 			logger.Warn().Err(err).Msg("failed to get transaction info from message")
-			validationErrMap["invalid-renewal-info"] = err.Error()
+			validationErrMap["invalid-transaction-info"] = err.Error()
 		}
 
 		// renewal info
 		renewalInfo, err := req.GetRenewalInfo(ctx)
 		if err != nil {
 			logger.Warn().Err(err).Msg("failed to get renewal info from message")
-			validationErrMap["invalid-transaction-info"] = err.Error()
+			validationErrMap["invalid-renewal-info"] = err.Error()
 		}
 
 		// if we had any validation errors, return the validation error map to the caller
