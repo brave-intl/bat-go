@@ -2,9 +2,12 @@ package rewards
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -105,9 +108,10 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 
 	// merge in static s3 attributes into response
 	var (
-		payoutStatus     *custodian.PayoutStatus
-		custodianRegions *custodian.CustodianRegions
-		bucket, ok       = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+		payoutStatus         *custodian.PayoutStatus
+		custodianRegions     *custodian.CustodianRegions
+		disabledGeoCountries []string
+		bucket, ok           = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
 	)
 	logger.Debug().Str("bucket", bucket).Msg("merge bucket env var")
 	if ok {
@@ -126,6 +130,17 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
 		}
 		logger.Debug().Str("bucket", bucket).Str("custodian regions", fmt.Sprintf("%+v", *custodianRegions)).Msg("custodianRegions")
+
+		// get the disabled geo countries
+		disabledGeoCountriesObject, ok := ctx.Value(appctx.DisabledWalletGeoCountriesCTXKey).(string)
+		if !ok {
+			return nil, fmt.Errorf("failed to get disabled geo countries object: %w", err)
+		}
+
+		disabledGeoCountries, err = getDisabledGeoCountries(ctx, s.s3Client, bucket, disabledGeoCountriesObject)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get disabled geo countries parameters: %w", err)
+		}
 	}
 
 	return &ParametersV1{
@@ -140,5 +155,33 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
+		DisabledGeoCountries: disabledGeoCountries,
 	}, nil
+}
+
+func getDisabledGeoCountries(ctx context.Context, s3Client appaws.S3GetObjectAPI, bucket, object string) ([]string, error) {
+	var locations []string
+
+	out, err := s3Client.GetObject(
+		ctx, &s3.GetObjectInput{
+			Bucket: ptr.FromString(bucket),
+			Key:    ptr.FromString(object),
+		})
+	if err != nil {
+		return locations, fmt.Errorf("error failed to get s3 object: %w", err)
+	}
+	defer func() {
+		err := out.Body.Close()
+		if err != nil {
+			logging.FromContext(ctx).Error().
+				Err(err).Msg("error closing body")
+		}
+	}()
+
+	err = json.NewDecoder(out.Body).Decode(&locations)
+	if err != nil {
+		return locations, fmt.Errorf("error decoding geo country s3 list")
+	}
+
+	return locations, nil
 }

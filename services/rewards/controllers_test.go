@@ -68,12 +68,25 @@ func TestGetParametersController(t *testing.T) {
 		}, nil
 	})
 
+	var mockS3DisabledGeoCountries = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+		return &s3.GetObjectOutput{
+			Body: io.NopCloser(bytes.NewBufferString(`"GB", "US", "AA"`)),
+		}, nil
+	})
+
 	var mockS3 = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 		if *params.Key == "payout-status.json" {
 			return mockS3PayoutStatus(ctx, params, optFns...)
-		} else if *params.Key == "custodian-regions.json" {
+		}
+
+		if *params.Key == "custodian-regions.json" {
 			return mockS3CustodianRegions(ctx, params, optFns...)
 		}
+
+		if *params.Key == "disabled-wallet-geo-countries.json" {
+			return mockS3DisabledGeoCountries(ctx, params, optFns...)
+		}
+
 		return nil, errors.New("invalid key")
 	})
 
