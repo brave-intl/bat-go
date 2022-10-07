@@ -368,7 +368,22 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	// perform an Account Validation call to gemini to get the accountID
 	accountID, country, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
-		return fmt.Errorf("failed to validate account: %w", err)
+		// check if this gemini accountID has already been linked to this wallet,
+		if errors.Is(err, errorutils.ErrInvalidCountry) {
+			ok, err := service.Datastore.HasPriorLinking(
+				ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
+			if err != nil {
+				return fmt.Errorf("failed to check prior linkings: %w", err)
+			}
+			if !ok {
+				// then pass back the original geo error
+				return fmt.Errorf("failed to validate account: %w", err)
+			}
+			// allow invalid country if there was a prior linking
+		} else {
+			// if so ignore the region not supported error
+			return fmt.Errorf("failed to validate account: %w", err)
+		}
 	}
 
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
@@ -417,9 +432,25 @@ func (service *Service) LinkWallet(
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
 	if uID, ok, c, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
-		// region not supported is an expected error
+		// get the rewards wallet id from the uphold wallet info
+		infoID, err := uuid.FromString(info.ID)
+		if err != nil {
+			return fmt.Errorf("failed to parse wallet id: %w", err)
+		}
+		// check if this gemini accountID has already been linked to this wallet,
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
-			// we handle the status code and response data in the handler
+			ok, err := service.Datastore.HasPriorLinking(
+				ctx, infoID, uuid.NewV5(ClaimNamespace, userID))
+			if err != nil {
+				return fmt.Errorf("failed to check prior linkings: %w", err)
+			}
+			if !ok {
+				// then pass back the original geo error
+				return err
+			}
+			// allow invalid country if there was a prior linking
+		} else {
+			// if so ignore the region not supported error
 			return err
 		}
 		// there was an unexpected error
