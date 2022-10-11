@@ -435,27 +435,24 @@ func (service *Service) LinkWallet(
 		// get the rewards wallet id from the uphold wallet info
 		infoID, infoIDErr := uuid.FromString(info.ID)
 		if infoIDErr != nil {
-			return fmt.Errorf("failed to parse uphold id: %w", err)
+			return fmt.Errorf("failed to parse uphold id: %w", infoIDErr)
 		}
 		// check if this gemini accountID has already been linked to this wallet,
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
-			ok, priorErr := service.Datastore.HasPriorLinking(
+			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
 				ctx, infoID, uuid.NewV5(ClaimNamespace, userID))
-			if priorErr != nil {
-				return fmt.Errorf("failed to check prior linkings: %w", priorErr)
+			if priorLinkingErr != nil {
+				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
 			}
+			// if a wallet has a prior linking to this account, allow the invalid country, otherwise
+			// return the kyc error
 			if !ok {
 				// then pass back the original geo error
 				return err
 			}
 			// allow invalid country if there was a prior linking
 		} else {
-			// not a invalid country error
-			// there was an unexpected error
-			return handlers.WrapError(err,
-				"wallet could not be kyc checked",
-				http.StatusInternalServerError,
-			)
+			return fmt.Errorf("wallet could not be kyc checked: %w", err)
 		}
 	} else if !ok {
 		// fail
