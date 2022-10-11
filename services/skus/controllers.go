@@ -1036,6 +1036,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				// set paymentProcessor as stripe
 				err = service.Datastore.UpdateOrderMetadata(orderID, paymentProcessor, StripePaymentMethod)
 				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
 					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
 				}
 
