@@ -370,10 +370,10 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	if err != nil {
 		// check if this gemini accountID has already been linked to this wallet,
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
-			ok, priorErr := service.Datastore.HasPriorLinking(
+			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
 				ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
-			if priorErr != nil {
-				return fmt.Errorf("failed to check prior linkings: %w", err)
+			if priorLinkingErr != nil {
+				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
 			}
 			if !ok {
 				// then pass back the original geo error
