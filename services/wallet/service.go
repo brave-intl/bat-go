@@ -348,7 +348,11 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+			// custodial account country code does not match declared country code
+			return handlers.AppError{
+				Message: "custodial account country code does not match declared country code",
+				Code:    http.StatusBadRequest,
+			}
 		}
 		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
@@ -399,7 +403,11 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+			// custodial account country code does not match declared country code
+			return handlers.AppError{
+				Message: "custodial account country code does not match declared country code",
+				Code:    http.StatusBadRequest,
+			}
 		}
 		return handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
@@ -492,7 +500,11 @@ func (service *Service) LinkWallet(
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+			// custodial account country code does not match declared country code
+			return handlers.AppError{
+				Message: "custodial account country code does not match declared country code",
+				Code:    http.StatusBadRequest,
+			}
 		}
 		return handlers.WrapError(err, "unable to link uphold wallets", status)
 	}
@@ -542,7 +554,11 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+			// custodial account country code does not match declared country code
+			return handlers.AppError{
+				Message: "custodial account country code does not match declared country code",
+				Code:    http.StatusBadRequest,
+			}
 		}
 		return handlers.WrapError(err, "unable to link brave wallets", status)
 	}
