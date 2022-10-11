@@ -370,9 +370,9 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	if err != nil {
 		// check if this gemini accountID has already been linked to this wallet,
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
-			ok, err := service.Datastore.HasPriorLinking(
+			ok, priorErr := service.Datastore.HasPriorLinking(
 				ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
-			if err != nil {
+			if priorErr != nil {
 				return fmt.Errorf("failed to check prior linkings: %w", err)
 			}
 			if !ok {
@@ -381,7 +381,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 			}
 			// allow invalid country if there was a prior linking
 		} else {
-			// if so ignore the region not supported error
+			// not err invalid country error
 			return fmt.Errorf("failed to validate account: %w", err)
 		}
 	}
@@ -433,16 +433,16 @@ func (service *Service) LinkWallet(
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
 	if uID, ok, c, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
 		// get the rewards wallet id from the uphold wallet info
-		infoID, err := uuid.FromString(info.ID)
-		if err != nil {
-			return fmt.Errorf("failed to parse wallet id: %w", err)
+		infoID, infoIDErr := uuid.FromString(info.ID)
+		if infoIDErr != nil {
+			return fmt.Errorf("failed to parse uphold id: %w", err)
 		}
 		// check if this gemini accountID has already been linked to this wallet,
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
-			ok, err := service.Datastore.HasPriorLinking(
+			ok, priorErr := service.Datastore.HasPriorLinking(
 				ctx, infoID, uuid.NewV5(ClaimNamespace, userID))
-			if err != nil {
-				return fmt.Errorf("failed to check prior linkings: %w", err)
+			if priorErr != nil {
+				return fmt.Errorf("failed to check prior linkings: %w", priorErr)
 			}
 			if !ok {
 				// then pass back the original geo error
@@ -450,14 +450,13 @@ func (service *Service) LinkWallet(
 			}
 			// allow invalid country if there was a prior linking
 		} else {
-			// if so ignore the region not supported error
-			return err
+			// not a invalid country error
+			// there was an unexpected error
+			return handlers.WrapError(err,
+				"wallet could not be kyc checked",
+				http.StatusInternalServerError,
+			)
 		}
-		// there was an unexpected error
-		return handlers.WrapError(err,
-			"wallet could not be kyc checked",
-			http.StatusInternalServerError,
-		)
 	} else if !ok {
 		// fail
 		return handlers.WrapError(
