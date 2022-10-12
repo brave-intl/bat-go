@@ -613,7 +613,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	// perform again, make sure we check haslinkedprio
 	hasPriorRows := sqlmock.NewRows([]string{"result"}).
 		AddRow(true)
-	mock.ExpectQuery("^select true from wallet_custodian (.+)").WithArgs(uuid.NewV5(wallet.ClaimNamespace, accountID.String()), idFrom).WillReturnRows(hasPriorRows)
+	mock.ExpectQuery("^select exists(select 1 from wallet_custodian (.+)").WithArgs(uuid.NewV5(wallet.ClaimNamespace, accountID.String()), idFrom).WillReturnRows(hasPriorRows)
 
 	max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	open = sqlmock.NewRows([]string{"used"}).AddRow(0)

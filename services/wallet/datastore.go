@@ -243,11 +243,13 @@ func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walle
 // HasPriorLinking - check if this wallet id has been linked to this provider linking id in the past
 func (pg *Postgres) HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (bool, error) {
 	statement := `
-	select
-		true
-	from
-		wallet_custodian
-	WHERE linking_id = $1 and wallet_id = $2
+	select exists (
+		select 1
+		from
+			wallet_custodian
+		where
+			linking_id = $1 and wallet_id = $2
+	)
 	`
 	var existingLinking bool
 	err := pg.RawDB().GetContext(ctx, &existingLinking, statement, providerLinkingID, walletID)
