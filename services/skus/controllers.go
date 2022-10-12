@@ -874,7 +874,7 @@ func WebhookRouter(service *Service) chi.Router {
 	return r
 }
 
-// HandleAndroidWebhook is the handler for stripe checkout session webhooks
+// HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
@@ -892,22 +892,27 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 		// read the payload
 		payload, err := requestutils.Read(r.Context(), r.Body)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
-			validationErrMap["request-body"] = err.Error()
+			logger.Error().Err(err).Msg("failed to read the payload")
+			return handlers.WrapValidationError(err)
 		}
 
 		// validate the payload
 		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
+			logger.Debug().Str("payload", string(payload)).
+				Msg("failed to decode and validate the payload")
 			validationErrMap["request-body-decode"] = err.Error()
 		}
 
 		// extract out the Developer notification
 		dn, err := req.Message.GetDeveloperNotification()
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to get developer notification from message")
 			validationErrMap["invalid-developer-notification"] = err.Error()
+		}
+
+		if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
+			logger.Error().Interface("validation-errors", validationErrMap).
+				Msg("failed to get developer notification from message")
+			validationErrMap["invalid-developer-notification-token"] = "notification has no purchase token"
 		}
 
 		// if we had any validation errors, return the validation error map to the caller
@@ -915,9 +920,19 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 			return handlers.ValidationError("Error validating request url", validationErrMap)
 		}
 
-		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
-			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+		err = service.verifyDeveloperNotification(ctx, dn)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to verify subscription notification")
+			switch {
+			case errors.Is(err, errNotFound):
+				return handlers.WrapError(err, "failed to verify subscription notification",
+					http.StatusNotFound)
+			default:
+				return handlers.WrapError(err, "failed to verify subscription notification",
+					http.StatusInternalServerError)
+			}
 		}
+
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
 	})
 }
@@ -1017,6 +1032,12 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order metadata")
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+				}
+				// set paymentProcessor as stripe
+				err = service.Datastore.UpdateOrderMetadata(orderID, paymentProcessor, StripePaymentMethod)
+				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
+					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
 				}
 
 				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
@@ -1127,8 +1148,9 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 
 		// set order paid and include the vendor and external id to metadata
 		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
-			"vendor":     req.Type.String(),
-			"externalID": externalID,
+			"vendor":         req.Type.String(),
+			"externalID":     externalID,
+			paymentProcessor: req.Type.String(),
 		}); err != nil {
 			logger.Warn().Err(err).Msg("Failed to update the order with appropriate metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)

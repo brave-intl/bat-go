@@ -486,7 +486,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 					"country_code": res.CountryCode,
 					"status":       "failure",
 				}).Inc()
-				return "", res.CountryCode, errorutils.ErrInvalidCountry
+				return res.ID, res.CountryCode, errorutils.ErrInvalidCountry
 			}
 		}
 	} else { // use default blacklist functionality
@@ -500,7 +500,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 							"status":       "failure",
 						}).Inc()
 					}
-					return "", res.CountryCode, errorutils.ErrInvalidCountry
+					return res.ID, res.CountryCode, errorutils.ErrInvalidCountry
 				}
 			}
 		}
