@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -372,7 +373,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
 			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
 				ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
-			if priorLinkingErr != nil {
+			if priorLinkingErr != nil && !errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
 			}
 			if !ok {
@@ -441,7 +442,7 @@ func (service *Service) LinkWallet(
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
 			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
 				ctx, infoID, uuid.NewV5(ClaimNamespace, userID))
-			if priorLinkingErr != nil {
+			if priorLinkingErr != nil && !errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
 			}
 			// if a wallet has a prior linking to this account, allow the invalid country, otherwise
