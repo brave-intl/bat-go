@@ -113,10 +113,20 @@ func validateSignature(ctx context.Context, request events.APIGatewayProxyReques
 	return nil
 }
 
+// normalizeHeaders - convert header keys to normalized version
+func normalizeHeaders(a map[string]string) map[string]string {
+	var b = map[string]string{}
+	for k, v := range a {
+		b[strings.ToUpper(k)] = v
+	}
+	return b
+}
+
 // handler takes the api gateway request and sends a templated email
 func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	logger := logging.Logger(ctx, "webhook.handler")
 	return func(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+		request.Headers = normalizeHeaders(request.Headers)
 		var (
 			authenticated  bool
 			apiKey, authOK = request.Headers[keyHeaderName]
