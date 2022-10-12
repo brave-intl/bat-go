@@ -133,6 +133,8 @@ func handler(ctx context.Context) func(request events.APIGatewayProxyRequest) (e
 			apiKeyHash     = sha256.Sum256([]byte(apiKey))
 		)
 
+		logger.Info().Msgf("full request: %+v", request)
+
 		// no api key in request
 		if !authOK {
 			logger.Warn().Msg("no api key in headers")
