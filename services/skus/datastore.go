@@ -1189,6 +1189,10 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 		return nil, err
 	}
 
+	if len(timeAwareSubIssuedCreds) == 0 {
+		return nil, nil
+	}
+
 	timeLimitedV2Creds := TimeLimitedV2Creds{
 		OrderID:     timeAwareSubIssuedCreds[0].OrderID,
 		IssuerID:    timeAwareSubIssuedCreds[0].IssuerID,
