@@ -894,7 +894,7 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 // GetTimeLimitedV2Creds returns all the single use credentials for a given order.
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
-func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*TimeLimitedV2Creds, int, error) {
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeAwareSubIssuedCreds, int, error) {
 	if order == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
@@ -923,7 +923,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*Tim
 	}
 
 	if creds != nil && len(creds.Credentials) == total {
-		return creds, http.StatusOK, nil
+		return creds.Credentials, http.StatusOK, nil
 	}
 
 	return nil, http.StatusAccepted, nil
