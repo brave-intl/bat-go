@@ -61,8 +61,6 @@ type Datastore interface {
 	InsertIssuer(issuer *Issuer) (*Issuer, error)
 	GetIssuer(merchantID string) (*Issuer, error)
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	InsertOrderCreds(ctx context.Context, creds *OrderCreds) error
-	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
@@ -78,9 +76,11 @@ type Datastore interface {
 	InsertVote(ctx context.Context, vr VoteRecord) error
 	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
 	IsStripeSub(uuid.UUID) (bool, string, error)
+	InsertOrderCredsTx(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) error
+	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
-	InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error
+	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) (err error)
 	GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
@@ -789,8 +789,8 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 	return &issuer, nil
 }
 
-// InsertOrderCreds inserts the given order creds
-func (pg *Postgres) InsertOrderCreds(ctx context.Context, creds *OrderCreds) error {
+// InsertOrderCredsTx inserts the given order creds.
+func (pg *Postgres) InsertOrderCredsTx(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) error {
 	blindedCredsJSON, err := json.Marshal(creds.BlindedCreds)
 	if err != nil {
 		return err
@@ -799,7 +799,7 @@ func (pg *Postgres) InsertOrderCreds(ctx context.Context, creds *OrderCreds) err
 	statement := `
 	insert into order_creds (item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key)
 	values ($1, $2, $3, $4, $5, $6, $7)`
-	_, err = pg.ExecContext(ctx, statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON,
+	_, err = tx.ExecContext(ctx, statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON,
 		creds.SignedCreds, creds.BatchProof, creds.PublicKey)
 
 	return err
@@ -1180,7 +1180,7 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 	query := `
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
 		from time_limited_v2_order_creds
-		where order_id = $1
+		where order_id = $1 and valid_to >= now()
 	`
 
 	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
@@ -1227,8 +1227,8 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*Ti
 	}, nil
 }
 
-// InsertTimeLimitedV2OrderCreds - insertion of time aware credentials
-func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error {
+// InsertTimeLimitedV2OrderCredsTx inserts time limited v2 credentials.
+func (pg *Postgres) InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error {
 	blindedCredsJSON, err := json.Marshal(tlv2.BlindedCreds)
 
 	if err != nil {
@@ -1244,7 +1244,7 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 Time
                         signed_creds, batch_proof, public_key, valid_to, valid_from) 
                     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
-	_, err = pg.ExecContext(ctx, query, tlv2.ItemID, tlv2.OrderID, tlv2.IssuerID, blindedCredsJSON,
+	_, err = tx.ExecContext(ctx, query, tlv2.ItemID, tlv2.OrderID, tlv2.IssuerID, blindedCredsJSON,
 		signedCredsJSON, tlv2.BatchProof, tlv2.PublicKey, tlv2.ValidTo, tlv2.ValidFrom)
 	if err != nil {
 		return fmt.Errorf("error inserting row: %w", err)
@@ -1260,11 +1260,11 @@ type SigningOrderRequestOutbox struct {
 	Message json.RawMessage `db:"message_data" json:"message"`
 }
 
-// GetSigningOrderRequestOutbox - get a message from the outbox
+// GetSigningOrderRequestOutbox retrieves the latest signing order from the outbox.
 func (pg *Postgres) GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select id, order_id, message_data from signing_order_request_outbox where order_id = $1`, orderID)
+		`select id, order_id, message_data from signing_order_request_outbox where order_id = $1 order by created_at limit 1`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request submitted results: %w", err)
 	}
@@ -1375,15 +1375,18 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	return nil
 }
 
-// StoreSignedOrderCredentials stores signed order requests and handles
-// both TimeLimitedV2Creds and SingleUse credentials.
+// StoreSignedOrderCredentials stores signed order requests and handles both TimeLimitedV2Creds and
+// SingleUse credentials. All SigningOrder's in the SigningOrderResult must be successful to persist the overall result.
 func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) (err error) {
 	message, err := reader.FetchMessage(ctx)
 	if err != nil {
 		return fmt.Errorf("error fetching message key %s partition %d offset %d: %w",
 			string(message.Key), message.Partition, message.Offset, err)
 	}
+
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
 	defer func() {
+		rollback()
 		if err != nil {
 			err := reader.DeadLetter(ctx, message, err)
 			if err != nil {
@@ -1458,7 +1461,7 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 				PublicKey:    ptr.FromString(so.PublicKey),
 			}
 
-			err = pg.InsertOrderCreds(ctx, cred)
+			err = pg.InsertOrderCredsTx(ctx, tx, cred)
 			if err != nil {
 				return fmt.Errorf("error inserting single use order credential orderID %s itemID %s: %w",
 					metadata.OrderID, metadata.ItemID, err)
@@ -1490,7 +1493,7 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 				ValidFrom:    *validFrom,
 			}
 
-			err = pg.InsertTimeLimitedV2OrderCreds(ctx, cred)
+			err = pg.InsertTimeLimitedV2OrderCredsTx(ctx, tx, cred)
 			if err != nil {
 				return fmt.Errorf("error inserting time limited order credential orderID %s itemID %s: %w",
 					metadata.OrderID, metadata.ItemID, err)
@@ -1500,6 +1503,11 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 			return fmt.Errorf("error unknown credential type %s for message key %s partition %d offset %d",
 				metadata.CredentialType, string(message.Key), message.Partition, message.Offset)
 		}
+	}
+
+	err = commit()
+	if err != nil {
+		return fmt.Errorf("error commiting txn for requestID %s: %w", signedOrderResult.RequestID, err)
 	}
 
 	return nil

@@ -407,8 +407,8 @@ func (_d DatastoreWithPrometheus) InsertIssuer(issuer *Issuer) (ip1 *Issuer, err
 	return _d.base.InsertIssuer(issuer)
 }
 
-// InsertOrderCreds implements Datastore
-func (_d DatastoreWithPrometheus) InsertOrderCreds(ctx context.Context, creds *OrderCreds) (err error) {
+// InsertOrderCredsTx implements Datastore
+func (_d DatastoreWithPrometheus) InsertOrderCredsTx(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -416,9 +416,9 @@ func (_d DatastoreWithPrometheus) InsertOrderCreds(ctx context.Context, creds *O
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertOrderCreds", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertOrderCredsTx", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertOrderCreds(ctx, creds)
+	return _d.base.InsertOrderCredsTx(ctx, tx, creds)
 }
 
 // InsertSigningOrderRequestOutbox implements Datastore
@@ -435,8 +435,8 @@ func (_d DatastoreWithPrometheus) InsertSigningOrderRequestOutbox(ctx context.Co
 	return _d.base.InsertSigningOrderRequestOutbox(ctx, orderID, signingOrderRequests)
 }
 
-// InsertTimeLimitedV2OrderCreds implements Datastore
-func (_d DatastoreWithPrometheus) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) (err error) {
+// InsertTimeLimitedV2OrderCredsTx implements Datastore
+func (_d DatastoreWithPrometheus) InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -444,9 +444,9 @@ func (_d DatastoreWithPrometheus) InsertTimeLimitedV2OrderCreds(ctx context.Cont
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertTimeLimitedV2OrderCreds", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertTimeLimitedV2OrderCredsTx", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertTimeLimitedV2OrderCreds(ctx, tlv2)
+	return _d.base.InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2)
 }
 
 // InsertVote implements Datastore

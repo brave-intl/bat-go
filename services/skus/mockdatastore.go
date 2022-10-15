@@ -430,18 +430,18 @@ func (mr *MockDatastoreMockRecorder) InsertIssuer(issuer interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertIssuer", reflect.TypeOf((*MockDatastore)(nil).InsertIssuer), issuer)
 }
 
-// InsertOrderCreds mocks base method.
-func (m *MockDatastore) InsertOrderCreds(ctx context.Context, creds *OrderCreds) error {
+// InsertOrderCredsTx mocks base method.
+func (m *MockDatastore) InsertOrderCredsTx(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertOrderCreds", ctx, creds)
+	ret := m.ctrl.Call(m, "InsertOrderCredsTx", ctx, tx, creds)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// InsertOrderCreds indicates an expected call of InsertOrderCreds.
-func (mr *MockDatastoreMockRecorder) InsertOrderCreds(ctx, creds interface{}) *gomock.Call {
+// InsertOrderCredsTx indicates an expected call of InsertOrderCredsTx.
+func (mr *MockDatastoreMockRecorder) InsertOrderCredsTx(ctx, tx, creds interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertOrderCreds", reflect.TypeOf((*MockDatastore)(nil).InsertOrderCreds), ctx, creds)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertOrderCredsTx", reflect.TypeOf((*MockDatastore)(nil).InsertOrderCredsTx), ctx, tx, creds)
 }
 
 // InsertSigningOrderRequestOutbox mocks base method.
@@ -458,18 +458,18 @@ func (mr *MockDatastoreMockRecorder) InsertSigningOrderRequestOutbox(ctx, orderI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSigningOrderRequestOutbox", reflect.TypeOf((*MockDatastore)(nil).InsertSigningOrderRequestOutbox), ctx, orderID, signingOrderRequests)
 }
 
-// InsertTimeLimitedV2OrderCreds mocks base method.
-func (m *MockDatastore) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error {
+// InsertTimeLimitedV2OrderCredsTx mocks base method.
+func (m *MockDatastore) InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertTimeLimitedV2OrderCreds", ctx, tlv2)
+	ret := m.ctrl.Call(m, "InsertTimeLimitedV2OrderCredsTx", ctx, tx, tlv2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// InsertTimeLimitedV2OrderCreds indicates an expected call of InsertTimeLimitedV2OrderCreds.
-func (mr *MockDatastoreMockRecorder) InsertTimeLimitedV2OrderCreds(ctx, tlv2 interface{}) *gomock.Call {
+// InsertTimeLimitedV2OrderCredsTx indicates an expected call of InsertTimeLimitedV2OrderCredsTx.
+func (mr *MockDatastoreMockRecorder) InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTimeLimitedV2OrderCreds", reflect.TypeOf((*MockDatastore)(nil).InsertTimeLimitedV2OrderCreds), ctx, tlv2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTimeLimitedV2OrderCredsTx", reflect.TypeOf((*MockDatastore)(nil).InsertTimeLimitedV2OrderCredsTx), ctx, tx, tlv2)
 }
 
 // InsertVote mocks base method.

@@ -459,6 +459,9 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAwareV2_Succ
 }
 
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatusError_DeadLetter() {
+	// The signed order result contains a failed signed order.
+	// We should rollback any db calls and send the whole message to dlq
+
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
@@ -466,6 +469,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
 	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devFreeTimeLimitedV2)
 
+	// create the signingOrderResult containing a failed signed order
 	metadata := Metadata{
 		ItemID:         order.Items[0].ID,
 		OrderID:        order.ID,
@@ -476,12 +480,31 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 	associatedData, err := json.Marshal(metadata)
 	suite.Require().NoError(err)
 
-	// created a failed signing result
 	signingOrderResult := &SigningOrderResult{
 		RequestID: uuid.NewV4().String(),
 		Data: []SignedOrder{
 			{
+				PublicKey:      issuer.PublicKey,
+				Proof:          test.RandomString(),
+				Status:         SignedOrderStatusOk,
+				BlindedTokens:  []string{test.RandomString()},
+				SignedTokens:   []string{test.RandomString()},
+				ValidTo:        &UnionNullString{"string": time.Now().Local().Add(time.Hour).Format(time.RFC3339)},
+				ValidFrom:      &UnionNullString{"string": time.Now().Local().Format(time.RFC3339)},
+				AssociatedData: associatedData,
+			},
+			{
 				Status:         SignedOrderStatusError,
+				AssociatedData: associatedData,
+			},
+			{
+				PublicKey:      issuer.PublicKey,
+				Proof:          test.RandomString(),
+				Status:         SignedOrderStatusOk,
+				BlindedTokens:  []string{test.RandomString()},
+				SignedTokens:   []string{test.RandomString()},
+				ValidTo:        &UnionNullString{"string": time.Now().Local().Add(time.Hour).Format(time.RFC3339)},
+				ValidFrom:      &UnionNullString{"string": time.Now().Local().Format(time.RFC3339)},
 				AssociatedData: associatedData,
 			},
 		},
@@ -509,11 +532,15 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 
 	suite.Assert().EqualError(err, fmt.Sprintf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
 		metadata.OrderID, metadata.ItemID, metadata.IssuerID, SignedOrderStatusError.String()))
+
+	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(metadata.OrderID)
+	suite.Require().NoError(err)
+
+	suite.Assert().Nil(creds)
 }
 
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatusError_DeadLetter_Fail() {
 	// This tests to make sure we do not commit the message if we fail to write to dlq.
-	// The message should be reprocessed and sent to dlq if it fails a second time.
 
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
@@ -625,6 +652,11 @@ func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx 
 
 	var orderCredentials []TimeAwareSubIssuedCreds
 
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, suite.storage)
+	suite.Require().NoError(err)
+
+	defer rollback()
+
 	for _, orderItem := range order.Items {
 		tlv2 := TimeAwareSubIssuedCreds{
 			ItemID:       orderItem.ID,
@@ -638,11 +670,14 @@ func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx 
 			ValidFrom:    *validFrom,
 		}
 
-		err = suite.storage.InsertTimeLimitedV2OrderCreds(ctx, tlv2)
+		err = suite.storage.InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2)
 		assert.NoError(t, err)
 
 		orderCredentials = append(orderCredentials, tlv2)
 	}
+
+	err = commit()
+	suite.Require().NoError(err)
 
 	return orderCredentials
 }
@@ -679,6 +714,11 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 
 	var orderCredentials []*OrderCreds
 
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, suite.storage)
+	suite.Require().NoError(err)
+
+	defer rollback()
+
 	// insert order creds
 	for _, orderItem := range order.Items {
 		oc := &OrderCreds{
@@ -690,10 +730,13 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 			BatchProof:   ptr.FromString(test.RandomString()),
 			PublicKey:    ptr.FromString(pk),
 		}
-		err = suite.storage.InsertOrderCreds(ctx, oc)
+		err = suite.storage.InsertOrderCredsTx(ctx, tx, oc)
 		assert.NoError(t, err)
 		orderCredentials = append(orderCredentials, oc)
 	}
+
+	err = commit()
+	suite.Require().NoError(err)
 
 	return orderCredentials
 }
