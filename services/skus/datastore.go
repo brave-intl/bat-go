@@ -1323,8 +1323,8 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	}
 
 	// If there is an error writing messages to kafka we need to log the failed messages here instead of returning
-	// to the job runner and retrying. Once logged we can update the messages as processed and continue
-	// to the next batch.
+	// to the job runner, we can then update the messages as processed and continue to the next batch rather than
+	// retrying, these errors are likely not transient and need checked before retry.
 	switch err := signingRequestWriter.WriteMessages(ctx, soro).(type) {
 	case nil:
 	case kafka.WriteErrors:
