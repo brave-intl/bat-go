@@ -299,16 +299,24 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		if currency != orderItem.Currency {
 			return nil, errors.New("all order items must be the same currency")
 		}
+
 		// stripe related
-		if stripeSuccessURI == "" {
-			stripeSuccessURI = orderItem.Metadata["stripe_success_uri"]
-		} else if stripeSuccessURI != orderItem.Metadata["stripe_success_uri"] {
-			return nil, errors.New("all order items must have same stripe success uri")
+		metadataStripeSuccessURI, ok := orderItem.Metadata["stripe_success_uri"].(string)
+		if ok {
+			if stripeSuccessURI == "" {
+				stripeSuccessURI = metadataStripeSuccessURI
+			} else if stripeSuccessURI != metadataStripeSuccessURI {
+				return nil, errors.New("all order items must have same stripe success uri")
+			}
 		}
-		if stripeCancelURI == "" {
-			stripeCancelURI = orderItem.Metadata["stripe_cancel_uri"]
-		} else if stripeCancelURI != orderItem.Metadata["stripe_cancel_uri"] {
-			return nil, errors.New("all order items must have same stripe cancel uri")
+
+		metadataStripeCancelURI, ok := orderItem.Metadata["stripe_cancel_uri"].(string)
+		if ok {
+			if stripeCancelURI == "" {
+				stripeCancelURI = metadataStripeCancelURI
+			} else if stripeCancelURI != metadataStripeCancelURI {
+				return nil, errors.New("all order items must have same stripe cancel uri")
+			}
 		}
 
 		orderItems = append(orderItems, *orderItem)
@@ -418,7 +426,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
 	// if this is a stripe order, and there is a checkout session, we actually need to check it with
 	// stripe, as the redirect flow sometimes is too fast for the webhook to be delivered.
-	if cs, ok := order.Metadata["stripeCheckoutSessionId"]; ok && cs != "" {
+	if cs, ok := order.Metadata["stripeCheckoutSessionId"].(string); ok && cs != "" {
 		// get old checkout session from stripe by id
 		stripeSession, err := session.Get(cs, nil)
 		if err != nil {
@@ -473,7 +481,11 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 	// recreate the stripe checkout session now that we have set the trial days on this order
 	if !order.IsPaid() && order.IsStripePayable() {
 		// get old checkout session from stripe by id
-		stripeSession, err := session.Get(order.Metadata["stripeCheckoutSessionId"], nil)
+		csID, ok := order.Metadata["stripeCheckoutSessionId"].(string)
+		if !ok {
+			return fmt.Errorf("failed to get checkout session id from metadata: %w", err)
+		}
+		stripeSession, err := session.Get(csID, nil)
 		if err != nil {
 			return fmt.Errorf("failed to get stripe checkout session: %w", err)
 		}
@@ -1423,8 +1435,15 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	for k, v := range metadata {
-		if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, v); err != nil {
-			return fmt.Errorf("failed to append order metadata: %w", err)
+		if vv, ok := v.(string); ok {
+			if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, vv); err != nil {
+				return fmt.Errorf("failed to append order metadata: %w", err)
+			}
+		}
+		if vv, ok := v.(int); ok {
+			if err := s.Datastore.AppendOrderMetadataInt(ctx, orderID, k, vv); err != nil {
+				return fmt.Errorf("failed to append order metadata: %w", err)
+			}
 		}
 	}
 	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {

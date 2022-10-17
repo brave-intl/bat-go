@@ -341,10 +341,15 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemParams {
 	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
 	for index, item := range order.Items {
+		// get the item id from the metadata
+		priceID, ok := item.Metadata["stripe_item_id"].(string)
+		if !ok {
+			continue
+		}
 		// since we are creating stripe line item, we can assume
 		// that the stripe product is embedded in macaroon as metadata
 		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
-			Price:    stripe.String(item.Metadata["stripe_item_id"]),
+			Price:    stripe.String(priceID),
 			Quantity: stripe.Int64(int64(item.Quantity)),
 		}
 	}

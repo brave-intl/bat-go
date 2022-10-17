@@ -519,7 +519,7 @@ func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
 	`, orderID)
 
 	if err == nil {
-		if v, ok := md["stripeSubscriptionId"]; ok {
+		if v, ok := md["stripeSubscriptionId"].(string); ok {
 			return ok, v, err
 		}
 	}
