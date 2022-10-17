@@ -203,39 +203,46 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_SingleRow_Success() {
 	associatedData, err := json.Marshal(metadata)
 	suite.Require().NoError(err)
 
-	signingOrderRequests := []SigningOrderRequest{
-		{
-			RequestID: test.RandomString(),
-			Data: []SigningOrder{
-				{
-					IssuerType:     test.RandomString(),
-					IssuerCohort:   defaultCohort,
-					BlindedTokens:  []string{test.RandomString()},
-					AssociatedData: associatedData,
-				},
+	signingOrderRequest := SigningOrderRequest{
+		RequestID: test.RandomString(),
+		Data: []SigningOrder{
+			{
+				IssuerType:     test.RandomString(),
+				IssuerCohort:   defaultCohort,
+				BlindedTokens:  []string{test.RandomString()},
+				AssociatedData: associatedData,
 			},
 		},
 	}
 
 	signingRequestWriter := NewMockSigningRequestWriter(ctrl)
-	signingRequestWriter.EXPECT().WriteMessages(ctx, gomock.Any()).
+	signingRequestWriter.EXPECT().
+		WriteMessages(gomock.Any(), gomock.Len(1)).
 		Return(nil)
 
-	err = suite.storage.InsertSigningOrderRequestOutbox(context.Background(), metadata.OrderID, signingOrderRequests)
+	ctx, tx, _, commit, err := datastore.GetTx(ctx, suite.storage)
+	suite.Require().NoError(err)
+
+	// Insert single message for processing
+	err = suite.storage.InsertSigningOrderRequestOutboxTx(context.Background(),
+		tx, metadata.OrderID, metadata.ItemID, signingOrderRequest)
+	suite.Require().NoError(err)
+
+	err = commit()
 	suite.Require().NoError(err)
 
 	err = suite.storage.SendSigningRequest(ctx, signingRequestWriter)
 	suite.Require().NoError(err)
 
 	// Use OutboxMessage as we don't want to expose certain fields in production code
-	type OutboxMessage struct {
+	type outboxMessage struct {
 		ProcessedAt time.Time `db:"processed_at"`
 		OrderID     uuid.UUID `db:"order_id"`
 	}
 
-	var om OutboxMessage
-	err = suite.storage.RawDB().GetContext(ctx, &om,
-		`select order_id, processed_at from signing_order_request_outbox where order_id = $1`, metadata.OrderID)
+	var om outboxMessage
+	err = suite.storage.RawDB().GetContext(ctx, &om, `select order_id, processed_at from 
+                                  signing_order_request_outbox where order_id = $1`, metadata.OrderID)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(metadata.OrderID, om.OrderID)
@@ -247,6 +254,11 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
+
+	ctx, tx, _, commit, err := datastore.GetTx(ctx, suite.storage)
+	suite.Require().NoError(err)
+
+	// Insert multiple messages for processing
 
 	orderID := uuid.NewV4()
 
@@ -261,29 +273,32 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 		associatedData, err := json.Marshal(metadata)
 		suite.Require().NoError(err)
 
-		signingOrderRequests := []SigningOrderRequest{
-			{
-				RequestID: test.RandomString(),
-				Data: []SigningOrder{
-					{
-						IssuerType:     test.RandomString(),
-						IssuerCohort:   defaultCohort,
-						BlindedTokens:  []string{test.RandomString()},
-						AssociatedData: associatedData,
-					},
+		signingOrderRequest := SigningOrderRequest{
+			RequestID: test.RandomString(),
+			Data: []SigningOrder{
+				{
+					IssuerType:     test.RandomString(),
+					IssuerCohort:   defaultCohort,
+					BlindedTokens:  []string{test.RandomString()},
+					AssociatedData: associatedData,
 				},
 			},
 		}
 
-		err = suite.storage.InsertSigningOrderRequestOutbox(context.Background(), metadata.OrderID, signingOrderRequests)
+		err = suite.storage.InsertSigningOrderRequestOutboxTx(context.Background(), tx, metadata.OrderID,
+			metadata.ItemID, signingOrderRequest)
 		suite.Require().NoError(err)
 	}
 
+	err = commit()
+	suite.Require().NoError(err)
+
 	signingRequestWriter := NewMockSigningRequestWriter(ctrl)
-	signingRequestWriter.EXPECT().WriteMessages(ctx, gomock.Any()).
+	signingRequestWriter.EXPECT().
+		WriteMessages(ctx, gomock.Len(signingRequestBatchSize)).
 		Return(nil)
 
-	err := suite.storage.SendSigningRequest(ctx, signingRequestWriter)
+	err = suite.storage.SendSigningRequest(ctx, signingRequestWriter)
 	suite.Require().NoError(err)
 
 	type outboxMessage struct {
@@ -292,10 +307,12 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 	}
 
 	var oms []outboxMessage
-	err = suite.storage.RawDB().SelectContext(ctx, &oms,
-		`select order_id, processed_at from signing_order_request_outbox where order_id = $1`, orderID)
+	err = suite.storage.RawDB().SelectContext(ctx, &oms, `select order_id, processed_at from 
+                                  signing_order_request_outbox where order_id = $1`, orderID)
 	suite.Require().NoError(err)
+	suite.Require().NotNil(oms)
 
+	// Assert everything has been processed
 	for _, om := range oms {
 		suite.Assert().Equal(orderID, om.OrderID)
 		suite.Assert().NotNil(om.ProcessedAt)
@@ -456,6 +473,84 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAwareV2_Succ
 
 	suite.Assert().Equal(*to, actual.Credentials[0].ValidTo)
 	suite.Assert().Equal(*from, actual.Credentials[0].ValidFrom)
+}
+
+func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_DuplicateMessages() {
+	// The signed order result contains a failed signed order.
+	// We should rollback any db calls and send the whole message to dlq
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	// create free order and order items
+	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
+	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devFreeTimeLimitedV2)
+
+	// create the signingOrderResult
+	metadata := Metadata{
+		ItemID:         order.Items[0].ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: order.Items[0].CredentialType,
+	}
+
+	associatedData, err := json.Marshal(metadata)
+	suite.Require().NoError(err)
+
+	signingOrderResult := &SigningOrderResult{
+		RequestID: uuid.NewV4().String(),
+		Data: []SignedOrder{
+			{
+				PublicKey:      issuer.PublicKey,
+				Proof:          test.RandomString(),
+				Status:         SignedOrderStatusOk,
+				BlindedTokens:  []string{test.RandomString()},
+				SignedTokens:   []string{test.RandomString()},
+				ValidTo:        &UnionNullString{"string": time.Now().Local().Add(time.Hour).Format(time.RFC3339)},
+				ValidFrom:      &UnionNullString{"string": time.Now().Local().Format(time.RFC3339)},
+				AssociatedData: associatedData,
+			},
+		},
+	}
+
+	message := kafka.Message{}
+	reader := NewMockSigningResultReader(ctrl)
+	reader.EXPECT().
+		FetchMessage(ctx).
+		Return(message, nil).
+		Times(2)
+
+	reader.EXPECT().
+		Decode(message).
+		Return(signingOrderResult, nil).
+		Times(2)
+
+	reader.EXPECT().
+		CommitMessages(ctx, message).
+		Return(nil)
+
+	// read message first time successfully
+	err = suite.storage.StoreSignedOrderCredentials(ctx, reader)
+	suite.Require().NoError(err)
+
+	// read message second time and expect error and dlq
+	reader.EXPECT().
+		DeadLetter(ctx, message, gomock.Any()).
+		Return(nil)
+
+	reader.EXPECT().
+		CommitMessages(ctx, message).
+		Return(nil)
+
+	err = suite.storage.StoreSignedOrderCredentials(ctx, reader)
+
+	suite.Assert().ErrorContains(err, fmt.Sprintf("orderID %s itemID %s: "+
+		"error inserting row: pq: duplicate key value violates unique constraint", metadata.OrderID, metadata.ItemID))
+
+	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(metadata.OrderID)
+	suite.Require().NoError(err)
+
+	suite.Assert().NotNil(creds)
 }
 
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatusError_DeadLetter() {

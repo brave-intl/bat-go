@@ -3,14 +3,11 @@
 package skus
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/test"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -75,41 +72,4 @@ func TestCredChunkFn(t *testing.T) {
 	if next.Month() != 2 {
 		t.Errorf("mo - the next month should be 2")
 	}
-}
-
-func TestCalculateTotalExpectedSigningResults(t *testing.T) {
-	sor1 := SigningOrderRequest{
-		Data: []SigningOrder{
-			{
-				BlindedTokens: []string{test.RandomString()},
-			},
-		},
-	}
-
-	sor2 := SigningOrderRequest{
-		Data: []SigningOrder{
-			{
-				BlindedTokens: []string{test.RandomString(), test.RandomString()},
-			},
-		},
-	}
-
-	m1, err := json.Marshal(sor1)
-	assert.NoError(t, err)
-
-	m2, err := json.Marshal(sor2)
-	assert.NoError(t, err)
-
-	outboxMessages := []SigningOrderRequestOutbox{
-		{
-			Message: m1,
-		},
-		{
-			Message: m2,
-		},
-	}
-
-	total, err := calculateTotalExpectedSigningResults(outboxMessages)
-
-	assert.Equal(t, 3, total)
 }

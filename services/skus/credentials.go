@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/datastore"
+
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -233,10 +235,22 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		return ErrOrderUnpaid
 	}
 
-	var signingOrderRequests []SigningOrderRequest
+	// Note, currently although we loop through the order items an order only ever has a single order item, CBR expects
+	// the signingOrderRequest.Data to only contain a single signing order and will fail otherwise.
+	// Effectively, a SigningOrderRequest represents the order in its entirety. If we start to support
+	// multiple items for an order we may need to consider how splitting an order's, order items across multiple
+	// SigningOrderRequest effects the storing and retrieval of the signed credentials.
+
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
+	defer rollback()
+
+	// TODO: Note - this is how is currently works by looping through all of the order items and submitting them for signing.
+	//  However, when you create an order it is created with all its order items and quantities but you only submit
+	//  a single order item to the order creds endpoint for signing. This loop with have the side effect of submitting all
+	//  the order items for signing when only expecting one.
+	//  Check to see if we can remove this loop without breaking any existing clients?
 
 	for _, orderItem := range order.Items {
-		// generalized issuer based on sku and merchant id
 		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
 		if err != nil {
 			return errorutils.Wrap(err, "error encoding issuer name")
@@ -276,10 +290,13 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			},
 		}
 
-		signingOrderRequests = append(signingOrderRequests, signingOrderRequest)
+		err = s.Datastore.InsertSigningOrderRequestOutboxTx(ctx, tx, order.ID, orderItem.ID, signingOrderRequest)
+		if err != nil {
+			return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
+		}
 	}
 
-	err = s.Datastore.InsertSigningOrderRequestOutbox(ctx, order.ID, signingOrderRequests)
+	err = commit()
 	if err != nil {
 		return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
 	}

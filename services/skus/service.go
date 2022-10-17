@@ -867,7 +867,7 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if creds != nil {
+	if len(creds) > 0 {
 		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
 		for i := 0; i < len(creds); i++ {
 			if creds[i].SignedCreds == nil {
@@ -878,17 +878,26 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 		return creds, http.StatusOK, nil
 	}
 
-	// check to see if messages are in outbox
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if len(outboxMessages) > 0 {
-		return nil, http.StatusAccepted, nil
+	if len(outboxMessages) == 0 {
+		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
 	}
 
-	return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	complete, err := isSigningComplete(creds, outboxMessages)
+	if err != nil {
+		return nil, http.StatusInternalServerError,
+			fmt.Errorf("error calculating total expected signing results: %w", err)
+	}
+
+	if complete {
+		return creds, http.StatusOK, nil
+	}
+
+	return nil, http.StatusAccepted, nil
 }
 
 // GetTimeLimitedV2Creds returns all the single use credentials for a given order.
@@ -899,30 +908,31 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]Ti
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
 
-	// First check order creds have successfully been submitted for processing.
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
 	if len(outboxMessages) == 0 {
-		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+		return nil, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
 	}
 
-	// To ensure we have completed signing all the creds for our order we need to check the total number of creds matches
-	// the number of signing results we are expecting otherwise we are not finished signing and return http.StatusAccepted.
 	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	total, err := calculateTotalExpectedSigningResults(outboxMessages)
+	if creds == nil {
+		return nil, http.StatusAccepted, nil
+	}
+
+	complete, err := isSigningCompleteV2(creds, outboxMessages)
 	if err != nil {
 		return nil, http.StatusInternalServerError,
 			fmt.Errorf("error calculating total expected signing results: %w", err)
 	}
 
-	if creds != nil && len(creds.Credentials) == total {
+	if complete {
 		return creds.Credentials, http.StatusOK, nil
 	}
 
@@ -1404,23 +1414,50 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	return commit()
 }
 
-// calculateTotalExpectedSigningResults calculates the expected number of signing results by multiplying the number
-// of blinded creds by the number of order items in the order. This function is only relevant to
-// skus.TimeLimitedV2Creds credentials so we can compare how many results we have received and if we are done
-// signing the order.
-func calculateTotalExpectedSigningResults(outboxMessages []SigningOrderRequestOutbox) (int, error) {
-	total := 0
+// TODO: Add func to type and tidy
 
+// isSigningComplete checks if all the submitted blinded tokens in the outbox messages are present in the creds.
+func isSigningComplete(orderCreds []OrderCreds, outboxMessages []SigningOrderRequestOutbox) (bool, error) {
+	// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
+	if len(orderCreds) == 0 || len(outboxMessages) == 0 {
+		return false, nil
+	}
+	// TODO: END
+	signed := make(map[string]bool)
+	for _, orderCred := range orderCreds {
+		for _, blindedCred := range orderCred.BlindedCreds {
+			signed[blindedCred] = true
+		}
+	}
+	return containsAll(signed, outboxMessages)
+}
+
+// isSigningCompleteV2 checks if all the submitted blinded tokens in the outbox messages are present in the creds.
+func isSigningCompleteV2(creds *TimeLimitedV2Creds, outboxMessages []SigningOrderRequestOutbox) (bool, error) {
+	signed := make(map[string]bool)
+	for _, timeAwareSubIssuedCred := range creds.Credentials {
+		for _, blindedCred := range timeAwareSubIssuedCred.BlindedCreds {
+			signed[blindedCred] = true
+		}
+	}
+	return containsAll(signed, outboxMessages)
+}
+
+func containsAll(signed map[string]bool, outboxMessages []SigningOrderRequestOutbox) (bool, error) {
 	var sor SigningOrderRequest
 	for _, outboxMessage := range outboxMessages {
 		err := json.Unmarshal(outboxMessage.Message, &sor)
 		if err != nil {
-			return 0, fmt.Errorf("error unmarshaling outbox message: %w", err)
+			return false, fmt.Errorf("error unmarshaling outbox message: %w", err)
 		}
-		for _, data := range sor.Data {
-			total += len(data.BlindedTokens)
+		for _, signingOrder := range sor.Data {
+			for _, blindedToken := range signingOrder.BlindedTokens {
+				_, ok := signed[blindedToken]
+				if !ok {
+					return false, nil
+				}
+			}
 		}
 	}
-
-	return total, nil
+	return true, nil
 }

@@ -295,8 +295,8 @@ func (_d DatastoreWithPrometheus) GetPagedMerchantTransactions(ctx context.Conte
 	return _d.base.GetPagedMerchantTransactions(ctx, merchantID, pagination)
 }
 
-// GetSigningOrderRequestOutbox implements Datastore
-func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) (sa1 []SigningOrderRequestOutbox, err error) {
+// GetSigningOrderRequestOutboxByOrder implements Datastore
+func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) (sa1 []SigningOrderRequestOutbox, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -304,9 +304,23 @@ func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutbox(ctx context.Conte
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningOrderRequestOutbox", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningOrderRequestOutboxByOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetSigningOrderRequestOutbox(ctx, orderID)
+	return _d.base.GetSigningOrderRequestOutboxByOrder(ctx, orderID)
+}
+
+// GetSigningOrderRequestOutboxByOrderItem implements Datastore
+func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) (sa1 []SigningOrderRequestOutbox, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningOrderRequestOutboxByOrderItem", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
 }
 
 // GetSumForTransactions implements Datastore
@@ -421,8 +435,8 @@ func (_d DatastoreWithPrometheus) InsertOrderCredsTx(ctx context.Context, tx *sq
 	return _d.base.InsertOrderCredsTx(ctx, tx, creds)
 }
 
-// InsertSigningOrderRequestOutbox implements Datastore
-func (_d DatastoreWithPrometheus) InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) (err error) {
+// InsertSigningOrderRequestOutboxTx implements Datastore
+func (_d DatastoreWithPrometheus) InsertSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequests SigningOrderRequest) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -430,9 +444,9 @@ func (_d DatastoreWithPrometheus) InsertSigningOrderRequestOutbox(ctx context.Co
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertSigningOrderRequestOutbox", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertSigningOrderRequestOutboxTx", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertSigningOrderRequestOutbox(ctx, orderID, signingOrderRequests)
+	return _d.base.InsertSigningOrderRequestOutboxTx(ctx, tx, orderID, itemID, signingOrderRequests)
 }
 
 // InsertTimeLimitedV2OrderCredsTx implements Datastore

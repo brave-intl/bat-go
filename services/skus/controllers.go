@@ -256,7 +256,7 @@ type CreateOrderRequest struct {
 
 // CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		ctx := r.Context()
 		sublogger := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
@@ -292,7 +292,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
-	})
+	}
 }
 
 // SetOrderTrialDaysInput - SetOrderTrialDays handler input
@@ -572,7 +572,7 @@ type CreateOrderCredsRequest struct {
 
 // CreateOrderCreds is the handler for creating order credentials
 func CreateOrderCreds(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateOrderCredsRequest
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
@@ -594,12 +594,14 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderCreds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), req.ItemID, false)
+		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
 		if err != nil {
+			//TODO: as this is already existing see if we can change this to message to existing order item without breaking
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
 
-		if orderCreds != nil {
+		if signingOrderRequests != nil {
+			//TODO: as this is already existing see if we can change this to message to existing order item without breaking
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
@@ -609,7 +611,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
-	})
+	}
 }
 
 // GetOrderCreds is the handler for fetching all order credentials associated with an order.

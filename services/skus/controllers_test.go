@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/handlers"
+
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 
@@ -1404,8 +1406,9 @@ func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
 }
 
 // This test performs a full e2e test using challenge bypass server to sign time limited v2 order credentials.
-// It uses three tokens and expects three signing results which translates to three order credentials being stored
-// for the single order item.
+// It uses three tokens and expects three signing results (which is determined by the issuer buffer/overlap and CBR)
+// which translates to three time limited v2 order credentials being stored for the single order containing
+// a single order item.
 func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_TimeLimitedV2() {
 	ctx := context.Background()
 	defer ctx.Done()
@@ -1448,6 +1451,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
+	// send the create order credentials request for the newly create order
 	data := CreateOrderCredsRequest{
 		ItemID: order.Items[0].ID,
 		// these are already base64 encoded
@@ -1477,8 +1481,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
+	suite.Require().Equal(http.StatusOK, rw.Code)
 
-	// start processing all messages
+	// start processing out signing request/results from kafka
 	go func() {
 		for {
 			select {
@@ -1497,43 +1502,100 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 				break
 			default:
 				_, _ = skuService.RunSendSigningRequestJob(ctx)
-				<-time.After(50 * time.Millisecond)
 			}
 		}
 	}()
+	// TODO: use poller
+	time.Sleep(time.Second * 30)
 
-	// TODO wrap in poller
-	time.Sleep(30 * time.Second)
-
-	// retrieve the newly signed order creds by orderID and itemID.
-	var recorder *httptest.ResponseRecorder
-
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials/%s/time-limited-v2",
-		order.ID, order.Items[0].ID), nil)
-
-	recorder = httptest.NewRecorder()
-
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials", order.ID), nil)
+	recorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(recorder, req)
 
-	var response TimeLimitedV2Creds
+	suite.Assert().Equal(http.StatusOK, recorder.Code)
+
+	var response []TimeAwareSubIssuedCreds
 	err = json.NewDecoder(recorder.Body).Decode(&response)
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(order.ID, response.OrderID)
-	suite.Assert().NotEmpty(response.IssuerID)
-	suite.Assert().Equal(3, len(response.Credentials))
+	suite.Assert().Equal(order.ID, response[0].OrderID)
+	suite.Assert().NotEmpty(response[0].IssuerID)
+	suite.Assert().Equal(3, len(response))
+}
 
-	// assert we have the correct credentials for our order items
-	// use a map so, we can retrieve them against our order items.
-	tc := make(map[uuid.UUID]TimeAwareSubIssuedCreds)
-	for _, cred := range response.Credentials {
-		tc[cred.ItemID] = cred
+func (suite *ControllersTestSuite) TestCreateOrderCreds_ExistingCredentials() {
+	ctx := context.Background()
+	defer ctx.Done()
+
+	// create macaroon token for sku and whitelist
+	sku := test.RandomString()
+	price := 0
+	token := suite.CreateMacaroon(sku, price)
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{token})
+
+	// create order with order items
+	request := CreateOrderRequest{
+		Email: test.RandomString(),
+		Items: []OrderItemRequest{
+			{
+				SKU:      token,
+				Quantity: 1,
+			},
+		},
 	}
-	for _, orderItem := range order.Items {
-		cred, ok := tc[orderItem.ID]
-		suite.Assert().True(ok)
-		suite.Assert().Equal(orderItem.OrderID, cred.OrderID)
+
+	client, err := cbr.New()
+	suite.Require().NoError(err)
+
+	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
+
+	// create order and also create issuer
+	service := &Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	order, err := service.CreateOrderFromRequest(ctx, request)
+	suite.Require().NoError(err)
+
+	// create and send the order credentials request for the newly create order
+	data := CreateOrderCredsRequest{
+		ItemID: order.Items[0].ID,
+		// these are already base64 encoded
+		BlindedCreds: []string{"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"Hi1j/9Pen5vRvGSLn6eZCxgtkgZX7LU9edmOD2w5CWo=", "YG07TqExOSoo/46SIWK42OG0of3z94Y5SzCswW6sYSw="},
 	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	requestID := uuid.NewV4().String()
+	ctx = context.WithValue(ctx, requestutils.RequestID, requestID)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials",
+		order.ID), bytes.NewBuffer(payload)).WithContext(ctx)
+
+	rw := httptest.NewRecorder()
+
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(service, instrumentHandler)
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
+	suite.Require().Equal(http.StatusOK, rw.Code)
+
+	// Send a second create order request for the same order and order item
+	rw = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials",
+		order.ID), bytes.NewBuffer(payload)).WithContext(ctx)
+
+	server.Handler.ServeHTTP(rw, r)
+	suite.Assert().Equal(http.StatusConflict, rw.Code)
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(http.StatusConflict, appError.Code)
+	suite.Assert().Contains(appError.Error(), "There are existing order credentials created for this order")
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
