@@ -214,7 +214,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		},
 		{
 			Func:    service.RunStoreSignedOrderCredentialsJob,
-			Cadence: 200 * time.Millisecond,
+			Cadence: 0,
 			Workers: 1,
 		},
 	}
