@@ -248,7 +248,8 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 	//  However, when you create an order it is created with all its order items and quantities but you only submit
 	//  a single order item to the order creds endpoint for signing. This loop with have the side effect of submitting all
 	//  the order items for signing when only expecting one.
-	//  Check to see if we can remove this loop without breaking any existing clients?
+	//  This also dosent treat quantities of the same order item as unique and but this also
+	//  happens in the create order call as well
 
 	for _, orderItem := range order.Items {
 		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
