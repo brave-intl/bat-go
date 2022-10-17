@@ -88,6 +88,7 @@ type Datastore interface {
 	InsertSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequests SigningOrderRequest) error
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
+	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
 }
 
 const signingRequestBatchSize = 10
@@ -1512,6 +1513,29 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 	}
 
 	return nil
+}
+
+// AppendOrderMetadataInt appends a key value pair to an order's metadata
+func (pg *Postgres) AppendOrderMetadataInt(ctx context.Context, orderID *uuid.UUID, key string, value int) error {
+	// get the db tx from context if exists, if not create it
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
+	defer rollback()
+	if err != nil {
+		return err
+	}
+	stmt := `update orders set metadata = coalesce(metadata||jsonb_build_object($1::text, $2::integer), metadata, jsonb_build_object($1::text, $2::integer)), updated_at = current_timestamp where id = $3`
+
+	result, err := tx.Exec(stmt, key, value, orderID.String())
+	if err != nil {
+		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows updated")
+	}
+
+	return commit()
 }
 
 // AppendOrderMetadata appends a key value pair to an order's metadata

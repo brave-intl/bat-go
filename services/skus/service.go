@@ -240,6 +240,8 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		status                string
 		allowedPaymentMethods = new(Methods)
 		merchantID            = "brave.com"
+		numTlv2Tokens         int
+		tokenMultiplier       int
 	)
 
 	for i := 0; i < len(req.Items); i++ {
@@ -261,6 +263,10 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 				return nil, fmt.Errorf("error creating issuer for merchantID %s and sku %s: %w",
 					merchantID, orderItem.SKU, err)
 			}
+			// set num tokens and token multi
+			tokenMultiplier = 5
+			numTlv2Tokens = issuerConfig.buffer + issuerConfig.overlap
+
 		}
 
 		// make sure all the order item skus have the same allowed Payment Methods
@@ -335,6 +341,20 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		}
 
 		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
+
+	if numTlv2Tokens > 0 {
+		err = s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numTlv2Tokens", numTlv2Tokens)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
+
+	if tokenMultiplier > 0 {
+		err = s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "tokenMultiplier", tokenMultiplier)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
