@@ -244,12 +244,15 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
 	defer rollback()
 
-	// TODO: Note - this is how is currently works by looping through all of the order items and submitting them for signing.
+	// TODO this is how is currently works by looping through all of the order items and submitting them for signing.
 	//  However, when you create an order it is created with all its order items and quantities but you only submit
 	//  a single order item to the order creds endpoint for signing. This loop with have the side effect of submitting all
 	//  the order items for signing when only expecting one.
-	//  This also dosent treat quantities of the same order item as unique and but this also
-	//  happens in the create order call as well
+
+	//  TODO: This also dosent treat quantities of the same order item as unique and but this also
+	//   happens in the create order call as well.
+
+	//  TODO: Consider changing this to only submit the order item for the provided creds?
 
 	for _, orderItem := range order.Items {
 		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
