@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/datastore"
-
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -221,7 +219,7 @@ type TimeLimitedCreds struct {
 
 // CreateOrderCredentials creates the order credentials for the given order id using the supplied blinded credentials.
 // If the order is unpaid an error ErrOrderUnpaid is returned.
-func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, blindedCreds []string) error {
+func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
@@ -235,72 +233,58 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		return ErrOrderUnpaid
 	}
 
-	// Note, currently although we loop through the order items an order only ever has a single order item, CBR expects
-	// the signingOrderRequest.Data to only contain a single signing order and will fail otherwise.
-	// Effectively, a SigningOrderRequest represents the order in its entirety. If we start to support
-	// multiple items for an order we may need to consider how splitting an order's, order items across multiple
-	// SigningOrderRequest effects the storing and retrieval of the signed credentials.
-
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
-	defer rollback()
-
-	// TODO this is how is currently works by looping through all of the order items and submitting them for signing.
-	//  However, when you create an order it is created with all its order items and quantities but you only submit
-	//  a single order item to the order creds endpoint for signing. This loop with have the side effect of submitting all
-	//  the order items for signing when only expecting one.
-
-	//  TODO: This also dosent treat quantities of the same order item as unique and but this also
-	//   happens in the create order call as well.
-
-	//  TODO: Consider changing this to only submit the order item for the provided creds?
-
-	for _, orderItem := range order.Items {
-		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
-		if err != nil {
-			return errorutils.Wrap(err, "error encoding issuer name")
-		}
-
-		issuer, err := s.Datastore.GetIssuer(issuerID)
-		if err != nil {
-			return fmt.Errorf("error getting issuer for issuerID %s: %w", issuerID, err)
-		}
-
-		requestID, ok := ctx.Value(requestutils.RequestID).(string)
-		if !ok {
-			return errors.New("error retrieving requestID from context for create order credentials")
-		}
-
-		metadata := Metadata{
-			ItemID:         orderItem.ID,
-			OrderID:        order.ID,
-			IssuerID:       issuer.ID,
-			CredentialType: orderItem.CredentialType,
-		}
-
-		associatedData, err := json.Marshal(metadata)
-		if err != nil {
-			return fmt.Errorf("error serializing associated data: %w", err)
-		}
-
-		signingOrderRequest := SigningOrderRequest{
-			RequestID: requestID,
-			Data: []SigningOrder{
-				{
-					IssuerType:     issuerID,
-					IssuerCohort:   defaultCohort,
-					BlindedTokens:  blindedCreds,
-					AssociatedData: associatedData,
-				},
-			},
-		}
-
-		err = s.Datastore.InsertSigningOrderRequestOutboxTx(ctx, tx, order.ID, orderItem.ID, signingOrderRequest)
-		if err != nil {
-			return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
+	var orderItem *OrderItem
+	for _, item := range order.Items {
+		if item.ID == itemID {
+			orderItem = &item
+			break
 		}
 	}
 
-	err = commit()
+	if orderItem == nil {
+		return errors.New("order item does not exist for order")
+	}
+
+	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
+	if err != nil {
+		return errorutils.Wrap(err, "error encoding issuer name")
+	}
+
+	issuer, err := s.Datastore.GetIssuer(issuerID)
+	if err != nil {
+		return fmt.Errorf("error getting issuer for issuerID %s: %w", issuerID, err)
+	}
+
+	requestID, ok := ctx.Value(requestutils.RequestID).(string)
+	if !ok {
+		return errors.New("error retrieving requestID from context for create order credentials")
+	}
+
+	metadata := Metadata{
+		ItemID:         orderItem.ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: orderItem.CredentialType,
+	}
+
+	associatedData, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("error serializing associated data: %w", err)
+	}
+
+	signingOrderRequest := SigningOrderRequest{
+		RequestID: requestID,
+		Data: []SigningOrder{
+			{
+				IssuerType:     issuerID,
+				IssuerCohort:   defaultCohort,
+				BlindedTokens:  blindedCreds,
+				AssociatedData: associatedData,
+			},
+		},
+	}
+
+	err = s.Datastore.InsertSigningOrderRequestOutbox(ctx, order.ID, orderItem.ID, signingOrderRequest)
 	if err != nil {
 		return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
 	}

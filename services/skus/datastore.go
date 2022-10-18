@@ -84,8 +84,8 @@ type Datastore interface {
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) (err error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
-	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
-	InsertSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequests SigningOrderRequest) error
+	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) (*SigningOrderRequestOutbox, error)
+	InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequests SigningOrderRequest) error
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
@@ -1267,32 +1267,33 @@ type SigningOrderRequestOutbox struct {
 func (pg *Postgres) GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select id, order_id, message_data from signing_order_request_outbox where order_id = $1 order by created_at`, orderID)
+		`select id, order_id, item_id, message_data from signing_order_request_outbox where order_id = $1`, orderID)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving signing request submitted results: %w", err)
+		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
 	return signingRequestOutbox, nil
 }
 
 // GetSigningOrderRequestOutboxByOrderItem retrieves the latest signing order from the outbox.
-func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox []SigningOrderRequestOutbox
-	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
+// An error is returned if the result set is empty.
+func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) (*SigningOrderRequestOutbox, error) {
+	var signingRequestOutbox SigningOrderRequestOutbox
+	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
 		`select id, order_id, item_id, message_data from signing_order_request_outbox where item_id = $1`, itemID)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving signing request submitted results: %w", err)
+		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
-	return signingRequestOutbox, nil
+	return &signingRequestOutbox, nil
 }
 
-// InsertSigningOrderRequestOutboxTx insert the signing order request into the outbox.
-func (pg *Postgres) InsertSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
+// InsertSigningOrderRequestOutbox insert the signing order request into the outbox.
+func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
 	message, err := json.Marshal(signingOrderRequest)
 	if err != nil {
 		return fmt.Errorf("error marshalling signing order request: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `insert into signing_order_request_outbox(order_id, item_id, message_data) 
+	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(order_id, item_id, message_data) 
 											values ($1, $2, $3)`, orderID, itemID, message)
 	if err != nil {
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
@@ -1312,7 +1313,7 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	defer pg.RollbackTx(tx)
 
 	var soro []SigningOrderRequestOutbox
-	err = tx.SelectContext(ctx, &soro, `select id, order_id, message_data from signing_order_request_outbox 
+	err = tx.SelectContext(ctx, &soro, `select id, order_id, item_id, message_data from signing_order_request_outbox 
 													where processed_at is null order by created_at asc 
 													for update skip locked limit $1`, signingRequestBatchSize)
 	if err != nil {

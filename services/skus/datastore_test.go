@@ -220,15 +220,9 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_SingleRow_Success() {
 		WriteMessages(gomock.Any(), gomock.Len(1)).
 		Return(nil)
 
-	ctx, tx, _, commit, err := datastore.GetTx(ctx, suite.storage)
-	suite.Require().NoError(err)
-
 	// Insert single message for processing
-	err = suite.storage.InsertSigningOrderRequestOutboxTx(context.Background(),
-		tx, metadata.OrderID, metadata.ItemID, signingOrderRequest)
-	suite.Require().NoError(err)
-
-	err = commit()
+	err = suite.storage.InsertSigningOrderRequestOutbox(context.Background(),
+		metadata.OrderID, metadata.ItemID, signingOrderRequest)
 	suite.Require().NoError(err)
 
 	err = suite.storage.SendSigningRequest(ctx, signingRequestWriter)
@@ -254,9 +248,6 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
-
-	ctx, tx, _, commit, err := datastore.GetTx(ctx, suite.storage)
-	suite.Require().NoError(err)
 
 	// Insert multiple messages for processing
 
@@ -285,20 +276,17 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 			},
 		}
 
-		err = suite.storage.InsertSigningOrderRequestOutboxTx(context.Background(), tx, metadata.OrderID,
+		err = suite.storage.InsertSigningOrderRequestOutbox(context.Background(), metadata.OrderID,
 			metadata.ItemID, signingOrderRequest)
 		suite.Require().NoError(err)
 	}
-
-	err = commit()
-	suite.Require().NoError(err)
 
 	signingRequestWriter := NewMockSigningRequestWriter(ctrl)
 	signingRequestWriter.EXPECT().
 		WriteMessages(ctx, gomock.Len(signingRequestBatchSize)).
 		Return(nil)
 
-	err = suite.storage.SendSigningRequest(ctx, signingRequestWriter)
+	err := suite.storage.SendSigningRequest(ctx, signingRequestWriter)
 	suite.Require().NoError(err)
 
 	type outboxMessage struct {
@@ -678,6 +666,38 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 	// we maintain the original failure message and log the dlq error.
 	suite.Assert().EqualError(err, fmt.Errorf("error decoding message key %s partition %d offset %d: %w",
 		string(message.Key), message.Partition, message.Offset, decodeError).Error())
+}
+
+func (suite *PostgresTestSuite) TestInsertSigningOrderRequestOutbox() {
+	orderID := uuid.NewV4()
+	itemID := uuid.NewV4()
+
+	signingOrderRequest := SigningOrderRequest{
+		RequestID: test.RandomString(),
+		Data: []SigningOrder{
+			{
+				IssuerType:     test.RandomString(),
+				IssuerCohort:   defaultCohort,
+				BlindedTokens:  []string{test.RandomString()},
+				AssociatedData: []byte{},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	err := suite.storage.InsertSigningOrderRequestOutbox(ctx, orderID, itemID, signingOrderRequest)
+	suite.Require().NoError(err)
+
+	outbox, err := suite.storage.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
+
+	suite.Assert().Equal(orderID, outbox.OrderID)
+	suite.Assert().Equal(itemID, outbox.ItemID)
+
+	var actual SigningOrderRequest
+	err = json.Unmarshal(outbox.Message, &actual)
+	suite.Assert().NoError(err)
+	suite.Assert().Equal(signingOrderRequest, actual)
 }
 
 // helper to set up a paid order, order items and issuer.

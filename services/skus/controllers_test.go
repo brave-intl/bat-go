@@ -1512,7 +1512,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	recorder := httptest.NewRecorder()
 	server.Handler.ServeHTTP(recorder, req)
 
-	suite.Assert().Equal(http.StatusOK, recorder.Code)
+	suite.Require().Equal(http.StatusOK, recorder.Code)
 
 	var response []TimeAwareSubIssuedCreds
 	err = json.NewDecoder(recorder.Body).Decode(&response)
