@@ -595,10 +595,13 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		_, err = service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
+		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			// TODO: as this is already existing see if we can change this to message to existing order item without breaking
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+		}
+
+		if signingOrderRequests != nil {
+			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
 		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
