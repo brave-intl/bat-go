@@ -1033,6 +1033,12 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 					sublogger.Error().Err(err).Msg("failed to update order metadata")
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
+				// set paymentProcessor as stripe
+				err = service.Datastore.UpdateOrderMetadata(orderID, paymentProcessor, StripePaymentMethod)
+				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
+					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
+				}
 
 				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
 				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
@@ -1142,8 +1148,9 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 
 		// set order paid and include the vendor and external id to metadata
 		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
-			"vendor":     req.Type.String(),
-			"externalID": externalID,
+			"vendor":         req.Type.String(),
+			"externalID":     externalID,
+			paymentProcessor: req.Type.String(),
 		}); err != nil {
 			logger.Warn().Err(err).Msg("Failed to update the order with appropriate metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)

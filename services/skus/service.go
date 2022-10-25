@@ -360,6 +360,11 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to update order to add the subscription id")
 			}
+			// set paymentProcessor as stripe
+			err = s.Datastore.UpdateOrderMetadata(order.ID, paymentProcessor, StripePaymentMethod)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order to add the payment processor")
+			}
 		}
 	}
 

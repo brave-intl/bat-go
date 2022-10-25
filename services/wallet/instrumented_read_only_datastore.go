@@ -140,6 +140,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetWalletByPublicKey(ctx context.Conte
 	return _d.base.GetWalletByPublicKey(ctx, s1)
 }
 
+// HasPriorLinking implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "HasPriorLinking", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.HasPriorLinking(ctx, walletID, providerLinkingID)
+}
+
 // Migrate implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) Migrate(p1 ...uint) (err error) {
 	_since := time.Now()
