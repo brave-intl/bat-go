@@ -479,7 +479,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	// turn on region check
 	ctx = context.WithValue(ctx, appctx.UseCustodianRegionsCTXKey, true)
 	// configure allow region
-	custodianRegions := custodian.CustodianRegions{
+	custodianRegions := custodian.Regions{
 		Gemini: custodian.GeoAllowBlockMap{
 			Allow: []string{"US"},
 		},
@@ -581,7 +581,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	}
 
 	// ban the country now
-	custodianRegions = custodian.CustodianRegions{
+	custodianRegions = custodian.Regions{
 		Gemini: custodian.GeoAllowBlockMap{
 			Allow: []string{},
 		},
