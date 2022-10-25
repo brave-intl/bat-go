@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -24,6 +23,7 @@ import (
 	srv "github.com/brave-intl/bat-go/libs/service"
 	w "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
@@ -162,10 +162,11 @@ func (service *Service) InitKafka(ctx context.Context) error {
 			return errors.New("failed not initialize kafka could not find consumer group")
 		}
 
-		service.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
+		reader, err := kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
 		if err != nil {
 			return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
 		}
+		service.kafkaAdminAttestationReader = reader
 	}
 
 	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
@@ -229,24 +230,27 @@ func InitService(
 	logger := logging.Logger(ctx, "promotion.InitService")
 
 	// register metrics with prometheus
-	err := prometheus.Register(countGrantsClaimedBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(countGrantsClaimedBatTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
+	}
+	if err := prometheus.Register(countGrantsClaimedTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 
-	err = prometheus.Register(countGrantsClaimedTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(countContributionsBatTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 
-	err = prometheus.Register(countContributionsBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countContributionsTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(countContributionsTotal); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 
 	cbClient, err := cbr.New()

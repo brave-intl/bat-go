@@ -285,7 +285,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	// feature flag for using new custodian regions
 	if useCustodianRegions, ok := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool); ok && useCustodianRegions {
 		// get the uphold custodian supported regions
-		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.CustodianRegions); ok {
+		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.Regions); ok {
 			allowed := custodianRegions.Uphold.Verdict(
 				uhResp.IdentityCountry,
 			)

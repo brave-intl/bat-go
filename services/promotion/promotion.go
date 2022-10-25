@@ -31,14 +31,16 @@ var (
 
 func init() {
 	// register our metrics with prometheus
-	err := prometheus.Register(promotionGetCount)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		promotionGetCount = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(promotionGetCount); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			promotionGetCount = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 
-	err = prometheus.Register(promotionExposureCount)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		promotionExposureCount = ae.ExistingCollector.(*prometheus.CounterVec)
+	if err := prometheus.Register(promotionExposureCount); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			promotionExposureCount = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
 	}
 }
 

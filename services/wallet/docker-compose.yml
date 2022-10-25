@@ -16,7 +16,10 @@ services:
     ports:
       - "3353:3353"
       - "6061:6061"
-    command: "go run main.go serve wallet rest"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    command: "cd main && go run main.go serve wallet rest"
     volumes:
       - ./:/src
     working_dir: /src

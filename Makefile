@@ -1,6 +1,14 @@
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_TIME := $(shell date +%s)
+
+ifeq (${OUTPUT_DIR},)
+	OUTPUT := ..
+else
+	OUTPUT := ${OUTPUT_DIR}
+endif
+
+
 VAULT_VERSION=0.10.1
 TEST_PKG?=./...
 TEST_FLAGS= --tags=$(TEST_TAGS) $(TEST_PKG)
@@ -14,53 +22,53 @@ all: test create-json-schema buildcmd
 .DEFAULT: buildcmd
 
 buildcmd:
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o bat-go main.go
+	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
 
 mock:
-	mockgen -source=./services/promotion/claim.go -destination=services/promotion/mockclaim.go -package=promotion
-	mockgen -source=./services/promotion/drain.go -destination=services/promotion/mockdrain.go -package=promotion
-	mockgen -source=./services/promotion/datastore.go -destination=services/promotion/mockdatastore.go -package=promotion
-	mockgen -source=./services/promotion/service.go -destination=services/promotion/mockservice.go -package=promotion
-	mockgen -source=./services/grant/datastore.go -destination=services/grant/mockdatastore.go -package=grant
-	mockgen -source=./services/wallet/service.go -destination=services/wallet/mockservice.go -package=wallet
-	mockgen -source=./services/skus/datastore.go -destination=services/skus/mockdatastore.go -package=skus
-	mockgen -source=./libs/clients/ratios/client.go -destination=libs/clients/ratios/mock/mock.go -package=mock_ratios
-	mockgen -source=./libs/clients/cbr/client.go -destination=libs/clients/cbr/mock/mock.go -package=mock_cbr
-	mockgen -source=./libs/clients/reputation/client.go -destination=libs/clients/reputation/mock/mock.go -package=mock_reputation
-	mockgen -source=./libs/clients/gemini/client.go -destination=libs/clients/gemini/mock/mock.go -package=mock_gemini
-	mockgen -source=./libs/clients/bitflyer/client.go -destination=libs/clients/bitflyer/mock/mock.go -package=mock_bitflyer
-	mockgen -source=./libs/clients/coingecko/client.go -destination=libs/clients/coingecko/mock/mock.go -package=mock_coingecko
-	mockgen -source=./libs/backoff/retrypolicy/retrypolicy.go -destination=libs/backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
-	mockgen -source=./libs/aws/s3.go -destination=libs/aws/mock/mock.go -package=mockaws
+	cd services && mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
+	cd services && mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
+	cd services && mockgen -source=./promotion/datastore.go -destination=promotion/mockdatastore.go -package=promotion
+	cd services && mockgen -source=./promotion/service.go -destination=promotion/mockservice.go -package=promotion
+	cd services && mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
+	cd services && mockgen -source=./wallet/service.go -destination=wallet/mockservice.go -package=wallet
+	cd services && mockgen -source=./skus/datastore.go -destination=skus/mockdatastore.go -package=skus
+	cd libs && mockgen -source=./clients/ratios/client.go -destination=clients/ratios/mock/mock.go -package=mock_ratios
+	cd libs && mockgen -source=./clients/cbr/client.go -destination=clients/cbr/mock/mock.go -package=mock_cbr
+	cd libs && mockgen -source=./clients/reputation/client.go -destination=clients/reputation/mock/mock.go -package=mock_reputation
+	cd libs && mockgen -source=./clients/gemini/client.go -destination=clients/gemini/mock/mock.go -package=mock_gemini
+	cd libs && mockgen -source=./clients/bitflyer/client.go -destination=clients/bitflyer/mock/mock.go -package=mock_bitflyer
+	cd libs && mockgen -source=./clients/coingecko/client.go -destination=clients/coingecko/mock/mock.go -package=mock_coingecko
+	cd libs && mockgen -source=./backoff/retrypolicy/retrypolicy.go -destination=backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
+	cd libs && mockgen -source=./aws/s3.go -destination=aws/mock/mock.go -package=mockaws
 
 instrumented:
-	gowrap gen -p github.com/brave-intl/bat-go/services/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./services/grant/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/services/grant -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./services/grant/instrumented_read_only_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/services/promotion -i Datastore -t ./.prom-gowrap.tmpl -o ./services/promotion/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/services/promotion -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./services/promotion/instrumented_read_only_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/services/skus -i Datastore -t ./.prom-gowrap.tmpl -o ./services/skus/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i Datastore -t ./.prom-gowrap.tmpl -o ./services/wallet/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./services/wallet/instrumented_read_only_datastore.go
+	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/grant -i Datastore -t ../.prom-gowrap.tmpl -o ./grant/instrumented_datastore.go
+	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/grant -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o ./grant/instrumented_read_only_datastore.go
+	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/promotion -i Datastore -t ../.prom-gowrap.tmpl -o ./promotion/instrumented_datastore.go
+	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/promotion -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o ./promotion/instrumented_read_only_datastore.go
+	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/skus -i Datastore -t ../.prom-gowrap.tmpl -o ./skus/instrumented_datastore.go
+	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i Datastore -t ../.prom-gowrap.tmpl -o ./wallet/instrumented_datastore.go
+	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o ./wallet/instrumented_read_only_datastore.go
 	# fix everything called datastore...
-	sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' services/grant/instrumented_datastore.go
-	sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./services/grant/instrumented_read_only_datastore.go
-	sed -i'bak' 's/datastore_duration_seconds/promotion_datastore_duration_seconds/g' ./services/promotion/instrumented_datastore.go
-	sed -i'bak' 's/readonlydatastore_duration_seconds/promotion_readonly_datastore_duration_seconds/g' ./services/promotion/instrumented_read_only_datastore.go
-	sed -i'bak' 's/datastore_duration_seconds/skus_datastore_duration_seconds/g' ./services/skus/instrumented_datastore.go
-	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./services/wallet/instrumented_datastore.go
-	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./services/wallet/instrumented_read_only_datastore.go
+	cd services && sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' grant/instrumented_datastore.go
+	cd services && sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
+	cd services && sed -i'bak' 's/datastore_duration_seconds/promotion_datastore_duration_seconds/g' ./promotion/instrumented_datastore.go
+	cd services && sed -i'bak' 's/readonlydatastore_duration_seconds/promotion_readonly_datastore_duration_seconds/g' ./promotion/instrumented_read_only_datastore.go
+	cd services && sed -i'bak' 's/datastore_duration_seconds/skus_datastore_duration_seconds/g' ./skus/instrumented_datastore.go
+	cd services && sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
+	cd services && sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
 	# http clients
-	gowrap gen -p github.com/brave-intl/bat-go/libs/clients/cbr -i Client -t ./.prom-gowrap.tmpl -o ./libs/clients/cbr/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/cbr -i Client -t ../.prom-gowrap.tmpl -o ./clients/cbr/instrumented_client.go
 	sed -i'bak' 's/cbr.//g' libs/clients/cbr/instrumented_client.go
-	gowrap gen -p github.com/brave-intl/bat-go/libs/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./libs/clients/ratios/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/ratios -i Client -t ../.prom-gowrap.tmpl -o ./clients/ratios/instrumented_client.go
 	sed -i'bak' 's/ratios.//g' libs/clients/ratios/instrumented_client.go
-	gowrap gen -p github.com/brave-intl/bat-go/libs/clients/reputation -i Client -t ./.prom-gowrap.tmpl -o ./libs/clients/reputation/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/reputation -i Client -t ../.prom-gowrap.tmpl -o ./clients/reputation/instrumented_client.go
 	sed -i'bak' 's/reputation.//g' libs/clients/reputation/instrumented_client.go
-	gowrap gen -p github.com/brave-intl/bat-go/libs/clients/gemini -i Client -t ./.prom-gowrap.tmpl -o ./libs/clients/gemini/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/gemini -i Client -t ../.prom-gowrap.tmpl -o ./clients/gemini/instrumented_client.go
 	sed -i'bak' 's/gemini.//g' libs/clients/gemini/instrumented_client.go
-	gowrap gen -p github.com/brave-intl/bat-go/libs/clients/bitflyer -i Client -t ./.prom-gowrap.tmpl -o ./libs/clients/bitflyer/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/bitflyer -i Client -t ../.prom-gowrap.tmpl -o ./clients/bitflyer/instrumented_client.go
 	sed -i'bak' 's/bitflyer.//g' libs/clients/bitflyer/instrumented_client.go
-	gowrap gen -p github.com/brave-intl/bat-go/libs/clients/coingecko -i Client -t ./.prom-gowrap.tmpl -o ./libs/clients/coingecko/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/coingecko -i Client -t ../.prom-gowrap.tmpl -o ./clients/coingecko/instrumented_client.go
 	sed -i'bak' 's/coingecko.//g' libs/clients/coingecko/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' libs/clients/cbr/instrumented_client.go
@@ -100,8 +108,7 @@ docker-test:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
-	go run main.go generate json-schema
+	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test && cd main && go run main.go generate json-schema
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
@@ -157,13 +164,16 @@ vault-clean:
 	rm -rf share-0.gpg target/settlement-tools/vault-data vault-data
 
 json-schema:
-	go run main.go generate json-schema --overwrite
+	cd main && go run main.go generate json-schema --overwrite
 
 create-json-schema:
-	go run main.go generate json-schema
+	cd main && go run main.go generate json-schema
 
 test:
-	go test -count 1 -v -p 1 $(TEST_FLAGS) github.com/brave-intl/bat-go/...
+	cd libs && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
+	cd services && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
+	cd tools && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
+	cd cmd && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
 
 format:
 	gofmt -s -w ./
@@ -171,4 +181,10 @@ format:
 format-lint:
 	make format && make lint
 lint:
-	golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	docker run --rm -v "$$(pwd):/app" --workdir /app/libs golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" --workdir /app/services golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" --workdir /app/tools golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" --workdir /app/cmd golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" --workdir /app/main golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" --workdir /app/serverless/email/webhook golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" --workdir /app/serverless/email/unsubscribe golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...

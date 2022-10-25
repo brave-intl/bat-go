@@ -1,0 +1,38 @@
+name: Deploy to dev
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - dev
+jobs:
+  deploy:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Git clone the repository
+        uses: actions/checkout@v2
+
+      - name: Setup SAM environment
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.8"
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::021268868874:role/bravex-lambdas-sbx-github-actions20220920082446554100000003
+          role-session-name: bravex-sbx-github-actions
+          aws-region: us-west-2
+
+      - name: Build lambdas inside Docker containers
+        run: sam build --use-container --build-dir ./serverless/email/build --base-dir ./serverless/email/ --template-file ./serverless/email/template.yaml --debug
+
+      - name: Deploy email lambdas
+        run: sam deploy --no-confirm-changeset --parameter-overrides 'ParameterKey=DeploymentEnvironment,ParameterValue=sbx ParameterKey=WebhookLambdaTracing,ParameterValue=Active ParameterKey=APIGatewayTracing,ParameterValue=true ParameterKey=EventLambdaTracing,ParameterValue=Active ParameterKey=UnsubscribeLambdaTracing,ParameterValue=Active' --template-file ./serverless/email/build/template.yaml --no-fail-on-empty-changeset --stack-name bravex-frontend --s3-bucket bravex-lambda-artifacts-sbx-20220920082445588400000002 --debug

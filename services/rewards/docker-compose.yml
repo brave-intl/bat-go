@@ -15,6 +15,9 @@ services:
     image: 045014719567.dkr.ecr.us-west-2.amazonaws.com/rewards:latest
     ports:
       - "3333:3333"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     volumes:
       - ../:/src
     working_dir: /src
@@ -40,7 +43,7 @@ services:
     ports:
       - "3343:3343"
       - "6061:6061"
-    command: "go run main.go serve rewards rest"
+    command: "cd main && go run main.go serve rewards rest"
     volumes:
       - ../:/src
     working_dir: /src
