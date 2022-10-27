@@ -17,13 +17,10 @@ type TxAble interface {
 
 // GetTx will get or create a tx on the context, if created hands back rollback and commit functions
 func GetTx(ctx context.Context, ta TxAble) (context.Context, *sqlx.Tx, func(), func() error, error) {
-	// create a sublogger
 	logger := logging.Logger(ctx, "datastore.GetTx")
-	logger.Debug().Msg("getting tx from context")
 	// get tx
 	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
 	if !noContextTx {
-		logger.Debug().Msg("no tx in context")
 		tx, err := CreateTx(ctx, ta)
 		if err != nil || tx == nil {
 			logger.Error().Err(err).Msg("error creating tx")
@@ -36,9 +33,7 @@ func GetTx(ctx context.Context, ta TxAble) (context.Context, *sqlx.Tx, func(), f
 }
 
 func rollbackFn(ctx context.Context, ta TxAble, tx *sqlx.Tx) func() {
-	logger := logging.Logger(ctx, "datastore.rollbackFn")
 	return func() {
-		logger.Debug().Msg("rolling back transaction")
 		ta.RollbackTx(tx)
 	}
 }
@@ -46,7 +41,6 @@ func rollbackFn(ctx context.Context, ta TxAble, tx *sqlx.Tx) func() {
 func commitFn(ctx context.Context, tx *sqlx.Tx) func() error {
 	logger := logging.Logger(ctx, "datastore.commitFn")
 	return func() error {
-		logger.Debug().Msg("committing transaction")
 		if err := tx.Commit(); err != nil {
 			logger.Error().Err(err).Msg("failed to commit transaction")
 			return err
@@ -58,8 +52,6 @@ func commitFn(ctx context.Context, tx *sqlx.Tx) func() error {
 // CreateTx - helper to create a tx
 func CreateTx(ctx context.Context, ta TxAble) (tx *sqlx.Tx, err error) {
 	logger := logging.Logger(ctx, "datastore.CreateTx")
-	logger.Debug().
-		Msg("creating transaction")
 	tx, err = ta.BeginTx()
 	if err != nil {
 		logger.Error().Err(err).

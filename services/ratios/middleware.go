@@ -26,9 +26,9 @@ func init() {
 	}
 }
 
-// RatiosXBraveHeaderInstrumentHandler instruments an http.Handler to capture
+// XBraveHeaderInstrumentHandler instruments an http.Handler to capture
 // data relevant to the ratios service
-func RatiosXBraveHeaderInstrumentHandler(name string, next http.Handler) http.Handler {
+func XBraveHeaderInstrumentHandler(name string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("x-brave-key")
 		expectedKey := os.Getenv("X_BRAVE_KEY")

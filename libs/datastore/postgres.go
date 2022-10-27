@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/metrics"
@@ -41,7 +43,7 @@ var (
 	}
 	dbs = map[string]*sqlx.DB{}
 	// CurrentMigrationVersion holds the default migration version
-	CurrentMigrationVersion = uint(45)
+	CurrentMigrationVersion = uint(46)
 	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
 	MigrationTracks = map[string]uint{
 		"eyeshade": 20,
@@ -56,6 +58,8 @@ type Datastore interface {
 	RollbackTxAndHandle(tx *sqlx.Tx) error
 	RollbackTx(tx *sqlx.Tx)
 	BeginTx() (*sqlx.Tx, error)
+	AdvisoryLock(ctx context.Context, id uuid.UUID) error
+	AdvisoryUnlock(ctx context.Context, id uuid.UUID) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -101,15 +105,16 @@ func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 		return err
 	}
 
-	v, dirty, err := m.Version()
+	activeMigrationVersion, dirty, err := m.Version()
 
 	currentMigrationVersion := CurrentMigrationVersion
 	if len(currentMigrationVersions) > 0 {
 		currentMigrationVersion = currentMigrationVersions[0]
 	}
+
 	subLogger := logger.With().
 		Bool("dirty", dirty).
-		Int("db_version", int(v)).
+		Int("db_version", int(activeMigrationVersion)).
 		Uint("code_version", currentMigrationVersion).
 		Logger()
 
@@ -121,14 +126,12 @@ func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 		return fmt.Errorf("failed to get migration version: %w", err)
 	}
 
-	if v > currentMigrationVersion || dirty {
-		// dont attempt to migrate if our number is less than what is on the db
-		// or if the migration is in dirty state
+	// Don't attempt the migration if our currentMigrationVersion is less than the active db version or if the migration is in dirty state
+	if currentMigrationVersion < activeMigrationVersion || dirty {
 		subLogger.Error().Msg("migration not attempted")
-
 		sentry.CaptureMessage(
 			fmt.Sprintf("migration not attempted, dirty: %t; code version: %d; db version: %d",
-				dirty, currentMigrationVersion, v))
+				dirty, currentMigrationVersion, activeMigrationVersion))
 		return nil
 	}
 
@@ -137,8 +140,6 @@ func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 		subLogger.Error().Err(err).Msg("migration failed")
 		return err
 	}
-
-	subLogger.Info().Msg("database migration finished")
 
 	return nil
 }
@@ -242,4 +243,18 @@ func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 // BeginTx starts a transaction
 func (pg *Postgres) BeginTx() (*sqlx.Tx, error) {
 	return pg.RawDB().Beginx()
+}
+
+// AdvisoryLock acquires a pg advisory lock for the given identifier.
+// If another sessions already holds the lock on the identifier then this function will
+// wait until the lock becomes available.
+func (pg *Postgres) AdvisoryLock(ctx context.Context, id uuid.UUID) error {
+	_, err := pg.RawDB().ExecContext(ctx, `SELECT pg_advisory_lock(hashtext($1))`, id.String())
+	return err
+}
+
+// AdvisoryUnlock releases the given advisory lock.
+func (pg *Postgres) AdvisoryUnlock(ctx context.Context, id uuid.UUID) error {
+	_, err := pg.RawDB().ExecContext(ctx, `SELECT pg_advisory_unlock(hashtext($1))`, id.String())
+	return err
 }

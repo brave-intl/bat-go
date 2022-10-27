@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+
 	"github.com/asaskevich/govalidator"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -22,7 +24,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
 )
 
@@ -43,7 +45,7 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 }
 
 // Router for order endpoints
-func Router(service *Service) chi.Router {
+func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
 	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
@@ -63,7 +65,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/anonymousCard", instrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	// api routes for order receipt validation
 	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
@@ -72,10 +74,9 @@ func Router(service *Service) chi.Router {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
-
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
+		cr.Method("GET", "/{itemID}/time-limited-v2", instrumentHandler("GetTimeLimitedV2OrderCredsByOrderItem", GetTimeLimitedV2OrderCredsByOrderItem(service)))
+		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 	})
 
 	return r
@@ -237,9 +238,9 @@ func GetKeys(service *Service) handlers.AppHandler {
 }
 
 // VoteRouter for voting endpoint
-func VoteRouter(service *Service) chi.Router {
+func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/", middleware.InstrumentHandler("MakeVote", MakeVote(service)))
+	r.Method("POST", "/", instrumentHandler("MakeVote", MakeVote(service)))
 	return r
 }
 
@@ -257,7 +258,7 @@ type CreateOrderRequest struct {
 
 // CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		ctx := r.Context()
 		sublogger := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
@@ -293,7 +294,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
-	})
+	}
 }
 
 // SetOrderTrialDaysInput - SetOrderTrialDays handler input
@@ -573,7 +574,7 @@ type CreateOrderCredsRequest struct {
 
 // CreateOrderCreds is the handler for creating order credentials
 func CreateOrderCreds(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateOrderCredsRequest
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
@@ -595,27 +596,37 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderCreds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), req.ItemID, false)
+		orderItem, err := service.Datastore.GetOrderItem(r.Context(), req.ItemID)
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
-		if orderCreds != nil {
-			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+
+		// Single use credentials can only be submitted once per order item, this does not apply to TLV2.
+		if orderItem.CredentialType == singleUse {
+			signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
+			if err != nil {
+				// This is an existing error message so don't want to change it incase client are relying on it.
+				return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+			}
+
+			if len(signingOrderRequests) > 0 {
+				return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+			}
 		}
 
-		err = service.CreateOrderCreds(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
-	})
+	}
 }
 
-// GetOrderCreds is the handler for fetching order credentials
+// GetOrderCreds is the handler for fetching all order credentials associated with an order.
+// This endpoint handles the retrieval of all order credential types i.e. single-use, time-limited and time-limited-v2.
 func GetOrderCreds(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -626,13 +637,12 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		// get credentials, either single-use/time-limited
 		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting credentials", status)
 		}
 		return handlers.RenderContent(r.Context(), creds, w, status)
-	})
+	}
 }
 
 // DeleteOrderCreds is the handler for deleting order credentials
@@ -1083,6 +1093,66 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
 	})
+}
+
+// GetTimeLimitedV2OrderCredsByOrderItem handler fetches all the time limited v2 order credentials for a given order item.
+// If the order credentials are signed it returns a status of http.StatusOK.
+// If the order credentials are still waiting to be signed it returns a status of http.StatusAccepted.
+func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			orderID           = new(inputs.ID)
+			itemID            = new(inputs.ID)
+			validationPayload = map[string]interface{}{}
+			err               error
+		)
+
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			validationPayload["orderID"] = err.Error()
+		}
+
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
+			validationPayload["itemID"] = err.Error()
+		}
+
+		if len(validationPayload) > 0 {
+			return handlers.ValidationError(
+				"error validating request url parameter",
+				validationPayload)
+		}
+
+		signedOrderRequest, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), *itemID.UUID())
+		if err != nil {
+			return handlers.WrapError(errorutils.ErrInternalServerError, "error retrieving credential",
+				http.StatusInternalServerError)
+		}
+
+		if len(signedOrderRequest) == 0 {
+			return handlers.WrapError(errors.New("no order credentials submitted for order item"),
+				"error retrieving credential", http.StatusBadRequest)
+		}
+
+		if signedOrderRequest[0].CompletedAt == nil {
+			return handlers.RenderContent(r.Context(), nil, w, http.StatusAccepted)
+		}
+
+		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "error retrieving credential", http.StatusBadRequest)
+		}
+
+		if creds == nil {
+			return &handlers.AppError{
+				Message: "could not find credentials",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
+	}
 }
 
 // SubmitReceipt submit a vendor verifiable receipt that proves order is paid

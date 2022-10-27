@@ -16,7 +16,7 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
@@ -26,12 +26,12 @@ jobs:
           working-directory: libs
           version: v1.49.0
           args: --timeout 2m
-          skip-go-installation: true
+
   golangci-services:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
@@ -41,12 +41,12 @@ jobs:
           working-directory: services
           version: v1.49.0
           args: --timeout 2m
-          skip-go-installation: true
+
   golangci-tools:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
@@ -56,12 +56,12 @@ jobs:
           working-directory: tools
           version: v1.49.0
           args: --timeout 2m
-          skip-go-installation: true
+
   golangci-cmd:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
@@ -71,12 +71,12 @@ jobs:
           working-directory: cmd
           version: v1.49.0
           args: --timeout 2m
-          skip-go-installation: true
+
   golangci-main:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '1.18'
@@ -86,4 +86,3 @@ jobs:
           working-directory: main
           version: v1.49.0
           args: --timeout 2m
-          skip-go-installation: true

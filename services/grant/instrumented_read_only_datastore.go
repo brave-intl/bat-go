@@ -7,6 +7,7 @@ package grant
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/services/grant -i ReadOnlyDatastore -t ../../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go -l ""
 
 import (
+	context "context"
 	"time"
 
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
@@ -14,6 +15,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	uuid "github.com/satori/go.uuid"
 )
 
 // ReadOnlyDatastoreWithPrometheus implements ReadOnlyDatastore interface with all methods wrapped
@@ -38,6 +40,34 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 		base:         base,
 		instanceName: instanceName,
 	}
+}
+
+// AdvisoryLock implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) AdvisoryLock(ctx context.Context, id uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryLock", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.AdvisoryLock(ctx, id)
+}
+
+// AdvisoryUnlock implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) AdvisoryUnlock(ctx context.Context, id uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryUnlock", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.AdvisoryUnlock(ctx, id)
 }
 
 // BeginTx implements ReadOnlyDatastore
