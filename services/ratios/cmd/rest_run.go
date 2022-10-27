@@ -53,7 +53,7 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(ctx)
 	r.Get(
 		"/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}",
-		ratios.RatiosXBraveHeaderInstrumentHandler(
+		ratios.XBraveHeaderInstrumentHandler(
 			"GetRelativeHandler",
 			middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)),
 		).ServeHTTP)

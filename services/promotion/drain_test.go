@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	mockdialer "github.com/brave-intl/bat-go/libs/kafka/mock"
 	"math/rand"
 	"net/http"
 	"testing"
@@ -37,7 +38,7 @@ func TestReadMessage_KafkaError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	kafkaReader := NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 
 	ctx := context.Background()
 	err := errors.New(uuid.NewV4().String())
@@ -62,7 +63,7 @@ func TestReadMessage_CodecError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	kafkaReader := NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 
 	ctx := context.Background()
 
@@ -113,7 +114,7 @@ func TestReadMessage_WalletIDInvalidError(t *testing.T) {
 		Value: binary,
 	}
 
-	kafkaReader := NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 	kafkaReader.EXPECT().
 		ReadMessage(gomock.Eq(ctx)).
 		Return(message, nil)
@@ -158,7 +159,7 @@ func TestReadMessage_Success(t *testing.T) {
 		Value: binary,
 	}
 
-	kafkaReader := NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 	kafkaReader.EXPECT().
 		ReadMessage(gomock.Eq(ctx)).
 		Return(message, nil)

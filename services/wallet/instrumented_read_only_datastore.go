@@ -42,6 +42,34 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 	}
 }
 
+// AdvisoryLock implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) AdvisoryLock(ctx context.Context, id uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryLock", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.AdvisoryLock(ctx, id)
+}
+
+// AdvisoryUnlock implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) AdvisoryUnlock(ctx context.Context, id uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryUnlock", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.AdvisoryUnlock(ctx, id)
+}
+
 // BeginTx implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
 	_since := time.Now()
