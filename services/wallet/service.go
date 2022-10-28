@@ -48,6 +48,21 @@ func isReputationGeoEnabled() bool {
 	return toggle
 }
 
+// VerifiedWalletEnable enable verified wallet call
+var VerifiedWalletEnable = isVerifiedWalletEnable()
+
+func isVerifiedWalletEnable() bool {
+	var toggle = false
+	if os.Getenv("VERIFIED_WALLET_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("VERIFIED_WALLET_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 var (
 	// ClaimNamespace uuidv5 namespace for provider linking - exported for tests
 	ClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
@@ -207,8 +222,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 		// if wallets are being migrated we do not want to over claim, we might go over the limit
 		if viper.GetBool("enable-link-drain-flag") {
 			// create wallet claim routes for our wallet providers
-			r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
-				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+			r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc("LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+
 			r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
@@ -216,12 +231,12 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
-			r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+
+			r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc("DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
 
 			// create wallet connect routes for our wallet providers
-			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
-				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc("LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+
 			r.Post("/bitflyer/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/brave/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
@@ -229,16 +244,14 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
-			r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+
+			r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc("DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
 		}
 
 		// unlink verified custodial wallet
-		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
-			middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
+		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
 
-		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
-			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
+		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
 
 		// get wallet routes
 		r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(

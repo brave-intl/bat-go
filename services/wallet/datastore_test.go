@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/clients/reputation"
+	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
+	"github.com/golang/mock/gomock"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
@@ -191,56 +195,40 @@ func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {
 }
 
 func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
-	for i := 0; i < 1; i++ {
+	// Mock reputation client calls and enable verified wallet
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
 
-		// seed 3 wallets with same linkingID
-		userDepositDestination, providerLinkingID := suite.seedWallet(pg)
+	VerifiedWalletEnable = true
+	reputationClient := mockreputation.NewMockClient(mockCtrl)
 
-		// concurrently link new wallet with same linkingID
-		altCurrency := altcurrency.BAT
-		walletInfo := &walletutils.Info{
-			ID:          uuid.NewV4().String(),
-			Provider:    "uphold",
-			ProviderID:  uuid.NewV4().String(),
-			AltCurrency: &altCurrency,
-			PublicKey:   "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
-		}
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, reputationClient)
+	reputationClient.EXPECT().
+		UpdateReputationSummary(gomock.Any(),
+			gomock.Any(), true).
+		Return(nil).
+		AnyTimes()
 
-		err = pg.UpsertWallet(context.WithValue(context.Background(),
-			appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), walletInfo)
-		suite.Require().NoError(err, "save wallet should succeed")
+	reputationClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, []int{reputation.CohortTooYoung, reputation.CohortGeoResetDifferent}, nil).
+		AnyTimes()
 
-		runs := 2
-		var wg sync.WaitGroup
-		wg.Add(runs)
-
-		for i := 0; i < runs; i++ {
-			go func() {
-				defer wg.Done()
-				err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-					walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.AnonymousAddress, walletInfo.Provider, "")
-			}()
-		}
-
-		wg.Wait()
-
-		used, max, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-			appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
-
-		suite.Require().NoError(err, "should have no error getting custodian link count")
-		suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))
-	}
-}
-
-func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUID) {
+	// Create the maximum wallets - 1 with the same linkingID
 	userDepositDestination := uuid.NewV4().String()
 	providerLinkingID := uuid.NewV4()
 
-	walletCount := 3
-	for i := 0; i < walletCount; i++ {
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+
+	used, max, err := pg.GetCustodianLinkCount(ctx, providerLinkingID, "")
+	suite.Require().NoError(err)
+
+	for i := 0; i < max-1; i++ {
 		altCurrency := altcurrency.BAT
 		walletInfo := &walletutils.Info{
 			ID:               uuid.NewV4().String(),
@@ -251,26 +239,71 @@ func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUI
 			AnonymousAddress: nil,
 		}
 
-		err := pg.UpsertWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), walletInfo)
+		err := pg.UpsertWallet(ctx, walletInfo)
 		suite.Require().NoError(err, "save wallet should succeed")
 
-		err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-			walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.AnonymousAddress, "uphold", "")
+		err = pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID,
+			walletInfo.AnonymousAddress, "uphold", "")
 		suite.Require().NoError(err, "link wallet should succeed")
 	}
 
-	used, _, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
+	// Create a final wallet to reach maximum and make two concurrent link calls
+	altCurrency := altcurrency.BAT
+	walletInfo := &walletutils.Info{
+		ID:               uuid.NewV4().String(),
+		Provider:         "uphold",
+		ProviderID:       uuid.NewV4().String(),
+		AltCurrency:      &altCurrency,
+		PublicKey:        "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
+		AnonymousAddress: nil,
+	}
+	err = pg.UpsertWallet(ctx, walletInfo)
+	suite.Require().NoError(err)
 
-	suite.Require().NoError(err, "should have no error getting custodian link count")
-	suite.Require().True(used == walletCount, fmt.Sprintf("used %d", used))
+	// Make two concurrent link calls
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			defer wg.Done()
+			err = pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID,
+				walletInfo.AnonymousAddress, walletInfo.Provider, "")
+		}()
+	}
+	wg.Wait()
 
-	return userDepositDestination, providerLinkingID
+	// Assert we have not linked more that the maximum allowed
+	used, max, err = pg.GetCustodianLinkCount(ctx, providerLinkingID, "")
+	suite.Require().NoError(err)
+	suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))
 }
 
 func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	VerifiedWalletEnable = true
+	reputationClient := mockreputation.NewMockClient(mockCtrl)
+
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, reputationClient)
+	reputationClient.EXPECT().
+		UpdateReputationSummary(gomock.Any(),
+			gomock.Any(), true).
+		Return(nil).
+		AnyTimes()
+
+	reputationClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, []int{reputation.CohortTooYoung,
+			reputation.CohortGeoResetDifferent}, nil).
+		AnyTimes()
+
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	wallets := make([]*walletutils.Info, 10, 10)
 
@@ -284,7 +317,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 			PublicKey:   "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
 		}
 		wallets[i] = walletInfo
-		err := pg.UpsertWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), walletInfo)
+		err := pg.UpsertWallet(ctx, walletInfo)
 		suite.Require().NoError(err, "save wallet should succeed")
 	}
 
@@ -297,15 +330,14 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 	for i := 0; i < len(wallets); i++ {
 		go func(index int) {
 			defer wg.Done()
-			err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-				wallets[index].ID, userDepositDestination, providerLinkingID, wallets[index].AnonymousAddress, wallets[index].Provider, "")
+			err = pg.LinkWallet(ctx, wallets[index].ID, userDepositDestination, providerLinkingID,
+				wallets[index].AnonymousAddress, wallets[index].Provider, "")
 		}(i)
 	}
 
 	wg.Wait()
 
-	used, max, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
+	used, max, err := pg.GetCustodianLinkCount(ctx, providerLinkingID, "")
 
 	suite.Require().NoError(err, "should have no error getting custodian link count")
 	suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))

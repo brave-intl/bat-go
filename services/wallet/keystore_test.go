@@ -14,6 +14,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/brave-intl/bat-go/libs/clients/reputation"
+	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -72,10 +75,6 @@ func (suite *WalletControllersTestSuite) CleanDB() {
 		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
-}
-
-func noUUID() *uuid.UUID {
-	return nil
 }
 
 func (suite *WalletControllersTestSuite) FundWallet(w *uphold.Wallet, probi decimal.Decimal) decimal.Decimal {
@@ -163,6 +162,21 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
+	VerifiedWalletEnable = true
+	reputationClient := mockreputation.NewMockClient(mockCtrl)
+
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, reputationClient)
+	reputationClient.EXPECT().
+		UpdateReputationSummary(gomock.Any(),
+			gomock.Any(), gomock.Any()).
+		Return(nil).
+		AnyTimes()
+
+	reputationClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, []int{reputation.CohortTooYoung,
+			reputation.CohortGeoResetDifferent}, nil).
+		AnyTimes()
+
 	service := &Service{
 		Datastore: pg,
 	}
@@ -210,48 +224,48 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 	zero := decimal.NewFromFloat(0)
 
 	suite.CheckBalance(w1, bat1)
-	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	// attempt an unlink
-	suite.unlinkCardV3(service, w1, http.StatusOK)
+	suite.unlinkCardV3(ctx, service, w1, http.StatusOK)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.claimCardV3(ctx, service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
 	suite.CheckBalance(w2, bat1)
 
 	// 1 linking
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w2, zero)
 
 	// 1 linking
 
 	suite.CheckBalance(w3, bat2)
-	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w3, bat1)
 
 	// 2 linking
 
 	suite.CheckBalance(w3, bat1)
-	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
+	suite.claimCardV3(ctx, service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, bat1)
 
 	// 2 linking
 
 	suite.CheckBalance(w4, bat1)
-	suite.claimCardV3(service, w4, w4ProviderID, http.StatusOK, zero, &anonCard4UUID)
+	suite.claimCardV3(ctx, service, w4, w4ProviderID, http.StatusOK, zero, &anonCard4UUID)
 	suite.CheckBalance(w4, bat1)
 
 	// 3 linking
 
 	suite.CheckBalance(w5, bat1)
-	suite.claimCardV3(service, w5, w5ProviderID, http.StatusOK, zero, &anonCard5UUID)
+	suite.claimCardV3(ctx, service, w5, w5ProviderID, http.StatusOK, zero, &anonCard5UUID)
 	suite.CheckBalance(w5, bat1)
 
 	// 4 linking
 
 	// reconnecting original wallet should fail
-	suite.claimCardV3(service, w1, w3ProviderID, http.StatusConflict, bat1, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w1, w3ProviderID, http.StatusConflict, bat1, &anonCard3UUID)
 }
 
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
@@ -262,6 +276,21 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
+
+	VerifiedWalletEnable = true
+	reputationClient := mockreputation.NewMockClient(mockCtrl)
+
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, reputationClient)
+	reputationClient.EXPECT().
+		UpdateReputationSummary(gomock.Any(),
+			gomock.Any(), gomock.Any()).
+		Return(nil).
+		AnyTimes()
+
+	reputationClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, []int{reputation.CohortTooYoung,
+			reputation.CohortGeoResetDifferent}, nil).
+		AnyTimes()
 
 	service := &Service{
 		Datastore: pg,
@@ -298,31 +327,32 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	zero := decimal.NewFromFloat(0)
 
 	suite.CheckBalance(w1, bat1)
-	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	// attempt a disconnect
-	suite.disconnectCardV3(service, w1, http.StatusOK)
+	suite.disconnectCardV3(ctx, service, w1, http.StatusOK)
 	// reconnect to existing card
-	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, zero, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w1, w3ProviderID, http.StatusOK, zero, &anonCard3UUID)
 	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.claimCardV3(ctx, service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
 	suite.CheckBalance(w2, bat1)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w2, zero)
 
 	suite.CheckBalance(w3, bat2)
-	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.claimCardV3(ctx, service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w3, bat1)
 
 	suite.CheckBalance(w3, bat1)
-	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
+	suite.claimCardV3(ctx, service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, bat1)
 }
 
 func (suite *WalletControllersTestSuite) unlinkCardV3(
+	ctx context.Context,
 	service *Service,
 	w *uphold.Wallet,
 	status int,
@@ -339,7 +369,7 @@ func (suite *WalletControllersTestSuite) unlinkCardV3(
 	fmt.Printf("info id: %+v\n", info.ID)
 	rctx.URLParams.Add("payment_id", info.ID)
 	rctx.URLParams.Add("custodian", "uphold")
-	ctx := req.Context()
+
 	// add signature key id to context
 	ctx = middleware.AddKeyID(ctx, info.ID)
 	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
@@ -356,6 +386,7 @@ func (suite *WalletControllersTestSuite) unlinkCardV3(
 }
 
 func (suite *WalletControllersTestSuite) disconnectCardV3(
+	ctx context.Context,
 	service *Service,
 	w *uphold.Wallet,
 	status int,
@@ -370,7 +401,7 @@ func (suite *WalletControllersTestSuite) disconnectCardV3(
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", info.ID)
 	rctx.URLParams.Add("custodian", "uphold")
-	ctx := req.Context()
+
 	// add signature key id to context
 	ctx = middleware.AddKeyID(ctx, info.ID)
 	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
@@ -386,6 +417,7 @@ func (suite *WalletControllersTestSuite) disconnectCardV3(
 }
 
 func (suite *WalletControllersTestSuite) claimCardV3(
+	ctx context.Context,
 	service *Service,
 	w *uphold.Wallet,
 	destination string,
@@ -420,6 +452,8 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", info.ID)
+
+	req = req.WithContext(ctx)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 

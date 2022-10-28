@@ -607,6 +607,18 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 		return err
 	}
 
+	if VerifiedWalletEnable {
+		repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+		if !ok {
+			return errors.New("error reputation client not in context")
+		}
+
+		err = repClient.UpdateReputationSummary(ctx, walletID.String(), false)
+		if err != nil {
+			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+		}
+	}
+
 	if err := commit(); err != nil {
 		return fmt.Errorf("failed to commit tx: %w", err)
 	}
@@ -631,45 +643,49 @@ var (
 )
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error {
+func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID,
+	anonymousAddress *uuid.UUID, depositProvider, country string) error {
 
 	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
 
-	// rep check
-	if repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
-		walletID, err := uuid.FromString(ID)
-		if err != nil {
-			sublogger.Warn().Err(err).Msg("invalid wallet id")
-			return fmt.Errorf("invalid wallet id, not uuid: %w", err)
-		}
-		// we have a client, check the value for ID
-		reputable, cohorts, err := repClient.IsLinkingReputable(ctx, walletID, country)
-		if err != nil {
-			sublogger.Warn().Err(err).Msg("failed to check reputation")
-			return fmt.Errorf("failed to check wallet rep: %w", err)
-		}
+	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+	if !ok {
+		return errors.New("error reputation client not in context")
+	}
 
-		var (
-			isTooYoung        = false
-			geoResetDifferent = false
-		)
-		for _, v := range cohorts {
-			if isTooYoung = (v == reputation.CohortTooYoung); isTooYoung {
-				break
-			}
-			if geoResetDifferent = (v == reputation.CohortGeoResetDifferent); geoResetDifferent {
-				break
-			}
-		}
+	walletID, err := uuid.FromString(ID)
+	if err != nil {
+		sublogger.Warn().Err(err).Msg("invalid wallet id")
+		return fmt.Errorf("invalid wallet id, not uuid: %w", err)
+	}
 
-		if !reputable && !isTooYoung && !geoResetDifferent {
-			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
-			countLinkingFlaggedUnusual.Inc()
-			return ErrUnusualActivity
-		} else if geoResetDifferent {
-			sublogger.Info().Msg("wallet linking attempt failed - geo reset is different")
-			return ErrGeoResetDifferent
+	// we have a client, check the value for ID
+	reputable, cohorts, err := repClient.IsLinkingReputable(ctx, walletID, country)
+	if err != nil {
+		sublogger.Warn().Err(err).Msg("failed to check reputation")
+		return fmt.Errorf("failed to check wallet rep: %w", err)
+	}
+
+	var (
+		isTooYoung        = false
+		geoResetDifferent = false
+	)
+	for _, v := range cohorts {
+		if isTooYoung = (v == reputation.CohortTooYoung); isTooYoung {
+			break
 		}
+		if geoResetDifferent = (v == reputation.CohortGeoResetDifferent); geoResetDifferent {
+			break
+		}
+	}
+
+	if !reputable && !isTooYoung && !geoResetDifferent {
+		sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
+		countLinkingFlaggedUnusual.Inc()
+		return ErrUnusualActivity
+	} else if geoResetDifferent {
+		sublogger.Info().Msg("wallet linking attempt failed - geo reset is different")
+		return ErrGeoResetDifferent
 	}
 
 	ctx, tx, rollback, commit, err := getTx(ctx, pg)
@@ -703,6 +719,13 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		sublogger.Error().Err(err).
 			Msg("error connect custodian wallet")
 		return fmt.Errorf("error connect custodian wallet: %w", err)
+	}
+
+	if VerifiedWalletEnable {
+		err = repClient.UpdateReputationSummary(ctx, ID, true)
+		if err != nil {
+			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+		}
 	}
 
 	err = commit()
@@ -933,6 +956,18 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 	); err != nil {
 		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
 		return err
+	}
+
+	if VerifiedWalletEnable {
+		repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+		if !ok {
+			return errors.New("error reputation client not in context")
+		}
+
+		err = repClient.UpdateReputationSummary(ctx, walletID.String(), false)
+		if err != nil {
+			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+		}
 	}
 
 	// if the tx was created in this scope we will commit here

@@ -35,6 +35,8 @@ import (
 )
 
 func TestLinkBraveWalletV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	var (
@@ -88,6 +90,12 @@ func TestLinkBraveWalletV3(t *testing.T) {
 		[]int{},
 		nil,
 	)
+
+	mockReputation.EXPECT().UpdateReputationSummary(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		true,
+	).Return(nil)
 
 	// begin linking tx
 	mock.ExpectBegin()
@@ -289,6 +297,8 @@ func TestGetWalletV3(t *testing.T) {
 }
 
 func TestLinkBitFlyerWalletV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	// setup jwt token for the test
@@ -400,6 +410,12 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		nil,
 	)
 
+	mockReputation.EXPECT().UpdateReputationSummary(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		true,
+	).Return(nil)
+
 	r = r.WithContext(ctx)
 
 	router := chi.NewRouter()
@@ -415,6 +431,8 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -470,6 +488,13 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		[]int{},
 		nil,
 	)
+
+	mockReputationClient.EXPECT().UpdateReputationSummary(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		gomock.Any(),
+	).Return(nil).
+		Times(2)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
@@ -588,18 +613,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
 
-	/*
-		mockGeminiClient.EXPECT().ValidateAccount(
-			gomock.Any(),
-			gomock.Any(),
-			gomock.Any(),
-		).Return(
-			accountID.String(),
-			"US",
-			nil,
-		)
-	*/
-
 	// begin linking tx
 	mock.ExpectBegin()
 
@@ -653,10 +666,11 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
-
 }
 
 func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -712,6 +726,12 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		[]int{},
 		nil,
 	)
+
+	mockReputationClient.EXPECT().UpdateReputationSummary(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		true,
+	).Return(nil)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
@@ -783,6 +803,8 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -855,6 +877,12 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		nil,
 	)
 
+	mockReputationClient.EXPECT().UpdateReputationSummary(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		true,
+	).Return(nil)
+
 	// begin linking tx
 	mock.ExpectBegin()
 
@@ -900,6 +928,8 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
+	wallet.VerifiedWalletEnable = true
+
 	var (
 		// setup test variables
 		idFrom = uuid.NewV4()
@@ -929,6 +959,8 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
+
+		reputationClient = mockreputation.NewMockClient(mockCtrl)
 	)
 
 	// create transaction
@@ -943,9 +975,15 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
 
+	reputationClient.EXPECT().
+		UpdateReputationSummary(gomock.Any(),
+			idFrom.String(), false).
+		Return(nil)
+
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, reputationClient)
 
 	r = r.WithContext(ctx)
 
@@ -961,6 +999,8 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 func TestUnlinkWalletV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
+
+	wallet.VerifiedWalletEnable = true
 
 	var (
 		// setup test variables
@@ -991,6 +1031,8 @@ func TestUnlinkWalletV3(t *testing.T) {
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
+
+		reputationClient = mockreputation.NewMockClient(mockCtrl)
 	)
 
 	// create transaction
@@ -1011,10 +1053,16 @@ func TestUnlinkWalletV3(t *testing.T) {
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
 
+	reputationClient.EXPECT().
+		UpdateReputationSummary(gomock.Any(),
+			idFrom.String(), false).
+		Return(nil)
+
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	// set cooldown to - 1 week (can not have been unlinked in the past week)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1W")
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, reputationClient)
 
 	r = r.WithContext(ctx)
 
