@@ -211,8 +211,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
 			r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
-			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
@@ -224,8 +222,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
 			r.Post("/bitflyer/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
-			r.Post("/brave/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
@@ -520,49 +516,6 @@ func (service *Service) LinkWallet(
 			return handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
 		}
 	}
-	return nil
-}
-
-// LinkBraveWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
-
-	// get reputation client from context
-	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
-	if !ok {
-		return fmt.Errorf("server misconfigured: no reputation client")
-	}
-
-	// is this from wallet reputable as an iOS device?
-	isFromOnPlatform, err := repClient.IsWalletOnPlatform(ctx, from, "ios")
-	if err != nil {
-		return fmt.Errorf("invalid device: %w", err)
-	}
-
-	if !isFromOnPlatform {
-		// wallet is not reputable, decline
-		return fmt.Errorf("unable to link wallet: invalid device")
-	}
-
-	// link the wallet in our datastore, provider linking id will be on the deposit wallet (to wallet)
-	providerLinkingID := uuid.NewV5(ClaimNamespace, to.String())
-
-	// "to" will be stored as UserDepositDestination in the wallet info upon linking
-	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave", ""); err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, ErrTooManyCardsLinked) {
-			// we are not allowing draining to wallets that exceed the linking limits
-			// this will cause an error in the client prior to attempting draining
-			status = http.StatusTeapot
-		}
-		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
-		}
-		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
-		}
-		return handlers.WrapError(err, "unable to link brave wallets", status)
-	}
-
 	return nil
 }
 
