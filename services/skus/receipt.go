@@ -100,18 +100,22 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 				logger.Error().Err(err).Msg("failed to verify subscription")
 				return "", errPurchaseFailed
 			}
-			// check that the order was paid
-			switch resp.PaymentState {
-			case androidPaymentStatePaid, androidPaymentStateTrial:
-				break
-			case androidPaymentStatePending:
-				return "", errPurchasePending
-			case androidPaymentStatePendingDeferred:
-				return "", errPurchaseDeferred
-			default:
-				return "", errPurchaseStatusUnknown
+			if resp.PaymentState != nil {
+				// check that the order was paid
+				switch *resp.PaymentState {
+				case androidPaymentStatePaid, androidPaymentStateTrial:
+					break
+				case androidPaymentStatePending:
+					return "", errPurchasePending
+				case androidPaymentStatePendingDeferred:
+					return "", errPurchaseDeferred
+				default:
+					return "", errPurchaseStatusUnknown
+				}
+				return v.Blob, nil
 			}
-			return v.Blob, nil
+			logger.Error().Err(err).Msg("failed to verify subscription: no payment state")
+			return "", errPurchaseFailed
 		}
 	}
 	logger.Error().Msg("client is not configured")
