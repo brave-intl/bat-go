@@ -396,9 +396,6 @@ func (c *HTTPClient) CheckTxStatus(ctx context.Context, APIKey string, clientID 
 
 	var body PayoutResult
 	resp, err := c.client.Do(ctx, req, &body)
-	if err != nil {
-		return nil, err
-	}
 
 	if resp.StatusCode == http.StatusNotFound {
 		notFoundReason := "404 From Gemini"
@@ -408,6 +405,10 @@ func (c *HTTPClient) CheckTxStatus(ctx context.Context, APIKey string, clientID 
 			TxRef:  txRef,
 		}
 		return &body, nil
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	return &body, err
