@@ -29,6 +29,7 @@ elif [ "${service}" = "/ia2" ]; then
     # setup proxy that allows the enclave to talk to Let's Encrypt and our Kafka
     # cluster
     export SOCKS_PROXY_ALLOWED_FQDNS="acme-v02.api.letsencrypt.org,${KAFKA_BROKERS}"
+    export SOCKS_PROXY_ALLOWED_ADDRS=""
     export SOCKS_PROXY_LISTEN_ADDR="127.0.0.1:1080"
     /enclave/socksproxy > /tmp/socksproxy.log &
 
@@ -40,8 +41,18 @@ elif [ "${service}" = "/ia2" ]; then
     /enclave/kafkaproxy > /tmp/kafkaproxy.log &
 
     # setup proxy for inbound traffic, ACME, and the enclave's SOCKS proxy
-    export IN_ADDRS=":8080,:80,${PARENT_CID}:80"
+    export IN_ADDRS=":8080,:80,${PARENT_CID}:1080"
     export OUT_ADDRS="${CID}:8080,${CID}:80,127.0.0.1:1080"
+elif [ "${service}" = "/star-randsrv" ]; then
+    # setup proxy that allows the enclave to talk to Let's Encrypt
+    export SOCKS_PROXY_ALLOWED_FQDNS="acme-v02.api.letsencrypt.org"
+    export SOCKS_PROXY_ALLOWED_ADDRS=""
+    export SOCKS_PROXY_LISTEN_ADDR="127.0.0.1:1080"
+    /enclave/socksproxy > /tmp/socksproxy.log &
+
+    # setup proxy for inbound traffic, ACME, and the enclave's SOCKS proxy
+    export IN_ADDRS=":8443,:80,${PARENT_CID}:1080"
+    export OUT_ADDRS="${CID}:8443,${CID}:80,127.0.0.1:1080"
 fi
 
 # next startup the proxy

@@ -22,9 +22,6 @@ func ReadConfigFromEnv(cfg map[string]string) error {
 		if !exists {
 			return fmt.Errorf("environment variable %q not set", envVar)
 		}
-		if value == "" {
-			return fmt.Errorf("environment variable %q empty", envVar)
-		}
 		cfg[envVar] = value
 	}
 
