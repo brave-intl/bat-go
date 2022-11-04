@@ -160,3 +160,30 @@ HTTP/1.1 200
     "data": <object> // context data about the error
 }
 ```
+
+## Online Payments with Nitro Enclaves
+
+### Children PRs
+
+* Configuration / Secret Management - https://github.com/brave-intl/bat-go/pull/1385
+* Payout Authorization - https://github.com/brave-intl/bat-go/pull/1384
+* Payments REST API - https://github.com/brave-intl/bat-go/pull/1219
+* Settlements Automation / Workflow - https://github.com/brave-intl/bat-go/pull/1361
+* Nitro Enclave Utilities - https://github.com/brave-intl/bat-go/pull/836
+
+
+# Command Line Utilities
+
+1. Prepare Tool
+    The prepare tool will take an antifraud output report, and put all transactions into redis prepare stream
+2. Authorize Tool
+    The authorize tool will take an antifraud output report, and submit all transactions to the payments service
+    with an httpsignature of the authorizor.  Two individuals must call this tool independently for transactions
+    to be processed by payments
+3. Abandon tool
+    create a mechanism to send a list of transactions (signed with httpsignature) that will taint the transactions
+    in qldb so they can never be processed.3. Abandon tool
+        create a mechanism to send a list of transactions (signed with httpsignature) that will taint the transactions
+        in qldb so they can never be processed.3. Abandon tool
+            create a mechanism to send a list of transactions (signed with httpsignature) that will taint the transactions
+            in qldb so they can never be processed.
