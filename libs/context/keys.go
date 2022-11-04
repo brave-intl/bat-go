@@ -197,8 +197,7 @@ const (
 
 	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
 	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
-	// AWSRegionCTXKey - the context key for getting the rate limit
-	AWSRegionCTXKey CTXKey = "aws_region"
+
 	// RequireUpholdCountryCTXKey - the context key for getting the rate limit
 	RequireUpholdCountryCTXKey CTXKey = "require_uphold_country"
 

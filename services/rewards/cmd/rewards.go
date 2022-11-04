@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"context"
+
 	// pprof imports
 	_ "net/http/pprof"
 
-	"github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/services/cmd"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -79,16 +76,3 @@ var (
 		Run:   GRPCRun,
 	}
 )
-
-// CommonRun - setup environment the same no matter how the service is run
-func CommonRun(command *cobra.Command, args []string) (context.Context, *zerolog.Logger) {
-	ctx := command.Context()
-	logger, err := appctx.GetLogger(ctx)
-	cmd.Must(err)
-
-	// setup ratios service values
-	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
-	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
-
-	return ctx, logger
-}
