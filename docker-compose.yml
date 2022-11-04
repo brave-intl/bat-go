@@ -1,5 +1,11 @@
 version: "3.4"
 
+volumes:
+  out:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+
 networks:
   grant:
     driver: bridge
@@ -68,6 +74,7 @@ services:
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
+      - "out:/out"
     depends_on:
       - redis
       - kafka
@@ -88,7 +95,10 @@ services:
     ports:
       - "3333:3333"
       - "6061:6061"
+    security_opt:
+      - no-new-privileges:true
     environment:
+      - OUTPUT_DIR="/out"
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
       - DRAIN_RETRY_JOB_ENABLED=true
@@ -172,7 +182,7 @@ services:
       - grant
   challenge-bypass:
     container_name: challenge-bypass
-    image: brave/challenge-bypass
+    image: brave/challenge-bypass:latest
     restart: always
     ports:
       - "2416:2416"
@@ -180,13 +190,24 @@ services:
       - "SENTRY_DSN"
       - "DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
+      - KAFKA_BROKERS=kafka:19092
+      - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
+      - KAFKA_REQUIRED_ACKS=1
+      - KAFKA_CONSUMERS_PER_NODE=1
+      - REDEEM_CONSUMER_TOPIC=redeem.consumer
+      - REDEEM_PRODUCER_TOPIC=redeem.producer
+      - SIGN_CONSUMER_TOPIC=sign.consumer
+      - SIGN_PRODUCER_TOPIC=sign.producer
+      - CONSUMER_GROUP=consumer.group
     depends_on:
       - challenge-bypass-postgres
     networks:
       - grant
   zookeeper:
     container_name: grant-zookeeper
-    image: confluentinc/cp-zookeeper:5.2.2
+    image: confluentinc/cp-zookeeper:7.1.1
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
     ports:
@@ -195,7 +216,7 @@ services:
       - grant
   kafka:
     container_name: grant-kafka
-    image: confluentinc/cp-kafka:latest # kafka version 2.2.1
+    image: confluentinc/cp-kafka:7.1.1
     ports:
       - "29092:29092"
     environment:
