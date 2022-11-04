@@ -55,7 +55,7 @@ func main() {
 
 	rawInAddrs, rawOutAddrs := strings.Split(inEnv, ","), strings.Split(outEnv, ",")
 	if len(rawInAddrs) != len(rawOutAddrs) {
-		l.Fatal("%s and %s must contain same number of addresses.", envInAddrs, envOutAddrs)
+		l.Fatalf("%s and %s must contain same number of addresses.", envInAddrs, envOutAddrs)
 	}
 
 	var tuples []*viproxy.Tuple
