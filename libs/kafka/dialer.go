@@ -15,7 +15,9 @@ import (
 
 	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/aws_msk_iam_v2"
 
+	"github.com/brave-intl/bat-go/libs/aws"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -31,13 +33,35 @@ type Reader struct {
 func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader, error) {
 	logger := logging.Logger(ctx, "kafka.NewKafkaReader")
 
-	dialer, x509Cert, err := TLSDialer()
-	if err != nil {
-		return nil, fmt.Errorf("kafka reader: could not create new kafka reader: %w", err)
+	var (
+		dialer   *kafka.Dialer
+		err      error
+		x509Cert *x509.Certificate
+	)
+	if saslEnabled, ok := ctx.Value(appctx.MSKSASLEnabledCTXKey).(bool); ok && saslEnabled {
+		cfg, err := aws.BaseAWSConfig(ctx, logger)
+		if err != nil {
+			return nil, fmt.Errorf("kafka reader: could not create aws config: %w", err)
+		}
+		// sasl mechanism for dialer
+		mechanism := aws_msk_iam_v2.NewMechanism(cfg)
+
+		dialer = &kafka.Dialer{
+			Timeout:       10 * time.Second,
+			DualStack:     true,
+			SASLMechanism: mechanism,
+			TLS:           &tls.Config{},
+		}
+	} else {
+		dialer, x509Cert, err = TLSDialer()
+		if err != nil {
+			return nil, fmt.Errorf("kafka reader: could not create new kafka reader: %w", err)
+		}
+		ctx = context.WithValue(ctx, appctx.Kafka509CertCTXKey, x509Cert)
 	}
 
 	// throw the cert on the context, instrument kafka
-	InstrumentKafka(context.WithValue(ctx, appctx.Kafka509CertCTXKey, x509Cert))
+	InstrumentKafka(ctx)
 
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 

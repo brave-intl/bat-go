@@ -180,6 +180,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/segmentio/kafka-go v0.4.36 // indirect
+	github.com/segmentio/kafka-go/sasl/aws_msk_iam_v2 v0.0.0-20221028172735-cf40a01d38fc // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
