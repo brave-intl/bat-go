@@ -106,7 +106,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 	// merge in static s3 attributes into response
 	var (
 		payoutStatus     *custodian.PayoutStatus
-		custodianRegions *custodian.CustodianRegions
+		custodianRegions *custodian.Regions
 		bucket, ok       = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
 	)
 	logger.Debug().Str("bucket", bucket).Msg("merge bucket env var")

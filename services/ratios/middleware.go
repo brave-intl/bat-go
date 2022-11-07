@@ -1,10 +1,11 @@
 package ratios
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
 	"net/http"
 	"os"
 	"strconv"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -18,7 +19,11 @@ var (
 )
 
 func init() {
-	prometheus.Register(xBraveKeyHeaderPresentCounter)
+	if err := prometheus.Register(xBraveKeyHeaderPresentCounter); err != nil {
+		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			xBraveKeyHeaderPresentCounter = ae.ExistingCollector.(*prometheus.CounterVec)
+		}
+	}
 }
 
 // RatiosXBraveHeaderInstrumentHandler instruments an http.Handler to capture

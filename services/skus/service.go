@@ -362,6 +362,11 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to update order to add the subscription id")
 			}
+			// set paymentProcessor as stripe
+			err = s.Datastore.UpdateOrderMetadata(order.ID, paymentProcessor, StripePaymentMethod)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order to add the payment processor")
+			}
 		}
 	}
 
@@ -1210,10 +1215,6 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 
 // verifyDeveloperNotification - verify the developer notification from playstore
 func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
-	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-		return errors.New("notification has no purchase token")
-	}
-
 	// lookup the order based on the token as externalID
 	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
 	if err != nil {

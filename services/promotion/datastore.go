@@ -1614,7 +1614,13 @@ limit 1`
 		logger.Error().Err(err).
 			Interface("claim_drain_id", job.ID).
 			Msg("failed to redeem and transfer funds")
-		sentry.CaptureException(err)
+		// do not need to capture wallet is not reputable
+		if !errors.Is(err, errWalletNotReputable) &&
+			!errors.Is(err, errWalletDrainLimitExceeded) &&
+			!errors.Is(err, cbr.ErrDupRedeem) {
+			// do not sentry log not reputable or drain limit exceeded, or duplicate redemption
+			sentry.CaptureException(err)
+		}
 
 		// record as error (retriable or not)
 		status, errCode, _ := errToDrainCode(err)

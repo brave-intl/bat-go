@@ -21,7 +21,7 @@ var (
 )
 
 // ExtractCustodianRegions - extract the custodian regions from the client
-func ExtractCustodianRegions(ctx context.Context, client appaws.S3GetObjectAPI, bucket string) (*CustodianRegions, error) {
+func ExtractCustodianRegions(ctx context.Context, client appaws.S3GetObjectAPI, bucket string) (*Regions, error) {
 	logger := logging.Logger(ctx, "custodian.ExtractCustodianRegions")
 	// get the object with the client
 	out, err := client.GetObject(
@@ -37,7 +37,7 @@ func ExtractCustodianRegions(ctx context.Context, client appaws.S3GetObjectAPI, 
 			logger.Error().Err(err).Msg("failed to close s3 result body")
 		}
 	}()
-	var custodianRegions = new(CustodianRegions)
+	var custodianRegions = new(Regions)
 
 	// parse body json
 	if err := inputs.DecodeAndValidateReader(ctx, custodianRegions, out.Body); err != nil {
@@ -111,59 +111,48 @@ type GeoAllowBlockMap struct {
 	Block []string `json:"block" valid:"-"`
 }
 
-func (gabm GeoAllowBlockMap) Verdict(countries ...string) bool {
-
-	var (
-		allow bool
-		block bool
-	)
-
-OUTER_ALLOW:
-	for _, ac := range gabm.Allow {
+// check if passed in countries exist in an allow or block list
+func contains(countries, allowblock []string) bool {
+	for _, ab := range allowblock {
 		for _, country := range countries {
-			if strings.EqualFold(ac, country) {
-				// in allow list
-				allow = true
-				break OUTER_ALLOW
+			if strings.EqualFold(ab, country) {
+				fmt.Println("contains ", ab, country)
+				return true
 			}
 		}
 	}
-	if allow {
-		return allow
-	}
-
-OUTER_BLOCK:
-	for _, bc := range gabm.Block {
-		for _, country := range countries {
-			if strings.EqualFold(bc, country) {
-				// in block list
-				block = true
-				break OUTER_BLOCK
-			}
-		}
-	}
-	return !block
+	return false
 }
 
-// CustodianRegions - Supported Regions
-type CustodianRegions struct {
+// Verdict - test is countries exist in allow list, or do not exist in block list
+func (gabm GeoAllowBlockMap) Verdict(countries ...string) bool {
+	if len(gabm.Allow) > 0 {
+		// allow list exists, use it to check if any countries exist in allow
+		return contains(countries, gabm.Allow)
+	}
+	// check if any block list countries exist in our list of countries
+	return !contains(gabm.Block, countries)
+}
+
+// Regions - Supported Regions
+type Regions struct {
 	Uphold   GeoAllowBlockMap `json:"uphold" valid:"-"`
 	Gemini   GeoAllowBlockMap `json:"gemini" valid:"-"`
 	Bitflyer GeoAllowBlockMap `json:"bitflyer" valid:"-"`
 }
 
 // HandleErrors - handle any errors in input
-func (cr *CustodianRegions) HandleErrors(err error) *handlers.AppError {
+func (cr *Regions) HandleErrors(err error) *handlers.AppError {
 	return handlers.ValidationError("invalid custodian regions", err)
 }
 
 // Decode - implement decodable
-func (cr *CustodianRegions) Decode(ctx context.Context, input []byte) error {
+func (cr *Regions) Decode(ctx context.Context, input []byte) error {
 	return json.Unmarshal(input, cr)
 }
 
 // Validate - implement validatable
-func (cr *CustodianRegions) Validate(ctx context.Context) error {
+func (cr *Regions) Validate(ctx context.Context) error {
 	isValid, err := govalidator.ValidateStruct(cr)
 	if err != nil {
 		return err

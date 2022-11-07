@@ -7,11 +7,11 @@ import (
 	"math"
 	"time"
 
-	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
 )

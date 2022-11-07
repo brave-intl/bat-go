@@ -476,7 +476,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 	// feature flag for using new custodian regions
 	if useCustodianRegions, ok := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool); ok && useCustodianRegions {
 		// get the uphold custodian supported regions
-		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.CustodianRegions); ok {
+		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.Regions); ok {
 			allowed := custodianRegions.Gemini.Verdict(
 				res.CountryCode,
 			)
@@ -486,7 +486,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 					"country_code": res.CountryCode,
 					"status":       "failure",
 				}).Inc()
-				return "", res.CountryCode, errorutils.ErrInvalidCountry
+				return res.ID, res.CountryCode, errorutils.ErrInvalidCountry
 			}
 		}
 	} else { // use default blacklist functionality
@@ -500,7 +500,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 							"status":       "failure",
 						}).Inc()
 					}
-					return "", res.CountryCode, errorutils.ErrInvalidCountry
+					return res.ID, res.CountryCode, errorutils.ErrInvalidCountry
 				}
 			}
 		}

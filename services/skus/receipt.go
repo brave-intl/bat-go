@@ -153,29 +153,33 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 			}
 
 			logger.Debug().Msgf("resp: %+v", resp)
-			// check that the order was paid
-			switch resp.PaymentState {
-			case androidPaymentStatePaid, androidPaymentStateTrial:
-				break
-			case androidPaymentStatePending:
-				// is there a cancel reason?
-				switch resp.CancelReason {
-				case androidCancelReasonUser:
-					return "", errPurchaseUserCanceled
-				case androidCancelReasonSystem:
-					return "", errPurchaseSystemCanceled
-				case androidCancelReasonReplaced:
-					return "", errPurchaseReplacedCanceled
-				case androidCancelReasonDeveloper:
-					return "", errPurchaseDeveloperCanceled
+			if resp.PaymentState != nil {
+				// check that the order was paid
+				switch resp.PaymentState {
+				case androidPaymentStatePaid, androidPaymentStateTrial:
+					break
+				case androidPaymentStatePending:
+					// is there a cancel reason?
+					switch resp.CancelReason {
+					case androidCancelReasonUser:
+						return "", errPurchaseUserCanceled
+					case androidCancelReasonSystem:
+						return "", errPurchaseSystemCanceled
+					case androidCancelReasonReplaced:
+						return "", errPurchaseReplacedCanceled
+					case androidCancelReasonDeveloper:
+						return "", errPurchaseDeveloperCanceled
+					}
+					return "", errPurchasePending
+				case androidPaymentStatePendingDeferred:
+					return "", errPurchaseDeferred
+				default:
+					return "", errPurchaseStatusUnknown
 				}
-				return "", errPurchasePending
-			case androidPaymentStatePendingDeferred:
-				return "", errPurchaseDeferred
-			default:
-				return "", errPurchaseStatusUnknown
+				return v.Blob, nil
 			}
-			return v.Blob, nil
+			logger.Error().Err(err).Msg("failed to verify subscription: no payment state")
+			return "", errPurchaseFailed
 		}
 	}
 	logger.Error().Msg("client is not configured")

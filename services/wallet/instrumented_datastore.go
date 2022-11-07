@@ -182,6 +182,20 @@ func (_d DatastoreWithPrometheus) GetWalletByPublicKey(ctx context.Context, s1 s
 	return _d.base.GetWalletByPublicKey(ctx, s1)
 }
 
+// HasPriorLinking implements Datastore
+func (_d DatastoreWithPrometheus) HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "HasPriorLinking", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.HasPriorLinking(ctx, walletID, providerLinkingID)
+}
+
 // IncreaseLinkingLimit implements Datastore
 func (_d DatastoreWithPrometheus) IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) (err error) {
 	_since := time.Now()

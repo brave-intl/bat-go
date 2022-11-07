@@ -2,11 +2,13 @@ package wallet
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -31,6 +33,21 @@ import (
 	"github.com/spf13/viper"
 )
 
+// ReputationGeoEnable - enable geo reputation check
+var ReputationGeoEnable = isReputationGeoEnabled()
+
+func isReputationGeoEnabled() bool {
+	var toggle = false
+	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 var (
 	// ClaimNamespace uuidv5 namespace for provider linking - exported for tests
 	ClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
@@ -47,8 +64,9 @@ var (
 	errRewardsWalletAlreadyExists = errors.New("rewards wallet already exists")
 )
 
+// GeoValidator - interface describing validation of geolocation
 type GeoValidator interface {
-	Validate(ctx context.Context, gelocation string) (bool, error)
+	Validate(ctx context.Context, geolocation string) (bool, error)
 }
 
 // Service contains datastore connections
@@ -84,6 +102,7 @@ func (service *Service) ReadableDatastore() ReadOnlyDatastore {
 	return service.Datastore
 }
 
+// SetupService - create a new wallet service
 func SetupService(ctx context.Context) (context.Context, *Service) {
 	logger := logging.Logger(ctx, "wallet.SetupService")
 
@@ -174,6 +193,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	return ctx, s
 }
 
+// RegisterRoutes - register the wallet api routes given a chi.Mux
 func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
@@ -191,8 +211,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
 			r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
-			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
@@ -204,8 +222,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
 			r.Post("/bitflyer/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
-			r.Post("/brave/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
@@ -368,7 +384,22 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	// perform an Account Validation call to gemini to get the accountID
 	accountID, country, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
-		return fmt.Errorf("failed to validate account: %w", err)
+		// check if this gemini accountID has already been linked to this wallet,
+		if errors.Is(err, errorutils.ErrInvalidCountry) {
+			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
+				ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
+			if priorLinkingErr != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
+			}
+			if !ok {
+				// then pass back the original geo error
+				return fmt.Errorf("failed to validate account: %w", err)
+			}
+			// allow invalid country if there was a prior linking
+		} else {
+			// not err invalid country error
+			return fmt.Errorf("failed to validate account: %w", err)
+		}
 	}
 
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
@@ -417,11 +448,28 @@ func (service *Service) LinkWallet(
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
 	if uID, ok, c, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
-		// there was an error
-		return handlers.WrapError(err,
-			"wallet could not be kyc checked",
-			http.StatusInternalServerError,
-		)
+		// get the rewards wallet id from the uphold wallet info
+		infoID, infoIDErr := uuid.FromString(info.ID)
+		if infoIDErr != nil {
+			return fmt.Errorf("failed to parse uphold id: %w", infoIDErr)
+		}
+		// check if this gemini accountID has already been linked to this wallet,
+		if errors.Is(err, errorutils.ErrInvalidCountry) {
+			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
+				ctx, infoID, uuid.NewV5(ClaimNamespace, userID))
+			if priorLinkingErr != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
+			}
+			// if a wallet has a prior linking to this account, allow the invalid country, otherwise
+			// return the kyc error
+			if !ok {
+				// then pass back the original geo error
+				return err
+			}
+			// allow invalid country if there was a prior linking
+		} else {
+			return fmt.Errorf("wallet could not be kyc checked: %w", err)
+		}
 	} else if !ok {
 		// fail
 		return handlers.WrapError(
@@ -468,49 +516,6 @@ func (service *Service) LinkWallet(
 			return handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
 		}
 	}
-	return nil
-}
-
-// LinkBraveWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
-
-	// get reputation client from context
-	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
-	if !ok {
-		return fmt.Errorf("server misconfigured: no reputation client")
-	}
-
-	// is this from wallet reputable as an iOS device?
-	isFromOnPlatform, err := repClient.IsWalletOnPlatform(ctx, from, "ios")
-	if err != nil {
-		return fmt.Errorf("invalid device: %w", err)
-	}
-
-	if !isFromOnPlatform {
-		// wallet is not reputable, decline
-		return fmt.Errorf("unable to link wallet: invalid device")
-	}
-
-	// link the wallet in our datastore, provider linking id will be on the deposit wallet (to wallet)
-	providerLinkingID := uuid.NewV5(ClaimNamespace, to.String())
-
-	// "to" will be stored as UserDepositDestination in the wallet info upon linking
-	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave", ""); err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, ErrTooManyCardsLinked) {
-			// we are not allowing draining to wallets that exceed the linking limits
-			// this will cause an error in the client prior to attempting draining
-			status = http.StatusTeapot
-		}
-		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
-		}
-		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
-		}
-		return handlers.WrapError(err, "unable to link brave wallets", status)
-	}
-
 	return nil
 }
 

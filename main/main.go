@@ -3,10 +3,10 @@
 package main
 
 import (
-	// unified tools/services binary
-	"github.com/brave-intl/bat-go/cmd"
 	// pull in tool module. setup code is in init
+	"github.com/brave-intl/bat-go/cmd"
 	_ "github.com/brave-intl/bat-go/tools/cmd"
+
 	// pull in settlement module. setup code is in init
 	_ "github.com/brave-intl/bat-go/tools/settlement/cmd"
 	// pull in vault module. setup code is in init
