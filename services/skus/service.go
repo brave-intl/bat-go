@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	session "github.com/stripe/stripe-go/v72/checkout/session"
 	client "github.com/stripe/stripe-go/v72/client"
 	sub "github.com/stripe/stripe-go/v72/sub"
@@ -1185,6 +1186,10 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JWSTransactionDecodedPayload, renewalInfo *appstore.JWSRenewalInfoDecodedPayload) error {
 	if txInfo == nil || renewalInfo == nil {
 		return errors.New("notification has no tx or renewal")
+	}
+
+	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
+		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
 	}
 
 	// lookup the order based on the token as externalID

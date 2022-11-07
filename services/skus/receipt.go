@@ -155,7 +155,7 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 			logger.Debug().Msgf("resp: %+v", resp)
 			if resp.PaymentState != nil {
 				// check that the order was paid
-				switch resp.PaymentState {
+				switch *resp.PaymentState {
 				case androidPaymentStatePaid, androidPaymentStateTrial:
 					break
 				case androidPaymentStatePending:
