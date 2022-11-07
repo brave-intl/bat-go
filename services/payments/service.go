@@ -155,6 +155,23 @@ func (s *Service) decryptSecrets(ctx context.Context, secrets []byte, keyCiphert
 		return nil, fmt.Errorf("failed to b64 decode ciphertext: %w", err)
 	}
 
+	// nacl box
+	/*
+		authorizer pub/priv key
+		payments server pub/priv key
+
+		authorizer encrypts with payments server pub key
+		authorizer signs ciphertext with own priv key
+
+		shove to s3 (forget kms for now)
+
+		payments server downloads from s3
+		payments server decrypts with own private key
+		payments server validates ciphertext with authorizers public key
+
+		json file
+	*/
+
 	// sender key is the ephemeral sender public key for nacl box
 	senderKey, err := hex.DecodeString(senderKeyHex)
 	if err != nil {

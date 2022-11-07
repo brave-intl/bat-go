@@ -189,6 +189,8 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
+		// TODO: check if business logic was met from authorizers table in qldb for this transaction
+
 		for _, t := range txns {
 			// perform the custodian submission (channel to worker) if the number of authorizations is appropriate
 			service.processTransaction <- t
