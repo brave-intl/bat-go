@@ -16,11 +16,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/backoff"
-	session "github.com/stripe/stripe-go/v72/checkout/session"
-	client "github.com/stripe/stripe-go/v72/client"
-	sub "github.com/stripe/stripe-go/v72/sub"
-
-	"errors"
 
 	"github.com/awa/go-iap/appstore"
 
