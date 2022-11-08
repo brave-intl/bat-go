@@ -890,12 +890,13 @@ func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
+	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
 	return r
 }
 
 // HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		var (
 			ctx              = r.Context()
@@ -953,12 +954,77 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
-	})
+	}
+}
+
+// HandleIOSWebhook is the handler for ios iap webhooks
+func HandleIOSWebhook(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var (
+			ctx              = r.Context()
+			req              = new(IOSNotification)
+			validationErrMap = map[string]interface{}{} // for tracking our validation errors
+		)
+
+		// get logger
+		logger := logging.Logger(ctx, "payments").With().
+			Str("func", "HandleIOSWebhook").
+			Logger()
+
+		// read the payload
+		payload, err := requestutils.Read(r.Context(), r.Body)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to read the payload")
+			// no need to go further
+			return handlers.WrapValidationError(err)
+		}
+
+		// validate the payload
+		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
+			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
+			logger.Warn().Err(err).Msg("failed to decode and validate the payload")
+			validationErrMap["request-body-decode"] = err.Error()
+		}
+
+		// transaction info
+		txInfo, err := req.GetTransactionInfo(ctx)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to get transaction info from message")
+			validationErrMap["invalid-transaction-info"] = err.Error()
+		}
+
+		// renewal info
+		renewalInfo, err := req.GetRenewalInfo(ctx)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to get renewal info from message")
+			validationErrMap["invalid-renewal-info"] = err.Error()
+		}
+
+		// if we had any validation errors, return the validation error map to the caller
+		if len(validationErrMap) != 0 {
+			return handlers.ValidationError("Error validating request url", validationErrMap)
+		}
+
+		err = service.verifyIOSNotification(ctx, txInfo, renewalInfo)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to verify ios subscription notification")
+			switch {
+			case errors.Is(err, errNotFound):
+				return handlers.WrapError(err, "failed to verify ios subscription notification",
+					http.StatusNotFound)
+			default:
+				return handlers.WrapError(err, "failed to verify ios subscription notification",
+					http.StatusInternalServerError)
+			}
+		}
+		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+	}
 }
 
 // HandleStripeWebhook is the handler for stripe checkout session webhooks
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 		// get logger
 		sublogger := logging.Logger(ctx, "payments").With().
@@ -1101,7 +1167,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
-	})
+	}
 }
 
 // GetTimeLimitedV2OrderCredsByOrderItem handler fetches all the time limited v2 order credentials for a given order item.

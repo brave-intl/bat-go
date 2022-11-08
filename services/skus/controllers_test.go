@@ -306,6 +306,35 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	return order, issuer
 }
 
+func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
+	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 40)
+	suite.Assert().NotNil(order)
+
+	// Check the order
+	suite.Assert().Equal("10", order.TotalPrice.String())
+
+	// add the external id to metadata as if an initial receipt was submitted
+	err := suite.service.Datastore.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
+	suite.Require().NoError(err)
+
+	handler := HandleIOSWebhook(suite.service)
+
+	// create a jws message to send
+	body := []byte{}
+
+	// create request to webhook
+	req, err := http.NewRequest("POST", "/v1/ios", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+
+}
+
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
 	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
 	suite.Assert().NotNil(order)

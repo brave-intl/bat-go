@@ -14,7 +14,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/backoff"
+	session "github.com/stripe/stripe-go/v72/checkout/session"
+	client "github.com/stripe/stripe-go/v72/client"
+	sub "github.com/stripe/stripe-go/v72/sub"
+
+	"errors"
+
+	"github.com/awa/go-iap/appstore"
+
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -1362,6 +1371,42 @@ func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, 
 	}
 
 	return kafkautils.Consume(ctx, reader, handler, errorHandler)
+}
+
+// verifyIOSNotification - verify the developer notification from appstore
+func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JWSTransactionDecodedPayload, renewalInfo *appstore.JWSRenewalInfoDecodedPayload) error {
+	if txInfo == nil || renewalInfo == nil {
+		return errors.New("notification has no tx or renewal")
+	}
+
+	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
+		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
+	}
+
+	// lookup the order based on the token as externalID
+	o, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
+	if err != nil {
+		return fmt.Errorf("failed to get order from db: %w", err)
+	}
+
+	if o == nil {
+		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+	}
+
+	// check if we are past the expiration date on transaction or the order was revoked
+
+	if time.Now().After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
+		time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond))) {
+		// past our tx expires/renewal time
+		if err = s.CancelOrder(o.ID); err != nil {
+			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
+		}
+	} else {
+		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+		}
+	}
+	return nil
 }
 
 // verifyDeveloperNotification - verify the developer notification from playstore
