@@ -278,6 +278,9 @@ func TestTransactions(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	if txInfo == nil {
+		t.Error("no tx information from transfer!")
+	}
 
 	balance, err = destWallet.GetBalance(ctx, true)
 	if err != nil {
