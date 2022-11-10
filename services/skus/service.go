@@ -238,7 +238,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		allowedPaymentMethods = new(Methods)
 		merchantID            = "brave.com"
 		numIntervals          int
-		numPerInterval        int = 2 // two per interval credentials to be submitted for signing
+		numPerInterval        = 2 // two per interval credentials to be submitted for signing
 	)
 
 	for i := 0; i < len(req.Items); i++ {

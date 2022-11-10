@@ -24,7 +24,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           working-directory: libs
-          version: v1.49.0
+          version: v1.50.1
           args: --timeout 3m
 
   golangci-services:
@@ -39,7 +39,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           working-directory: services
-          version: v1.49.0
+          version: v1.50.1
           args: --timeout 3m
 
   golangci-tools:
@@ -54,7 +54,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           working-directory: tools
-          version: v1.49.0
+          version: v1.50.1
           args: --timeout 3m
 
   golangci-cmd:
@@ -69,7 +69,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           working-directory: cmd
-          version: v1.49.0
+          version: v1.50.1
           args: --timeout 3m
 
   golangci-main:
@@ -84,5 +84,5 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           working-directory: main
-          version: v1.49.0
+          version: v1.50.1
           args: --timeout 3m
