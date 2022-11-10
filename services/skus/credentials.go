@@ -515,6 +515,7 @@ func encodeIssuerID(merchantID, sku string) (string, error) {
 	return u.String(), nil
 }
 
+// SignedOrderCredentialsHandler - this is the handler for getting the signed order credentials
 type SignedOrderCredentialsHandler struct {
 	decoder   Decoder
 	datastore Datastore
@@ -623,10 +624,12 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 	return nil
 }
 
+// Decoder - kafka message decoder interface
 type Decoder interface {
 	Decode(message kafka.Message) (*SigningOrderResult, error)
 }
 
+// SigningOrderResultDecoder - signed order result kafka message decoder interface
 type SigningOrderResultDecoder struct {
 	codec *goavro.Codec
 }
@@ -652,6 +655,7 @@ func (s *SigningOrderResultDecoder) Decode(message kafka.Message) (*SigningOrder
 	return &signedOrderResult, nil
 }
 
+// SigningOrderResultErrorHandler - error handler for signing results
 type SigningOrderResultErrorHandler struct {
 	kafkaWriter *kafka.Writer
 }

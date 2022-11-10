@@ -26,8 +26,10 @@ import (
 )
 
 const (
-	paymentProcessor     = "paymentProcessor"
-	IOSPaymentMethod     = "ios"
+	paymentProcessor = "paymentProcessor"
+	// IOSPaymentMethod - indicating this used an ios payment method
+	IOSPaymentMethod = "ios"
+	// AndroidPaymentMethod - indicating this used an android payment method
 	AndroidPaymentMethod = "android"
 )
 

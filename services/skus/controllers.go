@@ -648,7 +648,16 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error getting credentials", status)
+			if errors.Is(err, errSetRetryAfter) {
+				// error specifies a retry after period, add to response header
+				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
+				if err != nil {
+					return handlers.WrapError(err, "Error getting credential retry-after", status)
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
+			} else {
+				return handlers.WrapError(err, "Error getting credentials", status)
+			}
 		}
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	}
