@@ -46,6 +46,8 @@ import (
 )
 
 var (
+	errSetRetryAfter = errors.New("set retry-after")
+
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
 	// TODO address in kafka refactor. Check topics are correct
@@ -236,7 +238,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		allowedPaymentMethods = new(Methods)
 		merchantID            = "brave.com"
 		numIntervals          int
-		numPerInterval        int
+		numPerInterval        int = 2 // two per interval credentials to be submitted for signing
 	)
 
 	for i := 0; i < len(req.Items); i++ {
@@ -259,7 +261,6 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 					merchantID, orderItem.SKU, err)
 			}
 			// set num tokens and token multi
-			numPerInterval = 5
 			numIntervals = issuerConfig.buffer + issuerConfig.overlap
 		}
 
@@ -944,7 +945,8 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]Ti
 
 	for _, m := range outboxMessages {
 		if m.CompletedAt == nil {
-			return nil, http.StatusAccepted, nil
+			// get average of last 10 outbox messages duration as the retry after
+			return nil, http.StatusAccepted, errSetRetryAfter
 		}
 	}
 

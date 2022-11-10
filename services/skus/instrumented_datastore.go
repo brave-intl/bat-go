@@ -337,6 +337,20 @@ func (_d DatastoreWithPrometheus) GetOrderItem(ctx context.Context, itemID uuid.
 	return _d.base.GetOrderItem(ctx, itemID)
 }
 
+// GetOutboxMovAvgDurationSeconds implements Datastore
+func (_d DatastoreWithPrometheus) GetOutboxMovAvgDurationSeconds() (i1 int64, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOutboxMovAvgDurationSeconds", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetOutboxMovAvgDurationSeconds()
+}
+
 // GetPagedMerchantTransactions implements Datastore
 func (_d DatastoreWithPrometheus) GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (tap1 *[]Transaction, i1 int, err error) {
 	_since := time.Now()

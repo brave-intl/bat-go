@@ -93,6 +93,7 @@ type Datastore interface {
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
+	GetOutboxMovAvgDurationSeconds() (int64, error)
 }
 
 const signingRequestBatchSize = 10
@@ -343,6 +344,21 @@ func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
 		return nil, err
 	}
 	return &order, nil
+}
+
+// GetOutboxMovAvgDurationSeconds - get the number of seconds it takes to clear the last 20 outbox messages
+func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
+	statement := `
+		select
+			coalesce(ceiling(extract(epoch from avg(completed_at-created_at))),1)
+		from
+			(select completed_at, created_at from signing_order_request_outbox order by completed_at desc limit 20) as q;
+`
+	var seconds int64
+	if err := pg.RawDB().Get(&seconds, statement); err != nil {
+		return 0, err
+	}
+	return seconds, nil
 }
 
 // GetOrder queries the database and returns an order
