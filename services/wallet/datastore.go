@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/backoff"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -97,6 +99,10 @@ type Datastore interface {
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
 	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
 	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error)
+	// InsertVerifiedWalletOutboxTx inserts a verifiedWalletOutbox for processing.
+	InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, paymentID uuid.UUID, verifiedWallet bool) error
+	// SendVerifiedWalletOutbox sends requests to reputation service.
+	SendVerifiedWalletOutbox(ctx context.Context, client reputation.Client, retry backoff.RetryFunc) (bool, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -607,6 +613,13 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 		return err
 	}
 
+	if VerifiedWalletEnable {
+		err = pg.InsertVerifiedWalletOutboxTx(ctx, tx, walletID, false)
+		if err != nil {
+			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+		}
+	}
+
 	if err := commit(); err != nil {
 		return fmt.Errorf("failed to commit tx: %w", err)
 	}
@@ -703,6 +716,13 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		sublogger.Error().Err(err).
 			Msg("error connect custodian wallet")
 		return fmt.Errorf("error connect custodian wallet: %w", err)
+	}
+
+	if VerifiedWalletEnable {
+		err := pg.InsertVerifiedWalletOutboxTx(ctx, tx, id, true)
+		if err != nil {
+			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+		}
 	}
 
 	err = commit()
@@ -1067,6 +1087,58 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		return fmt.Errorf("failed to commit ConnectCustodialWallet transaction: %w", err)
 	}
 	return nil
+}
+
+// InsertVerifiedWalletOutboxTx inserts a verifiedWalletOutbox for processing.
+func (pg *Postgres) InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, walletID uuid.UUID, verifiedWallet bool) error {
+	_, err := tx.ExecContext(ctx, `insert into verified_wallet_outbox(payment_id, verified_wallet) 
+											values ($1, $2)`, walletID, verifiedWallet)
+	if err != nil {
+		return fmt.Errorf("error inserting values into vefified wallet outbox: %w", err)
+	}
+	return nil
+}
+
+// SendVerifiedWalletOutbox sends requests to reputation service.
+func (pg *Postgres) SendVerifiedWalletOutbox(ctx context.Context, client reputation.Client, retry backoff.RetryFunc) (bool, error) {
+	vw := struct {
+		ID             uuid.UUID `db:"id"`
+		PaymentID      uuid.UUID `db:"payment_id"`
+		VerifiedWallet bool      `db:"verified_wallet"`
+	}{}
+
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
+	if err != nil {
+		return false, fmt.Errorf("error getting tx for verified wallet: %w", err)
+	}
+	defer rollback()
+
+	err = tx.Get(&vw, `select id, payment_id, verified_wallet from verified_wallet_outbox 
+                                   order by created_at asc for update skip locked limit 1`)
+	if err != nil {
+		return false, fmt.Errorf("error get verified wallet: %w", err)
+	}
+
+	upsertReputationSummaryOp := func() (interface{}, error) {
+		return nil, client.UpdateReputationSummary(ctx, vw.PaymentID.String(), vw.VerifiedWallet)
+	}
+
+	_, err = retry(ctx, upsertReputationSummaryOp, retryPolicy, canRetry(nonRetriableErrors))
+	if err != nil {
+		return true, fmt.Errorf("error calling reputation for verified wallet: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "delete from verified_wallet_outbox where id = $1", vw.ID)
+	if err != nil {
+		return true, fmt.Errorf("error deleting verified wallet txn: %w", err)
+	}
+
+	err = commit()
+	if err != nil {
+		return true, fmt.Errorf("error commit verified wallet txn: %w", err)
+	}
+
+	return true, nil
 }
 
 // helper to make logger easier
