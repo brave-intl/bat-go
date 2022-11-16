@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -23,9 +24,11 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	srv "github.com/brave-intl/bat-go/libs/service"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/go-chi/chi"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -41,6 +44,21 @@ func isReputationGeoEnabled() bool {
 	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
 		var err error
 		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
+// VerifiedWalletEnable enable verified wallet call
+var VerifiedWalletEnable = isVerifiedWalletEnable()
+
+func isVerifiedWalletEnable() bool {
+	var toggle = false
+	if os.Getenv("VERIFIED_WALLET_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("VERIFIED_WALLET_ENABLED"))
 		if err != nil {
 			return false
 		}
@@ -77,6 +95,7 @@ type Service struct {
 	geminiClient gemini.Client
 	geoValidator GeoValidator
 	retry        backoff.RetryFunc
+	jobs         []srv.Job
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -92,6 +111,11 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient r
 		retry:        retry,
 	}
 	return service, nil
+}
+
+// Jobs - Implement srv.JobService interface
+func (service *Service) Jobs() []srv.Job {
+	return service.jobs
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
@@ -188,6 +212,19 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 			logger.Panic().Err(err).Msg("failed to initialize wallet service, unable to extract custodian regions")
 		}
 		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
+	}
+
+	s.jobs = []srv.Job{
+		{
+			Func:    s.RunVerifiedWalletWorker,
+			Cadence: 15 * time.Second,
+			Workers: 1,
+		},
+	}
+
+	err = cmd.SetupJobWorkers(ctx, s.Jobs())
+	if err != nil {
+		logger.Error().Err(err).Msg("error initializing job workers")
 	}
 
 	return ctx, s
@@ -579,6 +616,23 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 	}
 
 	return info, nil
+}
+
+func (service *Service) RunVerifiedWalletWorker(ctx context.Context) (bool, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return true, ctx.Err()
+		default:
+			_, err := service.Datastore.SendVerifiedWalletOutbox(ctx, service.repClient, service.retry)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return true, nil
+				}
+				return true, fmt.Errorf("error running send verified wallet request: %w", err)
+			}
+		}
+	}
 }
 
 func canRetry(nonRetriableErrors []int) func(error) bool {

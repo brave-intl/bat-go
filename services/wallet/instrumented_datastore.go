@@ -10,6 +10,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
@@ -252,6 +254,20 @@ func (_d DatastoreWithPrometheus) InsertBitFlyerRequestID(ctx context.Context, r
 	return _d.base.InsertBitFlyerRequestID(ctx, requestID)
 }
 
+// InsertVerifiedWalletOutboxTx implements Datastore
+func (_d DatastoreWithPrometheus) InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, paymentID uuid.UUID, verifiedWallet bool) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertVerifiedWalletOutboxTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertVerifiedWalletOutboxTx(ctx, tx, paymentID, verifiedWallet)
+}
+
 // InsertWallet implements Datastore
 func (_d DatastoreWithPrometheus) InsertWallet(ctx context.Context, wallet *walletutils.Info) (err error) {
 	_since := time.Now()
@@ -355,6 +371,20 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RollbackTxAndHandle(tx)
+}
+
+// SendVerifiedWalletOutbox implements Datastore
+func (_d DatastoreWithPrometheus) SendVerifiedWalletOutbox(ctx context.Context, client reputation.Client, retry backoff.RetryFunc) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SendVerifiedWalletOutbox", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SendVerifiedWalletOutbox(ctx, client, retry)
 }
 
 // UnlinkWallet implements Datastore
