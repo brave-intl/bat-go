@@ -174,6 +174,9 @@ const (
 
 	// AppleReceiptSharedKeyCTXKey - the context key for appstore key
 	AppleReceiptSharedKeyCTXKey CTXKey = "apple_receipt_shared_key"
+
+	// DisableDisconnectCTXKey - the context key for rewards wallet disconnect capability key
+	DisableDisconnectCTXKey CTXKey = "disable_disconnect"
 )
 
 var (
