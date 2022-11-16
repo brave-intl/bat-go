@@ -199,10 +199,6 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 
 	suite.CheckBalance(w1, bat1)
 	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
-	// attempt a disconnect
-	suite.disconnectCardV3(service, w1, http.StatusOK)
-	// reconnect to existing card
-	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, zero, &anonCard3UUID)
 	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
