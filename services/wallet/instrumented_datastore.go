@@ -198,20 +198,6 @@ func (_d DatastoreWithPrometheus) HasPriorLinking(ctx context.Context, walletID 
 	return _d.base.HasPriorLinking(ctx, walletID, providerLinkingID)
 }
 
-// IncreaseLinkingLimit implements Datastore
-func (_d DatastoreWithPrometheus) IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "IncreaseLinkingLimit", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.IncreaseLinkingLimit(ctx, providerLinkingID)
-}
-
 // InsertBitFlyerRequestID implements Datastore
 func (_d DatastoreWithPrometheus) InsertBitFlyerRequestID(ctx context.Context, requestID string) (err error) {
 	_since := time.Now()
@@ -357,20 +343,6 @@ func (_d DatastoreWithPrometheus) SendVerifiedWalletOutbox(ctx context.Context, 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SendVerifiedWalletOutbox", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.SendVerifiedWalletOutbox(ctx, client, retry)
-}
-
-// UnlinkWallet implements Datastore
-func (_d DatastoreWithPrometheus) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UnlinkWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.UnlinkWallet(ctx, walletID, custodian)
 }
 
 // UpsertWallet implements Datastore

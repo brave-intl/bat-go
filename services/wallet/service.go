@@ -232,6 +232,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 // RegisterRoutes - register the wallet api routes given a chi.Mux
 func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
+	disableDisconnect, _ := ctx.Value(appctx.DisableDisconnectCTXKey).(bool) // defaults false
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
@@ -251,8 +252,10 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
-			r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			if !disableDisconnect { // if disable-disconnect is false then add this route
+				r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			}
 
 			// create wallet connect routes for our wallet providers
 			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
@@ -262,13 +265,11 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
-			r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			if !disableDisconnect { // if disable-disconnect is false then add this route
+				r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			}
 		}
-
-		// unlink verified custodial wallet
-		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
-			middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
 
 		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
 			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
@@ -337,35 +338,6 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 
 	// Submit and confirm since we are requiring the idempotency key
 	return anonCard.SubmitTransaction(ctx, transaction, confirm)
-}
-
-// UnlinkWallet - unlink this wallet from the custodian
-func (service *Service) UnlinkWallet(ctx context.Context, walletID, custodian string) error {
-	id, err := uuid.FromString(walletID)
-	if err != nil {
-		return fmt.Errorf("unable to parse wallet id: %w", err)
-	}
-	switch custodian {
-	case "uphold", "bitflyer", "gemini", "brave":
-	default:
-		return fmt.Errorf("custodian '%s' not valid", custodian)
-	}
-
-	if err := service.Datastore.UnlinkWallet(ctx, id, custodian); err != nil {
-		return fmt.Errorf("unable to unlink wallet: %w", err)
-	}
-	return nil
-}
-
-// IncreaseLinkingLimit - increase this wallet's linking limit
-func (service *Service) IncreaseLinkingLimit(ctx context.Context, custodianID string) error {
-	// convert to provider id
-	providerLinkingID := uuid.NewV5(ClaimNamespace, custodianID)
-
-	if err := service.Datastore.IncreaseLinkingLimit(ctx, providerLinkingID); err != nil {
-		return fmt.Errorf("unable to increase linking limit: %w", err)
-	}
-	return nil
 }
 
 // GetLinkingInfo - Get data about the linking info
