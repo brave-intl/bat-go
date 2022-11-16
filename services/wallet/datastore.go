@@ -645,8 +645,8 @@ var (
 
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error {
-
 	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
+	sublogger.Debug().Msg("linking wallet")
 
 	// rep check
 	if repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
@@ -953,6 +953,13 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 	); err != nil {
 		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
 		return err
+	}
+
+	if VerifiedWalletEnable {
+		err = pg.InsertVerifiedWalletOutboxTx(ctx, tx, walletID, false)
+		if err != nil {
+			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+		}
 	}
 
 	// if the tx was created in this scope we will commit here

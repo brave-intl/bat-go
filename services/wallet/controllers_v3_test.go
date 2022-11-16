@@ -462,6 +462,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	// updates the disconnected date on the record, and returns no error and one changed row
 	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, false).WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
 
@@ -800,6 +802,8 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 }
 
 func TestDisconnectCustodianLinkV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -842,6 +846,8 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 
 	// updates the disconnected date on the record, and returns no error and one changed row
 	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, false).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
