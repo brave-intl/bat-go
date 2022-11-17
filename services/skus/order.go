@@ -122,7 +122,7 @@ type OrderItem struct {
 	CredentialType            string               `json:"credentialType" db:"credential_type"`
 	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
 	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
-	EachCredentialValidForISO *string              `json:"eachCredentialValidForIso" db:"each_credential_valid_for_iso"`
+	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
 	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
 	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
 }
