@@ -151,7 +151,7 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 			MaxTokens: defaultMaxTokensPerIssuer,
 			ValidFrom: ptr.FromTime(time.Now()),
 			ExpiresAt: ptr.FromTime(defaultExpiresAt),
-			Duration:  *orderItem.ValidForISO,
+			Duration:  *orderItem.EachCredentialValidForISO,
 			Buffer:    issuerConfig.buffer,
 			Overlap:   issuerConfig.overlap,
 		}
