@@ -849,7 +849,7 @@ const (
 var errInvalidCredentialType = errors.New("invalid credential type on order")
 
 // GetCredentials - based on the order, get the associated credentials
-func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID, requestID string) (interface{}, int, error) {
 	var credentialType string
 
 	order, err := s.Datastore.GetOrder(orderID)
@@ -879,7 +879,7 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	case timeLimited:
 		return s.GetTimeLimitedCreds(ctx, order)
 	case timeLimitedV2:
-		return s.GetTimeLimitedV2Creds(ctx, order)
+		return s.GetTimeLimitedV2Creds(ctx, order, requestID)
 	}
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
@@ -929,38 +929,61 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 // GetTimeLimitedV2Creds returns all the single use credentials for a given order.
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
-func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeAwareSubIssuedCreds, int, error) {
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order, requestID string) ([]TimeAwareSubIssuedCreds, int, error) {
+	var resp = []TimeAwareSubIssuedCreds{} // browser api_request_helper does not understand "null" as json
 	if order == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
+		return resp, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
 	}
 
 	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+		return resp, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
 	if len(outboxMessages) == 0 {
-		return nil, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
+		return resp, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
 	}
 
 	for _, m := range outboxMessages {
 		if m.CompletedAt == nil {
 			// get average of last 10 outbox messages duration as the retry after
-			return nil, http.StatusAccepted, errSetRetryAfter
+			return resp, http.StatusAccepted, errSetRetryAfter
 		}
 	}
 
-	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID, requestID)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+		return resp, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
 	// Potentially we can have all creds signed but nothing to return as they are all expired.
 	if creds == nil {
-		return nil, http.StatusOK, nil
+		return resp, http.StatusOK, nil
 	}
 
-	return creds.Credentials, http.StatusOK, nil
+	if requestID != "" {
+		// mark these as downloaded
+		err := s.Datastore.UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx, requestID, time.Now())
+		if err != nil {
+			return resp, http.StatusInternalServerError, fmt.Errorf("error marking credentials as downloaded: %w", err)
+		}
+
+		// if there was a request id return even if downloaded already
+		return creds.Credentials, http.StatusOK, nil
+	}
+
+	// remove all creds that have already been downloaded (unless we specify a request_id)
+	for i, v := range creds.Credentials {
+		if v.DownloadedAt != nil {
+			err := s.Datastore.UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx, v.RequestID, time.Now())
+			if err != nil {
+				return resp, http.StatusInternalServerError, fmt.Errorf("error marking credentials as downloaded: %w", err)
+			}
+			resp = append(resp, creds.Credentials[i])
+		}
+	}
+
+	return resp, http.StatusOK, nil
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant

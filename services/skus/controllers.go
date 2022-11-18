@@ -636,7 +636,11 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 // This endpoint handles the retrieval of all order credential types i.e. single-use, time-limited and time-limited-v2.
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var orderID = new(inputs.ID)
+		var (
+			orderID   = new(inputs.ID)
+			requestID = r.URL.Query().Get("requestID")
+		)
+
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
@@ -646,7 +650,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
+		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID(), requestID)
 		if err != nil {
 			if errors.Is(err, errSetRetryAfter) {
 				// error specifies a retry after period, add to response header
@@ -1185,6 +1189,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
+			requestID         = r.URL.Query().Get("requestID")
 			orderID           = new(inputs.ID)
 			itemID            = new(inputs.ID)
 			validationPayload = map[string]interface{}{}
@@ -1222,7 +1227,7 @@ func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler
 			return handlers.RenderContent(r.Context(), nil, w, http.StatusAccepted)
 		}
 
-		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID())
+		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID(), requestID)
 		if err != nil {
 			return handlers.WrapError(err, "error retrieving credential", http.StatusBadRequest)
 		}

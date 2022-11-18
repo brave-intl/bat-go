@@ -422,7 +422,7 @@ func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 d
 }
 
 // GetTimeLimitedV2OrderCredsByOrder implements Datastore
-func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
+func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID, requestID string) (tp1 *TimeLimitedV2Creds, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -432,11 +432,11 @@ func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrder(orderID uuid
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTimeLimitedV2OrderCredsByOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetTimeLimitedV2OrderCredsByOrder(orderID)
+	return _d.base.GetTimeLimitedV2OrderCredsByOrder(orderID, requestID)
 }
 
 // GetTimeLimitedV2OrderCredsByOrderItem implements Datastore
-func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
+func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID, requestID string) (tp1 *TimeLimitedV2Creds, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -446,7 +446,7 @@ func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrderItem(itemID u
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTimeLimitedV2OrderCredsByOrderItem", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetTimeLimitedV2OrderCredsByOrderItem(itemID)
+	return _d.base.GetTimeLimitedV2OrderCredsByOrderItem(itemID, requestID)
 }
 
 // GetTransaction implements Datastore
@@ -776,6 +776,20 @@ func (_d DatastoreWithPrometheus) UpdateSigningOrderRequestOutboxTx(ctx context.
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateSigningOrderRequestOutboxTx", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, completedAt)
+}
+
+// UpdateTimeLimitedV2OrderCredsDownloadedAt implements Datastore
+func (_d DatastoreWithPrometheus) UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx context.Context, requestID string, downloadedAt time.Time) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateTimeLimitedV2OrderCredsDownloadedAt", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx, requestID, downloadedAt)
 }
 
 // UpdateTransaction implements Datastore
