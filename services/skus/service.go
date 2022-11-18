@@ -974,7 +974,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order, reque
 
 	// remove all creds that have already been downloaded (unless we specify a request_id)
 	for i, v := range creds.Credentials {
-		if v.DownloadedAt != nil {
+		if v.DownloadedAt == nil {
 			err := s.Datastore.UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx, v.RequestID, time.Now())
 			if err != nil {
 				return resp, http.StatusInternalServerError, fmt.Errorf("error marking credentials as downloaded: %w", err)

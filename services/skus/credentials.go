@@ -141,8 +141,8 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 		logging.FromContext(ctx).Info().
 			Msgf("creating new v3 issuer %s", issuerID)
 
-		if orderItem.ValidForISO == nil {
-			return fmt.Errorf("error valid iso is empty for order item sku %s", orderItem.SKU)
+		if orderItem.EachCredentialValidForISO == nil {
+			return fmt.Errorf("error each credential valid iso is empty for order item sku %s", orderItem.SKU)
 		}
 
 		createIssuerV3 := cbr.IssuerRequest{

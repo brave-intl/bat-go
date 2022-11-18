@@ -211,6 +211,20 @@ func (_d DatastoreWithPrometheus) DeleteOrderCreds(orderID uuid.UUID, isSigned b
 	return _d.base.DeleteOrderCreds(orderID, isSigned)
 }
 
+// DeleteTimeLimitedV2OrderCredsByOrder implements Datastore
+func (_d DatastoreWithPrometheus) DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteTimeLimitedV2OrderCredsByOrder", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DeleteTimeLimitedV2OrderCredsByOrder(orderID)
+}
+
 // GetIssuer implements Datastore
 func (_d DatastoreWithPrometheus) GetIssuer(merchantID string) (ip1 *Issuer, err error) {
 	_since := time.Now()

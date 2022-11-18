@@ -83,6 +83,7 @@ type Datastore interface {
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error)
+	DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
@@ -934,6 +935,21 @@ func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID
 		IssuerID:    timeAwareCreds[0].IssuerID,
 		Credentials: timeAwareCreds,
 	}, nil
+}
+
+func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error {
+	query := `
+		delete
+		from time_limited_v2_order_creds
+		where order_id = $1`
+
+	_, err := pg.RawDB().Exec(query, orderID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 // DeleteOrderCreds deletes the order credentials for a OrderID.

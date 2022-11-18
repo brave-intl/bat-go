@@ -307,7 +307,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 }
 
 func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
-	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 40)
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
 	suite.Assert().NotNil(order)
 
 	// Check the order
@@ -1765,15 +1765,16 @@ func (suite *ControllersTestSuite) ReadSigningOrderRequestMessage(ctx context.Co
 // To create an unpaid order item set price to 0
 func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string {
 	c := macaroon.Caveats{
-		"sku":                       sku,
-		"price":                     strconv.Itoa(price),
-		"description":               test.RandomString(),
-		"currency":                  "usd",
-		"credential_type":           "time-limited-v2",
-		"credential_valid_duration": "P1M",
-		"issuer_token_buffer":       strconv.Itoa(3),
-		"issuer_token_overlap":      strconv.Itoa(0),
-		"allowed_payment_methods":   test.RandomString(),
+		"sku":                            sku,
+		"price":                          strconv.Itoa(price),
+		"description":                    test.RandomString(),
+		"currency":                       "usd",
+		"credential_type":                "time-limited-v2",
+		"credential_valid_duration":      "P1M",
+		"each_credential_valid_duration": "P1D",
+		"issuer_token_buffer":            strconv.Itoa(3),
+		"issuer_token_overlap":           strconv.Itoa(0),
+		"allowed_payment_methods":        test.RandomString(),
 		"metadata": `
 				{
 					"stripe_product_id":"stripe_product_id",

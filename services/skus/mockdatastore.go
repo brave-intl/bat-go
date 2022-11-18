@@ -215,6 +215,20 @@ func (mr *MockDatastoreMockRecorder) DeleteOrderCreds(orderID, isSigned interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteOrderCreds", reflect.TypeOf((*MockDatastore)(nil).DeleteOrderCreds), orderID, isSigned)
 }
 
+// DeleteTimeLimitedV2OrderCredsByOrder mocks base method.
+func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrder(orderID go_uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteTimeLimitedV2OrderCredsByOrder", orderID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteTimeLimitedV2OrderCredsByOrder indicates an expected call of DeleteTimeLimitedV2OrderCredsByOrder.
+func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrder(orderID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrder", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrder), orderID)
+}
+
 // GetIssuer mocks base method.
 func (m *MockDatastore) GetIssuer(merchantID string) (*Issuer, error) {
 	m.ctrl.T.Helper()
