@@ -96,6 +96,26 @@ func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt(arg0, arg1, arg2, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt), arg0, arg1, arg2, arg3)
 }
 
+// AreTimeLimitedV2CredsSigned mocks base method.
+func (m *MockDatastore) AreTimeLimitedV2CredsSigned(ctx context.Context, blindedCreds ...string) (bool, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx}
+	for _, a := range blindedCreds {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AreTimeLimitedV2CredsSigned", varargs...)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AreTimeLimitedV2CredsSigned indicates an expected call of AreTimeLimitedV2CredsSigned.
+func (mr *MockDatastoreMockRecorder) AreTimeLimitedV2CredsSigned(ctx interface{}, blindedCreds ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx}, blindedCreds...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AreTimeLimitedV2CredsSigned", reflect.TypeOf((*MockDatastore)(nil).AreTimeLimitedV2CredsSigned), varargs...)
+}
+
 // BeginTx mocks base method.
 func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
 	m.ctrl.T.Helper()

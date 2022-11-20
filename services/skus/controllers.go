@@ -631,6 +631,18 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 
+		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
+		if orderItem.CredentialType == timeLimitedV2 {
+			alreadySigned, err := service.Datastore.AreTimeLimitedV2CredsSigned(r.Context(), req.BlindedCreds...)
+			if err != nil {
+				// This is an existing error message so don't want to change it incase client are relying on it.
+				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
+			}
+			if alreadySigned {
+				return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+			}
+		}
+
 		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
