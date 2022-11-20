@@ -397,9 +397,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 		status := http.StatusOK
 		if order == nil {
 			status = http.StatusNotFound
-		}
-
-		if len(order.Items) > 0 && strings.Contains(order.Items[0].SKU, "vpn") {
+		} else if len(order.Items) > 0 && strings.Contains(order.Items[0].SKU, "vpn") {
 			// FIXME - this is to force the sdk to perform an initial fetch credentials
 			// on credential summary until https://github.com/brave/brave-core/pull/16034 is
 			// encorporated
