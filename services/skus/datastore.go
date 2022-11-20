@@ -1236,7 +1236,8 @@ func (pg *Postgres) AreTimeLimitedV2CredsSigned(ctx context.Context, blindedCred
 	}
 
 	query := `
-		select exists(select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1);
+		select exists(
+			select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1
 		)
 	`
 
