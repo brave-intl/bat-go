@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/backoff"
 
@@ -139,8 +141,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	// setup the in app purchase clients
 	initClients(ctx)
 
-	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
-
 	// setup stripe if exists in context and enabled
 	var scClient = &client.API{}
 	if enabled, ok := ctx.Value(appctx.StripeEnabledCTXKey).(bool); ok && enabled {
@@ -209,16 +209,17 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			Cadence: 100 * time.Millisecond,
 			Workers: 1,
 		},
-		{
-			Func:    service.RunStoreSignedOrderCredentialsJob,
-			Cadence: 100 * time.Millisecond,
-			Workers: 1,
-		},
 	}
 
 	err = service.InitKafka(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
+
+	if enabled, ok := ctx.Value(appctx.SkusEnableStoreSignedOrderCredsConsumer).(bool); ok && enabled {
+		go service.RunStoreSignedOrderCredentials(ctx, 10*time.Second)
 	}
 
 	return service, nil
@@ -1356,41 +1357,59 @@ func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
 	return true, s.Datastore.SendSigningRequest(ctx, s)
 }
 
-// TODO: Updated the consumers so use another loop and return to the
-//  outer job so they can self restart after transient failure
+// TODO: Address in kafka refactor
 
-// RunStoreSignedOrderCredentialsJob starts a signed order credentials consumer.
-// This function is blocking.
-func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, error) {
-	logging.Logger(ctx, "RunStoreSignedOrderCredentialsJob").
-		Info().Msg("creating consumer")
+// RunStoreSignedOrderCredentials starts a signed order credentials consumer.
+// This function creates a new signed order credentials consumer and starts processing messages.
+// If the consumers errors we backoff, close the reader and restarts the consumer.
+func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff time.Duration) {
+	logger := logging.Logger(ctx, "skus.RunStoreSignedOrderCredentials")
 
-	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
+	for {
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			if err != nil {
+				logger.Err(err).Msg("error calling context")
+			}
+			return
+		default:
+			reader, err := kafkautils.NewKafkaReader(ctx, kafkaSignedRequestReaderGroupID, kafkaSignedOrderCredsTopic)
+			if err != nil {
+				logger.Err(err).Msg("error creating kafka signed order credentials reader")
+				return
+			}
 
-	reader, err := kafkautils.NewKafkaReader(ctx, kafkaSignedRequestReaderGroupID, kafkaSignedOrderCredsTopic)
-	if err != nil {
-		return false, fmt.Errorf("error creating kafka sigend order credentials reader: %w", err)
+			_, ok := s.codecs[kafkaSignedOrderCredsTopic]
+			if !ok {
+				logger.Err(err).Msg("error signed order creds codec not found")
+				return
+			}
+
+			decoder := &SigningOrderResultDecoder{
+				codec: s.codecs[kafkaSignedOrderCredsTopic],
+			}
+
+			handler := &SignedOrderCredentialsHandler{
+				decoder:   decoder,
+				datastore: s.Datastore,
+			}
+
+			errorHandler := &SigningOrderResultErrorHandler{
+				kafkaWriter: s.kafkaWriter,
+			}
+
+			err = kafkautils.Consume(ctx, reader, handler, errorHandler)
+			if err != nil {
+				if err := reader.Close(); err != nil {
+					logger.Err(err).Msg("error closing kafka reader")
+					sentry.CaptureException(err)
+					return
+				}
+				time.Sleep(backoff)
+			}
+		}
 	}
-
-	_, ok := s.codecs[kafkaSignedOrderCredsTopic]
-	if !ok {
-		return false, fmt.Errorf("error signed order creds codec not found")
-	}
-
-	decoder := &SigningOrderResultDecoder{
-		codec: s.codecs[kafkaSignedOrderCredsTopic],
-	}
-
-	handler := &SignedOrderCredentialsHandler{
-		decoder:   decoder,
-		datastore: s.Datastore,
-	}
-
-	errorHandler := &SigningOrderResultErrorHandler{
-		kafkaWriter: s.kafkaWriter,
-	}
-
-	return kafkautils.Consume(ctx, reader, handler, errorHandler)
 }
 
 // verifyIOSNotification - verify the developer notification from appstore

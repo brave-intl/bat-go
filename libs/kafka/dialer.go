@@ -26,6 +26,7 @@ type Consumer interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
 	FetchMessage(ctx context.Context) (kafka.Message, error)
 	CommitMessages(ctx context.Context, messages ...kafka.Message) error
+	Close() error
 }
 
 // Reader is an implementation of the kafka.Consumer interface.
@@ -77,6 +78,10 @@ func (k *Reader) FetchMessage(ctx context.Context) (kafka.Message, error) {
 // CommitMessages commits the list of messages passed as argument.
 func (k *Reader) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
 	return k.kafkaReader.CommitMessages(ctx, messages...)
+}
+
+func (k *Reader) Close() error {
+	return k.kafkaReader.Close()
 }
 
 // TLSDialer creates a Kafka dialer over TLS. The function requires

@@ -239,6 +239,11 @@ func init() {
 		"the appstore shared key").
 		Bind("apple-receipt-shared-key").
 		Env("APPLE_RECEIPT_SHARED_KEY")
+
+	flagBuilder.Flag().Bool("enable-store-signed-order-creds-consumer", true,
+		"enable store signed order creds consumer").
+		Bind("enable-store-signed-order-creds-consumer").
+		Env("ENABLE_STORE_SIGNED_ORDER_CREDS_CONSUMER")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -531,6 +536,10 @@ func GrantServer(
 
 	// custodian unlinking cooldown
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))
+
+	// skus enable store signed order creds consumer
+	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer,
+		viper.GetString("enable-store-signed-order-creds-consumer"))
 
 	// playstore json key
 	// json key is base64

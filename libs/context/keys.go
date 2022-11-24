@@ -82,6 +82,8 @@ const (
 	SkusGeminiAPISecretCTXKey CTXKey = "skus_gemini_api_secret"
 	// SkusGeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	SkusGeminiSettlementAddressCTXKey CTXKey = "skus_gemini_settlement_address"
+	// SkusEnableStoreSignedOrderCredsConsumer enables the store sigend order creds consumers
+	SkusEnableStoreSignedOrderCredsConsumer CTXKey = "skus_enable_store_signed_order_creds_consumer"
 
 	// Kafka509CertCTXKey - context key for the build time of code
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
