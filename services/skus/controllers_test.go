@@ -1472,6 +1472,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		return h
 	}
 
+	// Enable store signed order creds consumer
+	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
+
 	skuService, err := InitService(ctx, suite.storage, nil)
 	suite.Require().NoError(err)
 
@@ -1494,7 +1497,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 			case <-ctx.Done():
 				break
 			default:
-				_, _ = skuService.RunStoreSignedOrderCredentialsJob(ctx)
+				skuService.RunStoreSignedOrderCredentials(ctx, 0)
 			}
 		}
 	}()
@@ -1506,6 +1509,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 				break
 			default:
 				_, _ = skuService.RunSendSigningRequestJob(ctx)
+				time.Sleep(time.Second)
 			}
 		}
 	}()
@@ -1604,6 +1608,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		return h
 	}
 
+	// Enable store signed order creds consumer
+	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
+
 	skuService, err := InitService(ctx, suite.storage, nil)
 	suite.Require().NoError(err)
 
@@ -1626,7 +1633,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 			case <-ctx.Done():
 				break
 			default:
-				_, _ = skuService.RunStoreSignedOrderCredentialsJob(ctx)
+				skuService.RunStoreSignedOrderCredentials(ctx, 0)
 			}
 		}
 	}()
@@ -1638,6 +1645,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 				break
 			default:
 				_, _ = skuService.RunSendSigningRequestJob(ctx)
+				time.Sleep(time.Second)
 			}
 		}
 	}()
