@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -23,9 +24,11 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	srv "github.com/brave-intl/bat-go/libs/service"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/go-chi/chi"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -41,6 +44,21 @@ func isReputationGeoEnabled() bool {
 	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
 		var err error
 		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
+// VerifiedWalletEnable enable verified wallet call
+var VerifiedWalletEnable = isVerifiedWalletEnable()
+
+func isVerifiedWalletEnable() bool {
+	var toggle = false
+	if os.Getenv("VERIFIED_WALLET_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("VERIFIED_WALLET_ENABLED"))
 		if err != nil {
 			return false
 		}
@@ -77,6 +95,7 @@ type Service struct {
 	geminiClient gemini.Client
 	geoValidator GeoValidator
 	retry        backoff.RetryFunc
+	jobs         []srv.Job
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -92,6 +111,11 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient r
 		retry:        retry,
 	}
 	return service, nil
+}
+
+// Jobs - Implement srv.JobService interface
+func (service *Service) Jobs() []srv.Job {
+	return service.jobs
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
@@ -190,6 +214,19 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
 	}
 
+	s.jobs = []srv.Job{
+		{
+			Func:    s.RunVerifiedWalletWorker,
+			Cadence: 15 * time.Second,
+			Workers: 1,
+		},
+	}
+
+	err = cmd.SetupJobWorkers(ctx, s.Jobs())
+	if err != nil {
+		logger.Error().Err(err).Msg("error initializing job workers")
+	}
+
 	return ctx, s
 }
 
@@ -211,8 +248,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
 			r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
-			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
@@ -224,8 +259,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
 			r.Post("/bitflyer/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
-			r.Post("/brave/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
@@ -523,49 +556,6 @@ func (service *Service) LinkWallet(
 	return nil
 }
 
-// LinkBraveWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
-
-	// get reputation client from context
-	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
-	if !ok {
-		return fmt.Errorf("server misconfigured: no reputation client")
-	}
-
-	// is this from wallet reputable as an iOS device?
-	isFromOnPlatform, err := repClient.IsWalletOnPlatform(ctx, from, "ios")
-	if err != nil {
-		return fmt.Errorf("invalid device: %w", err)
-	}
-
-	if !isFromOnPlatform {
-		// wallet is not reputable, decline
-		return fmt.Errorf("unable to link wallet: invalid device")
-	}
-
-	// link the wallet in our datastore, provider linking id will be on the deposit wallet (to wallet)
-	providerLinkingID := uuid.NewV5(ClaimNamespace, to.String())
-
-	// "to" will be stored as UserDepositDestination in the wallet info upon linking
-	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave", ""); err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, ErrTooManyCardsLinked) {
-			// we are not allowing draining to wallets that exceed the linking limits
-			// this will cause an error in the client prior to attempting draining
-			status = http.StatusTeapot
-		}
-		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
-		}
-		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
-		}
-		return handlers.WrapError(err, "unable to link brave wallets", status)
-	}
-
-	return nil
-}
-
 // DisconnectCustodianLink - removes the link to the custodian wallet that is active
 func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian string, walletID uuid.UUID) error {
 	if err := service.Datastore.DisconnectCustodialWallet(ctx, walletID); err != nil {
@@ -626,6 +616,23 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 	}
 
 	return info, nil
+}
+
+func (service *Service) RunVerifiedWalletWorker(ctx context.Context) (bool, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return true, ctx.Err()
+		default:
+			_, err := service.Datastore.SendVerifiedWalletOutbox(ctx, service.repClient, service.retry)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return true, nil
+				}
+				return true, fmt.Errorf("error running send verified wallet request: %w", err)
+			}
+		}
+	}
 }
 
 func canRetry(nonRetriableErrors []int) func(error) bool {

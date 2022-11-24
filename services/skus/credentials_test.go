@@ -108,7 +108,7 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_KafkaDuplic
 	}
 	wg.Wait()
 
-	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID, "")
 	suite.NoError(err)
 
 	suite.Require().NotNil(creds)
@@ -178,12 +178,15 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_RequestDupl
 	}
 	wg.Wait()
 
-	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID, requestIDs[0].String())
 	suite.NoError(err)
 
 	suite.Require().NotNil(creds)
 	suite.Assert().Len(creds.Credentials, 1)
 	suite.Assert().Equal(order.Items[0].ID, creds.Credentials[0].ItemID)
+	// cleanup
+	err = suite.storage.DeleteTimeLimitedV2OrderCredsByOrder(order.ID)
+	suite.NoError(err)
 }
 
 func TestCreateIssuer_NewIssuer(t *testing.T) {
@@ -195,9 +198,10 @@ func TestCreateIssuer_NewIssuer(t *testing.T) {
 	merchantID := "brave.com"
 
 	orderItem := OrderItem{
-		ID:          uuid.NewV4(),
-		SKU:         test.RandomString(),
-		ValidForISO: ptr.FromString("P1M"),
+		ID:                        uuid.NewV4(),
+		SKU:                       test.RandomString(),
+		ValidForISO:               ptr.FromString("P1M"),
+		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
@@ -252,9 +256,10 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	merchantID := "brave.com"
 
 	orderItem := OrderItem{
-		ID:          uuid.NewV4(),
-		SKU:         test.RandomString(),
-		ValidForISO: ptr.FromString("P1M"),
+		ID:                        uuid.NewV4(),
+		SKU:                       test.RandomString(),
+		ValidForISO:               ptr.FromString("P1M"),
+		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
@@ -273,7 +278,7 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 		Cohort:    defaultCohort,
 		MaxTokens: defaultMaxTokensPerIssuer,
 		ValidFrom: ptr.FromTime(time.Now()),
-		Duration:  *orderItem.ValidForISO,
+		Duration:  *orderItem.EachCredentialValidForISO,
 		Buffer:    issuerConfig.buffer,
 		Overlap:   issuerConfig.overlap,
 	}
@@ -324,9 +329,10 @@ func TestCreateIssuer_AlreadyExists(t *testing.T) {
 	merchantID := "brave.com"
 
 	orderItem := OrderItem{
-		ID:          uuid.NewV4(),
-		SKU:         test.RandomString(),
-		ValidForISO: ptr.FromString("P1M"),
+		ID:                        uuid.NewV4(),
+		SKU:                       test.RandomString(),
+		ValidForISO:               ptr.FromString("P1M"),
+		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
@@ -360,9 +366,10 @@ func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
 	merchantID := "brave.com"
 
 	orderItem := OrderItem{
-		ID:          uuid.NewV4(),
-		SKU:         test.RandomString(),
-		ValidForISO: ptr.FromString("P1M"),
+		ID:                        uuid.NewV4(),
+		SKU:                       test.RandomString(),
+		ValidForISO:               ptr.FromString("P1M"),
+		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
@@ -415,9 +422,10 @@ func TestCreateOrderCredentials(t *testing.T) {
 	merchantID := "brave.com"
 
 	orderItem := OrderItem{
-		ID:          uuid.NewV4(),
-		SKU:         test.RandomString(),
-		ValidForISO: ptr.FromString("P1M"),
+		ID:                        uuid.NewV4(),
+		SKU:                       test.RandomString(),
+		ValidForISO:               ptr.FromString("P1M"),
+		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)

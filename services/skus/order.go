@@ -26,8 +26,10 @@ import (
 )
 
 const (
-	paymentProcessor     = "paymentProcessor"
-	IOSPaymentMethod     = "ios"
+	paymentProcessor = "paymentProcessor"
+	// IOSPaymentMethod - indicating this used an ios payment method
+	IOSPaymentMethod = "ios"
+	// AndroidPaymentMethod - indicating this used an android payment method
 	AndroidPaymentMethod = "android"
 )
 
@@ -106,22 +108,23 @@ func (order *Order) getTrialDays() int64 {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID                  uuid.UUID            `json:"id" db:"id"`
-	OrderID             uuid.UUID            `json:"orderId" db:"order_id"`
-	SKU                 string               `json:"sku" db:"sku"`
-	CreatedAt           *time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt           *time.Time           `json:"updatedAt" db:"updated_at"`
-	Currency            string               `json:"currency" db:"currency"`
-	Quantity            int                  `json:"quantity" db:"quantity"`
-	Price               decimal.Decimal      `json:"price" db:"price"`
-	Subtotal            decimal.Decimal      `json:"subtotal" db:"subtotal"`
-	Location            datastore.NullString `json:"location" db:"location"`
-	Description         datastore.NullString `json:"description" db:"description"`
-	CredentialType      string               `json:"credentialType" db:"credential_type"`
-	ValidFor            *time.Duration       `json:"validFor" db:"valid_for"`
-	ValidForISO         *string              `json:"validForIso" db:"valid_for_iso"`
-	Metadata            datastore.Metadata   `json:"metadata" db:"metadata"`
-	IssuanceIntervalISO *string              `json:"issuanceInterval" db:"issuance_interval"`
+	ID                        uuid.UUID            `json:"id" db:"id"`
+	OrderID                   uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU                       string               `json:"sku" db:"sku"`
+	CreatedAt                 *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt                 *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency                  string               `json:"currency" db:"currency"`
+	Quantity                  int                  `json:"quantity" db:"quantity"`
+	Price                     decimal.Decimal      `json:"price" db:"price"`
+	Subtotal                  decimal.Decimal      `json:"subtotal" db:"subtotal"`
+	Location                  datastore.NullString `json:"location" db:"location"`
+	Description               datastore.NullString `json:"description" db:"description"`
+	CredentialType            string               `json:"credentialType" db:"credential_type"`
+	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
+	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
+	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
+	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
 }
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
@@ -207,6 +210,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		case "issuance_interval":
 			orderItem.IssuanceIntervalISO = &value
 		case "credential_valid_duration":
+			// actually the expires time
 			orderItem.ValidFor = new(time.Duration)
 			id, err := timeutils.ParseDuration(value)
 			if err != nil {
@@ -220,6 +224,16 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			}
 			*orderItem.ValidFor = time.Until(*t)
 			orderItem.ValidForISO = &value
+		case "each_credential_valid_duration":
+			// for time aware issuers we need to explain per order item
+			// what the duration of each credential is
+			_, err := timeutils.ParseDuration(value) // parse the duration
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku each_credential_valid_duration")
+				return nil, nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
+			// set the duration iso for the order item
+			orderItem.EachCredentialValidForISO = &value
 		case "issuer_token_buffer":
 			buffer, err := strconv.Atoi(value)
 			if err != nil {

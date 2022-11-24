@@ -63,7 +63,7 @@ func RestRun(command *cobra.Command, args []string) {
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initalize job workers")
+		logger.Fatal().Err(err).Msg("failed to initialize job workers")
 	}
 
 	// make sure exceptions go to sentry

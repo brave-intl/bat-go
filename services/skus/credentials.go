@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/getsentry/sentry-go"
@@ -49,6 +50,7 @@ func init() {
 
 // Retry and backoff variables
 var (
+	defaultExpiresAt   = time.Now().Add(17532 * time.Hour) // 2 years
 	retryPolicy        = retrypolicy.DefaultRetry
 	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden,
 		http.StatusInternalServerError, http.StatusConflict}
@@ -139,8 +141,8 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 		logging.FromContext(ctx).Info().
 			Msgf("creating new v3 issuer %s", issuerID)
 
-		if orderItem.ValidForISO == nil {
-			return fmt.Errorf("error valid iso is empty for order item sku %s", orderItem.SKU)
+		if orderItem.EachCredentialValidForISO == nil {
+			return fmt.Errorf("error each credential valid iso is empty for order item sku %s", orderItem.SKU)
 		}
 
 		createIssuerV3 := cbr.IssuerRequest{
@@ -148,7 +150,8 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 			Cohort:    defaultCohort,
 			MaxTokens: defaultMaxTokensPerIssuer,
 			ValidFrom: ptr.FromTime(time.Now()),
-			Duration:  *orderItem.ValidForISO,
+			ExpiresAt: ptr.FromTime(defaultExpiresAt),
+			Duration:  *orderItem.EachCredentialValidForISO,
 			Buffer:    issuerConfig.buffer,
 			Overlap:   issuerConfig.overlap,
 		}
@@ -512,6 +515,7 @@ func encodeIssuerID(merchantID, sku string) (string, error) {
 	return u.String(), nil
 }
 
+// SignedOrderCredentialsHandler - this is the handler for getting the signed order credentials
 type SignedOrderCredentialsHandler struct {
 	decoder   Decoder
 	datastore Datastore
@@ -620,10 +624,12 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 	return nil
 }
 
+// Decoder - kafka message decoder interface
 type Decoder interface {
 	Decode(message kafka.Message) (*SigningOrderResult, error)
 }
 
+// SigningOrderResultDecoder - signed order result kafka message decoder interface
 type SigningOrderResultDecoder struct {
 	codec *goavro.Codec
 }
@@ -649,6 +655,7 @@ func (s *SigningOrderResultDecoder) Decode(message kafka.Message) (*SigningOrder
 	return &signedOrderResult, nil
 }
 
+// SigningOrderResultErrorHandler - error handler for signing results
 type SigningOrderResultErrorHandler struct {
 	kafkaWriter *kafka.Writer
 }

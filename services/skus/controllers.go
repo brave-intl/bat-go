@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 
@@ -396,6 +397,12 @@ func GetOrder(service *Service) handlers.AppHandler {
 		status := http.StatusOK
 		if order == nil {
 			status = http.StatusNotFound
+		} else if len(order.Items) > 0 && strings.Contains(order.Items[0].SKU, "vpn") {
+			// FIXME - this is to force the sdk to perform an initial fetch credentials
+			// on credential summary until https://github.com/brave/brave-core/pull/16034 is
+			// encorporated
+			var t = time.Now().Add(60 * 24 * time.Minute)
+			order.ExpiresAt = &t
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, status)
@@ -575,19 +582,26 @@ type CreateOrderCredsRequest struct {
 // CreateOrderCreds is the handler for creating order credentials
 func CreateOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req CreateOrderCredsRequest
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
+		var (
+			req    = new(CreateOrderCredsRequest)
+			ctx    = r.Context()
+			logger = logging.Logger(ctx, "skus.CreateOrderCreds")
+		)
+		err := requestutils.ReadJSON(r.Context(), r.Body, req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to read body payload")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to validate struct")
 			return handlers.WrapValidationError(err)
 		}
 
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			logger.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
@@ -598,6 +612,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 
 		orderItem, err := service.Datastore.GetOrderItem(r.Context(), req.ItemID)
 		if err != nil {
+			logger.Error().Err(err).Msg("error getting the order item for creds")
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
 
@@ -614,8 +629,21 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 
+		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
+		if orderItem.CredentialType == timeLimitedV2 {
+			alreadySigned, err := service.Datastore.AreTimeLimitedV2CredsSigned(r.Context(), req.BlindedCreds...)
+			if err != nil {
+				// This is an existing error message so don't want to change it incase client are relying on it.
+				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
+			}
+			if alreadySigned {
+				return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+			}
+		}
+
 		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
@@ -627,7 +655,11 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 // This endpoint handles the retrieval of all order credential types i.e. single-use, time-limited and time-limited-v2.
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var orderID = new(inputs.ID)
+		var (
+			orderID   = new(inputs.ID)
+			requestID = r.URL.Query().Get("requestID")
+		)
+
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
@@ -637,9 +669,18 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
+		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID(), requestID)
 		if err != nil {
-			return handlers.WrapError(err, "Error getting credentials", status)
+			if errors.Is(err, errSetRetryAfter) {
+				// error specifies a retry after period, add to response header
+				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
+				if err != nil {
+					return handlers.WrapError(err, "Error getting credential retry-after", status)
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
+			} else {
+				return handlers.WrapError(err, "Error getting credentials", status)
+			}
 		}
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	}
@@ -881,12 +922,13 @@ func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
+	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
 	return r
 }
 
 // HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		var (
 			ctx              = r.Context()
@@ -944,12 +986,77 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
-	})
+	}
+}
+
+// HandleIOSWebhook is the handler for ios iap webhooks
+func HandleIOSWebhook(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var (
+			ctx              = r.Context()
+			req              = new(IOSNotification)
+			validationErrMap = map[string]interface{}{} // for tracking our validation errors
+		)
+
+		// get logger
+		logger := logging.Logger(ctx, "payments").With().
+			Str("func", "HandleIOSWebhook").
+			Logger()
+
+		// read the payload
+		payload, err := requestutils.Read(r.Context(), r.Body)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to read the payload")
+			// no need to go further
+			return handlers.WrapValidationError(err)
+		}
+
+		// validate the payload
+		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
+			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
+			logger.Warn().Err(err).Msg("failed to decode and validate the payload")
+			validationErrMap["request-body-decode"] = err.Error()
+		}
+
+		// transaction info
+		txInfo, err := req.GetTransactionInfo(ctx)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to get transaction info from message")
+			validationErrMap["invalid-transaction-info"] = err.Error()
+		}
+
+		// renewal info
+		renewalInfo, err := req.GetRenewalInfo(ctx)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to get renewal info from message")
+			validationErrMap["invalid-renewal-info"] = err.Error()
+		}
+
+		// if we had any validation errors, return the validation error map to the caller
+		if len(validationErrMap) != 0 {
+			return handlers.ValidationError("Error validating request url", validationErrMap)
+		}
+
+		err = service.verifyIOSNotification(ctx, txInfo, renewalInfo)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to verify ios subscription notification")
+			switch {
+			case errors.Is(err, errNotFound):
+				return handlers.WrapError(err, "failed to verify ios subscription notification",
+					http.StatusNotFound)
+			default:
+				return handlers.WrapError(err, "failed to verify ios subscription notification",
+					http.StatusInternalServerError)
+			}
+		}
+		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+	}
 }
 
 // HandleStripeWebhook is the handler for stripe checkout session webhooks
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 		// get logger
 		sublogger := logging.Logger(ctx, "payments").With().
@@ -1038,13 +1145,13 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 					sublogger.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 				}
-				err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order metadata")
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
 				// set paymentProcessor as stripe
-				err = service.Datastore.UpdateOrderMetadata(orderID, paymentProcessor, StripePaymentMethod)
+				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
 					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
@@ -1063,7 +1170,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			}
 			sublogger.Debug().
 				Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
-			err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+			err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to update order metadata")
 				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
@@ -1092,7 +1199,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
-	})
+	}
 }
 
 // GetTimeLimitedV2OrderCredsByOrderItem handler fetches all the time limited v2 order credentials for a given order item.
@@ -1101,6 +1208,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
+			requestID         = r.URL.Query().Get("requestID")
 			orderID           = new(inputs.ID)
 			itemID            = new(inputs.ID)
 			validationPayload = map[string]interface{}{}
@@ -1138,7 +1246,7 @@ func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler
 			return handlers.RenderContent(r.Context(), nil, w, http.StatusAccepted)
 		}
 
-		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID())
+		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID(), requestID)
 		if err != nil {
 			return handlers.WrapError(err, "error retrieving credential", http.StatusBadRequest)
 		}

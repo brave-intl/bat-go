@@ -34,119 +34,6 @@ import (
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
-func TestLinkBraveWalletV3(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var (
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		// add the datastore to the context
-		idFrom = uuid.NewV4()
-		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
-		idTo   = uuid.NewV4()
-		r      = httptest.NewRequest(
-			"POST",
-			fmt.Sprintf("/v3/wallet/brave/%s/claim", idFrom),
-			bytes.NewBufferString(fmt.Sprintf(`
-				{
-					"depositDestination": "%s"
-				}`, idTo)),
-		)
-		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		handler        = wallet.LinkBraveDepositAccountV3(&wallet.Service{
-			Datastore: datastore,
-		})
-		w = httptest.NewRecorder()
-	)
-
-	mockReputation.EXPECT().IsWalletOnPlatform(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).Return(
-		true,
-		nil,
-	)
-
-	mockReputation.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
-		true,
-		[]int{},
-		nil,
-	)
-
-	// begin linking tx
-	mock.ExpectBegin()
-
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// not before linked
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "brave").WillReturnError(sql.ErrNoRows)
-
-	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
-	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
-
-	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("brave", linkingID.String())
-
-	// linking limit checks
-	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"wallet_id"}).AddRow(uuid.NewV4().String()))
-
-	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
-		AddRow(time.Now(), time.Now())
-
-	// get last un linking
-	var lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
-	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
-
-	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.ClaimNamespace, idTo.String())).WillReturnRows(clRows)
-
-	// updates the user_deposit_destination
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "brave", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction
-	mock.ExpectCommit()
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
-	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/brave/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
-
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected 201, got %d", resp.StatusCode))
-	}
-}
-
 func TestCreateBraveWalletV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -289,6 +176,8 @@ func TestGetWalletV3(t *testing.T) {
 }
 
 func TestLinkBitFlyerWalletV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	// setup jwt token for the test
@@ -382,6 +271,8 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "bitflyer", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// commit transaction
 	mock.ExpectCommit()
 
@@ -415,6 +306,8 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -532,6 +425,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// commit transaction
 	mock.ExpectCommit()
 
@@ -566,6 +461,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	// updates the disconnected date on the record, and returns no error and one changed row
 	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, false).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
@@ -657,6 +554,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -765,6 +664,8 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// commit transaction
 	mock.ExpectCommit()
 
@@ -783,6 +684,8 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -879,6 +782,8 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// commit transaction
 	mock.ExpectCommit()
 
@@ -897,6 +802,8 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 }
 
 func TestDisconnectCustodianLinkV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -940,6 +847,8 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	// updates the disconnected date on the record, and returns no error and one changed row
 	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, false).WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
 
@@ -959,6 +868,8 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 }
 
 func TestUnlinkWalletV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -1007,6 +918,8 @@ func TestUnlinkWalletV3(t *testing.T) {
 
 	// removes the link to the user_deposit_destination record in wallets
 	mock.ExpectExec("^update wallets set user_deposit_destination='',user_deposit_account_provider=null(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, false).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()

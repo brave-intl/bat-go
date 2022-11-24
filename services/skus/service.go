@@ -14,7 +14,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/backoff"
+
+	"github.com/awa/go-iap/appstore"
+
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -42,6 +46,8 @@ import (
 )
 
 var (
+	errSetRetryAfter = errors.New("set retry-after")
+
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
 	// TODO address in kafka refactor. Check topics are correct
@@ -232,7 +238,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		allowedPaymentMethods = new(Methods)
 		merchantID            = "brave.com"
 		numIntervals          int
-		numPerInterval        int
+		numPerInterval        = 2 // two per interval credentials to be submitted for signing
 	)
 
 	for i := 0; i < len(req.Items); i++ {
@@ -255,7 +261,6 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 					merchantID, orderItem.SKU, err)
 			}
 			// set num tokens and token multi
-			numPerInterval = 5
 			numIntervals = issuerConfig.buffer + issuerConfig.overlap
 		}
 
@@ -338,7 +343,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
 		}
 
-		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
@@ -385,6 +390,8 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 // TransformStripeOrder - update checkout session if expired, check the status of the checkout session
 func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
+	ctx := context.Background()
+
 	// check if this order has an expired checkout session
 	expired, cs, err := s.Datastore.CheckExpiredCheckoutSession(order.ID)
 	if err != nil {
@@ -407,7 +414,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
 		}
 
-		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
@@ -428,12 +435,12 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 			if err = s.Datastore.UpdateOrder(order.ID, "paid"); err != nil {
 				return nil, fmt.Errorf("failed to update order to paid status: %w", err)
 			}
-			err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeSubscriptionId", stripeSession.Subscription.ID)
+			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeSubscriptionId", stripeSession.Subscription.ID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to update order to add the subscription id")
 			}
 			// set paymentProcessor as stripe
-			err = s.Datastore.UpdateOrderMetadata(order.ID, paymentProcessor, StripePaymentMethod)
+			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, paymentProcessor, StripePaymentMethod)
 			if err != nil {
 				return nil, fmt.Errorf("failed to update order to add the payment processor")
 			}
@@ -495,7 +502,7 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		}
 
 		// overwrite the old checkout session
-		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
 		if err != nil {
 			return fmt.Errorf("failed to update order metadata: %w", err)
 		}
@@ -524,15 +531,6 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 		}
 	}
 
-	return nil
-}
-
-// UpdateOrderMetadata updates the metadata on an order
-func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
-	err := s.Datastore.UpdateOrderMetadata(orderID, key, value)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -851,7 +849,7 @@ const (
 var errInvalidCredentialType = errors.New("invalid credential type on order")
 
 // GetCredentials - based on the order, get the associated credentials
-func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID, requestID string) (interface{}, int, error) {
 	var credentialType string
 
 	order, err := s.Datastore.GetOrder(orderID)
@@ -881,7 +879,7 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	case timeLimited:
 		return s.GetTimeLimitedCreds(ctx, order)
 	case timeLimitedV2:
-		return s.GetTimeLimitedV2Creds(ctx, order)
+		return s.GetTimeLimitedV2Creds(ctx, order, requestID)
 	}
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
@@ -931,37 +929,61 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 // GetTimeLimitedV2Creds returns all the single use credentials for a given order.
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
-func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeAwareSubIssuedCreds, int, error) {
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order, requestID string) ([]TimeAwareSubIssuedCreds, int, error) {
+	var resp = []TimeAwareSubIssuedCreds{} // browser api_request_helper does not understand "null" as json
 	if order == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
+		return resp, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
 	}
 
 	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+		return resp, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
 	if len(outboxMessages) == 0 {
-		return nil, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
+		return resp, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
 	}
 
 	for _, m := range outboxMessages {
 		if m.CompletedAt == nil {
-			return nil, http.StatusAccepted, nil
+			// get average of last 10 outbox messages duration as the retry after
+			return resp, http.StatusAccepted, errSetRetryAfter
 		}
 	}
 
-	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID, requestID)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+		return resp, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
 	// Potentially we can have all creds signed but nothing to return as they are all expired.
 	if creds == nil {
-		return nil, http.StatusOK, nil
+		return resp, http.StatusOK, nil
 	}
 
-	return creds.Credentials, http.StatusOK, nil
+	if requestID != "" {
+		// mark these as downloaded
+		err := s.Datastore.UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx, requestID, time.Now())
+		if err != nil {
+			return resp, http.StatusInternalServerError, fmt.Errorf("error marking credentials as downloaded: %w", err)
+		}
+
+		// if there was a request id return even if downloaded already
+		return creds.Credentials, http.StatusOK, nil
+	}
+
+	// remove all creds that have already been downloaded (unless we specify a request_id)
+	for i, v := range creds.Credentials {
+		if v.DownloadedAt == nil {
+			err := s.Datastore.UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx, v.RequestID, time.Now())
+			if err != nil {
+				return resp, http.StatusInternalServerError, fmt.Errorf("error marking credentials as downloaded: %w", err)
+			}
+			resp = append(resp, creds.Credentials[i])
+		}
+	}
+
+	return resp, http.StatusOK, nil
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
@@ -1369,6 +1391,42 @@ func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, 
 	}
 
 	return kafkautils.Consume(ctx, reader, handler, errorHandler)
+}
+
+// verifyIOSNotification - verify the developer notification from appstore
+func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JWSTransactionDecodedPayload, renewalInfo *appstore.JWSRenewalInfoDecodedPayload) error {
+	if txInfo == nil || renewalInfo == nil {
+		return errors.New("notification has no tx or renewal")
+	}
+
+	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
+		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
+	}
+
+	// lookup the order based on the token as externalID
+	o, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
+	if err != nil {
+		return fmt.Errorf("failed to get order from db: %w", err)
+	}
+
+	if o == nil {
+		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+	}
+
+	// check if we are past the expiration date on transaction or the order was revoked
+
+	if time.Now().After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
+		time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond))) {
+		// past our tx expires/renewal time
+		if err = s.CancelOrder(o.ID); err != nil {
+			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
+		}
+	} else {
+		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+		}
+	}
+	return nil
 }
 
 // verifyDeveloperNotification - verify the developer notification from playstore
