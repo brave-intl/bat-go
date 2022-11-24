@@ -17,7 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/brave-intl/bat-go/libs/test"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
@@ -392,14 +391,14 @@ func (suite *PostgresTestSuite) TestInsertSignedOrderCredentials_TimeAwareV2_Suc
 	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].SignedTokens), actual.Credentials[0].SignedCreds)
 	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].BlindedTokens), actual.Credentials[0].BlindedCreds)
 
-	to, err := timeutils.ParseStringToTime(&vTo)
+	to, err := time.Parse(time.RFC3339, vTo)
 	suite.Require().NoError(err)
 
-	from, err := timeutils.ParseStringToTime(&vFrom)
+	from, err := time.Parse(time.RFC3339, vFrom)
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(*to, actual.Credentials[0].ValidTo)
-	suite.Assert().Equal(*from, actual.Credentials[0].ValidFrom)
+	suite.Assert().Equal(to, actual.Credentials[0].ValidTo)
+	suite.Assert().Equal(from, actual.Credentials[0].ValidFrom)
 }
 
 func (suite *PostgresTestSuite) TestInsertSigningOrderRequestOutbox() {
@@ -495,11 +494,11 @@ func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx 
 
 	// create the time limited order credentials for each of the order items in our order
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
-	validTo, err := timeutils.ParseStringToTime(&to)
+	validTo, err := time.Parse(time.RFC3339, to)
 	assert.NoError(t, err)
 
 	from := time.Now().Local().Format(time.RFC3339)
-	validFrom, err := timeutils.ParseStringToTime(&from)
+	validFrom, err := time.Parse(time.RFC3339, from)
 	assert.NoError(t, err)
 
 	signedCreds := jsonutils.JSONStringArray([]string{test.RandomString()})
@@ -520,8 +519,8 @@ func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx 
 			SignedCreds:  signedCreds,
 			BatchProof:   test.RandomString(),
 			PublicKey:    issuer.PublicKey,
-			ValidTo:      *validTo,
-			ValidFrom:    *validFrom,
+			ValidTo:      validTo,
+			ValidFrom:    validFrom,
 		}
 
 		err = suite.storage.InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2)
