@@ -219,7 +219,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
 
 	if enabled, ok := ctx.Value(appctx.SkusEnableStoreSignedOrderCredsConsumer).(bool); ok && enabled {
-		go service.RunStoreSignedOrderCredentials(ctx, 10*time.Second)
+		if consumers, ok := ctx.Value(appctx.SkusNumberStoreSignedOrderCredsConsumer).(int); ok {
+			for i := 0; i < consumers; i++ {
+				go service.RunStoreSignedOrderCredentials(ctx, 10*time.Second)
+			}
+		}
 	}
 
 	return service, nil
@@ -1365,6 +1369,19 @@ func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
 func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff time.Duration) {
 	logger := logging.Logger(ctx, "skus.RunStoreSignedOrderCredentials")
 
+	decoder := &SigningOrderResultDecoder{
+		codec: s.codecs[kafkaSignedOrderCredsTopic],
+	}
+
+	handler := &SignedOrderCredentialsHandler{
+		decoder:   decoder,
+		datastore: s.Datastore,
+	}
+
+	errorHandler := &SigningOrderResultErrorHandler{
+		kafkaWriter: s.kafkaWriter,
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1380,27 +1397,9 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 				return
 			}
 
-			_, ok := s.codecs[kafkaSignedOrderCredsTopic]
-			if !ok {
-				logger.Err(err).Msg("error signed order creds codec not found")
-				return
-			}
-
-			decoder := &SigningOrderResultDecoder{
-				codec: s.codecs[kafkaSignedOrderCredsTopic],
-			}
-
-			handler := &SignedOrderCredentialsHandler{
-				decoder:   decoder,
-				datastore: s.Datastore,
-			}
-
-			errorHandler := &SigningOrderResultErrorHandler{
-				kafkaWriter: s.kafkaWriter,
-			}
-
 			err = kafkautils.Consume(ctx, reader, handler, errorHandler)
 			if err != nil {
+				logger.Err(err).Msg("consumer error")
 				if err := reader.Close(); err != nil {
 					logger.Err(err).Msg("error closing kafka reader")
 					sentry.CaptureException(err)
