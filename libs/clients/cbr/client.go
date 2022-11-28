@@ -20,8 +20,10 @@ type Client interface {
 	CreateIssuerV3(ctx context.Context, createIssuerV3 IssuerRequest) error
 	// GetIssuer returns issuers prior to version 3.
 	GetIssuer(ctx context.Context, issuer string) (*IssuerResponse, error)
-	// GetIssuerV2 returns issuers based on issuer name and cohort. Should be used when retrieving version 3 issuers.
+	// GetIssuerV2 returns issuers based on issuer name and cohort.
 	GetIssuerV2(ctx context.Context, issuer string, cohort int16) (*IssuerResponse, error)
+	// GetIssuerV3 returns issuers based on issuer name. Should be used when retrieving version 3 issuers.
+	GetIssuerV3(ctx context.Context, issuer string) (*IssuerResponse, error)
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
@@ -121,6 +123,19 @@ type CredentialsIssueRequest struct {
 type CredentialsIssueResponse struct {
 	BatchProof   string   `json:"batch_proof"`
 	SignedTokens []string `json:"signed_tokens"`
+}
+
+// GetIssuerV3 returns issuers based on issuer name. Should be used when retrieving version 3 issuers.
+func (c *HTTPClient) GetIssuerV3(ctx context.Context, issuer string) (*IssuerResponse, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "v3/issuer/"+issuer, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp IssuerResponse
+	_, err = c.client.Do(ctx, req, &resp)
+
+	return &resp, err
 }
 
 // GetIssuerV2 - get a v2 issuer from CB
