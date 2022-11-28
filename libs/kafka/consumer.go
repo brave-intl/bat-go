@@ -9,32 +9,31 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 )
 
+// Handler defines a handler.
 type Handler interface {
 	Handle(ctx context.Context, message kafkago.Message) error
 }
 
-// ErrorHandler defines
+// ErrorHandler defines an error handler.
 type ErrorHandler interface {
 	Handle(ctx context.Context, message kafkago.Message, errorMessage error) error
 }
 
 // TODO: Commit many messages off cache.
-// TODO: Return and flush offset is fail deadletter
-// TODO: Add support multithreading handler
 
 // Consume implements consumer loop.
-func Consume(ctx context.Context, reader Consumer, handler Handler, errorHandler ErrorHandler) (bool, error) {
+func Consume(ctx context.Context, reader Consumer, handler Handler, errorHandler ErrorHandler) error {
 	logger := logging.Logger(ctx, "kafka consumer")
 	logger.Info().Msg("starting consumer")
 
 	for {
 		select {
 		case <-ctx.Done():
-			return true, ctx.Err()
+			return ctx.Err()
 		default:
 			message, err := reader.FetchMessage(ctx)
 			if err != nil {
-				return true, fmt.Errorf("error fetching message key %s partition %d offset %d: %w",
+				return fmt.Errorf("error fetching message key %s partition %d offset %d: %w",
 					string(message.Key), message.Partition, message.Offset, err)
 			}
 
@@ -48,7 +47,7 @@ func Consume(ctx context.Context, reader Consumer, handler Handler, errorHandler
 						Int("partition", message.Partition).
 						Int64("offset", message.Offset).
 						Msg("error writing message to dlq")
-					sentry.CaptureException(err)
+					return fmt.Errorf("error writing message to dlq: %w", err)
 				}
 			}
 

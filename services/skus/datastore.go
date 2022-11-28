@@ -19,7 +19,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/ptr"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -1563,13 +1562,23 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 
 		case timeLimitedV2:
 
-			validTo, err := timeutils.ParseStringToTime(so.ValidTo.Value())
+			if so.ValidTo.Value() == nil {
+				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null: %w",
+					metadata.OrderID, metadata.ItemID, err)
+			}
+
+			validTo, err := time.Parse(time.RFC3339, *so.ValidTo.Value())
 			if err != nil {
 				return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w",
 					metadata.OrderID, metadata.ItemID, err)
 			}
 
-			validFrom, err := timeutils.ParseStringToTime(so.ValidFrom.Value())
+			if so.ValidFrom.Value() == nil {
+				return fmt.Errorf("error validFrom for order creds orderID %s itemID %s is null: %w",
+					metadata.OrderID, metadata.ItemID, err)
+			}
+
+			validFrom, err := time.Parse(time.RFC3339, *so.ValidFrom.Value())
 			if err != nil {
 				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w",
 					metadata.OrderID, metadata.ItemID, err)
@@ -1583,8 +1592,8 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				SignedCreds:  signedTokens,
 				BatchProof:   so.Proof,
 				PublicKey:    so.PublicKey,
-				ValidTo:      *validTo,
-				ValidFrom:    *validFrom,
+				ValidTo:      validTo,
+				ValidFrom:    validFrom,
 				RequestID:    requestID,
 			}
 
