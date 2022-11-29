@@ -48,7 +48,8 @@ import (
 )
 
 var (
-	errSetRetryAfter = errors.New("set retry-after")
+	errSetRetryAfter   = errors.New("set retry-after")
+	errClosingResource = errors.New("error closing resource")
 
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
@@ -1382,6 +1383,29 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 		kafkaWriter: s.kafkaWriter,
 	}
 
+	run := func() (err error) {
+		reader, err := kafkautils.NewKafkaReader(ctx, kafkaSignedRequestReaderGroupID, kafkaSignedOrderCredsTopic)
+		if err != nil {
+			return fmt.Errorf("error creating kafka signed order credentials reader: %w", err)
+		}
+		defer func() {
+			closeErr := reader.Close()
+			if closeErr != nil {
+				if err != nil {
+					logger.Err(err).Msg("consumer error")
+				}
+				err = fmt.Errorf("error closing kafka reader: %w", errClosingResource)
+			}
+		}()
+
+		err = kafkautils.Consume(ctx, reader, handler, errorHandler)
+		if err != nil {
+			return fmt.Errorf("consumer error: %w", err)
+		}
+
+		return nil
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1391,18 +1415,11 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 			}
 			return
 		default:
-			reader, err := kafkautils.NewKafkaReader(ctx, kafkaSignedRequestReaderGroupID, kafkaSignedOrderCredsTopic)
+			err := run()
 			if err != nil {
-				logger.Err(err).Msg("error creating kafka signed order credentials reader")
-				return
-			}
-
-			err = kafkautils.Consume(ctx, reader, handler, errorHandler)
-			if err != nil {
-				logger.Err(err).Msg("consumer error")
-				if err := reader.Close(); err != nil {
-					logger.Err(err).Msg("error closing kafka reader")
-					sentry.CaptureException(err)
+				logger.Err(err).Msg("error running consumer")
+				sentry.CaptureException(err)
+				if errors.Is(err, errClosingResource) {
 					return
 				}
 				time.Sleep(backoff)
