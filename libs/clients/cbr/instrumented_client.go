@@ -94,6 +94,20 @@ func (_d ClientWithPrometheus) GetIssuerV2(ctx context.Context, issuer string, c
 	return _d.base.GetIssuerV2(ctx, issuer, cohort)
 }
 
+// GetIssuerV3 implements Client
+func (_d ClientWithPrometheus) GetIssuerV3(ctx context.Context, issuer string) (ip1 *IssuerResponse, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "GetIssuerV3", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetIssuerV3(ctx, issuer)
+}
+
 // RedeemCredential implements Client
 func (_d ClientWithPrometheus) RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) (err error) {
 	_since := time.Now()

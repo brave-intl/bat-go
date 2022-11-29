@@ -167,7 +167,7 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 		}
 
 		requestOperation = func() (interface{}, error) {
-			return s.cbClient.GetIssuerV2(ctx, createIssuerV3.Name, createIssuerV3.Cohort)
+			return s.cbClient.GetIssuerV3(ctx, createIssuerV3.Name)
 		}
 
 		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))

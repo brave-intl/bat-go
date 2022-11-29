@@ -291,7 +291,7 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 		PublicKey: test.RandomString(),
 	}
 	cbrClient.EXPECT().
-		GetIssuerV2(ctx, createIssuerV3.Name, createIssuerV3.Cohort).
+		GetIssuerV3(ctx, createIssuerV3.Name).
 		Return(issuerResponse, nil)
 
 	// mock datastore

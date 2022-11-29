@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 
@@ -397,12 +396,6 @@ func GetOrder(service *Service) handlers.AppHandler {
 		status := http.StatusOK
 		if order == nil {
 			status = http.StatusNotFound
-		} else if len(order.Items) > 0 && strings.Contains(order.Items[0].SKU, "vpn") {
-			// FIXME - this is to force the sdk to perform an initial fetch credentials
-			// on credential summary until https://github.com/brave/brave-core/pull/16034 is
-			// encorporated
-			var t = time.Now().Add(60 * 24 * time.Minute)
-			order.ExpiresAt = &t
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, status)
