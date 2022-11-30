@@ -360,6 +360,10 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 	if err := pg.RawDB().Get(&seconds, statement); err != nil {
 		return 0, err
 	}
+	if seconds > 5 {
+		// set max allowable retry after
+		seconds = 5
+	}
 	return seconds, nil
 }
 
