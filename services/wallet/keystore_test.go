@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uphold "github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
@@ -101,9 +102,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ = wallet.InitService(pg, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 
@@ -163,9 +162,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ = wallet.InitService(pg, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 	w2 := suite.NewWallet(service, "uphold")
@@ -314,9 +311,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ = wallet.InitService(pg, nil, nil, nil, nil, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -359,9 +354,8 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ = wallet.InitService(pg, nil, nil, nil, nil, nil)
+
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
 	badJSONBodyParse := suite.createUpholdWalletV3(
