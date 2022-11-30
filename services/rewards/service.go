@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -128,7 +129,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		logger.Debug().Str("bucket", bucket).Str("custodian regions", fmt.Sprintf("%+v", *custodianRegions)).Msg("custodianRegions")
 	}
 
-	return &ParametersV1{
+	params := &ParametersV1{
 		PayoutStatus:     payoutStatus,
 		CustodianRegions: custodianRegions,
 		BATRate:          rate,
@@ -140,5 +141,17 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
-	}, nil
+	}
+
+	vbatDeadline, ok := ctx.Value(appctx.ParametersVBATDeadlineCTXKey).(time.Time)
+	if ok {
+		params.VBATDeadline = vbatDeadline
+	}
+
+	transition, ok := ctx.Value(appctx.ParametersTransitionCTXKey).(bool)
+	if ok {
+		params.Transition = transition
+	}
+
+	return params, nil
 }
