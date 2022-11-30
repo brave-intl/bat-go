@@ -536,8 +536,6 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 
 	// Use the outbox message request id to get a session lock on that id to prevent any updates for that outbox message.
 	// This allows us to get the result of insert txn before anything else can attempt an update.
-
-	// TODO: Investigate if this locking is really necessary or if it is safe to allow a potential update between our txn's READCOMMIT, ROW LOCKING (SELECT FOR UPDATE)
 	err = s.datastore.AdvisoryLock(ctx, requestID)
 	if err != nil {
 		return fmt.Errorf("error acquring tx lock for request id %s: %w", signedOrderResult.RequestID, err)
@@ -573,7 +571,6 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 		if err != nil {
 			// Transactions that fail with unique constraint violation can never been stored so marked them as completed.
 			// This needs to be done out with the main transaction, but we are still holding the lock.
-
 			var pgErr *pq.Error
 			if errors.As(err, &pgErr) {
 				if pgErr.Code == "23505" {
