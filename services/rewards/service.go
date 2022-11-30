@@ -141,8 +141,9 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			logger.Debug().Str("bucket", bucket).Str("custodian regions", fmt.Sprintf("%+v", *custodianRegions)).Msg("custodianRegions")
 		}
 		s.cacheMu.Lock()
-		s.lastPayoutStatus = payoutStatus
-		s.lastCustodianRegions = custodianRegions
+		s.lastPayoutStatus = payoutStatus         // update the payout status
+		s.lastCustodianRegions = custodianRegions // update the custodian regions
+		s.lastPollTime = time.Now()               // update the time to now
 		s.cacheMu.Unlock()
 	}
 	s.cacheMu.RLock()
