@@ -215,7 +215,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	_, err = s.RefreshCustodianRegionsWorker(ctx)
 	if err != nil {
-		logger.Panic().Err(err).Msg("failed to initialize custodian regions")
+		logger.Error().Err(err).Msg("failed to initialize custodian regions")
 	}
 
 	s.jobs = []srv.Job{
