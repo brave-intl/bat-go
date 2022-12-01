@@ -1,6 +1,6 @@
 //go:build integration
 
-package wallet
+package wallet_test
 
 import (
 	"bytes"
@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uphold "github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
@@ -36,7 +37,7 @@ func TestWalletControllersTestSuite(t *testing.T) {
 }
 
 func (suite *WalletControllersTestSuite) SetupSuite() {
-	pg, _, err := NewPostgres()
+	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -64,7 +65,7 @@ func (suite *WalletControllersTestSuite) TearDownTest() {
 func (suite *WalletControllersTestSuite) CleanDB() {
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions", "wallet_custodian"}
 
-	pg, _, err := NewPostgres()
+	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
@@ -95,15 +96,13 @@ func (suite *WalletControllersTestSuite) CheckBalance(w *uphold.Wallet, expect d
 }
 
 func (suite *WalletControllersTestSuite) TestBalanceV3() {
-	pg, _, err := NewPostgres()
+	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 
@@ -115,7 +114,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	suite.CheckBalance(w1, bat1)
 
 	// call the balance endpoint and check that you get back a total of 1
-	handler := GetUpholdWalletBalanceV3
+	handler := wallet.GetUpholdWalletBalanceV3
 
 	req, err := http.NewRequest("GET", "/v3/wallet/uphold/{paymentID}", nil)
 	suite.Require().NoError(err, "wallet claim request could not be created")
@@ -130,7 +129,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code, fmt.Sprintf("status is expected to match %d: %s", http.StatusOK, rr.Body.String()))
 
-	var balance BalanceResponseV3
+	var balance wallet.BalanceResponseV3
 	err = json.Unmarshal(rr.Body.Bytes(), &balance)
 	suite.Require().NoError(err, "failed to unmarshal balance result")
 
@@ -157,15 +156,13 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	ctx := context.Background()
 
-	pg, _, err := NewPostgres()
+	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 	w2 := suite.NewWallet(service, "uphold")
@@ -219,7 +216,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 }
 
 func (suite *WalletControllersTestSuite) claimCardV3(
-	service *Service,
+	service *wallet.Service,
 	w *uphold.Wallet,
 	destination string,
 	status int,
@@ -231,7 +228,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	suite.Require().NoError(err, "transaction must be signed client side")
 
 	// V3 Payload
-	reqBody := LinkUpholdDepositAccountRequest{
+	reqBody := wallet.LinkUpholdDepositAccountRequest{
 		SignedLinkingRequest: signedCreationRequest,
 	}
 
@@ -246,7 +243,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 
 	// V3 Handler
 
-	handler := LinkUpholdDepositAccountV3(service)
+	handler := wallet.LinkUpholdDepositAccountV3(service)
 
 	req, err := http.NewRequest("POST", "/v3/wallet/{paymentID}/claim", bytes.NewBuffer(body))
 	suite.Require().NoError(err, "wallet claim request could not be created")
@@ -267,13 +264,13 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 func (suite *WalletControllersTestSuite) createBody(
 	tx string,
 ) string {
-	reqBody, _ := json.Marshal(UpholdCreationRequest{
+	reqBody, _ := json.Marshal(wallet.UpholdCreationRequest{
 		SignedCreationRequest: tx,
 	})
 	return string(reqBody)
 }
 
-func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider string) *uphold.Wallet {
+func (suite *WalletControllersTestSuite) NewWallet(service *wallet.Service, provider string) *uphold.Wallet {
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 	publicKeyString := hex.EncodeToString(publicKey)
 
@@ -302,21 +299,19 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 		true,
 	)
 
-	var returnedInfo ResponseV3
+	var returnedInfo wallet.ResponseV3
 	err = json.Unmarshal([]byte(createResp), &returnedInfo)
 	suite.Require().NoError(err, "unable to create wallet")
-	convertedInfo := ResponseV3ToInfo(returnedInfo)
+	convertedInfo := wallet.ResponseV3ToInfo(returnedInfo)
 	w.Info = *convertedInfo
 	return w
 }
 
 func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
-	pg, _, err := NewPostgres()
+	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -342,13 +337,13 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 		true,
 	)
 
-	var created ResponseV3
+	var created wallet.ResponseV3
 	err = json.Unmarshal([]byte(createResp), &created)
 	suite.Require().NoError(err, "unable to unmarshal response")
 
 	getResp := suite.getWallet(service, uuid.Must(uuid.FromString(created.PaymentID)), http.StatusOK)
 
-	var gotten ResponseV3
+	var gotten wallet.ResponseV3
 	err = json.Unmarshal([]byte(getResp), &gotten)
 	suite.Require().NoError(err, "unable to unmarshal response")
 	// does not return wallet provider
@@ -356,12 +351,11 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 }
 
 func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
-	pg, _, err := NewPostgres()
+	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service := &Service{
-		Datastore: pg,
-	}
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
+
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
 	badJSONBodyParse := suite.createUpholdWalletV3(
@@ -413,11 +407,11 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 }
 
 func (suite *WalletControllersTestSuite) getWallet(
-	service *Service,
+	service *wallet.Service,
 	paymentId uuid.UUID,
 	code int,
 ) string {
-	handler := handlers.AppHandler(GetWalletV3)
+	handler := handlers.AppHandler(wallet.GetWalletV3)
 
 	req, err := http.NewRequest("GET", "/v3/wallet/"+paymentId.String(), nil)
 	suite.Require().NoError(err, "a request should be created")
@@ -438,7 +432,7 @@ func (suite *WalletControllersTestSuite) getWallet(
 }
 
 func (suite *WalletControllersTestSuite) createBraveWalletV3(
-	service *Service,
+	service *wallet.Service,
 	body string,
 	code int,
 	publicKey httpsignature.Ed25519PubKey,
@@ -446,7 +440,7 @@ func (suite *WalletControllersTestSuite) createBraveWalletV3(
 	shouldSign bool,
 ) string {
 
-	handler := handlers.AppHandler(CreateBraveWalletV3)
+	handler := handlers.AppHandler(wallet.CreateBraveWalletV3)
 
 	bodyBuffer := bytes.NewBuffer([]byte(body))
 	req, err := http.NewRequest("POST", "/v3/wallet/brave", bodyBuffer)
@@ -476,7 +470,7 @@ func (suite *WalletControllersTestSuite) createBraveWalletV3(
 }
 
 func (suite *WalletControllersTestSuite) createUpholdWalletV3(
-	service *Service,
+	service *wallet.Service,
 	body string,
 	code int,
 	publicKey httpsignature.Ed25519PubKey,
@@ -484,7 +478,7 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 	shouldSign bool,
 ) string {
 
-	handler := handlers.AppHandler(CreateUpholdWalletV3)
+	handler := handlers.AppHandler(wallet.CreateUpholdWalletV3)
 
 	bodyBuffer := bytes.NewBuffer([]byte(body))
 	req, err := http.NewRequest("POST", "/v3/wallet", bodyBuffer)
