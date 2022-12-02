@@ -71,8 +71,6 @@ func init() {
 type Datastore interface {
 	datastore.Datastore
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error
-	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
-	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (bool, error)
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
@@ -553,89 +551,6 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 // ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
 var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
 
-// UnlinkWallet - unlink the wallet from the custodian completely
-func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
-	// get tx
-	ctx, tx, rollback, commit, err := getTx(ctx, pg)
-	if err != nil {
-		return fmt.Errorf("failed to create db transaction UnlinkWallet: %w", err)
-	}
-	// will rollback if tx created at this scope
-	defer rollback()
-
-	// lower bound based
-	lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey).(string)
-	if !ok {
-		return fmt.Errorf("misconfigured service, no unlink prior to duration configured")
-	}
-
-	d, err := timeutils.ParseDuration(lbDur)
-	if err != nil {
-		return fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
-	}
-
-	notBefore, err := d.FromNow()
-	if err != nil {
-		return fmt.Errorf("unable to get not before time from duration: %w", err)
-	}
-
-	// validate that no other linkages were unlinked in the duration specified
-	stmt := `
-		select
-			count(wc2.*)
-		from
-			wallet_custodian wc1 join wallet_custodian wc2 on wc1.linking_id=wc2.linking_id
-		where
-			wc1.wallet_id=$1 and wc1.custodian=$2 and wc2.unlinked_at>$3
-	`
-	var count int
-	err = tx.Get(&count, stmt, walletID, custodian, notBefore)
-	if err != nil {
-		return err
-	}
-
-	if count > 0 {
-		return ErrUnlinkingsExceeded
-	}
-
-	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
-	_, err = tx.ExecContext(ctx, statement, walletID, custodian)
-	if err != nil {
-		return err
-	}
-
-	// remove the user_deposit_destination, user_account_deposit_provider from the wallets table
-
-	statement = `update wallets set user_deposit_destination='',user_deposit_account_provider=null where id = $1`
-
-	_, err = tx.ExecContext(ctx, statement, walletID)
-	if err != nil {
-		return err
-	}
-
-	if VerifiedWalletEnable {
-		err = pg.InsertVerifiedWalletOutboxTx(ctx, tx, walletID, false)
-		if err != nil {
-			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
-		}
-	}
-
-	if err := commit(); err != nil {
-		return fmt.Errorf("failed to commit tx: %w", err)
-	}
-	return nil
-}
-
-// IncreaseLinkingLimit - increase the linking limit for the given walletID by one
-func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error {
-	statement := `INSERT INTO linking_limit_adjust (provider_linking_id) VALUES ($1)`
-	_, err := pg.RawDB().ExecContext(ctx, statement, providerLinkingID)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 var (
 	// ErrUnusualActivity - error for wallets with unusual activity
 	ErrUnusualActivity = errors.New("unusual activity")
@@ -1044,6 +959,17 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 				Msg("failed to insert wallet_custodian due to db err checking linking limits")
 			return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
 		}
+	}
+
+	// evict any prior linkings that were not disconnected
+	stmt = `
+		update wallet_custodian set disconnected_at=now() where linking_id=$1 and wallet_id=$2
+	`
+	// perform query
+	if _, err := tx.ExecContext(ctx, stmt, cl.LinkingID, cl.WalletID); err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to update wallet_custodian evicting prior linked")
+		return fmt.Errorf("error updating wallet_custodian evicting prior linked: %w", err)
 	}
 
 	stmt = `
