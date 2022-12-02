@@ -81,7 +81,7 @@ type Datastore interface {
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
-	AreTimeLimitedV2CredsSigned(ctx context.Context, blindedCreds ...string) (bool, error)
+	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error)
@@ -1233,7 +1233,7 @@ type TimeAwareSubIssuedCreds struct {
 	DownloadedAt *time.Time                `json:"-" db:"downloaded_at"`
 }
 
-func (pg *Postgres) AreTimeLimitedV2CredsSigned(ctx context.Context, blindedCreds ...string) (bool, error) {
+func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error) {
 	if len(blindedCreds) < 1 {
 		return false, errors.New("invalid parameter to tlv2 creds signed")
 	}
@@ -1244,13 +1244,13 @@ func (pg *Postgres) AreTimeLimitedV2CredsSigned(ctx context.Context, blindedCred
 		)
 	`
 
-	var alreadySigned bool
-	err := pg.RawDB().Get(&alreadySigned, query, blindedCreds[0])
+	var alreadySubmitted bool
+	err := pg.RawDB().Get(&alreadySubmitted, query, blindedCreds[0])
 	if err != nil {
 		return false, err
 	}
 
-	return alreadySigned, nil
+	return alreadySubmitted, nil
 }
 
 // GetTimeLimitedV2OrderCredsByOrder returns all the non expired time limited v2 order credentials for a given order.

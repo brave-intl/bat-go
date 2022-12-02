@@ -99,8 +99,8 @@ func (_d DatastoreWithPrometheus) AppendOrderMetadataInt(ctx context.Context, up
 	return _d.base.AppendOrderMetadataInt(ctx, up1, s1, i1)
 }
 
-// AreTimeLimitedV2CredsSigned implements Datastore
-func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSigned(ctx context.Context, blindedCreds ...string) (b1 bool, err error) {
+// AreTimeLimitedV2CredsSubmitted implements Datastore
+func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (b1 bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -108,9 +108,9 @@ func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSigned(ctx context.Contex
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AreTimeLimitedV2CredsSigned", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AreTimeLimitedV2CredsSubmitted", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.AreTimeLimitedV2CredsSigned(ctx, blindedCreds...)
+	return _d.base.AreTimeLimitedV2CredsSubmitted(ctx, blindedCreds...)
 }
 
 // BeginTx implements Datastore

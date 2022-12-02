@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
-
 	"github.com/asaskevich/govalidator"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -75,7 +73,6 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
-		cr.Method("GET", "/{itemID}/time-limited-v2", instrumentHandler("GetTimeLimitedV2OrderCredsByOrderItem", GetTimeLimitedV2OrderCredsByOrderItem(service)))
 		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 	})
 
@@ -624,17 +621,19 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 
 		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
 		if orderItem.CredentialType == timeLimitedV2 {
-			alreadySigned, err := service.Datastore.AreTimeLimitedV2CredsSigned(r.Context(), req.BlindedCreds...)
+			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(r.Context(), req.BlindedCreds...)
 			if err != nil {
 				// This is an existing error message so don't want to change it incase client are relying on it.
 				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
 			}
-			if alreadySigned {
-				return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+			if alreadySubmitted {
+				// since these are already submitted, no need to create order credentials
+				// return ok
+				return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 			}
 		}
 
-		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderItemCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
@@ -1192,67 +1191,6 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
-	}
-}
-
-// GetTimeLimitedV2OrderCredsByOrderItem handler fetches all the time limited v2 order credentials for a given order item.
-// If the order credentials are signed it returns a status of http.StatusOK.
-// If the order credentials are still waiting to be signed it returns a status of http.StatusAccepted.
-func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			requestID         = r.URL.Query().Get("requestID")
-			orderID           = new(inputs.ID)
-			itemID            = new(inputs.ID)
-			validationPayload = map[string]interface{}{}
-			err               error
-		)
-
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			validationPayload["orderID"] = err.Error()
-		}
-
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
-			validationPayload["itemID"] = err.Error()
-		}
-
-		if len(validationPayload) > 0 {
-			return handlers.ValidationError(
-				"error validating request url parameter",
-				validationPayload)
-		}
-
-		signedOrderRequest, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), *itemID.UUID())
-		if err != nil {
-			return handlers.WrapError(errorutils.ErrInternalServerError, "error retrieving credential",
-				http.StatusInternalServerError)
-		}
-
-		if len(signedOrderRequest) == 0 {
-			return handlers.WrapError(errors.New("no order credentials submitted for order item"),
-				"error retrieving credential", http.StatusBadRequest)
-		}
-
-		if signedOrderRequest[0].CompletedAt == nil {
-			return handlers.RenderContent(r.Context(), nil, w, http.StatusAccepted)
-		}
-
-		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID(), requestID)
-		if err != nil {
-			return handlers.WrapError(err, "error retrieving credential", http.StatusBadRequest)
-		}
-
-		if creds == nil {
-			return &handlers.AppError{
-				Message: "could not find credentials",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
-			}
-		}
-
-		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
 	}
 }
 
