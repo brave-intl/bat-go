@@ -12,8 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -128,35 +129,6 @@ func TestCreateIssuerV3(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestGetIssuerV2(t *testing.T) {
-	ctx := context.Background()
-
-	client, err := New()
-	assert.NoError(t, err)
-
-	issuerRequest := IssuerRequest{
-		Name:      test.RandomString(),
-		Cohort:    int16(test.RandomNonZeroInt(10)),
-		MaxTokens: test.RandomNonZeroInt(10),
-		ValidFrom: ptr.FromTime(time.Now()),
-		ExpiresAt: ptr.FromTime(time.Now().Add(time.Hour)),
-		Duration:  "P1M",
-		Buffer:    test.RandomNonZeroInt(30),
-		Overlap:   test.RandomNonZeroInt(10),
-	}
-
-	err = client.CreateIssuerV3(ctx, issuerRequest)
-	assert.NoError(t, err)
-
-	issuer, err := client.GetIssuerV2(ctx, issuerRequest.Name, issuerRequest.Cohort)
-	assert.NoError(t, err)
-
-	assert.Equal(t, issuerRequest.Name, issuer.Name)
-	assert.Equal(t, issuerRequest.Cohort, issuer.Cohort)
-	assert.Equal(t, issuerRequest.ExpiresAt.Format(time.RFC3339), issuer.ExpiresAt)
-	assert.NotEmpty(t, issuer.PublicKey)
-}
-
 func TestSignAndRedeemCredentialsV3(t *testing.T) {
 	databaseURL := os.Getenv("CHALLENGE_BYPASS_DATABASE_URL")
 
@@ -209,7 +181,7 @@ func TestSignAndRedeemCredentialsV3(t *testing.T) {
 	err = client.CreateIssuerV3(context.Background(), issuerRequest)
 	assert.NoError(t, err)
 
-	issuer, err := client.GetIssuerV2(ctx, issuerRequest.Name, issuerRequest.Cohort)
+	issuer, err := client.GetIssuerV3(ctx, issuerRequest.Name)
 	assert.NoError(t, err)
 
 	assert.Equal(t, issuerRequest.Name, issuer.Name)

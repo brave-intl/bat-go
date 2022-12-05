@@ -78,21 +78,6 @@ func (mr *MockClientMockRecorder) GetIssuer(ctx, issuer interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuer", reflect.TypeOf((*MockClient)(nil).GetIssuer), ctx, issuer)
 }
 
-// GetIssuerV2 mocks base method.
-func (m *MockClient) GetIssuerV2(ctx context.Context, issuer string, cohort int16) (*cbr.IssuerResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetIssuerV2", ctx, issuer, cohort)
-	ret0, _ := ret[0].(*cbr.IssuerResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetIssuerV2 indicates an expected call of GetIssuerV2.
-func (mr *MockClientMockRecorder) GetIssuerV2(ctx, issuer, cohort interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuerV2", reflect.TypeOf((*MockClient)(nil).GetIssuerV2), ctx, issuer, cohort)
-}
-
 // GetIssuerV3 mocks base method.
 func (m *MockClient) GetIssuerV3(ctx context.Context, issuer string) (*cbr.IssuerResponse, error) {
 	m.ctrl.T.Helper()

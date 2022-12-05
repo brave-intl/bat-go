@@ -80,20 +80,6 @@ func (_d ClientWithPrometheus) GetIssuer(ctx context.Context, issuer string) (ip
 	return _d.base.GetIssuer(ctx, issuer)
 }
 
-// GetIssuerV2 implements Client
-func (_d ClientWithPrometheus) GetIssuerV2(ctx context.Context, issuer string, cohort int16) (ip1 *IssuerResponse, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "GetIssuerV2", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetIssuerV2(ctx, issuer, cohort)
-}
-
 // GetIssuerV3 implements Client
 func (_d ClientWithPrometheus) GetIssuerV3(ctx context.Context, issuer string) (ip1 *IssuerResponse, err error) {
 	_since := time.Now()
