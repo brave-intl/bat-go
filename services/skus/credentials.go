@@ -13,8 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
-	"github.com/getsentry/sentry-go"
-	"github.com/lib/pq"
 	"github.com/linkedin/goavro"
 
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
@@ -534,74 +532,8 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 		return fmt.Errorf("error getting uuid from signed order request %w", err)
 	}
 
-	// Use the outbox message request id to get a session lock on that id to prevent any updates for that outbox message.
-	// This allows us to get the result of insert txn before anything else can attempt an update.
-	err = s.datastore.AdvisoryLock(ctx, requestID)
-	if err != nil {
-		return fmt.Errorf("error acquring tx lock for request id %s: %w", signedOrderResult.RequestID, err)
-	}
-	metricSignedOrderRequestLockGauge.Inc()
-
-	defer func() {
-		err := s.datastore.AdvisoryUnlock(ctx, requestID)
-		if err != nil {
-			logging.FromContext(ctx).Err(err).
-				Str("requestID", requestID.String()).
-				Msg("error releasing advisory lock")
-			sentry.CaptureException(err)
-		}
-		metricSignedOrderRequestLockGauge.Dec()
-	}()
-
-	// Check to see if the signed order result has already been processed.
-	signingOrderRequestOutbox, err := s.datastore.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
-	if err != nil {
-		return fmt.Errorf("error retrieving signing order request from outbox: %w", err)
-	}
-
-	// If the message has already been processed no further processing needed.
-	if signingOrderRequestOutbox.CompletedAt != nil {
-		return nil
-	}
-
 	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.datastore)
-	defer func() {
-		rollback()
-
-		if err != nil {
-			// Transactions that fail with unique constraint violation can never been stored so marked them as completed.
-			// This needs to be done out with the main transaction, but we are still holding the lock.
-			var pgErr *pq.Error
-			if errors.As(err, &pgErr) {
-				if pgErr.Code == "23505" {
-
-					ctx, tx, rollback, commit, err = datastore.GetTx(context.Background(), s.datastore)
-					defer rollback()
-
-					err = s.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, time.Now())
-					if err != nil {
-						logging.FromContext(ctx).Err(err).
-							Str("requestID", requestID.String()).
-							Msg("error updating signed order request")
-						sentry.CaptureException(err)
-						return
-					}
-
-					err = commit()
-					if err != nil {
-						logging.FromContext(ctx).Err(err).
-							Str("requestID", requestID.String()).
-							Msg("error committing signed order request update")
-						sentry.CaptureException(err)
-						return
-					}
-
-					// Discard the original error.
-					err = nil
-				}
-			}
-		}
-	}()
+	defer rollback()
 
 	err = s.datastore.InsertSignedOrderCredentialsTx(ctx, tx, signedOrderResult)
 	if err != nil {

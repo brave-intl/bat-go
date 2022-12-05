@@ -1335,7 +1335,7 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sql
 
 	query := `insert into time_limited_v2_order_creds(item_id, order_id, issuer_id, blinded_creds,
                         signed_creds, batch_proof, public_key, valid_to, valid_from, request_id)
-                    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+                    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) on conflict do nothing`
 
 	_, err = tx.ExecContext(ctx, query, tlv2.ItemID, tlv2.OrderID, tlv2.IssuerID, blindedCredsJSON,
 		signedCredsJSON, tlv2.BatchProof, tlv2.PublicKey, tlv2.ValidTo, tlv2.ValidFrom, tlv2.RequestID)

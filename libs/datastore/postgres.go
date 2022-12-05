@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
-
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/metrics"
@@ -58,8 +56,6 @@ type Datastore interface {
 	RollbackTxAndHandle(tx *sqlx.Tx) error
 	RollbackTx(tx *sqlx.Tx)
 	BeginTx() (*sqlx.Tx, error)
-	AdvisoryLock(ctx context.Context, id uuid.UUID) error
-	AdvisoryUnlock(ctx context.Context, id uuid.UUID) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -243,18 +239,4 @@ func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 // BeginTx starts a transaction
 func (pg *Postgres) BeginTx() (*sqlx.Tx, error) {
 	return pg.RawDB().Beginx()
-}
-
-// AdvisoryLock acquires a pg advisory lock for the given identifier.
-// If another sessions already holds the lock on the identifier then this function will
-// wait until the lock becomes available.
-func (pg *Postgres) AdvisoryLock(ctx context.Context, id uuid.UUID) error {
-	_, err := pg.RawDB().ExecContext(ctx, `SELECT pg_advisory_lock(hashtext($1))`, id.String())
-	return err
-}
-
-// AdvisoryUnlock releases the given advisory lock.
-func (pg *Postgres) AdvisoryUnlock(ctx context.Context, id uuid.UUID) error {
-	_, err := pg.RawDB().ExecContext(ctx, `SELECT pg_advisory_unlock(hashtext($1))`, id.String())
-	return err
 }
