@@ -238,9 +238,9 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
-// CreateOrderCredentials creates the order credentials for the given order id using the supplied blinded credentials.
+// CreateOrderItemCredentials creates the order credentials for the given order id using the supplied blinded credentials.
 // If the order is unpaid an error ErrOrderUnpaid is returned.
-func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)

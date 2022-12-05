@@ -64,6 +64,11 @@ func init() {
 		Bind("enable-job-workers").
 		Env("ENABLE_JOB_WORKERS")
 
+	flagBuilder.Flag().Bool("disable-disconnect", false,
+		"disable custodian ability to disconnect rewards wallets").
+		Bind("disable-disconnect").
+		Env("DISABLE_DISCONNECT")
+
 	flagBuilder.Flag().Bool("disable-uphold-linking", false,
 		"disable custodian linking to uphold").
 		Bind("disable-uphold-linking").
@@ -498,6 +503,8 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
 	ctx = context.WithValue(ctx, appctx.UseCustodianRegionsCTXKey, viper.GetBool("use-custodian-regions"))
 	ctx = context.WithValue(ctx, appctx.ReputationWithdrawalOnDrainCTXKey, viper.GetBool("reputation-withdrawal-on-drain"))
+	// disable-disconnect wallet apis
+	ctx = context.WithValue(ctx, appctx.DisableDisconnectCTXKey, viper.GetBool("disable-disconnect"))
 
 	// bitflyer variables
 	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))
