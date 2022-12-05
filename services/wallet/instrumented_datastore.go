@@ -44,34 +44,6 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
-// AdvisoryLock implements Datastore
-func (_d DatastoreWithPrometheus) AdvisoryLock(ctx context.Context, id uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryLock", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.AdvisoryLock(ctx, id)
-}
-
-// AdvisoryUnlock implements Datastore
-func (_d DatastoreWithPrometheus) AdvisoryUnlock(ctx context.Context, id uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryUnlock", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.AdvisoryUnlock(ctx, id)
-}
-
 // BeginTx implements Datastore
 func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
 	_since := time.Now()

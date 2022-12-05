@@ -40,34 +40,6 @@ func (m *MockDatastore) EXPECT() *MockDatastoreMockRecorder {
 	return m.recorder
 }
 
-// AdvisoryLock mocks base method.
-func (m *MockDatastore) AdvisoryLock(ctx context.Context, id go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AdvisoryLock", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AdvisoryLock indicates an expected call of AdvisoryLock.
-func (mr *MockDatastoreMockRecorder) AdvisoryLock(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvisoryLock", reflect.TypeOf((*MockDatastore)(nil).AdvisoryLock), ctx, id)
-}
-
-// AdvisoryUnlock mocks base method.
-func (m *MockDatastore) AdvisoryUnlock(ctx context.Context, id go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AdvisoryUnlock", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AdvisoryUnlock indicates an expected call of AdvisoryUnlock.
-func (mr *MockDatastoreMockRecorder) AdvisoryUnlock(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvisoryUnlock", reflect.TypeOf((*MockDatastore)(nil).AdvisoryUnlock), ctx, id)
-}
-
 // AppendOrderMetadata mocks base method.
 func (m *MockDatastore) AppendOrderMetadata(arg0 context.Context, arg1 *go_uuid.UUID, arg2, arg3 string) error {
 	m.ctrl.T.Helper()

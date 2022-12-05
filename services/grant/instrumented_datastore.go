@@ -7,7 +7,6 @@ package grant
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/services/grant -i Datastore -t ../../.prom-gowrap.tmpl -o instrumented_datastore.go -l ""
 
 import (
-	context "context"
 	"time"
 
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
@@ -15,7 +14,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	uuid "github.com/satori/go.uuid"
 )
 
 // DatastoreWithPrometheus implements Datastore interface with all methods wrapped
@@ -40,34 +38,6 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 		base:         base,
 		instanceName: instanceName,
 	}
-}
-
-// AdvisoryLock implements Datastore
-func (_d DatastoreWithPrometheus) AdvisoryLock(ctx context.Context, id uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryLock", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.AdvisoryLock(ctx, id)
-}
-
-// AdvisoryUnlock implements Datastore
-func (_d DatastoreWithPrometheus) AdvisoryUnlock(ctx context.Context, id uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AdvisoryUnlock", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.AdvisoryUnlock(ctx, id)
 }
 
 // BeginTx implements Datastore

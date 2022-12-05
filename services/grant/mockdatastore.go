@@ -5,14 +5,12 @@
 package grant
 
 import (
-	context "context"
 	reflect "reflect"
 
 	wallet "github.com/brave-intl/bat-go/libs/wallet"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
-	go_uuid "github.com/satori/go.uuid"
 )
 
 // MockDatastore is a mock of Datastore interface.
@@ -36,34 +34,6 @@ func NewMockDatastore(ctrl *gomock.Controller) *MockDatastore {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockDatastore) EXPECT() *MockDatastoreMockRecorder {
 	return m.recorder
-}
-
-// AdvisoryLock mocks base method.
-func (m *MockDatastore) AdvisoryLock(ctx context.Context, id go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AdvisoryLock", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AdvisoryLock indicates an expected call of AdvisoryLock.
-func (mr *MockDatastoreMockRecorder) AdvisoryLock(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvisoryLock", reflect.TypeOf((*MockDatastore)(nil).AdvisoryLock), ctx, id)
-}
-
-// AdvisoryUnlock mocks base method.
-func (m *MockDatastore) AdvisoryUnlock(ctx context.Context, id go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AdvisoryUnlock", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AdvisoryUnlock indicates an expected call of AdvisoryUnlock.
-func (mr *MockDatastoreMockRecorder) AdvisoryUnlock(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvisoryUnlock", reflect.TypeOf((*MockDatastore)(nil).AdvisoryUnlock), ctx, id)
 }
 
 // BeginTx mocks base method.
@@ -190,34 +160,6 @@ func NewMockReadOnlyDatastore(ctrl *gomock.Controller) *MockReadOnlyDatastore {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReadOnlyDatastore) EXPECT() *MockReadOnlyDatastoreMockRecorder {
 	return m.recorder
-}
-
-// AdvisoryLock mocks base method.
-func (m *MockReadOnlyDatastore) AdvisoryLock(ctx context.Context, id go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AdvisoryLock", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AdvisoryLock indicates an expected call of AdvisoryLock.
-func (mr *MockReadOnlyDatastoreMockRecorder) AdvisoryLock(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvisoryLock", reflect.TypeOf((*MockReadOnlyDatastore)(nil).AdvisoryLock), ctx, id)
-}
-
-// AdvisoryUnlock mocks base method.
-func (m *MockReadOnlyDatastore) AdvisoryUnlock(ctx context.Context, id go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AdvisoryUnlock", ctx, id)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AdvisoryUnlock indicates an expected call of AdvisoryUnlock.
-func (mr *MockReadOnlyDatastoreMockRecorder) AdvisoryUnlock(ctx, id interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvisoryUnlock", reflect.TypeOf((*MockReadOnlyDatastore)(nil).AdvisoryUnlock), ctx, id)
 }
 
 // BeginTx mocks base method.
