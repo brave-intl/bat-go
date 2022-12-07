@@ -557,11 +557,11 @@ func GrantServer(
 
 	// skus enable store signed order creds consumer
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer,
-		viper.GetString("enable-store-signed-order-creds-consumer"))
+		viper.GetBool("enable-store-signed-order-creds-consumer"))
 
 	// skus number of consumers to create for store signed order creds
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer,
-		viper.GetString("number-store-signed-order-creds-consumer"))
+		viper.GetInt("number-store-signed-order-creds-consumer"))
 
 	// playstore json key
 	// json key is base64
