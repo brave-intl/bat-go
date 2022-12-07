@@ -254,6 +254,11 @@ func init() {
 		"number of consumers to create for store signed order creds").
 		Bind("number-store-signed-order-creds-consumer").
 		Env("NUMBER_STORE_SIGNED_ORDER_CREDS_CONSUMER")
+
+	flagBuilder.Flag().String("kafka-brokers", "",
+		"kafka broker list").
+		Bind("kafka-brokers").
+		Env("KAFKA_BROKERS")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -498,6 +503,7 @@ func GrantServer(
 		Msg("Starting server")
 
 	// add flags to context
+	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, viper.GetString("kafka-brokers"))
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
