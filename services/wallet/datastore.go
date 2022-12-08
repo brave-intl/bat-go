@@ -870,13 +870,6 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 		return err
 	}
 
-	if VerifiedWalletEnable {
-		err = pg.InsertVerifiedWalletOutboxTx(ctx, tx, walletID, false)
-		if err != nil {
-			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
-		}
-	}
-
 	// if the tx was created in this scope we will commit here
 	if err := commit(); err != nil {
 		return fmt.Errorf("failed to commit DisconnectCustodialWallet transaction: %w", err)
