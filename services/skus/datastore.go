@@ -1013,7 +1013,11 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	job := jobs[0]
 
 	attempted = true
-	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
+	var (
+		creds = new(OrderCreds)
+	)
+
+	creds, err = worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// is this a cbr client error
 		var eb *errorutils.ErrorBundle
@@ -1026,12 +1030,12 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 						// if the error is from CBR and contains "Cannot decompress Edwards point" this job will never complete
 						// and keep retrying over and over. We want to filter this out and set batch proof
 						// to empty string, so it will not be picked up again
-						if strings.EqualFold("cannot decompress edwards point", bodyStr) {
-							bp := ""
-							creds = &OrderCreds{
-								ID:           job.OrderID,
-								BlindedCreds: job.BlindedCreds,
-								BatchProof:   &bp, // signals if the job needs to run, setting to empty string will stop it from being run
+						if strings.Contains(strings.ToLower(bodyStr), "cannot decompress edwards point") {
+							_, err = tx.Exec(`update order_creds set batch_proof = $1 where order_id = $2`,
+								"BAD", job.OrderID)
+							if err != nil {
+								return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
+									job.ID, job.OrderID, err)
 							}
 						}
 					}
@@ -1046,13 +1050,13 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 			return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
 				job.ID, job.OrderID, err)
 		}
-	}
-
-	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`,
-		creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
-	if err != nil {
-		return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
-			job.ID, job.OrderID, err)
+	} else {
+		_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`,
+			creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+		if err != nil {
+			return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
+				job.ID, job.OrderID, err)
+		}
 	}
 
 	err = tx.Commit()

@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
@@ -869,7 +871,7 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 	return
 }
 
-func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
+func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime, alreadyMockedSignCreds bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
 	issuerName = "brave.com?sku=" + order.Items[0].SKU
 	issuerPublicKey = "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	blindedCred := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
@@ -902,10 +904,13 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 			PublicKey: issuerPublicKey,
 		}, nil)
 	}
-	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCred)).Return(&cbr.CredentialsIssueResponse{
-		BatchProof:   proof,
-		SignedTokens: signedCreds,
-	}, nil)
+
+	if !alreadyMockedSignCreds {
+		mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCred)).Return(&cbr.CredentialsIssueResponse{
+			BatchProof:   proof,
+			SignedTokens: signedCreds,
+		}, nil)
+	}
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -925,6 +930,10 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 
 	// check status code for error, or until status is okay (from accepted)
 	for rr.Code != http.StatusOK {
+		if alreadyMockedSignCreds {
+			// assuming we are testing errors here, we will never not have accepted
+			return
+		}
 		if rr.Code == http.StatusAccepted {
 			select {
 			case <-ctx.Done():
@@ -1093,7 +1102,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
-	issuerName, issuerPublicKey, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true)
+	issuerName, issuerPublicKey, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true, false)
 
 	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
 
@@ -1308,6 +1317,36 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 
 }
 
+func (suite *ControllersTestSuite) TestFailureToSignCredentialsBadPoint() {
+	// mock out particular failure
+	suite.mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+		nil, clients.NewHTTPError(errors.New("error"),
+			"url string", "response", http.StatusInternalServerError, clients.RespErrData{
+				Body: `{
+					"message": "Could not approve new tokens: Failed to sign token: Cannot decompress Edwards point",
+					"code": 500
+				}`}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// create order
+	order := suite.setupCreateOrder(FreeTestSkuToken, 1)
+	// perform fetch credentials (will fail at sign
+	suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true, true)
+
+	// run the job, make sure we error
+	attempted, err := suite.service.RunNextOrderJob(ctx)
+	suite.Require().True(!attempted)
+	suite.Require().NoError(err)
+
+	// run the job, no more jobs to run
+	attempted, err = suite.service.RunNextOrderJob(ctx)
+	suite.Require().True(!attempted)
+	suite.Require().NoError(err)
+
+}
+
 func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	ctx, cancel := context.WithCancel(context.Background())
 	var err error
@@ -1327,7 +1366,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 
 	order := suite.setupCreateOrder(FreeTestSkuToken, 1)
 
-	_, _, _, _, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true)
+	_, _, _, _, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true, false)
 	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
 
 	handler := DeleteOrderCreds(suite.service)
@@ -1358,7 +1397,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	suite.Assert().Equal(http.StatusNotFound, rr.Code)
 
 	// Signing after reset should proceed normally
-	issuerName, _, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, false)
+	issuerName, _, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, false, false)
 	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
 
 	presentation := cbr.CredentialRedemption{
