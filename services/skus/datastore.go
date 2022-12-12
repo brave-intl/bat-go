@@ -1013,11 +1013,8 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	job := jobs[0]
 
 	attempted = true
-	var (
-		creds = new(OrderCreds)
-	)
 
-	creds, err = worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
+	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// is this a cbr client error
 		var eb *errorutils.ErrorBundle
