@@ -3,8 +3,8 @@ package promotion
 import (
 	"time"
 
-	"github.com/brave-intl/bat-go/services/skus"
 	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/services/skus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
