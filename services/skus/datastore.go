@@ -1020,22 +1020,26 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 		if errors.As(err, &eb) {
 			// pull out the data and see if this is an http client error
 			if hs, ok := eb.Data().(clients.HTTPState); ok {
-				// if the error is from CBR and contains "Cannot decompress Edwards point" this job will never complete
-				// and keep retrying over and over. We want to filter this out and set batch proof
-				// to empty string, so it will not be picked up again
-				if strings.Contains("cannot decompress edwards point",
-					strings.ToLower(fmt.Sprintf("%+v", hs.Body))) {
-					bp := ""
-					creds = &OrderCreds{
-						ID:           job.OrderID,
-						BlindedCreds: job.BlindedCreds,
-						BatchProof:   &bp, // signals if the job needs to run, setting to empty string will stop it from being run
+				// see if you can't get the raw http response body for a check
+				if red, ok := hs.Body.(clients.RespErrData); ok {
+					if bodyStr, ok := red.Body.(string); ok {
+						// if the error is from CBR and contains "Cannot decompress Edwards point" this job will never complete
+						// and keep retrying over and over. We want to filter this out and set batch proof
+						// to empty string, so it will not be picked up again
+						if strings.EqualFold("cannot decompress edwards point", bodyStr) {
+							bp := ""
+							creds = &OrderCreds{
+								ID:           job.OrderID,
+								BlindedCreds: job.BlindedCreds,
+								BatchProof:   &bp, // signals if the job needs to run, setting to empty string will stop it from being run
+							}
+						}
 					}
-				} else {
-					// this is a retry able error
-					return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
-						hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
 				}
+			} else {
+				// this is a retry able error
+				return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
+					hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
 			}
 		} else {
 			// Unknown error
