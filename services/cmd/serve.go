@@ -87,7 +87,7 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 	r.Get("/health-check", handlers.HealthCheckHandler(
 		ctx.Value(appctx.VersionCTXKey).(string),
 		ctx.Value(appctx.VersionCTXKey).(string),
-		ctx.Value(appctx.VersionCTXKey).(string), nil))
+		ctx.Value(appctx.VersionCTXKey).(string), nil, nil))
 	return r
 }
 
