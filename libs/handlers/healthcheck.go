@@ -32,7 +32,7 @@ func HealthCheckHandler(version, buildTime, commit string, serviceStatus map[str
 
 			if check != nil {
 				if err := check(); err != nil {
-					err = AppError{
+					return &AppError{
 						Message: "service is (partially) unavailable",
 						Code:    500,
 						Data:    hcr.Data,
