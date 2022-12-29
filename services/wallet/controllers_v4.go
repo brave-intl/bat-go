@@ -67,7 +67,16 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 
 		info, err := s.CreateRewardsWallet(ctx, publicKey, request.GeoCountry)
 		if err != nil {
-			logger.Error().Err(err).Msg("error creating rewards wallet")
+			logger.Error().Err(err).
+				Msg("error creating rewards wallet")
+
+			var errorBundle *errorutils.ErrorBundle
+			if errors.As(err, &errorBundle) {
+				logger.Error().
+					Str("error_bundle", errorBundle.DataToString()).
+					Msg("error creating rewards wallet")
+			}
+
 			switch {
 			case errors.Is(err, errRewardsWalletAlreadyExists):
 				return handlers.WrapError(errRewardsWalletAlreadyExists,
