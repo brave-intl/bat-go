@@ -606,19 +606,6 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
 
-		// Single use credentials can only be submitted once per order item, this does not apply to TLV2.
-		if orderItem.CredentialType == singleUse {
-			signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
-			if err != nil {
-				// This is an existing error message so don't want to change it incase client are relying on it.
-				return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
-			}
-
-			if len(signingOrderRequests) > 0 {
-				return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
-			}
-		}
-
 		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
 		if orderItem.CredentialType == timeLimitedV2 {
 			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(r.Context(), req.BlindedCreds...)
@@ -631,6 +618,19 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 				// return ok
 				return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 			}
+		}
+
+		// check if we already have a signing request for this order, delete order creds will
+		// delete the prior signing request.  this allows subscriptions to manage how many
+		// order creds are handed out.
+		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
+		if err != nil {
+			// This is an existing error message so don't want to change it incase client are relying on it.
+			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+		}
+
+		if len(signingOrderRequests) > 0 {
+			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
 		err = service.CreateOrderItemCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
@@ -647,10 +647,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 // This endpoint handles the retrieval of all order credential types i.e. single-use, time-limited and time-limited-v2.
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			orderID   = new(inputs.ID)
-			requestID = r.URL.Query().Get("requestID")
-		)
+		var orderID = new(inputs.ID)
 
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -661,7 +658,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID(), requestID)
+		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
 			if errors.Is(err, errSetRetryAfter) {
 				// error specifies a retry after period, add to response header
