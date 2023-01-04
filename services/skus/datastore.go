@@ -82,15 +82,14 @@ type Datastore interface {
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
-	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error)
+	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error
-	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error)
+	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
 	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
-	UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx context.Context, requestID string, downloadedAt time.Time) error
 	UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID, completedAt time.Time) error
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
@@ -973,6 +972,19 @@ func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 		return err
 	}
 
+	// delete any time limited v2 credentials that are associated with this order
+	err = pg.DeleteTimeLimitedV2OrderCredsByOrder(orderID)
+	if err != nil {
+		return err
+	}
+
+	// delete the associated signing request so another can be performed
+	query = `delete from signing_order_request_outbox where order_id = $1`
+	_, err = pg.RawDB().Exec(query, orderID)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -1230,7 +1242,6 @@ type TimeAwareSubIssuedCreds struct {
 	BatchProof   string                    `json:"batchProof" db:"batch_proof"`
 	PublicKey    string                    `json:"publicKey" db:"public_key"`
 	RequestID    string                    `json:"-" db:"request_id"`
-	DownloadedAt *time.Time                `json:"-" db:"downloaded_at"`
 }
 
 func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error) {
@@ -1254,23 +1265,16 @@ func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedC
 }
 
 // GetTimeLimitedV2OrderCredsByOrder returns all the non expired time limited v2 order credentials for a given order.
-func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error) {
+func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key,
-		valid_from, valid_to, request_id, downloaded_at
+		valid_from, valid_to
 		from time_limited_v2_order_creds
 		where order_id = $1 and valid_to > now()
 	`
-	var params = []interface{}{
-		orderID,
-	}
-	if requestID != "" {
-		query += " and request_id = $2"
-		params = append(params, requestID)
-	}
 
 	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
-	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, params...)
+	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -1289,23 +1293,16 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID, request
 }
 
 // GetTimeLimitedV2OrderCredsByOrderItem returns all the order credentials for a single order item.
-func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID, requestID string) (*TimeLimitedV2Creds, error) {
+func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key,
-		valid_from, valid_to, request_id, downloaded_at
+		valid_from, valid_to
 		from time_limited_v2_order_creds
 		where item_id = $1
 	`
-	var params = []interface{}{
-		itemID,
-	}
-	if requestID != "" {
-		query += " and request_id = $2"
-		params = append(params, requestID)
-	}
 
 	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
-	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, params...)
+	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting time aware creds: %w", err)
 	}
@@ -1399,16 +1396,6 @@ func (pg *Postgres) UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *s
                                     where request_id = $1`, requestID, completedAt)
 	if err != nil {
 		return fmt.Errorf("error updating signing order request: %w", err)
-	}
-	return nil
-}
-
-// UpdateTimeLimitedV2OrderCredsDownloadedAtTx updates all the tlv2 creds as downloaded at by request id
-func (pg *Postgres) UpdateTimeLimitedV2OrderCredsDownloadedAt(ctx context.Context, requestID string, downloadedAt time.Time) error {
-	_, err := pg.RawDB().ExecContext(ctx, `update time_limited_v2_order_creds set downloaded_at = $2
-                                    where request_id = $1`, requestID, downloadedAt)
-	if err != nil {
-		return fmt.Errorf("error updating downloaded at for tlv2 creds: %w", err)
 	}
 	return nil
 }
