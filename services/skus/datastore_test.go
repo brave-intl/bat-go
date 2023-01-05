@@ -148,7 +148,7 @@ func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrder_Success() 
 	_ = suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveSearchPremiumYearTimeLimited)
 
 	// both order items have same orderID so can use the first element to retrieve all order creds
-	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(orderCredentials[0].OrderID, "")
+	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(orderCredentials[0].OrderID)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(orderCredentials[0].OrderID, actual.OrderID)
@@ -172,7 +172,7 @@ func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrderItem_Succes
 	_ = suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveSearchPremiumYearTimeLimited)
 
 	// retrieve the first order credential from our newly created order items
-	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrderItem(orderCredentials[0].ItemID, "")
+	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrderItem(orderCredentials[0].ItemID)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(orderCredentials[0].OrderID, actual.OrderID)
@@ -382,7 +382,7 @@ func (suite *PostgresTestSuite) TestInsertSignedOrderCredentials_TimeAwareV2_Suc
 
 	time.Sleep(time.Millisecond)
 
-	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrderItem(order.Items[0].ID, "")
+	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrderItem(order.Items[0].ID)
 	suite.Require().NoError(err)
 
 	suite.Require().NotNil(actual)

@@ -108,7 +108,7 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_KafkaDuplic
 	}
 	wg.Wait()
 
-	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID, "")
+	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	suite.NoError(err)
 
 	suite.Require().NotNil(creds)
@@ -178,7 +178,7 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_RequestDupl
 	}
 	wg.Wait()
 
-	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID, requestIDs[0].String())
+	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	suite.NoError(err)
 
 	suite.Require().NotNil(creds)

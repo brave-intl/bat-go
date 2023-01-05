@@ -442,7 +442,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		Str("buildTime", buildTime).
 		Msg("server starting up")
 
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus))
+	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus, nil))
 
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
