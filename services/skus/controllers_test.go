@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
-	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
@@ -888,117 +887,82 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(service *Service,
 	return
 }
 
-func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime, alreadyMockedSignCreds bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
-	if mockCB != nil {
-		service.cbClient = mockCB
-	}
-	issuerName = "brave.com?sku=" + order.Items[0].SKU
-	issuerPublicKey = "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
-	blindedCred := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
-	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY=", "XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
-	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
-	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
-	sig = "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
-	preimage = "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server *http.Server, order Order, issuer Issuer) (signature, tokenPreimage string, ordercreds []OrderCreds) {
+	signature = "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	tokenPreimage = "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
 
+	// perform create order creds request
 	credsReq := CreateOrderCredsRequest{
 		ItemID:       order.Items[0].ID,
-		BlindedCreds: blindedCreds,
+		BlindedCreds: []string{base64.StdEncoding.EncodeToString([]byte(test.RandomString()))},
 	}
-
-	body, err := json.Marshal(&credsReq)
+	body, err := json.Marshal(credsReq)
 	suite.Require().NoError(err)
 
-	handler := CreateOrderCreds(service)
-	req, err := http.NewRequest("POST", "/{orderID}/credentials", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	if firstTime {
-		mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
-		mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
-			Name:      issuerName,
-			PublicKey: issuerPublicKey,
-		}, nil)
-	}
-
-	if !alreadyMockedSignCreds {
-		mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCred)).Return(&cbr.CredentialsIssueResponse{
-			BatchProof:   proof,
-			SignedTokens: signedCreds,
-		}, nil)
-	}
-
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials", order.ID),
+		bytes.NewBuffer(body)).WithContext(ctx)
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	// Check to see if we have HTTP Accepted
-	handler = GetOrderCreds(service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
-	suite.Require().NoError(err)
-
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
+	// check to see if order creds are waiting to be processed.
+	// We can expect a http accepted status when a job is submitted but not processed.
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials", order.ID), nil)
 	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
 
-	// check status code for error, or until status is okay (from accepted)
-	for rr.Code != http.StatusOK {
-		if alreadyMockedSignCreds {
-			// assuming we are testing errors here, we will never not have accepted
-			return
-		}
-		if rr.Code == http.StatusAccepted {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				time.Sleep(500 * time.Millisecond)
-				rr = httptest.NewRecorder()
-				handler.ServeHTTP(rr, req)
-			}
-		} else if rr.Code > 299 {
-			// error condition bail out
-			suite.Require().True(false, "error status code, expecting 2xx")
-		}
+	server.Handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusAccepted, rr.Code)
+
+	// The CreateOrderCreds request writes to the db table signing_order_request_outbox which gets sent to Kafka
+	// and CBR for signing. To mock that insert the Kafka result.
+
+	to := time.Now().Add(time.Hour).Format(time.RFC3339)
+	from := time.Now().Local().Format(time.RFC3339)
+
+	metadata := Metadata{
+		ItemID:         order.Items[0].ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: order.Items[0].CredentialType,
 	}
 
-	// see if we can get our order creds
-	handler = GetOrderCreds(service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	associatedData, err := json.Marshal(metadata)
 	suite.Require().NoError(err)
 
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	signingOrderResult := SigningOrderResult{
+		RequestID: uuid.NewV4().String(),
+		Data: []SignedOrder{
+			{
+				PublicKey:      issuer.PublicKey,
+				Proof:          test.RandomString(),
+				Status:         SignedOrderStatusOk,
+				BlindedTokens:  credsReq.BlindedCreds,
+				SignedTokens:   []string{test.RandomString()},
+				ValidTo:        &UnionNullString{"string": to},
+				ValidFrom:      &UnionNullString{"string": from},
+				AssociatedData: associatedData,
+			},
+		},
+	}
+
+	_, tx, _, commit, err := datastore.GetTx(ctx, suite.storage)
+
+	err = suite.storage.InsertSignedOrderCredentialsTx(ctx, tx, &signingOrderResult)
+	suite.Require().NoError(err)
+
+	err = commit()
+	suite.Require().NoError(err)
+
+	// get the signed order credentials
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials", order.ID), nil)
 
 	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	for rr.Code != http.StatusOK {
-		if rr.Code == http.StatusBadRequest {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			break
-		default:
-			time.Sleep(50 * time.Millisecond)
-			rr = httptest.NewRecorder()
-			handler.ServeHTTP(rr, req)
-		}
-	}
-
-	suite.Require().Equal(http.StatusOK, rr.Code, "Async signing timed out")
-
-	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
+	err = json.NewDecoder(rr.Body).Decode(&ordercreds)
 	suite.Require().NoError(err)
 
 	return
@@ -1090,31 +1054,8 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
-	// start processing out signing request/results from kafka
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				suite.service.RunStoreSignedOrderCredentials(ctx, 0)
-			}
-		}
-	}()
+	signature, tokenPreimage, orderCreds := suite.fetchCredentials(ctx, server, order, *issuer)
 
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				_, _ = suite.service.RunSendSigningRequestJob(ctx)
-				time.Sleep(time.Second)
-			}
-		}
-	}()
-
-	_, _, signature, tokenPreimage, orderCreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true, false)
 	suite.Require().Equal(len(*(*[]string)(orderCreds[0].SignedCreds)), order.Items[0].Quantity)
 
 	// Check we can retrieve the order by order and item id
@@ -1150,7 +1091,7 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	voteReq := VoteRequest{
 		Vote: votePayload,
 		Credentials: []CredentialBinding{{
-			PublicKey:     ptr.String(orderCreds[0].PublicKey),
+			PublicKey:     *orderCreds[0].PublicKey,
 			TokenPreimage: tokenPreimage,
 			Signature:     signature,
 		}},
@@ -1291,120 +1232,12 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 	}
 }
 
-/*
-func (suite *ControllersTestSuite) TestFailureToSignCredentialsBadPoint()
+/* func (suite *ControllersTestSuite) TestFailureToSignCredentialsBadPoint()
 This test is no longer valid, as we no longer are using the HTTP endpoint for signing requests,
 but rather using kafka for signing request/results.  No longer an applicable test.  Leaving note here
 as tombstone.
+
 */
-
-func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
-	ctx, cancel := context.WithCancel(context.Background())
-	var err error
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				_, err = suite.service.RunNextOrderJob(ctx)
-				suite.Require().NoError(err, "Failed to drain order queue")
-				<-time.After(50 * time.Millisecond)
-			}
-		}
-	}()
-	defer cancel()
-
-	order, _ := suite.setupCreateOrder(FreeTLTestSkuToken, FreeTLTestToken, 1)
-
-	_, _, _, _, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true, false)
-	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
-
-	handler := DeleteOrderCreds(suite.service)
-	req, err := http.NewRequest("DELETE", "/{orderID}/credentials", nil)
-	suite.Require().NoError(err)
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	// Need to add faux auth details to context
-	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Reset should succeed
-	suite.Require().Equal(http.StatusOK, rr.Code)
-
-	handler = GetOrderCreds(suite.service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
-	suite.Require().NoError(err)
-
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Credentials should be cleared out
-	suite.Assert().Equal(http.StatusNotFound, rr.Code)
-
-	// Signing after reset should proceed normally
-	issuerName, _, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, false, false)
-	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
-
-	presentation := cbr.CredentialRedemption{
-		Issuer:        issuerName,
-		TokenPreimage: preimage,
-		Signature:     sig,
-	}
-
-	presentationBytes, err := json.Marshal(&presentation)
-	suite.Require().NoError(err)
-	presentationPayload := base64.StdEncoding.EncodeToString(presentationBytes)
-
-	verifyRequest := VerifyCredentialRequestV1{
-		Type:         "single-use",
-		Version:      1,
-		SKU:          "incorrect-sku",
-		MerchantID:   "brave.com",
-		Presentation: presentationPayload,
-	}
-
-	body, err := json.Marshal(&verifyRequest)
-	suite.Require().NoError(err)
-
-	handler = VerifyCredentialV1(suite.service)
-	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	// Need to add faux auth details to context
-	req = req.WithContext(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Verification should fail when outer sku does not match inner presentation
-	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
-
-	// Correct the SKU
-	verifyRequest.SKU = "integration-test-free"
-
-	body, err = json.Marshal(&verifyRequest)
-	suite.Require().NoError(err)
-
-	handler = VerifyCredentialV1(suite.service)
-	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	// Need to add faux auth details to context
-	req = req.WithContext(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"))
-
-	// mocked redeem creds
-	suite.mockCB.EXPECT().RedeemCredential(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(preimage), gomock.Eq(sig), gomock.Eq(issuerName))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Verification should succeed if SKU and merchant are correct
-	suite.Assert().Equal(http.StatusOK, rr.Code)
-}
 
 func (suite *ControllersTestSuite) SetupCreateKey(merchantID string) Key {
 	createRequest := &CreateKeyRequest{
