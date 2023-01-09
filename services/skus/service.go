@@ -967,7 +967,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]Ti
 		return resp, http.StatusOK, nil
 	}
 
-	return resp, http.StatusOK, nil
+	return creds.Credentials, http.StatusOK, nil
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant

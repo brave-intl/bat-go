@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,15 +17,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/ptr"
-
 	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
-	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
@@ -892,6 +889,9 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(service *Service,
 }
 
 func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime, alreadyMockedSignCreds bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
+	if mockCB != nil {
+		service.cbClient = mockCB
+	}
 	issuerName = "brave.com?sku=" + order.Items[0].SKU
 	issuerPublicKey = "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	blindedCred := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
@@ -1090,6 +1090,30 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
+	// start processing out signing request/results from kafka
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				suite.service.RunStoreSignedOrderCredentials(ctx, 0)
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, _ = suite.service.RunSendSigningRequestJob(ctx)
+				time.Sleep(time.Second)
+			}
+		}
+	}()
+
 	_, _, signature, tokenPreimage, orderCreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true, false)
 	suite.Require().Equal(len(*(*[]string)(orderCreds[0].SignedCreds)), order.Items[0].Quantity)
 
@@ -1267,35 +1291,12 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 	}
 }
 
-func (suite *ControllersTestSuite) TestFailureToSignCredentialsBadPoint() {
-	// mock out particular failure
-	suite.mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Any()).Return(
-		nil, clients.NewHTTPError(errors.New("error"),
-			"url string", "response", http.StatusInternalServerError, clients.RespErrData{
-				Body: `{
-					"message": "Could not approve new tokens: Failed to sign token: Cannot decompress Edwards point",
-					"code": 500
-				}`}))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// create order
-	order, _ := suite.setupCreateOrder(FreeTLTestSkuToken, FreeTLTestToken, 1)
-	// perform fetch credentials (will fail at sign
-	suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true, true)
-
-	// run the job, make sure we error
-	attempted, err := suite.service.RunNextOrderJob(ctx)
-	suite.Require().True(!attempted)
-	suite.Require().NoError(err)
-
-	// run the job, no more jobs to run
-	attempted, err = suite.service.RunNextOrderJob(ctx)
-	suite.Require().True(!attempted)
-	suite.Require().NoError(err)
-
-}
+/*
+func (suite *ControllersTestSuite) TestFailureToSignCredentialsBadPoint()
+This test is no longer valid, as we no longer are using the HTTP endpoint for signing requests,
+but rather using kafka for signing request/results.  No longer an applicable test.  Leaving note here
+as tombstone.
+*/
 
 func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	ctx, cancel := context.WithCancel(context.Background())
