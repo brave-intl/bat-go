@@ -240,10 +240,9 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 				}`, tokenString)),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		handler        = wallet.LinkBitFlyerDepositAccountV3(&wallet.Service{
-			Datastore: datastore,
-		})
-		w = httptest.NewRecorder()
+		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
+		w              = httptest.NewRecorder()
 	)
 	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -351,10 +350,9 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
-			Datastore: datastore,
-		})
-		w = httptest.NewRecorder()
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		handler = wallet.LinkGeminiDepositAccountV3(s)
+		w       = httptest.NewRecorder()
 	)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
@@ -454,9 +452,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		"DELETE",
 		fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
 
-	handler = wallet.DisconnectCustodianLinkV3(&wallet.Service{
-		Datastore: datastore,
-	})
+	s, _ = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+	handler = wallet.DisconnectCustodianLinkV3(s)
 	w = httptest.NewRecorder()
 
 	// create transaction
@@ -467,8 +464,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	// updates the disconnected date on the record, and returns no error and one changed row
 	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, false).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
@@ -605,10 +600,9 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
-			Datastore: datastore,
-		})
-		w = httptest.NewRecorder()
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		handler = wallet.LinkGeminiDepositAccountV3(s)
+		w       = httptest.NewRecorder()
 	)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
@@ -738,10 +732,9 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
-			Datastore: datastore,
-		})
-		w = httptest.NewRecorder()
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		handler = wallet.LinkGeminiDepositAccountV3(s)
+		w       = httptest.NewRecorder()
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -847,10 +840,9 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 			"DELETE",
 			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
 
-		handler = wallet.DisconnectCustodianLinkV3(&wallet.Service{
-			Datastore: datastore,
-		})
-		w = httptest.NewRecorder()
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		handler = wallet.DisconnectCustodianLinkV3(s)
+		w       = httptest.NewRecorder()
 	)
 
 	// create transaction
@@ -861,8 +853,6 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 
 	// updates the disconnected date on the record, and returns no error and one changed row
 	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, false).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()

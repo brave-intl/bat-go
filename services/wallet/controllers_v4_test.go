@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -228,7 +229,9 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
-	errReputation := errors.New(test.RandomString())
+	errReputation := errorutils.New(errors.New(test.RandomString()),
+		test.RandomString(), test.RandomString())
+
 	reputationClient := mockreputation.NewMockClient(ctrl)
 	reputationClient.EXPECT().
 		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
