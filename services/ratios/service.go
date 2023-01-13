@@ -247,3 +247,26 @@ func (s *Service) GetCoinMarkets(
 		LastUpdated: updated,
 	}, nil
 }
+
+// GetAssetDiscoveryResponse - the response structure for asset discovery calls
+type GetAssetDiscoveryResponse struct {
+	SOL map[string][]string `json:"sol"`
+	ETH map[string][]string `json:"eth"`
+}
+
+// GetAssetDiscovery - respond to caller with asset discovery data
+func (s *Service) GetAssetDiscovery(
+	ctx context.Context,
+	solanaAccountAddresses []string,
+	ethereumAccountAddresses []string,
+) (*GetAssetDiscoveryResponse, error) {
+	return &GetAssetDiscoveryResponse{
+		SOL: map[string][]string{
+			"0x65": {""},
+		},
+		ETH: map[string][]string{
+			"0x1": {"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"},
+			"0xa": {"0x6b175474e89094c44da98b954eedeac495271d0f"},
+		},
+	}, nil
+}

@@ -60,6 +60,7 @@ func RestRun(command *cobra.Command, args []string) {
 	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
 	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
 	r.Get("/v2/market/provider/coingecko", middleware.InstrumentHandler("GetCoinMarketsHandler", ratios.GetCoinMarketsHandler(s)).ServeHTTP)
+	r.Get("/v1/asset_discovery", middleware.InstrumentHandler("GetAssetDiscoveryHandler", ratios.GetCoinMarketsHandler(s)).ServeHTTP)
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {

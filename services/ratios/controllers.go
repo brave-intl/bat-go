@@ -3,6 +3,7 @@ package ratios
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -239,6 +240,34 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 			logger.Error().Err(err).Msg("failed to get top currencies")
 			return handlers.WrapError(err, "failed to get top currencies", http.StatusInternalServerError)
 		}
+		return handlers.RenderContent(ctx, data, w, http.StatusOK)
+	})
+}
+
+// GetAssetDiscoveryHandler - handler to discover assets
+func GetAssetDiscoveryHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		logger := logging.Logger(ctx, "ratios.GetAssetDiscoveryHandler")
+
+		// Get account addresses for each CoinType from the request
+		solAddresses := r.URL.Query().Get("SOL")
+		ethAddresses := r.URL.Query().Get("ETH")
+
+		// Parse the comma separated lists
+		solAddressesList := strings.Split(solAddresses, ",")
+		ethAddressesList := strings.Split(ethAddresses, ",")
+
+		logger.Info().Msgf("SOL Addresses: %v", solAddressesList)
+		logger.Info().Msgf("ETH Addresses: %v", ethAddressesList)
+
+		// Call GetAssetDiscovery on the service with the inputs
+		data, err := service.GetAssetDiscovery(ctx, solAddressesList, ethAddressesList)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get asset discovery")
+			return handlers.WrapError(err, "failed to get asset discovery", http.StatusInternalServerError)
+		}
+
 		return handlers.RenderContent(ctx, data, w, http.StatusOK)
 	})
 }
