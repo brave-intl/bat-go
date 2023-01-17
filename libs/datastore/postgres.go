@@ -41,7 +41,7 @@ var (
 	}
 	dbs = map[string]*sqlx.DB{}
 	// CurrentMigrationVersion holds the default migration version
-	CurrentMigrationVersion = uint(46)
+	CurrentMigrationVersion = uint(50)
 	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
 	MigrationTracks = map[string]uint{
 		"eyeshade": 20,
