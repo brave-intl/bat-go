@@ -26,7 +26,6 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 
 		// get logger from context
 		logger := logging.Logger(ctx, "ratios.GetRelativeHandler")
-
 		var coinIDs = new(CoingeckoCoinList)
 		if err = inputs.DecodeAndValidate(ctx, coinIDs, []byte(coinIDsInput)); err != nil {
 			if errors.Is(err, ErrCoingeckoCoinInvalid) {
@@ -39,6 +38,29 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 					},
 				)
 			}
+
+			if errors.Is(err, ErrCoingeckoCoinEmpty) {
+				logger.Error().Err(err).Msg("empty coin input from caller")
+				return handlers.ValidationError(
+					"Error validating coin url parameter",
+					map[string]interface{}{
+						"err":     err.Error(),
+						"coinIDs": "empty coin",
+					},
+				)
+			}
+
+			if errors.Is(err, ErrCoingeckoCoinListLimit) {
+				logger.Error().Err(err).Msg("coin list limit exceeded")
+				return handlers.ValidationError(
+					"Error validating coin url parameter",
+					map[string]interface{}{
+						"err":     err.Error(),
+						"coinIDs": "coin list limit exceeded",
+					},
+				)
+			}
+
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
@@ -56,6 +78,29 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 					},
 				)
 			}
+
+			if errors.Is(err, ErrCoingeckoVsCurrencyEmpty) {
+				logger.Error().Err(err).Msg("empty vs currency input from caller")
+				return handlers.ValidationError(
+					"Error validating vs currency url parameter",
+					map[string]interface{}{
+						"err":          err.Error(),
+						"vScurrencies": "empty vs currency",
+					},
+				)
+			}
+
+			if errors.Is(err, ErrCoingeckoVsCurrencyLimit) {
+				logger.Error().Err(err).Msg("vs currency list limit exceeded")
+				return handlers.ValidationError(
+					"Error validating vs currency url parameter",
+					map[string]interface{}{
+						"err":          err.Error(),
+						"vScurrencies": "vs currency list limit exceeded",
+					},
+				)
+			}
+
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
@@ -132,6 +177,18 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 					},
 				)
 			}
+
+			if errors.Is(err, ErrCoingeckoVsCurrencyEmpty) {
+				logger.Error().Err(err).Msg("empty vs currency input from caller")
+				return handlers.ValidationError(
+					"Error validating vs currency url parameter",
+					map[string]interface{}{
+						"err":          err.Error(),
+						"vsCurrencies": "empty vs currency",
+					},
+				)
+			}
+
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
