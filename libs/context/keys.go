@@ -6,6 +6,8 @@ import "errors"
 type CTXKey string
 
 const (
+	// MSKSASLEnabledCTXKey - the context key for merge custodial
+	MSKSASLEnabledCTXKey CTXKey = "msk_sasl_enabled"
 	// MergeCustodialCTXKey - the context key for merge custodial
 	MergeCustodialCTXKey CTXKey = "merge_custodial"
 	// AWSClientCTXKey - the context key for an aws client
