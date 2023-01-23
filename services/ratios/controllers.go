@@ -63,7 +63,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		var vsCurrencies = new(CoingeckoVsCurrencyList)
@@ -103,7 +103,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		var duration = new(CoingeckoDuration)
@@ -120,7 +120,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 			}
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		rates, err := service.GetRelative(ctx, *coinIDs, *vsCurrencies, *duration)
@@ -162,7 +162,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			}
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		var vsCurrency = new(CoingeckoVsCurrency)
@@ -191,7 +191,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		var duration = new(CoingeckoDuration)
@@ -208,7 +208,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			}
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		rates, err := service.GetHistory(ctx, *coinID, *vsCurrency, *duration)
@@ -272,7 +272,7 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 			}
 			// degraded, unknown error when validating/decoding
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		var limit = new(CoingeckoLimit)
@@ -288,7 +288,7 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 				)
 			}
 			logger.Error().Err(err).Msg("unforseen error in decode and validation")
-			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+			return handlers.WrapError(err, "degraded: ", http.StatusBadRequest)
 		}
 
 		data, err := service.GetCoinMarkets(ctx, *vsCurrency, *limit)
