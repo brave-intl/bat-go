@@ -45,6 +45,8 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.DefaultACChoiceCTXKey, viper.GetFloat64("default-ac-choice"))
 	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
 
+	ctx = context.WithValue(ctx, appctx.ParametersVBATDeadlineCTXKey, viper.GetTime("vbat-deadline"))
+	ctx = context.WithValue(ctx, appctx.ParametersTransitionCTXKey, viper.GetBool("transition"))
 	// parse default-monthly-choices and default-tip-choices
 
 	var monthlyChoices = []float64{}

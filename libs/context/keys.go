@@ -179,6 +179,11 @@ const (
 
 	// DisableDisconnectCTXKey - the context key for rewards wallet disconnect capability key
 	DisableDisconnectCTXKey CTXKey = "disable_disconnect"
+
+	// ParametersVBATDeadlineCTXKey - the context key for getting the vbat deadline
+	ParametersVBATDeadlineCTXKey CTXKey = "parameters_vbat_deadline"
+	// ParametersTransitionCTXKey - the context key for getting the vbat deadline
+	ParametersTransitionCTXKey CTXKey = "parameters_transition"
 )
 
 var (
