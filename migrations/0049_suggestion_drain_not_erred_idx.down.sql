@@ -1,0 +1,1 @@
+DROP INDEX suggestion_drain_not_erred_idx;
