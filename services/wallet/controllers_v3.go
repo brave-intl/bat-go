@@ -207,7 +207,7 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }
 
@@ -275,7 +275,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }
 
@@ -354,7 +354,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }
 
@@ -627,6 +627,6 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 			return handlers.WrapError(err, "failed to disconnect custodian link", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }

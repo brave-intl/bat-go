@@ -130,7 +130,7 @@ var (
 func (cvc *CoingeckoVsCurrency) Decode(ctx context.Context, v []byte) error {
 	vc := strings.ToLower(string(v))
 	if vc == "" {
-		return ErrCoingeckoCoinEmpty
+		return ErrCoingeckoVsCurrencyEmpty
 	}
 
 	*cvc = CoingeckoVsCurrency(vc)
