@@ -855,7 +855,7 @@ func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 		query += " and signed_creds is not null"
 	}
 
-	_, err := pg.RawDB().Exec(query, orderID)
+	_, err = pg.RawDB().Exec(query, orderID)
 	if err != nil {
 		return err
 	}
