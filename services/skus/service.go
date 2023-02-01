@@ -430,7 +430,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 	// stripe, as the redirect flow sometimes is too fast for the webhook to be delivered.
 	// exclude any order with a subscription identifier from stripe
 	if _, sOK := order.Metadata["stripeSubscriptionId"]; !sOK {
-		if cs, ok := order.Metadata["stripeCheckoutSessionId"]; ok && cs != "" {
+		if cs, ok := order.Metadata["stripeCheckoutSessionId"].(string); ok && cs != "" {
 			// get old checkout session from stripe by id
 			stripeSession, err := session.Get(cs, nil)
 			if err != nil {
