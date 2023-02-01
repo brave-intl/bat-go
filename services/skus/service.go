@@ -342,31 +342,33 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
-
 	}
 
 	// if this is a stripe order, and there is a checkout session, we actually need to check it with
 	// stripe, as the redirect flow sometimes is too fast for the webhook to be delivered.
-	if cs, ok := order.Metadata["stripeCheckoutSessionId"]; ok && cs != "" {
-		// get old checkout session from stripe by id
-		stripeSession, err := session.Get(cs, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
-		}
+	// exclude any order with a subscription identifier from stripe
+	if _, sOK := order.Metadata["stripeSubscriptionId"]; !sOK {
+		if cs, ok := order.Metadata["stripeCheckoutSessionId"]; ok && cs != "" {
+			// get old checkout session from stripe by id
+			stripeSession, err := session.Get(cs, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
+			}
 
-		if stripeSession.PaymentStatus == "paid" {
-			// if the session is actually paid, then set the subscription id and order to paid
-			if err = s.Datastore.UpdateOrder(order.ID, "paid"); err != nil {
-				return nil, fmt.Errorf("failed to update order to paid status: %w", err)
-			}
-			err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeSubscriptionId", stripeSession.Subscription.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update order to add the subscription id")
-			}
-			// set paymentProcessor as stripe
-			err = s.Datastore.AppendOrderMetadata(context.Background(), &order.ID, paymentProcessor, StripePaymentMethod)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update order to add the payment processor")
+			if stripeSession.PaymentStatus == "paid" {
+				// if the session is actually paid, then set the subscription id and order to paid
+				if err = s.Datastore.UpdateOrder(order.ID, "paid"); err != nil {
+					return nil, fmt.Errorf("failed to update order to paid status: %w", err)
+				}
+				err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeSubscriptionId", stripeSession.Subscription.ID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update order to add the subscription id")
+				}
+				// set paymentProcessor as stripe
+				err = s.Datastore.AppendOrderMetadata(context.Background(), &order.ID, paymentProcessor, StripePaymentMethod)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update order to add the payment processor")
+				}
 			}
 		}
 	}
