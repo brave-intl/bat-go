@@ -13,7 +13,7 @@ services:
       - reputation-web-grant
   reputation-postgres-grant:
     container_name: reputation-postgres-grant
-    image: postgres:10.7
+    image: postgres:14
     environment:
       - "POSTGRES_USER=reputation"
       - "POSTGRES_PASSWORD=password"
