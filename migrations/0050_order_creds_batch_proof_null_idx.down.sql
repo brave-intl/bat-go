@@ -1,0 +1,1 @@
+DROP INDEX order_creds_batch_proof_null_idx;
