@@ -167,7 +167,7 @@ func (aw authorizeWrapper) MarshalBinary() (data []byte, err error) {
 }
 
 // SignAndPublishTransactions - implement report publisher, returns stream/error, takes payoutid and attested report
-func (c *client) SignAndPublishTransactions(ctx context.Context, payoutID string, report *AttestedReport, paymentsHost string, priv ed25519.PrivateKey) (string, error) {
+func (c *client) SignAndPublishTransactions(ctx context.Context, payoutID string, report *AttestedReport, paymentsHost string, priv ed25519.PrivateKey) (string, int, error) {
 
 	if c.redis == nil {
 		return "", 0, LogAndError(ctx, nil, "PublishSignedTransactions", "no configured publisher client")

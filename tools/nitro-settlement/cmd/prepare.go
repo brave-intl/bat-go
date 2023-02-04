@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"strings"
 
 	cmdutils "github.com/brave-intl/bat-go/cmd"
@@ -18,7 +19,7 @@ func init() {
 
 	// report as input
 	prepareCmd.Flags().String(reportKey, "", "report input for prepare")
-	viper.BindPFlag(reportKey, prepareCmd.Flags().Lookup(reportKey))
+	viper.BindPFlag(prepareReportKey, prepareCmd.Flags().Lookup(reportKey))
 
 	// payout identifier as input
 	prepareCmd.Flags().String(payoutIDKey, "", "the identifier of the payout (20230202 for example)")
@@ -32,17 +33,18 @@ var (
 		Short: "prepare transactions for settlement",
 		Run:   cmdutils.Perform("prepare settlement", prepareRun),
 	}
-	payoutIDKey = "payout-id"
-	reportKey   = "report"
+	payoutIDKey      = "payout-id"
+	reportKey        = "report"
+	prepareReportKey = "prepare-report"
 )
 
 // prepareRun - main entrypoint for the `prepare` subcommand
 func prepareRun(command *cobra.Command, args []string) error {
-	ctx := command.Context()
+	ctx := context.WithValue(command.Context(), internal.TestModeCTXKey, viper.GetBool(testModeKey))
 	logging.Logger(ctx, "prepare").Info().Msg("performing prepare...")
 
 	logging.Logger(ctx, "prepare").Info().
-		Str(reportKey, viper.GetString(reportKey)).
+		Str(reportKey, viper.GetString(prepareReportKey)).
 		Str(payoutIDKey, viper.GetString(payoutIDKey)).
 		Str(redisAddrKey, strings.Join(viper.GetStringSlice(redisAddrKey), ", ")).
 		Str(redisUserKey, viper.GetString(redisUserKey)).
@@ -56,7 +58,7 @@ func prepareRun(command *cobra.Command, args []string) error {
 	logging.Logger(ctx, "prepare").Info().Msg("created publisher...")
 
 	// read the report
-	report, err := internal.ParseReport(ctx, viper.GetString(reportKey))
+	report, err := internal.ParseReport(ctx, viper.GetString(prepareReportKey))
 	if err != nil {
 		return internal.LogAndError(ctx, err, "prepare", "failed to prepare report")
 	}

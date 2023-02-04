@@ -19,7 +19,7 @@ func init() {
 
 	// report as input, this is the validated report attested
 	authorizeCmd.Flags().String(attestedReportKey, "", "attested report input for authorize")
-	viper.BindPFlag(attestedReportKey, authorizeCmd.Flags().Lookup(attestedReportKey))
+	viper.BindPFlag(authorizeAttestedReportKey, authorizeCmd.Flags().Lookup(attestedReportKey))
 
 	// payout identifier as input
 	authorizeCmd.Flags().String(payoutIDKey, "", "the identifier of the payout (20230202 for example)")
@@ -41,9 +41,10 @@ var (
 		Short: "authorize transactions for settlement",
 		Run:   cmdutils.Perform("authorize settlement", authorizeRun),
 	}
-	privateKeyFileKey = "key-file"
-	attestedReportKey = "attested-report"
-	paymentsHostKey   = "payments-host"
+	privateKeyFileKey          = "key-file"
+	attestedReportKey          = "attested-report"
+	authorizeAttestedReportKey = "authorize-attested-report"
+	paymentsHostKey            = "payments-host"
 )
 
 // authorizeRun - main entrypoint for the `authorize` subcommand
@@ -52,7 +53,7 @@ func authorizeRun(command *cobra.Command, args []string) error {
 	logging.Logger(ctx, "authorize").Info().Msg("performing authorize...")
 
 	logging.Logger(ctx, "authorize").Info().
-		Str(attestedReportKey, viper.GetString(attestedReportKey)).
+		Str(attestedReportKey, viper.GetString(authorizeAttestedReportKey)).
 		Str(payoutIDKey, viper.GetString(payoutIDKey)).
 		Str(privateKeyFileKey, viper.GetString(privateKeyFileKey)).
 		Str(redisAddrKey, strings.Join(viper.GetStringSlice(redisAddrKey), ", ")).
@@ -67,7 +68,7 @@ func authorizeRun(command *cobra.Command, args []string) error {
 	logging.Logger(ctx, "authorize").Info().Msg("created publisher...")
 
 	// read the report
-	attestedReport, err := internal.ParseAttestedReport(ctx, viper.GetString(attestedReportKey))
+	attestedReport, err := internal.ParseAttestedReport(ctx, viper.GetString(authorizeAttestedReportKey))
 	if err != nil {
 		return internal.LogAndError(ctx, err, "authorize", "failed to parse attested report")
 	}

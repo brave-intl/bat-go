@@ -2,9 +2,12 @@ package internal
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/shopspring/decimal"
@@ -55,6 +58,13 @@ type AuthorizeTx struct {
 	ID         string          `json:"idempotencyKey"`
 	Custodian  string          `json:"custodian"`
 	DocumentID string          `json:"documentId"`
+	Signature  string          `json:"signature"`
+}
+
+// BuildSigningString - the string format that payments will sign over per tx
+func (at AuthorizeTx) BuildSigningBytes() []byte {
+	return []byte(fmt.Sprintf("%s|%s|%s|%s|%s",
+		at.To, at.Amount.String(), at.ID, at.Custodian, at.DocumentID))
 }
 
 // PrepareTx - this is the tx going to prepare workers from report
@@ -99,6 +109,73 @@ func (pt *PrepareTx) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Report - the payout report of prepare transactions
 type Report []PrepareTx
 
+// SumBAT - sum up the amount of bat in the report
+func (r Report) SumBAT(custodians ...string) decimal.Decimal {
+	var total = decimal.Zero
+	for i := 0; i < len([]PrepareTx(r)); i++ {
+		if len(custodians) > 0 {
+			for _, c := range custodians {
+				if strings.EqualFold([]PrepareTx(r)[i].Custodian, c) {
+					total = total.Add([]PrepareTx(r)[i].Amount)
+				}
+			}
+		} else { // all custodians
+			total = total.Add([]PrepareTx(r)[i].Amount)
+		}
+	}
+	return total
+}
+
+// Length - report length
+func (r Report) Length() int {
+	return len([]PrepareTx(r))
+}
+
+// AttestedReport - the attested transactions
 type AttestedReport []AuthorizeTx
+
+// Length - report length
+func (ar AttestedReport) Length() int {
+	return len([]AuthorizeTx(ar))
+}
+
+// SumBAT - sum up the amount of bat in the report
+func (ar AttestedReport) SumBAT(custodians ...string) decimal.Decimal {
+	var total = decimal.Zero
+	for i := 0; i < len([]AuthorizeTx(ar)); i++ {
+		if len(custodians) > 0 {
+			for _, c := range custodians {
+				if strings.EqualFold([]AuthorizeTx(ar)[i].Custodian, c) {
+					total = total.Add([]AuthorizeTx(ar)[i].Amount)
+				}
+			}
+		} else { // all custodians
+			total = total.Add([]AuthorizeTx(ar)[i].Amount)
+		}
+	}
+	return total
+}
+
+// Verify - verify signatures on each of the records in the report
+func (ar AttestedReport) Verify(ctx context.Context, pub ed25519.PublicKey) error {
+	for i := 0; i < len([]AuthorizeTx(ar)); i++ { // for every transaction
+		msg := []AuthorizeTx(ar)[i].BuildSigningBytes()
+		sig, err := hex.DecodeString([]AuthorizeTx(ar)[i].Signature)
+		if err != nil {
+			return LogAndError(ctx, fmt.Errorf("tx invalid sig # %d - %s - %s",
+				i, msg, sig,
+			), "Verify", "could not decode transaction signature")
+		}
+
+		if !ed25519.Verify(pub, msg, sig) {
+			// failed verification
+			return LogAndError(ctx, fmt.Errorf("tx invalid sig # %d - %s - %s",
+				i, msg, sig,
+			), "Verify", "could not verify transaction signature")
+		}
+	}
+	return nil
+}
