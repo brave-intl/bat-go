@@ -82,15 +82,13 @@ func validateRun(command *cobra.Command, args []string) error {
 				attestedReport.Length()))
 	}
 
-	if !viper.GetBool(testModeKey) {
-		if !originalReport.SumBAT().Equal(attestedReport.SumBAT()) {
-			return internal.LogAndError(
-				ctx, err, "validate",
-				fmt.Sprintf(
-					"transaction sum mismatch, original %s != attested %s",
-					originalReport.SumBAT(),
-					attestedReport.SumBAT()))
-		}
+	if !originalReport.SumBAT().Equal(attestedReport.SumBAT()) {
+		return internal.LogAndError(
+			ctx, err, "validate",
+			fmt.Sprintf(
+				"transaction sum mismatch, original %s != attested %s",
+				originalReport.SumBAT(),
+				attestedReport.SumBAT()))
 	}
 
 	// check signatures on each transaction in attested file with paymentsPubKey

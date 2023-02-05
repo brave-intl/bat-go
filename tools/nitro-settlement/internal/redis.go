@@ -84,7 +84,7 @@ func (c *client) PublishReport(ctx context.Context, payoutID string, report *Rep
 		for i := 0; i < numRecords; i++ { // feed in the messages into the buffered channel
 			select {
 			case <-ctx.Done(): // context canceled
-				logging.Logger(ctx, "PublishReport").Error().Msg("told to stop")
+				logging.Logger(ctx, "PublishReport").Debug().Msg("told to stop")
 				return
 			default:
 				begin <- []PrepareTx(*report)[i]
@@ -98,7 +98,7 @@ func (c *client) PublishReport(ctx context.Context, payoutID string, report *Rep
 			for {
 				select {
 				case <-ctx.Done(): // context canceled
-					logging.Logger(ctx, "PublishReport").Error().Msg("told to stop")
+					logging.Logger(ctx, "PublishReport").Debug().Msg("told to stop")
 					return
 				default:
 					// marshal transaction from begin pipeline
@@ -191,7 +191,6 @@ func (c *client) SignAndPublishTransactions(ctx context.Context, payoutID string
 			Headers: []string{
 				"(request-target)",
 				"host",
-				"date",
 				"digest",
 				"content-length",
 				"content-type",
@@ -206,7 +205,7 @@ func (c *client) SignAndPublishTransactions(ctx context.Context, payoutID string
 		for i := 0; i < len(*report); i++ { // feed in the messages into the buffered channel
 			select {
 			case <-ctx.Done(): // context canceled
-				logging.Logger(ctx, "SignAndPublishTransactions").Error().Msg("told to stop")
+				logging.Logger(ctx, "SignAndPublishTransactions").Debug().Msg("told to stop")
 				return
 			default:
 				begin <- []AuthorizeTx(*report)[i]
@@ -220,7 +219,7 @@ func (c *client) SignAndPublishTransactions(ctx context.Context, payoutID string
 			for {
 				select {
 				case <-ctx.Done(): // context canceled
-					logging.Logger(ctx, "SignAndPublishTransactions").Error().Msg("told to stop")
+					logging.Logger(ctx, "SignAndPublishTransactions").Debug().Msg("told to stop")
 					return
 				default:
 					// marshal transaction

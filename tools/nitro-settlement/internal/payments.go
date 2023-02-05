@@ -16,6 +16,15 @@ type confResp struct {
 
 // GetPaymentsPubKey - get the public key from the payments server
 func GetPaymentsPubKey(ctx context.Context, paymentsHost string) (ed25519.PublicKey, error) {
+	// if --test-mode we will use the public key from test/private.pem to validate signatures
+	if testMode, ok := ctx.Value(TestModeCTXKey).(bool); ok && testMode {
+		priv, err := GetOperatorPrivateKey(ctx, "test/private.pem")
+		if err != nil {
+			return nil, LogAndError(ctx, err, "GetPaymentsPubKey", "failed to get key")
+		}
+		return priv.Public().(ed25519.PublicKey), nil
+	}
+
 	// the public key is on the payments service in configuration
 	resp, err := http.Get(fmt.Sprintf("%s/v1/configuration", paymentsHost))
 	if err != nil {

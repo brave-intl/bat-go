@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -17,6 +18,10 @@ const (
 	UpholdCustodian   = "uphold"
 	GeminiCustodian   = "gemini"
 	BitflyerCustodian = "bitflyer"
+)
+
+var (
+	settlementIdempotencyNamespace, _ = uuid.Parse("1286fb9f-c6ac-4e97-97a3-9fd866c95926")
 )
 
 // ParseAttestedReport - take a filename and parse the transaction report
@@ -32,6 +37,7 @@ func ParseAttestedReport(ctx context.Context, reportLocation string) (*AttestedR
 	if err := json.NewDecoder(f).Decode(report); err != nil {
 		return nil, fmt.Errorf("failed to parse json: %w", err)
 	}
+
 	return report, nil
 }
 
@@ -48,6 +54,7 @@ func ParseReport(ctx context.Context, reportLocation string) (*Report, error) {
 	if err := json.NewDecoder(f).Decode(report); err != nil {
 		return nil, fmt.Errorf("failed to parse json: %w", err)
 	}
+
 	return report, nil
 }
 
@@ -92,7 +99,8 @@ func (pt *PrepareTx) UnmarshalJSON(data []byte) error {
 		*PrepareTxAlias
 		To        string          `json:"address"`
 		Amount    decimal.Decimal `json:"probi"`
-		ID        string          `json:"transactionId"`
+		Publisher string          `json:"publisher"`
+		BatchID   string          `json:"transactionId"`
 		Custodian string          `json:"walletProvider"`
 	}{
 		PrepareTxAlias: (*PrepareTxAlias)(pt),
@@ -104,8 +112,13 @@ func (pt *PrepareTx) UnmarshalJSON(data []byte) error {
 
 	pt.Amount = altcurrency.BAT.FromProbi(aux.Amount)
 	pt.To = aux.To
-	pt.ID = aux.ID
 	pt.Custodian = aux.Custodian
+
+	// uuidv5 with settlement namespace to get the idemptotency key for this publisher/transactionId
+	// transactionId is the settlement batch identifier, and publisher is the identifier of the recipient
+	pt.ID = uuid.NewSHA1(
+		settlementIdempotencyNamespace, []byte(fmt.Sprintf("%s|%s", aux.BatchID, aux.Publisher))).String()
+
 	return nil
 }
 
