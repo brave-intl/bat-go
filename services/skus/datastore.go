@@ -833,6 +833,19 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 // DeleteOrderCreds deletes the order credentials for a OrderID
 func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 
+	// does this order have credential_type time-limited?  if so there will not be order creds, success
+	order, err := pg.GetOrder(orderID)
+	if err != nil {
+		return err
+	}
+
+	if len(order.Items) > 0 {
+		if order.Items[0].CredentialType == "time-limited" {
+			// time-limited v1 credentials are not stored in order creds, do not attempt to check
+			return nil
+		}
+	}
+
 	query := `
 		delete
 		from order_creds
@@ -842,7 +855,7 @@ func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 		query += " and signed_creds is not null"
 	}
 
-	_, err := pg.RawDB().Exec(query, orderID)
+	_, err = pg.RawDB().Exec(query, orderID)
 	if err != nil {
 		return err
 	}

@@ -163,7 +163,7 @@ services:
       - grant
   postgres:
     container_name: grant-postgres
-    image: postgres:10.4
+    image: postgres:14
     ports:
       - "3401:5432"
     environment:
@@ -174,7 +174,7 @@ services:
     command: ["postgres", "-c", "log_statement=all"]
   challenge-bypass-postgres:
     container_name: challenge-bypass-postgres
-    image: postgres:10.4
+    image: postgres:14
     environment:
       - "POSTGRES_USER=btokens"
       - "POSTGRES_PASSWORD=password"
@@ -207,7 +207,7 @@ services:
       - grant
   zookeeper:
     container_name: grant-zookeeper
-    image: confluentinc/cp-zookeeper:7.1.1
+    image: confluentinc/cp-zookeeper:7.1.2
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
     ports:
@@ -216,7 +216,7 @@ services:
       - grant
   kafka:
     container_name: grant-kafka
-    image: confluentinc/cp-kafka:7.1.1
+    image: confluentinc/cp-kafka:7.1.2
     ports:
       - "29092:29092"
     environment:
