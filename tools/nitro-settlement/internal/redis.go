@@ -7,9 +7,11 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -303,12 +305,19 @@ func (c *client) ConfigureWorker(ctx context.Context, stream string, conf *Worke
 // GetPublisher - get something capable of publishing a report somewhere
 func GetPublisher(ctx context.Context, addrs []string, username, pass string) (*client, error) {
 	tlsConfig := &tls.Config{
+		ServerName: "redis",
 		MinVersion: tls.VersionTLS12,
 		ClientAuth: 0,
 	}
 	// --test-mode will cause tls to skip the insecure verification, --test-mode not for production use
 	if testMode, ok := ctx.Value(TestModeCTXKey).(bool); ok && testMode {
-		tlsConfig.InsecureSkipVerify = true
+		certPool := x509.NewCertPool()
+		pem, err := ioutil.ReadFile("test/redis/tls/ca.crt")
+		if err != nil {
+			return nil, LogAndError(ctx, err, "GetPublisher", "failed to read test-mode ca.crt")
+		}
+		certPool.AppendCertsFromPEM(pem)
+		tlsConfig.RootCAs = certPool
 	}
 	c := &client{
 		redis: redis.NewClusterClient(
@@ -326,7 +335,7 @@ func GetPublisher(ctx context.Context, addrs []string, username, pass string) (*
 	}
 	err := c.redis.Ping(ctx).Err()
 	if err != nil {
-		return nil, fmt.Errorf("failed to ping redis: %w", err)
+		return nil, LogAndError(ctx, err, "GetPublisher", "failed to ping redis")
 	}
 	return c, nil
 }

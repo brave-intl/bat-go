@@ -26,8 +26,6 @@ services:
       - redis-slave-1
       - redis-slave-2
       - redis-slave-3
-    networks:
-        - bat-go_grant
 
   redis-slave-1:
     container_name: redis-slave-1
@@ -47,8 +45,6 @@ services:
       - "6381:6379"
     volumes:
       - ./test/redis/tls:/etc/redis
-    networks:
-      - bat-go_grant
 
   redis-slave-2:
     container_name: redis-slave-2
@@ -68,8 +64,6 @@ services:
       - "6382:6379"
     volumes:
       - ./test/redis/tls:/etc/redis
-    networks:
-      - bat-go_grant
 
   redis-slave-3:
     container_name: redis-slave-3
@@ -89,9 +83,3 @@ services:
       - "6383:6379"
     volumes:
       - ./test/redis/tls:/etc/redis
-    networks:
-      - bat-go_grant
-
-networks:
-  bat-go_grant:
-    external: true

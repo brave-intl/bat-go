@@ -5,6 +5,7 @@ validate, and authorize custodian transactions.
 
 ### Setup Redis Locally
 ```bash
+// add `127.0.0.1 redis` to hosts file
 docker-compose -f docker-compose.redis.yml up -d # to start up the local redis cluster
 ```
 
@@ -48,7 +49,7 @@ REDIS_PASS=whatever_the_pass_is \
     go run main.go prepare \
         --report test/report.json \
         --payout-id 20230202_1 \
-        --redis-addrs 127.0.0.1:6380,127.0.0.1:6383,127.0.0.1:6381,127.0.0.1:6382 \
+        --redis-addrs redis:6380,redis:6383,redis:6381,redis:6382 \
         --redis-user redis \
         --test-mode # test mode is just for testing, not production
 ```
@@ -129,7 +130,7 @@ REDIS_PASS=whatever_the_pass_is
     go run main.go authorize \
     --attested-report test/attested-report.json \ # the attested report you validated
     --payout-id 20230202_1 \ # identifier of the payout
-    --redis-addrs 127.0.0.1:6380,127.0.0.1:6383,127.0.0.1:6381,127.0.0.1:6382 \
+    --redis-addrs redis:6380,redis:6383,redis:6381,redis:6382 \
     --redis-user redis \ 
     --key-file test/private.pem \ # this is your operator key, payments validates your key
     --payments-host https://payments.bsg.brave.software \ # this is the host of the payments service in nitro
