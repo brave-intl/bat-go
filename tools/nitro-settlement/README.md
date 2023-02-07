@@ -18,6 +18,24 @@ Available commands are:
 3. `authorize`
 3. `validate`
 
+### Bootstrap
+
+For the payments service to download relevant configurations, the operator will need to bootstrap
+the system by encrypting the configurations with a KMS key that only the enclave can decrypt from,
+so the bootstrap command takes the configurations and performs the encryption and uploads the
+configuration to s3.  Below is an example of how to run:
+
+```bash
+    go run main.go bootstrap \
+        --assume-role="arn:aws:iam::*********:role/*******" \
+        --kms-key="arn:aws:kms:*******:key/**********" \ 
+        --s3-bucket="*****************" \
+        --bootstrap-file=test/bootstrap.json
+```
+
+bootstrap.json should be structured in a way that the payments service initialization is able to read
+parse and use it as it's configuration.
+
 ### Prepare
 
 The prepare command parses the payout report, and enqueues the transactions in 
