@@ -3,15 +3,16 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"io"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/tools/nitro-settlement/internal"
@@ -28,10 +29,6 @@ func init() {
 	// bootstrap-file - the bootstrap configuration file
 	bootstrapCmd.Flags().String(bootstrapFileKey, "", "the location of bootstrap file")
 	viper.BindPFlag(bootstrapFileKey, bootstrapCmd.Flags().Lookup(bootstrapFileKey))
-
-	// assume-role - the role to assume (needs iam ability to encrypt/s3 put
-	bootstrapCmd.Flags().String(assumeRoleKey, "", "the role to assume which allows encrypt/upload")
-	viper.BindPFlag(assumeRoleKey, bootstrapCmd.Flags().Lookup(assumeRoleKey))
 
 	// kms-key - the kms key arn to use to encrypt
 	bootstrapCmd.Flags().String(kmsKeyKey, "", "the kms key to use to encrypt with")
@@ -50,7 +47,6 @@ var (
 		Run:   cmdutils.Perform("bootstrap settlement", bootstrapRun),
 	}
 	bootstrapFileKey = "bootstrap-file"
-	assumeRoleKey    = "assume-role"
 	kmsKeyKey        = "kms-key"
 	s3BucketKey      = "s3-bucket"
 )
@@ -62,7 +58,6 @@ func bootstrapRun(command *cobra.Command, args []string) error {
 
 	logging.Logger(ctx, "bootstrap").Info().
 		Str(bootstrapFileKey, viper.GetString(bootstrapFileKey)).
-		Str(assumeRoleKey, viper.GetString(assumeRoleKey)).
 		Str(kmsKeyKey, viper.GetString(kmsKeyKey)).
 		Str(s3BucketKey, viper.GetString(s3BucketKey)).
 		Msg("configuration")
@@ -87,12 +82,7 @@ func bootstrapRun(command *cobra.Command, args []string) error {
 	}
 	logging.Logger(ctx, "bootstrap").Info().Msg("aws config loaded...")
 
-	// setup creds for role we need to assume
-	stsSvc := sts.NewFromConfig(cfg)
-	creds := stscreds.NewAssumeRoleProvider(stsSvc, viper.GetString(assumeRoleKey))
-	cfg.Credentials = aws.NewCredentialsCache(creds)
-
-	// get kms client from config - assumed role
+	// get kms client from config
 	kmsClient := kms.NewFromConfig(cfg)
 	logging.Logger(ctx, "bootstrap").Info().Msg("created kms client...")
 
@@ -109,10 +99,15 @@ func bootstrapRun(command *cobra.Command, args []string) error {
 	s3Client := s3.NewFromConfig(cfg)
 	logging.Logger(ctx, "bootstrap").Info().Msg("created s3 client...")
 
+	h := md5.New()
+	h.Write(out.CiphertextBlob)
+
 	_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(viper.GetString(s3BucketKey)),
-		Key:    aws.String("bootstrap.json"),
-		Body:   bytes.NewBuffer(out.CiphertextBlob),
+		Bucket:                    aws.String(viper.GetString(s3BucketKey)),
+		Key:                       aws.String("bootstrap.json"),
+		Body:                      bytes.NewBuffer(out.CiphertextBlob),
+		ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
+		ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 	})
 	if err != nil {
 		return internal.LogAndError(ctx, err, "bootstrap", "failed to upload bootstrap file")

@@ -26,11 +26,11 @@ so the bootstrap command takes the configurations and performs the encryption an
 configuration to s3.  Below is an example of how to run:
 
 ```bash
-    go run main.go bootstrap \
-        --assume-role="arn:aws:iam::*********:role/*******" \
-        --kms-key="arn:aws:kms:*******:key/**********" \ 
-        --s3-bucket="*****************" \
-        --bootstrap-file=test/bootstrap.json
+    aws-vault exec <operator aws role> -- \
+        go run main.go bootstrap \
+            --kms-key="arn:aws:kms:*******:key/**********" \
+            --s3-bucket="*****************" \
+            --bootstrap-file=test/bootstrap.json
 ```
 
 bootstrap.json should be structured in a way that the payments service initialization is able to read
