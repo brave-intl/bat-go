@@ -5,8 +5,11 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -85,6 +88,52 @@ func bootstrapRun(command *cobra.Command, args []string) error {
 	// get kms client from config
 	kmsClient := kms.NewFromConfig(cfg)
 	logging.Logger(ctx, "bootstrap").Info().Msg("created kms client...")
+
+	// list the key policies associated with the key
+	keyPolicies, err := kmsClient.ListKeyPolicies(ctx, &kms.ListKeyPoliciesInput{
+		KeyId: aws.String(viper.GetString(kmsKeyKey)),
+	})
+	if err != nil {
+		return internal.LogAndError(ctx, err, "bootstrap", "failed to get key policy")
+	}
+	logging.Logger(ctx, "bootstrap").Info().Msg("aws key policy downloaded...")
+
+	for _, policy := range keyPolicies.PolicyNames {
+		// get the key policy associated with the key, prompt user to continue or not
+		keyPolicy, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+			KeyId:      aws.String(viper.GetString(kmsKeyKey)),
+			PolicyName: aws.String(policy),
+		})
+		if err != nil {
+			return internal.LogAndError(ctx, err, "bootstrap", "failed to get key policy")
+		}
+		logging.Logger(ctx, "bootstrap").Info().Msg("aws key policy downloaded...")
+
+		// print out the policy name, principal and conditions of who can decrypt
+		var p = new(internal.KeyPolicy)
+		if err := json.Unmarshal([]byte(*keyPolicy.Policy), p); err != nil {
+			return internal.LogAndError(ctx, err, "bootstrap", "failed to parse key policy")
+		}
+
+		for _, statement := range p.Statement {
+			if statement.Effect == "Allow" && strings.Contains(strings.Join(statement.Action, "|"), "Decrypt") {
+				conditions, err := json.MarshalIndent(statement.Condition, "", "\t")
+				if err != nil {
+					return internal.LogAndError(ctx, err, "bootstrap", "failed to parse key policy conditions")
+				}
+				fmt.Printf("\nPrincipal: %+v \n\tConditions: %s\n", statement.Principal.AWS, string(conditions))
+			}
+		}
+	}
+
+	var input = "no"
+	fmt.Printf("Would you like to continue? (yes|no) ")
+	fmt.Scanln(&input)
+
+	if strings.EqualFold(input, "no") {
+		logging.Logger(ctx, "bootstrap").Info().Msg("ending bootstrap process")
+		os.Exit(0)
+	}
 
 	// perform encryption of the bootstrap file
 	out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{
