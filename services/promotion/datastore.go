@@ -279,8 +279,8 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 // GetPromotion by ID
 func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 	statement := `select *,
-		case when claimable_until is null then created_at + interval '3 months'
-			else claimable_until
+		case when claimable_until_override is null then created_at + interval '3 months'
+			else claimable_until_override
 		end as claimable_until
 		from promotions where id = $1`
 	promotions := []Promotion{}
@@ -664,8 +664,8 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 			promos.id,
 			promos.promotion_type,
 			promos.created_at,
-			case when claimable_until is null then promos.created_at + interval '3 months'
-				else claimable_until
+			case when claimable_until_override is null then promos.created_at + interval '3 months'
+				else claimable_until_override
 			end as claimable_until,
 			promos.expires_at,
 			promos.version,
@@ -726,8 +726,8 @@ func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error)
 	statement := `
 		select
 			promotions.*,
-			case when promotions.claimable_until is null then promotions.created_at + interval '3 months'
-				else claimable_until
+			case when promotions.claimable_until_override is null then promotions.created_at + interval '3 months'
+				else claimable_until_override
 			end as claimable_until,
 			false as legacy_claimed,
 			true as available,

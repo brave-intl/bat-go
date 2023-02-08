@@ -1,1 +1,1 @@
-alter table promotions drop column claimable_until;
+alter table promotions drop column claimable_until_override;
