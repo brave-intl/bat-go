@@ -278,7 +278,11 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 
 // GetPromotion by ID
 func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
-	statement := "select *, created_at + interval '3 months' as claimable_until from promotions where id = $1"
+	statement := `select *,
+		case when claimable_until is null then created_at + interval '3 months'
+			else claimable_until
+		end as claimable_until
+		from promotions where id = $1`
 	promotions := []Promotion{}
 	err := pg.RawDB().Select(&promotions, statement, promotionID)
 	if err != nil {
@@ -660,7 +664,9 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 			promos.id,
 			promos.promotion_type,
 			promos.created_at,
-			promos.created_at + interval '3 months' as claimable_until,
+			case when claimable_until is null then promos.created_at + interval '3 months'
+				else claimable_until
+			end as claimable_until,
 			promos.expires_at,
 			promos.version,
 			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
@@ -720,7 +726,9 @@ func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error)
 	statement := `
 		select
 			promotions.*,
-			promotions.created_at + interval '3 months' as claimable_until,
+			case when promotions.claimable_until is null then promotions.created_at + interval '3 months'
+				else claimable_until
+			end as claimable_until,
 			false as legacy_claimed,
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
