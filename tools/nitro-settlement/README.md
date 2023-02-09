@@ -85,15 +85,15 @@ after settlement workers complete preparation.  The attested report has the foll
         "idempotencyKey":"1d691291-f376-5591-8ab8-43db145d0e5e",
         "custodian":"uphold",
         "documentId":"1234",
-        "signature": "a4f1354071880faee6391a022b120471e1254afbc87f198d4ce8833350b3a9596fb09ea17eb20fcfc0ed8e63596281cca4f260096943bc6eadf78ffef6da5604"
+        "attestationDocument": "a4f1354071880faee6391a022b120471e1254afbc87f198d4ce8833350b3a9596fb09ea17eb20fcfc0ed8e63596281cca4f260096943bc6eadf78ffef6da5604"
     },
     ...
 ]
 ```
 
 The documentId is the QLDB document identifier for the transaction record stored by payments
-service from the enclave.  The signature is the ed25519 signature of the transaction from
-the following signing string:
+service from the enclave.  The attestation document is from nitro, and the userdata should be validated against
+the transaction.  The following signing string is used for the userdata in the attestation document:
 
 ```go
 // BuildSigningString - the string format that payments will sign over per tx
@@ -108,7 +108,7 @@ performs the following feats:
 
 1. validates the number of transactions in the original report matches the attested report
 2. validates the amount of bat in the original report matches the attested report
-3. validates each transaction was signed (and checks signature) by the payments service running in the enclave
+3. validates each transaction was attested by nitro through the payments service running in the enclave
 4. outputs based on custodian the amount of total BAT being paid out.
 
 If the validate command completes successfully, the operator can spot check the values manually
@@ -118,7 +118,7 @@ and then perform the authorize command.  Below is an example of how to run the v
 go run main.go validate \
     --report test/report.json \
     --attested-report test/attested-report.json \
-    --payments-host https://payments.bsg.brave.software \
+    --nitro-cert ./certs/root.pem \
     --test-mode # test mode just for testing, not production
 ```
 

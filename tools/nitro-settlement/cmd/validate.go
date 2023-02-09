@@ -25,9 +25,9 @@ func init() {
 	validateCmd.Flags().String(attestedReportKey, "", "attested report input for validate")
 	viper.BindPFlag(validateAttestedReportKey, validateCmd.Flags().Lookup(attestedReportKey))
 
-	// payments service host -- to get the ed25519 ephemeral signing key
-	validateCmd.Flags().String(paymentsHostKey, "", "the payments service host")
-	viper.BindPFlag(paymentsHostKey, validateCmd.Flags().Lookup(paymentsHostKey))
+	// root nitro certificate for attestation verification
+	validateCmd.Flags().String(rootNitroCertFilenameKey, "", "the nitro root cert file")
+	viper.BindPFlag(rootNitroCertFilenameKey, validateCmd.Flags().Lookup(rootNitroCertFilenameKey))
 }
 
 // validateCmd is the nitro settlements prepare command, which loads transactions into workflow
@@ -39,6 +39,7 @@ var (
 	}
 	validateReportKey         = "validate-report"
 	validateAttestedReportKey = "validate-attested-report"
+	rootNitroCertFilenameKey  = "nitro-cert"
 )
 
 // validateRun - main entrypoint for the `validate` subcommand
@@ -49,15 +50,8 @@ func validateRun(command *cobra.Command, args []string) error {
 	logging.Logger(ctx, "validate").Info().
 		Str(attestedReportKey, viper.GetString(validateAttestedReportKey)).
 		Str(reportKey, viper.GetString(validateReportKey)).
-		Str(paymentsHostKey, viper.GetString(paymentsHostKey)).
+		Str(rootNitroCertFilenameKey, viper.GetString(rootNitroCertFilenameKey)).
 		Msg("configuration")
-
-	// get the payments service's signing key
-	paymentsPubKey, err := internal.GetPaymentsPubKey(ctx, viper.GetString(paymentsHostKey))
-	if err != nil {
-		return internal.LogAndError(ctx, err, "validate", "failed to download payments public key")
-	}
-	logging.Logger(ctx, "validate").Info().Msg("payments public key downloaded...")
 
 	// read the original report
 	originalReport, err := internal.ParseReport(ctx, viper.GetString(validateReportKey))
@@ -91,9 +85,9 @@ func validateRun(command *cobra.Command, args []string) error {
 				attestedReport.SumBAT()))
 	}
 
-	// check signatures on each transaction in attested file with paymentsPubKey
-	if err := attestedReport.Verify(ctx, paymentsPubKey); err != nil {
-		return internal.LogAndError(ctx, err, "validate", "failed to verify attested report with signing key")
+	// check nitro attestation document on each transaction in attested file
+	if err := attestedReport.Verify(ctx, viper.GetString(rootNitroCertFilenameKey)); err != nil {
+		return internal.LogAndError(ctx, err, "validate", "failed to verify attested report")
 	}
 	logging.Logger(ctx, "validate").Info().Msg("attested report has been verified...")
 

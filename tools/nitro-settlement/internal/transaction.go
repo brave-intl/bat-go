@@ -2,12 +2,14 @@ package internal
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/hex"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+
+	nitrodoc "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/google/uuid"
@@ -60,12 +62,12 @@ func ParseReport(ctx context.Context, reportLocation string) (*Report, error) {
 
 // AuthorizeTx - this is the tx going to authorize workers from attested report
 type AuthorizeTx struct {
-	To         string          `json:"to"`
-	Amount     decimal.Decimal `json:"amount"`
-	ID         string          `json:"idempotencyKey"`
-	Custodian  string          `json:"custodian"`
-	DocumentID string          `json:"documentId"`
-	Signature  string          `json:"signature"`
+	To                  string          `json:"to"`
+	Amount              decimal.Decimal `json:"amount"`
+	ID                  string          `json:"idempotencyKey"`
+	Custodian           string          `json:"custodian"`
+	DocumentID          string          `json:"documentId"`
+	AttestationDocument string          `json:"attestationDocument"` // base64 encoded
 }
 
 // BuildSigningString - the string format that payments will sign over per tx
@@ -172,22 +174,31 @@ func (ar AttestedReport) SumBAT(custodians ...string) decimal.Decimal {
 	return total
 }
 
-// Verify - verify signatures on each of the records in the report
-func (ar AttestedReport) Verify(ctx context.Context, pub ed25519.PublicKey) error {
+// Verify - verify nitro attestation on each of the records in the report
+func (ar AttestedReport) Verify(ctx context.Context, rootCertFilename string) error {
+	// parse the amazon nitro cert
+	cert, err := parsePemCertFile(ctx, rootCertFilename)
+	if err != nil {
+		return LogAndError(ctx, err, "Verify", "failed to parse root nitro certificate file")
+	}
+
 	for i := 0; i < len([]AuthorizeTx(ar)); i++ { // for every transaction
-		msg := []AuthorizeTx(ar)[i].BuildSigningBytes()
-		sig, err := hex.DecodeString([]AuthorizeTx(ar)[i].Signature)
+		// decode the attestation document base64
+		doc, err := base64.StdEncoding.DecodeString([]AuthorizeTx(ar)[i].AttestationDocument)
 		if err != nil {
-			return LogAndError(ctx, fmt.Errorf("tx invalid sig # %d - %s - %s",
-				i, msg, sig,
-			), "Verify", "could not decode transaction signature")
+			return LogAndError(ctx, err, "Verify", "failed to b64 decode attestation document")
 		}
 
-		if !ed25519.Verify(pub, msg, sig) {
-			// failed verification
-			return LogAndError(ctx, fmt.Errorf("tx invalid sig # %d - %s - %s",
-				i, msg, sig,
-			), "Verify", "could not verify transaction signature")
+		// authenticate the attestation document on the record
+		document, err := nitrodoc.AuthenticateDocument(doc, *cert)
+		if err != nil {
+			return LogAndError(ctx, err, "Verify", "failed to authenticate attestation document")
+		}
+		// authentically from nitro, now validate the signing bytes match
+		if subtle.ConstantTimeCompare(
+			[]AuthorizeTx(ar)[i].BuildSigningBytes(),
+			document.UserData) < 1 {
+			return LogAndError(ctx, err, "Verify", "attested userdata does not match transaction data")
 		}
 	}
 	return nil

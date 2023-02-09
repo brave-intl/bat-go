@@ -5,7 +5,7 @@
 		"idempotencyKey":"1d691291-f376-5591-8ab8-43db145d0e5e",
 		"custodian":"uphold",
 		"documentId":"1234",
-        "signature": "a4f1354071880faee6391a022b120471e1254afbc87f198d4ce8833350b3a9596fb09ea17eb20fcfc0ed8e63596281cca4f260096943bc6eadf78ffef6da5604"
+        "attestationDocument": ""
 	},
 	{
 		"to":"002399e3-6eaa-47ce-bf92-7f531bb6a971",
@@ -13,7 +13,7 @@
 		"idempotencyKey":"11705191-50e4-5401-ab9b-9fd8d88d934a",
 		"custodian":"gemini",
 		"documentId":"2345",
-        "signature": "8cf5e3a1934e4e22054cb36e32e6b9e6d9f0dd78eebec5788f522f962350b613a9a5e8d42179841ccfd275bba957df808342caeea5911872cc1691abd3300b0c"
+        "attestationDocument": ""
 	},
 	{
 		"to":"003694c1-def6-48c4-8a45-ca8c2fce50f3",
@@ -21,7 +21,7 @@
 		"idempotencyKey":"431bd316-91e7-519c-9588-7fe6ff7408bb",
 		"custodian":"bitflyer",
 		"documentId":"3456",
-        "signature": "e4fc374b02aa5776f1c512cdd7768d3b3aa6984aa310536b9c8a2c3ff52468ca29eec63012f7a189ac0673f08faf01c5b0acbb05f8cad5ac4bdbeaca16785b09"
+        "attestationDocument": ""
 	}
 ]
 
