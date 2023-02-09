@@ -44,7 +44,7 @@ var (
 		"btu":   "btu-protocol",
 		"can":   "canyacoin",
 		"cat":   "bitclave",
-		"comp":  "compound-coin",
+		"comp":  "compound-governance-token",
 		"cor":   "coreto",
 		"cvp":   "concentrated-voting-power",
 		"cwbtc": "compound-wrapped-btc",
