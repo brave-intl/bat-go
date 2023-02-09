@@ -262,7 +262,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "bitflyer").WillReturnRows(linkingIDRows)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(linkingID, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -418,7 +418,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(linkingID, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -528,7 +528,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(linkingID, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	clRows = sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -659,7 +659,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(linkingID, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -777,7 +777,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(linkingID, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// this wallet has been linked prior, with the same linking id that the request is with
 	// SHOULD SKIP THE linking limit checks
