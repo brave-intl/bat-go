@@ -177,7 +177,7 @@ services:
 
   postgres:
     container_name: grant-postgres
-    image: postgres:14
+    image: postgres:10.4
     ports:
       - "3401:5432"
     environment:
@@ -189,7 +189,7 @@ services:
 
   challenge-bypass-postgres:
     container_name: challenge-bypass-postgres
-    image: postgres:14
+    image: postgres:10.4
     environment:
       - "POSTGRES_USER=btokens"
       - "POSTGRES_PASSWORD=password"
