@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,12 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asaskevich/govalidator"
-	session "github.com/stripe/stripe-go/v72/checkout/session"
-	client "github.com/stripe/stripe-go/v72/client"
-	sub "github.com/stripe/stripe-go/v72/sub"
+	"github.com/getsentry/sentry-go"
 
-	"errors"
+	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/libs/backoff"
 
 	"github.com/awa/go-iap/appstore"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
-	stripe "github.com/stripe/stripe-go/v72"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
@@ -41,12 +39,28 @@ import (
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/checkout/session"
+	"github.com/stripe/stripe-go/v72/client"
+	"github.com/stripe/stripe-go/v72/sub"
 )
 
 var (
+	errSetRetryAfter   = errors.New("set retry-after")
+	errClosingResource = errors.New("error closing resource")
+
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
+
+	// TODO address in kafka refactor. Check topics are correct
+	// kafka topic for requesting order credentials are signed, write to by sku service
+	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
+
+	// kafka topic which receives order creds once they have been signed, read by sku service
+	kafkaSignedOrderCredsTopic      = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaSignedOrderCredsDLQTopic   = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC_DLQ")
+	kafkaSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
 )
 
 const (
@@ -56,6 +70,12 @@ const (
 	OrderStatusPaid = "paid"
 	// OrderStatusPending - string literal used in db for pending status
 	OrderStatusPending = "pending"
+)
+
+// Default issuer V3 config default values
+const (
+	defaultBuffer  = 30
+	defaultOverlap = 5
 )
 
 // Service contains datastore
@@ -72,6 +92,7 @@ type Service struct {
 	jobs             []srv.Job
 	pauseVoteUntil   time.Time
 	pauseVoteUntilMu sync.RWMutex
+	retry            backoff.RetryFunc
 }
 
 // PauseWorker - pause worker until time specified
@@ -95,18 +116,18 @@ func (s *Service) Jobs() []srv.Job {
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (s *Service) InitKafka(ctx context.Context) error {
-
-	// TODO: eventually as cobra/viper
-	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
-
+	// TODO address in kafka refactor
+	// passing an empty string will not set topic on writer, so it can be defined at message write time
 	var err error
-	s.kafkaWriter, s.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, voteTopic)
+	s.kafkaWriter, s.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, "")
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
 	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"vote": voteSchema,
+		"vote":                       voteSchema,
+		kafkaUnsignedOrderCredsTopic: signingOrderRequestSchema,
+		kafkaSignedOrderCredsTopic:   signingOrderResultSchema,
 	})
 
 	if err != nil {
@@ -169,6 +190,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		scClient:         scClient,
 		Datastore:        datastore,
 		pauseVoteUntilMu: sync.RWMutex{},
+		retry:            backoff.Retry,
 	}
 
 	// setup runnable jobs
@@ -183,11 +205,26 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			Cadence: 500 * time.Millisecond,
 			Workers: 3,
 		},
+		{
+			Func:    service.RunSendSigningRequestJob,
+			Cadence: 100 * time.Millisecond,
+			Workers: 1,
+		},
 	}
 
 	err = service.InitKafka(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
+
+	if enabled, ok := ctx.Value(appctx.SkusEnableStoreSignedOrderCredsConsumer).(bool); ok && enabled {
+		if consumers, ok := ctx.Value(appctx.SkusNumberStoreSignedOrderCredsConsumer).(int); ok {
+			for i := 0; i < consumers; i++ {
+				go service.RunStoreSignedOrderCredentials(ctx, 10*time.Second)
+			}
+		}
 	}
 
 	return service, nil
@@ -196,21 +233,41 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 // CreateOrderFromRequest creates an order from the request
 func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
-	orderItems := []OrderItem{}
 	var (
 		currency              string
+		orderItems            []OrderItem
 		location              string
 		validFor              *time.Duration
 		stripeSuccessURI      string
 		stripeCancelURI       string
 		status                string
 		allowedPaymentMethods = new(Methods)
+		merchantID            = "brave.com"
+		numIntervals          int
+		numPerInterval        = 2 // two per interval credentials to be submitted for signing
 	)
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, pm, err := s.CreateOrderItemFromMacaroon(ctx, req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, pm, issuerConfig, err := s.CreateOrderItemFromMacaroon(ctx, req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
+		}
+
+		// Create issuer for sku. This only happens when a new sku is created.
+		switch orderItem.CredentialType {
+		case singleUse:
+			err = s.CreateIssuer(ctx, merchantID, *orderItem)
+			if err != nil {
+				return nil, errorutils.Wrap(err, "error finding issuer")
+			}
+		case timeLimitedV2:
+			err = s.CreateIssuerV3(ctx, merchantID, *orderItem, *issuerConfig)
+			if err != nil {
+				return nil, fmt.Errorf("error creating issuer for merchantID %s and sku %s: %w",
+					merchantID, orderItem.SKU, err)
+			}
+			// set num tokens and token multi
+			numIntervals = issuerConfig.buffer + issuerConfig.overlap
 		}
 
 		// make sure all the order item skus have the same allowed Payment Methods
@@ -243,16 +300,24 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		if currency != orderItem.Currency {
 			return nil, errors.New("all order items must be the same currency")
 		}
+
 		// stripe related
-		if stripeSuccessURI == "" {
-			stripeSuccessURI = orderItem.Metadata["stripe_success_uri"]
-		} else if stripeSuccessURI != orderItem.Metadata["stripe_success_uri"] {
-			return nil, errors.New("all order items must have same stripe success uri")
+		metadataStripeSuccessURI, ok := orderItem.Metadata["stripe_success_uri"].(string)
+		if ok {
+			if stripeSuccessURI == "" {
+				stripeSuccessURI = metadataStripeSuccessURI
+			} else if stripeSuccessURI != metadataStripeSuccessURI {
+				return nil, errors.New("all order items must have same stripe success uri")
+			}
 		}
-		if stripeCancelURI == "" {
-			stripeCancelURI = orderItem.Metadata["stripe_cancel_uri"]
-		} else if stripeCancelURI != orderItem.Metadata["stripe_cancel_uri"] {
-			return nil, errors.New("all order items must have same stripe cancel uri")
+
+		metadataStripeCancelURI, ok := orderItem.Metadata["stripe_cancel_uri"].(string)
+		if ok {
+			if stripeCancelURI == "" {
+				stripeCancelURI = metadataStripeCancelURI
+			} else if stripeCancelURI != metadataStripeCancelURI {
+				return nil, errors.New("all order items must have same stripe cancel uri")
+			}
 		}
 
 		orderItems = append(orderItems, *orderItem)
@@ -265,14 +330,15 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		status = OrderStatusPending
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, validFor, orderItems, allowedPaymentMethods)
+	order, err := s.Datastore.CreateOrder(totalPrice, merchantID, status, currency,
+		location, validFor, orderItems, allowedPaymentMethods)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
 	if !order.IsPaid() && order.IsStripePayable() {
-		// brand new order, contains an email in the request
+		// brand-new order, contains an email in the request
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
@@ -283,7 +349,21 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
 		}
 
-		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
+
+	if numIntervals > 0 {
+		err = s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numIntervals", numIntervals)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
+
+	if numPerInterval > 0 {
+		err = s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", numPerInterval)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
@@ -316,6 +396,8 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 // TransformStripeOrder - update checkout session if expired, check the status of the checkout session
 func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
+	ctx := context.Background()
+
 	// check if this order has an expired checkout session
 	expired, cs, err := s.Datastore.CheckExpiredCheckoutSession(order.ID)
 	if err != nil {
@@ -338,7 +420,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
 		}
 
-		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
@@ -348,7 +430,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 	// stripe, as the redirect flow sometimes is too fast for the webhook to be delivered.
 	// exclude any order with a subscription identifier from stripe
 	if _, sOK := order.Metadata["stripeSubscriptionId"]; !sOK {
-		if cs, ok := order.Metadata["stripeCheckoutSessionId"]; ok && cs != "" {
+		if cs, ok := order.Metadata["stripeCheckoutSessionId"].(string); ok && cs != "" {
 			// get old checkout session from stripe by id
 			stripeSession, err := session.Get(cs, nil)
 			if err != nil {
@@ -369,6 +451,11 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 				if err != nil {
 					return nil, fmt.Errorf("failed to update order to add the payment processor")
 				}
+				// set paymentProcessor as stripe
+				err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, paymentProcessor, StripePaymentMethod)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update order to add the payment processor")
+				}
 			}
 		}
 	}
@@ -382,7 +469,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 	return order, nil
 }
 
-// CancelOrder - cancels an order, propogates to stripe if needed
+// CancelOrder - cancels an order, propagates to stripe if needed
 func (s *Service) CancelOrder(orderID uuid.UUID) error {
 	// check the order, do we have a stripe subscription?
 	ok, subID, err := s.Datastore.IsStripeSub(orderID)
@@ -428,7 +515,11 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 	// recreate the stripe checkout session now that we have set the trial days on this order
 	if !order.IsPaid() && order.IsStripePayable() {
 		// get old checkout session from stripe by id
-		stripeSession, err := session.Get(order.Metadata["stripeCheckoutSessionId"], nil)
+		csID, ok := order.Metadata["stripeCheckoutSessionId"].(string)
+		if !ok {
+			return fmt.Errorf("failed to get checkout session id from metadata: %w", err)
+		}
+		stripeSession, err := session.Get(csID, nil)
 		if err != nil {
 			return fmt.Errorf("failed to get stripe checkout session: %w", err)
 		}
@@ -443,7 +534,7 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		}
 
 		// overwrite the old checkout session
-		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
 		if err != nil {
 			return fmt.Errorf("failed to update order metadata: %w", err)
 		}
@@ -472,15 +563,6 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 		}
 	}
 
-	return nil
-}
-
-// UpdateOrderMetadata updates the metadata on an order
-func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
-	err := s.Datastore.UpdateOrderMetadata(orderID, key, value)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -777,19 +859,6 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	return sum.GreaterThanOrEqual(order.TotalPrice), nil
 }
 
-// RunNextOrderJob takes the next order job and completes it
-func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
-	for {
-		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
-		if err != nil {
-			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
-		}
-		if !attempted {
-			return attempted, err
-		}
-	}
-}
-
 func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 	// add order id to the stripe success and cancel urls
 	surl, err := url.Parse(u)
@@ -804,8 +873,9 @@ func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 }
 
 const (
-	singleUse   = "single-use"
-	timeLimited = "time-limited"
+	singleUse     = "single-use"
+	timeLimited   = "time-limited"
+	timeLimitedV2 = "time-limited-v2"
 )
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
@@ -813,11 +883,16 @@ var errInvalidCredentialType = errors.New("invalid credential type on order")
 // GetCredentials - based on the order, get the associated credentials
 func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
 	var credentialType string
-	// get the order from datastore
+
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
 	}
+
+	if order == nil {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
+	}
+
 	// look through order, find out what all the order item's credential types are
 	for i, v := range order.Items {
 		if i > 0 {
@@ -835,13 +910,16 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 		return s.GetSingleUseCreds(ctx, order)
 	case timeLimited:
 		return s.GetTimeLimitedCreds(ctx, order)
+	case timeLimitedV2:
+		return s.GetTimeLimitedV2Creds(ctx, order)
 	}
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
 
-// GetSingleUseCreds get an order's single use creds
+// GetSingleUseCreds returns all the single use credentials for a given order.
+// If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
+// If the credentials have been signed it will return a http.StatusOK and the order credentials.
 func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderCreds, int, error) {
-
 	if order == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
@@ -851,18 +929,71 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if creds == nil {
-		return nil, http.StatusNotFound, fmt.Errorf("Credentials do not exist")
+	if len(creds) > 0 {
+		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
+		for i := 0; i < len(creds); i++ {
+			if creds[i].SignedCreds == nil {
+				return nil, http.StatusAccepted, nil
+			}
+		}
+		// TODO: End
+		return creds, http.StatusOK, nil
 	}
 
-	status := http.StatusOK
-	for i := 0; i < len(*creds); i++ {
-		if (*creds)[i].SignedCreds == nil {
-			status = http.StatusAccepted
-			break
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	if len(outboxMessages) == 0 {
+		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	}
+
+	for _, m := range outboxMessages {
+		if m.CompletedAt == nil {
+			return nil, http.StatusAccepted, nil
 		}
 	}
-	return *creds, status, nil
+
+	return creds, http.StatusOK, nil
+}
+
+// GetTimeLimitedV2Creds returns all the single use credentials for a given order.
+// If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
+// If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeAwareSubIssuedCreds, int, error) {
+	var resp = []TimeAwareSubIssuedCreds{} // browser api_request_helper does not understand "null" as json
+	if order == nil {
+		return resp, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
+	}
+
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
+	if err != nil {
+		return resp, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+	}
+
+	if len(outboxMessages) == 0 {
+		return resp, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
+	}
+
+	for _, m := range outboxMessages {
+		if m.CompletedAt == nil {
+			// get average of last 10 outbox messages duration as the retry after
+			return resp, http.StatusAccepted, errSetRetryAfter
+		}
+	}
+
+	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	if err != nil {
+		return resp, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	// Potentially we can have all creds signed but nothing to return as they are all expired.
+	if creds == nil {
+		return resp, http.StatusOK, nil
+	}
+
+	return creds.Credentials, http.StatusOK, nil
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
@@ -1053,6 +1184,7 @@ type credential interface {
 	GetPresentation(context.Context) string
 }
 
+// TODO refactor this see issue #1502
 // verifyCredential - given a credential, verify it.
 func (s *Service) verifyCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
 	logger := logging.Logger(ctx, "verifyCredential")
@@ -1090,7 +1222,7 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 	}
 	logger.Debug().Msg("caveats validated")
 
-	if req.GetType(ctx) == "single-use" {
+	if req.GetType(ctx) == singleUse || req.GetType(ctx) == timeLimitedV2 {
 		var bytes []byte
 		bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
 		if err != nil {
@@ -1112,7 +1244,18 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 			return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 		}
 
-		err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
+		switch req.GetType(ctx) {
+		case singleUse:
+			err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
+				decodedCredential.Signature, decodedCredential.Issuer)
+		case timeLimitedV2:
+			err = s.cbClient.RedeemCredentialV3(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
+				decodedCredential.Signature, decodedCredential.Issuer)
+		default:
+			return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", req.GetType(ctx)),
+				"unknown credential type %s", http.StatusBadRequest)
+		}
+
 		if err != nil {
 			// if this is a duplicate redemption these are not verified
 			if err.Error() == cbr.ErrDupRedeem.Error() || err.Error() == cbr.ErrBadRequest.Error() {
@@ -1122,7 +1265,9 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		}
 
 		return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
-	} else if req.GetType(ctx) == "time-limited" {
+	}
+
+	if req.GetType(ctx) == "time-limited" {
 		// Presentation includes a token and token metadata test test
 		type Presentation struct {
 			IssuedAt  string `json:"issuedAt"`
@@ -1201,6 +1346,90 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		return handlers.RenderContent(ctx, "Credentials could not be verified", w, http.StatusForbidden)
 	}
 	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
+}
+
+// RunNextOrderJob Deprecated. Takes the next order job and completes it.
+func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
+	for {
+		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
+		if err != nil {
+			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
+		}
+		if !attempted {
+			return attempted, err
+		}
+	}
+}
+
+// RunSendSigningRequestJob - send the order credentials signing requests
+func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
+	return true, s.Datastore.SendSigningRequest(ctx, s)
+}
+
+// TODO: Address in kafka refactor
+
+// RunStoreSignedOrderCredentials starts a signed order credentials consumer.
+// This function creates a new signed order credentials consumer and starts processing messages.
+// If the consumers errors we backoff, close the reader and restarts the consumer.
+func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff time.Duration) {
+	logger := logging.Logger(ctx, "skus.RunStoreSignedOrderCredentials")
+
+	decoder := &SigningOrderResultDecoder{
+		codec: s.codecs[kafkaSignedOrderCredsTopic],
+	}
+
+	handler := &SignedOrderCredentialsHandler{
+		decoder:   decoder,
+		datastore: s.Datastore,
+	}
+
+	errorHandler := &SigningOrderResultErrorHandler{
+		kafkaWriter: s.kafkaWriter,
+	}
+
+	run := func() (err error) {
+		reader, err := kafkautils.NewKafkaReader(ctx, kafkaSignedRequestReaderGroupID, kafkaSignedOrderCredsTopic)
+		if err != nil {
+			return fmt.Errorf("error creating kafka signed order credentials reader: %w", err)
+		}
+		defer func() {
+			closeErr := reader.Close()
+			if closeErr != nil {
+				if err != nil {
+					logger.Err(err).Msg("consumer error")
+				}
+				err = fmt.Errorf("error closing kafka reader: %w", errClosingResource)
+			}
+		}()
+
+		err = kafkautils.Consume(ctx, reader, handler, errorHandler)
+		if err != nil {
+			return fmt.Errorf("consumer error: %w", err)
+		}
+
+		return nil
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			if err != nil {
+				logger.Err(err).Msg("error calling context")
+			}
+			return
+		default:
+			err := run()
+			if err != nil {
+				logger.Err(err).Msg("error running consumer")
+				sentry.CaptureException(err)
+				if errors.Is(err, errClosingResource) {
+					return
+				}
+				time.Sleep(backoff)
+			}
+		}
+	}
 }
 
 // verifyIOSNotification - verify the developer notification from appstore
@@ -1314,8 +1543,15 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	for k, v := range metadata {
-		if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, v); err != nil {
-			return fmt.Errorf("failed to append order metadata: %w", err)
+		if vv, ok := v.(string); ok {
+			if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, vv); err != nil {
+				return fmt.Errorf("failed to append order metadata: %w", err)
+			}
+		}
+		if vv, ok := v.(int); ok {
+			if err := s.Datastore.AppendOrderMetadataInt(ctx, orderID, k, vv); err != nil {
+				return fmt.Errorf("failed to append order metadata: %w", err)
+			}
 		}
 	}
 	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {

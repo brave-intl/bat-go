@@ -704,6 +704,11 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 			return handlers.WrapValidationError(errors.New("ClaimIDs: required, cannot be empty"))
 		}
 
+		// govalidator does not always catch empty array on required
+		if len(req.ClaimIDs) == 0 {
+			return handlers.WrapValidationError(errors.New("ClaimIDs: required, cannot be empty"))
+		}
+
 		err = service.Datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs, version)
 		if err != nil {
 			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/closers"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 type requestID string
@@ -42,10 +43,12 @@ func Read(ctx context.Context, body io.Reader) ([]byte, error) {
 
 // ReadJSON reads a request body according to an interface and limits the size to 10MB
 func ReadJSON(ctx context.Context, body io.Reader, intr interface{}) error {
+	logger := logging.Logger(ctx, "requestutils.ReadJSON")
 	jsonString, err := Read(ctx, body)
 	if err != nil {
 		return err
 	}
+	logger.Debug().Str("json", string(jsonString)).Msg("read payload")
 	err = json.Unmarshal(jsonString, &intr)
 	if err != nil {
 		return errorutils.Wrap(err, "error unmarshalling body")

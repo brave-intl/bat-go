@@ -22,7 +22,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
 )
 
@@ -43,7 +43,7 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 }
 
 // Router for order endpoints
-func Router(service *Service) chi.Router {
+func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
 	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
@@ -63,7 +63,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/anonymousCard", instrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	// api routes for order receipt validation
 	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
@@ -72,10 +72,8 @@ func Router(service *Service) chi.Router {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
-
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
+		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 	})
 
 	return r
@@ -237,9 +235,9 @@ func GetKeys(service *Service) handlers.AppHandler {
 }
 
 // VoteRouter for voting endpoint
-func VoteRouter(service *Service) chi.Router {
+func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/", middleware.InstrumentHandler("MakeVote", MakeVote(service)))
+	r.Method("POST", "/", instrumentHandler("MakeVote", MakeVote(service)))
 	return r
 }
 
@@ -257,7 +255,7 @@ type CreateOrderRequest struct {
 
 // CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		ctx := r.Context()
 		sublogger := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
@@ -293,7 +291,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
-	})
+	}
 }
 
 // SetOrderTrialDaysInput - SetOrderTrialDays handler input
@@ -573,20 +571,27 @@ type CreateOrderCredsRequest struct {
 
 // CreateOrderCreds is the handler for creating order credentials
 func CreateOrderCreds(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req CreateOrderCredsRequest
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			req    = new(CreateOrderCredsRequest)
+			ctx    = r.Context()
+			logger = logging.Logger(ctx, "skus.CreateOrderCreds")
+		)
+		err := requestutils.ReadJSON(r.Context(), r.Body, req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to read body payload")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to validate struct")
 			return handlers.WrapValidationError(err)
 		}
 
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			logger.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
@@ -595,28 +600,55 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderCreds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), req.ItemID, false)
+		orderItem, err := service.Datastore.GetOrderItem(r.Context(), req.ItemID)
 		if err != nil {
+			logger.Error().Err(err).Msg("error getting the order item for creds")
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
-		if orderCreds != nil {
+
+		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
+		if orderItem.CredentialType == timeLimitedV2 {
+			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(r.Context(), req.BlindedCreds...)
+			if err != nil {
+				// This is an existing error message so don't want to change it incase client are relying on it.
+				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
+			}
+			if alreadySubmitted {
+				// since these are already submitted, no need to create order credentials
+				// return ok
+				return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+			}
+		}
+
+		// check if we already have a signing request for this order, delete order creds will
+		// delete the prior signing request.  this allows subscriptions to manage how many
+		// order creds are handed out.
+		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
+		if err != nil {
+			// This is an existing error message so don't want to change it incase client are relying on it.
+			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+		}
+
+		if len(signingOrderRequests) > 0 {
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
-		err = service.CreateOrderCreds(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderItemCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
-	})
+	}
 }
 
-// GetOrderCreds is the handler for fetching order credentials
+// GetOrderCreds is the handler for fetching all order credentials associated with an order.
+// This endpoint handles the retrieval of all order credential types i.e. single-use, time-limited and time-limited-v2.
 func GetOrderCreds(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var orderID = new(inputs.ID)
+
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
@@ -626,13 +658,21 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		// get credentials, either single-use/time-limited
 		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error getting credentials", status)
+			if errors.Is(err, errSetRetryAfter) {
+				// error specifies a retry after period, add to response header
+				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
+				if err != nil {
+					return handlers.WrapError(err, "Error getting credential retry-after", status)
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
+			} else {
+				return handlers.WrapError(err, "Error getting credentials", status)
+			}
 		}
 		return handlers.RenderContent(r.Context(), creds, w, status)
-	})
+	}
 }
 
 // DeleteOrderCreds is the handler for deleting order credentials
@@ -1094,13 +1134,13 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 					sublogger.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 				}
-				err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order metadata")
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
 				// set paymentProcessor as stripe
-				err = service.Datastore.UpdateOrderMetadata(orderID, paymentProcessor, StripePaymentMethod)
+				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
 					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
@@ -1119,7 +1159,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			}
 			sublogger.Debug().
 				Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
-			err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+			err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to update order metadata")
 				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)

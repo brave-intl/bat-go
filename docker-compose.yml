@@ -51,6 +51,10 @@ services:
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - KAFKA_REQUIRED_ACKS=1
       - KAFKA_CONSUMER_GROUP_PROMOTIONS=grant-bat-promotions-local
+      - KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS=grant-bat-skus-local
+      - GRANT_CBP_SIGN_CONSUMER_TOPIC=sign.consumer # unsigned order creds request
+      - GRANT_CBP_SIGN_CONSUMER_TOPIC_DLQ=sign.consumer.dlq # unsigned order creds request dlq
+      - GRANT_CBP_SIGN_PRODUCER_TOPIC=sign.producer # signed orders creds result
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "RATIOS_SERVICE=https://ratios.rewards.bravesoftware.com"
@@ -71,6 +75,10 @@ services:
       - BITFLYER_TOKEN
       - "ALLOWED_ORIGINS=http://localhost:8080"
       - SKUS_WHITELIST
+      - "DYNAMODB_ENDPOINT=http://dynamodb:8000"
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - AWS_REGION=us-west-2
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -99,6 +107,10 @@ services:
       - no-new-privileges:true
     environment:
       - OUTPUT_DIR="/out"
+      - "DYNAMODB_ENDPOINT=http://dynamodb:8000"
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - AWS_REGION=us-west-2
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
       - DRAIN_RETRY_JOB_ENABLED=true
@@ -154,6 +166,7 @@ services:
       - challenge-bypass
     networks:
       - grant
+
   redis:
     container_name: grant-redis
     image: redis
@@ -161,9 +174,10 @@ services:
       - "6379:6379"
     networks:
       - grant
+
   postgres:
     container_name: grant-postgres
-    image: postgres:14
+    image: postgres:10.4
     ports:
       - "3401:5432"
     environment:
@@ -172,14 +186,16 @@ services:
     networks:
       - grant
     command: ["postgres", "-c", "log_statement=all"]
+
   challenge-bypass-postgres:
     container_name: challenge-bypass-postgres
-    image: postgres:14
+    image: postgres:10.4
     environment:
       - "POSTGRES_USER=btokens"
       - "POSTGRES_PASSWORD=password"
     networks:
       - grant
+
   challenge-bypass:
     container_name: challenge-bypass
     image: brave/challenge-bypass:latest
@@ -187,6 +203,7 @@ services:
     ports:
       - "2416:2416"
     environment:
+      - "ENV=devtest"
       - "SENTRY_DSN"
       - "DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
@@ -198,13 +215,21 @@ services:
       - KAFKA_CONSUMERS_PER_NODE=1
       - REDEEM_CONSUMER_TOPIC=redeem.consumer
       - REDEEM_PRODUCER_TOPIC=redeem.producer
-      - SIGN_CONSUMER_TOPIC=sign.consumer
-      - SIGN_PRODUCER_TOPIC=sign.producer
+      - SIGN_CONSUMER_TOPIC=sign.consumer # unsigned order creds request
+      - SIGN_PRODUCER_TOPIC=sign.producer # signed orders creds result
       - CONSUMER_GROUP=consumer.group
+      - "DYNAMODB_ENDPOINT=http://dynamodb:8000"
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - AWS_REGION=us-west-2
     depends_on:
       - challenge-bypass-postgres
+      - dynamodb
+    volumes:
+      - ./test/secrets:/etc/kafka/secrets
     networks:
       - grant
+
   zookeeper:
     container_name: grant-zookeeper
     image: confluentinc/cp-zookeeper:7.1.2
@@ -214,6 +239,7 @@ services:
       - "2181:2181"
     networks:
       - grant
+
   kafka:
     container_name: grant-kafka
     image: confluentinc/cp-kafka:7.1.2
@@ -232,9 +258,18 @@ services:
       KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: " "
       KAFKA_SSL_CLIENT_AUTH: requested
       KAFKA_SECURITY_INTER_BROKER_PROTOCOL: SSL
+      KAFKA_RETENTION_MS: 10000
     volumes:
       - ./test/secrets:/etc/kafka/secrets
     depends_on:
       - zookeeper
     networks:
       - grant
+
+  dynamodb:
+    container_name: dynamodb
+    image: amazon/dynamodb-local:1.12.0
+    networks:
+      - grant
+    ports:
+      - "8000:8000"

@@ -16,7 +16,7 @@ import (
 
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob
 type VerifyCredentialRequestV1 struct {
-	Type         string  `json:"type" valid:"in(single-use|time-limited)"`
+	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
 	Version      float64 `json:"version" valid:"-"`
 	SKU          string  `json:"sku" valid:"-"`
 	MerchantID   string  `json:"merchantId" valid:"-"`
@@ -109,7 +109,7 @@ func (vcr *VerifyCredentialRequestV2) Validate(ctx context.Context) error {
 
 // VerifyCredentialOpaque includes an opaque presentation blob
 type VerifyCredentialOpaque struct {
-	Type         string  `json:"type" valid:"in(single-use|time-limited)"`
+	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
 	Version      float64 `json:"version" valid:"-"`
 	Presentation string  `json:"presentation" valid:"base64"`
 }
@@ -248,7 +248,7 @@ func (anm *AndroidNotificationMessage) Decode(ctx context.Context, data []byte) 
 	return nil
 }
 
-// Validate - implement Validable interface
+// Validate - implement Validatable interface
 func (anm *AndroidNotificationMessage) Validate(ctx context.Context) error {
 	logger := logging.Logger(ctx, "AndroidNotificationMessage.Validate")
 	if _, err := govalidator.ValidateStruct(anm); err != nil {
