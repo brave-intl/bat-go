@@ -3,14 +3,15 @@ tokens:
     version: 1
     location: "vpn.brave.software"
     first_party_caveats:
-      - sku: "brave-vpn-premium"
+      - sku: "brave-firewall-vpn-premium"
       - price: 9.99
       - currency: "USD"
-      - description: "brave-vpn-premium"
+      - description: "Brave Firewall + VPN"
       - credential_type: "time-limited-v2"
-      - credential_valid_duration: "P1D"
-      - issuer_token_buffer: "30"
-      - issuer_token_overlap: "1"
+      - credential_valid_duration: "P1M"
+      - each_credential_valid_duration: "P1D"
+      - issuer_token_buffer: "31"
+      - issuer_token_overlap: "2"
       - allowed_payment_methods: "stripe"
       - metadata: '
 {

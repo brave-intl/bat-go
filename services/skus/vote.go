@@ -162,7 +162,7 @@ func rollbackTx(ds Datastore, tx *sqlx.Tx, wrap string, err error) error {
 }
 
 // RunNextVoteDrainJob - Attempt to drain the vote queue
-func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
+func (s *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 	logger := logging.Logger(ctx, "skus.RunNextVoteDrainJob")
 
 	select {
@@ -173,15 +173,15 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 	default:
 
 		// make sure we are not paused.
-		if service.IsPaused() {
+		if s.IsPaused() {
 			logger.Error().Msg("drain worker is paused!\n")
 			return false, nil
 		}
 		// pull vote from db queue
-		tx, records, err := service.Datastore.GetUncommittedVotesForUpdate(ctx)
+		tx, records, err := s.Datastore.GetUncommittedVotesForUpdate(ctx)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get uncommitted votes from drain queue")
-			return true, rollbackTx(service.Datastore, tx, "failed to get uncommitted votes from drain queue", err)
+			return true, rollbackTx(s.Datastore, tx, "failed to get uncommitted votes from drain queue", err)
 		}
 		for _, record := range records {
 			if record == nil {
@@ -191,38 +191,39 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 			err := json.Unmarshal([]byte(record.RequestCredentials), &requestCredentials)
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to decode credentials")
-				if err := service.Datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
+				if err := s.Datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
 					logger.Error().Err(err).Msg("failed to mark vote as errored")
-					return true, rollbackTx(service.Datastore, tx, "failed to mark vote as errored for creds redemption", err)
+					return true, rollbackTx(s.Datastore, tx, "failed to mark vote as errored for creds redemption", err)
 				}
 				// okay if it is errored, we will update the errored column
 			}
 			// redeem the credentials
-			err = service.cbClient.RedeemCredentials(ctx, requestCredentials, record.VoteText)
+			err = s.cbClient.RedeemCredentials(ctx, requestCredentials, record.VoteText)
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to redeem credentials")
-				if err := service.Datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
-					return true, rollbackTx(service.Datastore, tx, "failed to mark vote as errored for creds redemption", err)
+				if err := s.Datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
+					return true, rollbackTx(s.Datastore, tx, "failed to mark vote as errored for creds redemption", err)
 				}
 				// okay if errored, update errored column
 			}
 			// write the message to kafka if successful
-			if err = service.kafkaWriter.WriteMessages(ctx,
+			if err = s.kafkaWriter.WriteMessages(ctx,
 				kafka.Message{
+					Topic: voteTopic,
 					Value: record.VoteEventBinary,
 				},
 			); err != nil {
 				if strings.Contains(err.Error(), "expired") {
 					// pause the worker for 30 minutes, expired cert
-					service.PauseWorker(time.Now().Add(30 * time.Minute))
+					s.PauseWorker(time.Now().Add(30 * time.Minute))
 				}
 				logger.Error().Err(err).Msg("failed to write message to kafka")
-				return true, rollbackTx(service.Datastore, tx, "failed to write vote to kafka", err)
+				return true, rollbackTx(s.Datastore, tx, "failed to write vote to kafka", err)
 			}
 			// update the particular record to not be picked again
-			if err = service.Datastore.CommitVote(ctx, *record, tx); err != nil {
+			if err = s.Datastore.CommitVote(ctx, *record, tx); err != nil {
 				logger.Error().Err(err).Msg("failed to commit the vote")
-				return true, rollbackTx(service.Datastore, tx, "failed to commit vote to drain vote queue", err)
+				return true, rollbackTx(s.Datastore, tx, "failed to commit vote to drain vote queue", err)
 			}
 		}
 		// finalize the record
@@ -235,7 +236,7 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 }
 
 // Vote based on the browser's attention
-func (service *Service) Vote(
+func (s *Service) Vote(
 	ctx context.Context, credentials []CredentialBinding, voteText string) error {
 
 	logger := logging.Logger(ctx, "skus.Vote")
@@ -248,7 +249,7 @@ func (service *Service) Vote(
 
 	// generate all the cb credential redemptions
 	requestCredentials, err := generateCredentialRedemptions(
-		context.WithValue(ctx, appctx.DatastoreCTXKey, service.Datastore), credentials)
+		context.WithValue(ctx, appctx.DatastoreCTXKey, s.Datastore), credentials)
 	if err != nil {
 		return fmt.Errorf("error generating credential redemptions: %w", err)
 	}
@@ -308,7 +309,7 @@ func (service *Service) Vote(
 		}
 
 		// encode the event for processing
-		voteEventBinary, err := voteEvent.CodecEncode(service.codecs["vote"])
+		voteEventBinary, err := voteEvent.CodecEncode(s.codecs["vote"])
 		if err != nil {
 			return fmt.Errorf("failed to encode avro codec: %w", err)
 		}
@@ -319,7 +320,7 @@ func (service *Service) Vote(
 		}
 
 		// insert serialized event into db
-		if err = service.Datastore.InsertVote(
+		if err = s.Datastore.InsertVote(
 			ctx, VoteRecord{
 				RequestCredentials: string(rcSerial),
 				VoteText:           voteText,

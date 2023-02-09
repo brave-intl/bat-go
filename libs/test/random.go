@@ -1,6 +1,5 @@
+// Package test provides utilities for testing. Do not import this into non-test code.
 package test
-
-// This file provides some basic helpers to generate random values for testing only
 
 import (
 	"crypto/rand"
@@ -8,12 +7,12 @@ import (
 	"math/big"
 )
 
-// RandomString return a random alphanumeric string with length 10
+// RandomString return a random alphanumeric string with length 10.
 func RandomString() string {
 	return RandomStringWithLen(10)
 }
 
-// RandomStringWithLen returns a random alphanumeric string with a specified length
+// RandomStringWithLen returns a random alphanumeric string with a specified length.
 func RandomStringWithLen(length int) string {
 	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 	s := make([]rune, length)
@@ -24,8 +23,23 @@ func RandomStringWithLen(length int) string {
 	return string(s)
 }
 
-// RandomInt return a random int up to math.MaxInt32
+// RandomInt return a random int up to math.MaxInt32.
 func RandomInt() int {
-	n, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
-	return int(n.Int64())
+	return RandomIntWithMax(math.MaxInt32)
+}
+
+// RandomIntWithMax returns a random int in range [0, max].
+func RandomIntWithMax(max int) int {
+	n, _ := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	i := n.Int64()
+	if i == 0 {
+		i = 1
+	}
+	return int(i)
+}
+
+// RandomNonZeroInt return a random nonzero int up to the supplied max.
+func RandomNonZeroInt(max int) int {
+	n, _ := rand.Int(rand.Reader, big.NewInt(int64(max)-1))
+	return int(n.Int64() + 1)
 }

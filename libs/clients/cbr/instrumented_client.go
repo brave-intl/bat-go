@@ -52,6 +52,20 @@ func (_d ClientWithPrometheus) CreateIssuer(ctx context.Context, issuer string, 
 	return _d.base.CreateIssuer(ctx, issuer, maxTokens)
 }
 
+// CreateIssuerV3 implements Client
+func (_d ClientWithPrometheus) CreateIssuerV3(ctx context.Context, createIssuerV3 IssuerRequest) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateIssuerV3", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CreateIssuerV3(ctx, createIssuerV3)
+}
+
 // GetIssuer implements Client
 func (_d ClientWithPrometheus) GetIssuer(ctx context.Context, issuer string) (ip1 *IssuerResponse, err error) {
 	_since := time.Now()
@@ -66,6 +80,20 @@ func (_d ClientWithPrometheus) GetIssuer(ctx context.Context, issuer string) (ip
 	return _d.base.GetIssuer(ctx, issuer)
 }
 
+// GetIssuerV3 implements Client
+func (_d ClientWithPrometheus) GetIssuerV3(ctx context.Context, issuer string) (ip1 *IssuerResponse, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "GetIssuerV3", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetIssuerV3(ctx, issuer)
+}
+
 // RedeemCredential implements Client
 func (_d ClientWithPrometheus) RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) (err error) {
 	_since := time.Now()
@@ -78,6 +106,20 @@ func (_d ClientWithPrometheus) RedeemCredential(ctx context.Context, issuer stri
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "RedeemCredential", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RedeemCredential(ctx, issuer, preimage, signature, payload)
+}
+
+// RedeemCredentialV3 implements Client
+func (_d ClientWithPrometheus) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "RedeemCredentialV3", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RedeemCredentialV3(ctx, issuer, preimage, signature, payload)
 }
 
 // RedeemCredentials implements Client

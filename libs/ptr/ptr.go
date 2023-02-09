@@ -1,6 +1,10 @@
 package ptr
 
-import uuid "github.com/satori/go.uuid"
+import (
+	"time"
+
+	uuid "github.com/satori/go.uuid"
+)
 
 // FromUUID returns pointer to uuid
 func FromUUID(u uuid.UUID) *uuid.UUID {
@@ -23,4 +27,9 @@ func StringOr(s *string, or string) string {
 		return or
 	}
 	return *s
+}
+
+// FromTime - get the address of the time
+func FromTime(t time.Time) *time.Time {
+	return &t
 }

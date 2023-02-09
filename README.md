@@ -1,5 +1,6 @@
 # pass "go" and collect 200 BAT
 
+
 ![CI](https://github.com/brave-intl/bat-go/workflows/CI/badge.svg)
 
 ## Developer Setup

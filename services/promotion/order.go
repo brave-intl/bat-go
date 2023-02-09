@@ -33,22 +33,23 @@ type Order struct {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID                  uuid.UUID            `json:"id" db:"id"`
-	OrderID             uuid.UUID            `json:"orderId" db:"order_id"`
-	SKU                 string               `json:"sku" db:"sku"`
-	CreatedAt           *time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt           *time.Time           `json:"updatedAt" db:"updated_at"`
-	Currency            string               `json:"currency" db:"currency"`
-	Quantity            int                  `json:"quantity" db:"quantity"`
-	Price               decimal.Decimal      `json:"price" db:"price"`
-	Subtotal            decimal.Decimal      `json:"subtotal"`
-	Location            datastore.NullString `json:"location" db:"location"`
-	Description         datastore.NullString `json:"description" db:"description"`
-	CredentialType      string               `json:"credentialType" db:"credential_type"`
-	ValidFor            *time.Duration       `json:"validFor" db:"valid_for"`
-	ValidForISO         *string              `json:"validForIso" db:"valid_for_iso"`
-	Metadata            datastore.Metadata   `json:"metadata" db:"metadata"`
-	IssuanceIntervalISO *string              `json:"issuanceInterval" db:"issuance_interval"`
+	ID                        uuid.UUID            `json:"id" db:"id"`
+	OrderID                   uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU                       string               `json:"sku" db:"sku"`
+	CreatedAt                 *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt                 *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency                  string               `json:"currency" db:"currency"`
+	Quantity                  int                  `json:"quantity" db:"quantity"`
+	Price                     decimal.Decimal      `json:"price" db:"price"`
+	Subtotal                  decimal.Decimal      `json:"subtotal"`
+	Location                  datastore.NullString `json:"location" db:"location"`
+	Description               datastore.NullString `json:"description" db:"description"`
+	CredentialType            string               `json:"credentialType" db:"credential_type"`
+	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
+	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
+	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
+	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
 }
 
 // IsPaid returns true if the order is paid
