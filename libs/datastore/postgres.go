@@ -41,7 +41,7 @@ var (
 	}
 	dbs = map[string]*sqlx.DB{}
 	// CurrentMigrationVersion holds the default migration version
-	CurrentMigrationVersion = uint(47)
+	CurrentMigrationVersion = uint(51)
 	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
 	MigrationTracks = map[string]uint{
 		"eyeshade": 20,
@@ -101,15 +101,16 @@ func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 		return err
 	}
 
-	v, dirty, err := m.Version()
+	activeMigrationVersion, dirty, err := m.Version()
 
 	currentMigrationVersion := CurrentMigrationVersion
 	if len(currentMigrationVersions) > 0 {
 		currentMigrationVersion = currentMigrationVersions[0]
 	}
+
 	subLogger := logger.With().
 		Bool("dirty", dirty).
-		Int("db_version", int(v)).
+		Int("db_version", int(activeMigrationVersion)).
 		Uint("code_version", currentMigrationVersion).
 		Logger()
 
@@ -121,14 +122,12 @@ func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 		return fmt.Errorf("failed to get migration version: %w", err)
 	}
 
-	if v > currentMigrationVersion || dirty {
-		// dont attempt to migrate if our number is less than what is on the db
-		// or if the migration is in dirty state
+	// Don't attempt the migration if our currentMigrationVersion is less than the active db version or if the migration is in dirty state
+	if currentMigrationVersion < activeMigrationVersion || dirty {
 		subLogger.Error().Msg("migration not attempted")
-
 		sentry.CaptureMessage(
 			fmt.Sprintf("migration not attempted, dirty: %t; code version: %d; db version: %d",
-				dirty, currentMigrationVersion, v))
+				dirty, currentMigrationVersion, activeMigrationVersion))
 		return nil
 	}
 
@@ -137,8 +136,6 @@ func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 		subLogger.Error().Err(err).Msg("migration failed")
 		return err
 	}
-
-	subLogger.Info().Msg("database migration finished")
 
 	return nil
 }

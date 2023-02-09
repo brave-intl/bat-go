@@ -19,15 +19,17 @@ import (
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/customer"
-	macaroon "gopkg.in/macaroon.v2"
+	"gopkg.in/macaroon.v2"
 )
 
 const (
-	paymentProcessor     = "paymentProcessor"
-	IOSPaymentMethod     = "ios"
+	paymentProcessor = "paymentProcessor"
+	// IOSPaymentMethod - indicating this used an ios payment method
+	IOSPaymentMethod = "ios"
+	// AndroidPaymentMethod - indicating this used an android payment method
 	AndroidPaymentMethod = "android"
 )
 
@@ -106,22 +108,23 @@ func (order *Order) getTrialDays() int64 {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID                  uuid.UUID            `json:"id" db:"id"`
-	OrderID             uuid.UUID            `json:"orderId" db:"order_id"`
-	SKU                 string               `json:"sku" db:"sku"`
-	CreatedAt           *time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt           *time.Time           `json:"updatedAt" db:"updated_at"`
-	Currency            string               `json:"currency" db:"currency"`
-	Quantity            int                  `json:"quantity" db:"quantity"`
-	Price               decimal.Decimal      `json:"price" db:"price"`
-	Subtotal            decimal.Decimal      `json:"subtotal" db:"subtotal"`
-	Location            datastore.NullString `json:"location" db:"location"`
-	Description         datastore.NullString `json:"description" db:"description"`
-	CredentialType      string               `json:"credentialType" db:"credential_type"`
-	ValidFor            *time.Duration       `json:"validFor" db:"valid_for"`
-	ValidForISO         *string              `json:"validForIso" db:"valid_for_iso"`
-	Metadata            datastore.Metadata   `json:"metadata" db:"metadata"`
-	IssuanceIntervalISO *string              `json:"issuanceInterval" db:"issuance_interval"`
+	ID                        uuid.UUID            `json:"id" db:"id"`
+	OrderID                   uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU                       string               `json:"sku" db:"sku"`
+	CreatedAt                 *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt                 *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency                  string               `json:"currency" db:"currency"`
+	Quantity                  int                  `json:"quantity" db:"quantity"`
+	Price                     decimal.Decimal      `json:"price" db:"price"`
+	Subtotal                  decimal.Decimal      `json:"subtotal" db:"subtotal"`
+	Location                  datastore.NullString `json:"location" db:"location"`
+	Description               datastore.NullString `json:"description" db:"description"`
+	CredentialType            string               `json:"credentialType" db:"credential_type"`
+	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
+	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
+	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
+	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
 }
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
@@ -137,55 +140,35 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	return mac, nil
 }
 
+// IssuerConfig - the configuration of an issuer
+type IssuerConfig struct {
+	buffer  int
+	overlap int
+}
+
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, error) {
+func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, *IssuerConfig, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
-	// validation prior to decoding/unmarshaling
+	// validation prior to decoding/unmarshalling
 	valid, err := validateHardcodedSku(ctx, sku)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to validate sku")
-		return nil, nil, fmt.Errorf("failed to validate sku: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to validate sku: %w", err)
 	}
 
 	// perform validation
 	if !valid {
 		sublogger.Error().Err(err).Msg("invalid sku")
-		return nil, nil, ErrInvalidSKU
+		return nil, nil, nil, ErrInvalidSKU
 	}
 
 	// read the macaroon, its valid
 	mac, err := decodeAndUnmarshalSku(sku)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to decode sku")
-		return nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
 	}
-
-	/*
-		 * TODO: macaroon library to validate macaroons
-		 * don't delete the below, when we have a good macaroon lib it will be applicable
-
-		// get the merchant's keys
-		keys, err := s.Datastore.GetKeys(mac.Location(), false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
-		}
-
-		// check if any of the keys for the merchant will validate the mac
-		var valid bool
-		for _, k := range *keys {
-			// decrypt the merchant's secret key from db
-			if err := k.SetSecretKey(); err != nil {
-				return nil, nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
-			}
-			// perform verify
-			if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
-				// valid
-				valid = true
-				break
-			}
-		}
-	*/
 
 	caveats := mac.Caveats()
 	allowedPaymentMethods := new(Methods)
@@ -194,6 +177,11 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 
 	orderItem.Location.String = mac.Location()
 	orderItem.Location.Valid = true
+
+	issuerConfig := &IssuerConfig{
+		buffer:  defaultBuffer,
+		overlap: defaultOverlap,
+	}
 
 	for i := 0; i < len(caveats); i++ {
 		caveat := mac.Caveats()[i]
@@ -207,13 +195,13 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		case "price", "amount":
 			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		case "description":
 			orderItem.Description.String = value
 			orderItem.Description.Valid = true
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		case "currency":
 			orderItem.Currency = value
@@ -222,19 +210,42 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		case "issuance_interval":
 			orderItem.IssuanceIntervalISO = &value
 		case "credential_valid_duration":
+			// actually the expires time
 			orderItem.ValidFor = new(time.Duration)
 			id, err := timeutils.ParseDuration(value)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
-				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+				return nil, nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
 			t, err := id.FromNow()
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
-				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+				return nil, nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
 			*orderItem.ValidFor = time.Until(*t)
 			orderItem.ValidForISO = &value
+		case "each_credential_valid_duration":
+			// for time aware issuers we need to explain per order item
+			// what the duration of each credential is
+			_, err := timeutils.ParseDuration(value) // parse the duration
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku each_credential_valid_duration")
+				return nil, nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
+			// set the duration iso for the order item
+			orderItem.EachCredentialValidForISO = &value
+		case "issuer_token_buffer":
+			buffer, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("error converting buffer for order item %s: %w", orderItem.ID, err)
+			}
+			issuerConfig.buffer = buffer
+		case "issuer_token_overlap":
+			overlap, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("error converting overlap for order item %s: %w", orderItem.ID, err)
+			}
+			issuerConfig.overlap = overlap
 		case "allowed_payment_methods":
 			*allowedPaymentMethods = Methods(strings.Split(value, ","))
 		case "metadata":
@@ -243,18 +254,18 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			sublogger.Debug().Str("metadata", fmt.Sprintf("%+v", orderItem.Metadata)).Msg("metadata structure")
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku metadata")
-				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+				return nil, nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
 		}
 	}
 	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
-	return &orderItem, allowedPaymentMethods, nil
+	return &orderItem, allowedPaymentMethods, issuerConfig, nil
 }
 
 // IsStripePayable returns true if every item is payable by Stripe
@@ -350,10 +361,15 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemParams {
 	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
 	for index, item := range order.Items {
+		// get the item id from the metadata
+		priceID, ok := item.Metadata["stripe_item_id"].(string)
+		if !ok {
+			continue
+		}
 		// since we are creating stripe line item, we can assume
 		// that the stripe product is embedded in macaroon as metadata
 		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
-			Price:    stripe.String(item.Metadata["stripe_item_id"]),
+			Price:    stripe.String(priceID),
 			Quantity: stripe.Int64(int64(item.Quantity)),
 		}
 	}

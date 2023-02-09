@@ -9,7 +9,7 @@ import (
 )
 
 // Metadata - type which represents key/value pair metadata
-type Metadata map[string]string
+type Metadata map[string]interface{}
 
 // Value - implement driver.Valuer interface for conversion to and from sql
 func (m Metadata) Value() (driver.Value, error) {

@@ -3,8 +3,10 @@ package cbr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -12,11 +14,18 @@ import (
 
 // Client abstracts over the underlying client
 type Client interface {
+	// CreateIssuer creates an issuer.
 	CreateIssuer(ctx context.Context, issuer string, maxTokens int) error
+	// CreateIssuerV3 creates a version 3 issuer.
+	CreateIssuerV3(ctx context.Context, createIssuerV3 IssuerRequest) error
+	// GetIssuer returns issuers prior to version 3.
 	GetIssuer(ctx context.Context, issuer string) (*IssuerResponse, error)
+	// GetIssuerV3 returns issuers based on issuer name. Should be used when retrieving version 3 issuers.
+	GetIssuerV3(ctx context.Context, issuer string) (*IssuerResponse, error)
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
+	RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -48,6 +57,8 @@ type IssuerCreateRequest struct {
 type IssuerResponse struct {
 	Name      string `json:"name"`
 	PublicKey string `json:"public_key"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+	Cohort    int16  `json:"cohort,omitempty"`
 }
 
 // CreateIssuer with the provided name and token cap
@@ -55,6 +66,32 @@ func (c *HTTPClient) CreateIssuer(ctx context.Context, issuer string, maxTokens 
 	req, err := c.client.NewRequest(ctx, "POST", "v1/issuer/", &IssuerCreateRequest{Name: issuer, MaxTokens: maxTokens}, nil)
 	if err != nil {
 		return err
+	}
+
+	_, err = c.client.Do(ctx, req, nil)
+
+	return err
+}
+
+// IssuerRequest - create a new issuer request structure
+type IssuerRequest struct {
+	Name      string     `json:"name"`
+	Version   int        `json:"version"`
+	Cohort    int16      `json:"cohort"`
+	MaxTokens int        `json:"max_tokens"`
+	ValidFrom *time.Time `json:"valid_from"` // start of issuance
+	ExpiresAt *time.Time `json:"expires_at"`
+	Duration  string     `json:"duration"` // valid duration of each sub issuer
+	Buffer    int        `json:"buffer"`   // number of sub issuers in the future
+	Overlap   int        `json:"overlap"`  // number of days sub issuer should overlap
+}
+
+// CreateIssuerV3 creates a version 3 issuer.
+func (c *HTTPClient) CreateIssuerV3(ctx context.Context, issuerRequest IssuerRequest) error {
+	issuerRequest.Version = 3
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "v3/issuer/", issuerRequest, nil)
+	if err != nil {
+		return fmt.Errorf("error creating create issuer request v3: %w", err)
 	}
 
 	_, err = c.client.Do(ctx, req, nil)
@@ -84,6 +121,19 @@ type CredentialsIssueRequest struct {
 type CredentialsIssueResponse struct {
 	BatchProof   string   `json:"batch_proof"`
 	SignedTokens []string `json:"signed_tokens"`
+}
+
+// GetIssuerV3 returns issuers based on issuer name. Should be used when retrieving version 3 issuers.
+func (c *HTTPClient) GetIssuerV3(ctx context.Context, issuer string) (*IssuerResponse, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "v3/issuer/"+issuer, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp IssuerResponse
+	_, err = c.client.Do(ctx, req, &resp)
+
+	return &resp, err
 }
 
 // SignCredentials using a particular issuer
@@ -199,6 +249,18 @@ type CredentialsRedeemRequest struct {
 // RedeemCredentials that were issued by the specified issuer
 func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error {
 	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/bulk/redemption/", &CredentialsRedeemRequest{Credentials: credentials, Payload: payload}, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.Do(ctx, req, nil)
+	return handleRedeemError(err)
+}
+
+// RedeemCredentialV3 redeems a version 3 token that was issued by the specified issuer
+func (c *HTTPClient) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error {
+	req, err := c.client.NewRequest(ctx, "POST", "v3/blindedToken/"+issuer+"/redemption/",
+		&CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload}, nil)
 	if err != nil {
 		return err
 	}

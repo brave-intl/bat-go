@@ -1,3 +1,5 @@
+//go:build integration
+
 package skus
 
 import (
@@ -50,5 +52,4 @@ func TestCredChunkFn(t *testing.T) {
 	if next.Month() != 2 {
 		t.Errorf("mo - the next month should be 2")
 	}
-
 }

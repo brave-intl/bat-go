@@ -32,6 +32,7 @@ mock:
 	cd services && mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
 	cd services && mockgen -source=./wallet/service.go -destination=wallet/mockservice.go -package=wallet
 	cd services && mockgen -source=./skus/datastore.go -destination=skus/mockdatastore.go -package=skus
+	cd services && mockgen -source=./skus/credentials.go -destination=skus/mockcredentials.go -package=skus
 	cd libs && mockgen -source=./clients/ratios/client.go -destination=clients/ratios/mock/mock.go -package=mock_ratios
 	cd libs && mockgen -source=./clients/cbr/client.go -destination=clients/cbr/mock/mock.go -package=mock_cbr
 	cd libs && mockgen -source=./clients/reputation/client.go -destination=clients/reputation/mock/mock.go -package=mock_reputation
@@ -40,6 +41,7 @@ mock:
 	cd libs && mockgen -source=./clients/coingecko/client.go -destination=clients/coingecko/mock/mock.go -package=mock_coingecko
 	cd libs && mockgen -source=./backoff/retrypolicy/retrypolicy.go -destination=backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
 	cd libs && mockgen -source=./aws/s3.go -destination=aws/mock/mock.go -package=mockaws
+	cd libs && mockgen -source=./kafka/dialer.go -destination=kafka/mock/dialer.go -package=mockdialer
 
 instrumented:
 	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/grant -i Datastore -t ../.prom-gowrap.tmpl -o ./grant/instrumented_datastore.go

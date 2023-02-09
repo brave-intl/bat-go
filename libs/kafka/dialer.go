@@ -21,13 +21,21 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 )
 
-// Reader - implements KafkaReader
+// Consumer defines methods for consuming kafka messages.
+type Consumer interface {
+	ReadMessage(ctx context.Context) (kafka.Message, error)
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, messages ...kafka.Message) error
+	Close() error
+}
+
+// Reader is an implementation of the kafka.Consumer interface.
 type Reader struct {
 	kafkaReader *kafka.Reader
 	kafkaDialer *kafka.Dialer
 }
 
-// NewKafkaReader - creates a new kafka reader for groupID and topic
+// NewKafkaReader creates a new kafka reader for groupID and topic.
 func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader, error) {
 	logger := logging.Logger(ctx, "kafka.NewKafkaReader")
 
@@ -59,6 +67,21 @@ func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader,
 // ReadMessage - reads kafka messages
 func (k *Reader) ReadMessage(ctx context.Context) (kafka.Message, error) {
 	return k.kafkaReader.ReadMessage(ctx)
+}
+
+// FetchMessage reads and return the next message.
+// FetchMessage does not commit offsets automatically when using consumer groups.
+func (k *Reader) FetchMessage(ctx context.Context) (kafka.Message, error) {
+	return k.kafkaReader.FetchMessage(ctx)
+}
+
+// CommitMessages commits the list of messages passed as argument.
+func (k *Reader) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
+	return k.kafkaReader.CommitMessages(ctx, messages...)
+}
+
+func (k *Reader) Close() error {
+	return k.kafkaReader.Close()
 }
 
 // TLSDialer creates a Kafka dialer over TLS. The function requires
@@ -179,11 +202,12 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		Brokers:  strings.Split(kafkaBrokers, ","),
-		Topic:    topic,
-		Balancer: &kafka.LeastBytes{},
-		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
+		Brokers:      strings.Split(kafkaBrokers, ","),
+		Balancer:     &kafka.LeastBytes{},
+		Dialer:       dialer,
+		Topic:        topic,
+		BatchTimeout: 1 * time.Second,
+		Logger:       kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	return kafkaWriter, dialer, nil
