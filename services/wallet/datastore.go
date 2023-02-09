@@ -954,12 +954,12 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		}
 	}
 
-	// evict any prior linkings that were not disconnected
+	// evict any prior linkings that were not disconnected (across all custodians)
 	stmt = `
-		update wallet_custodian set disconnected_at=now() where linking_id=$1 and wallet_id=$2
+		update wallet_custodian set disconnected_at=now() where wallet_id=$1 and disconnected_at is null
 	`
 	// perform query
-	if _, err := tx.ExecContext(ctx, stmt, cl.LinkingID, cl.WalletID); err != nil {
+	if _, err := tx.ExecContext(ctx, stmt, cl.WalletID); err != nil {
 		sublogger.Error().Err(err).
 			Msg("failed to update wallet_custodian evicting prior linked")
 		return fmt.Errorf("error updating wallet_custodian evicting prior linked: %w", err)
