@@ -41,6 +41,11 @@ func parseAddr(rawAddr string) net.Addr {
 	if err != nil {
 		l.Fatal("Couldn't turn port into integer.")
 	}
+
+	if cid > int64(^uint32(0)) || port > int64(^uint32(0)) {
+		l.Fatal("invalid cid or port")
+	}
+
 	addr = &vsock.Addr{ContextID: uint32(cid), Port: uint32(port)}
 
 	return addr
