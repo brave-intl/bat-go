@@ -96,7 +96,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	}
 
 	// setup vsock listener
-	l, err := vsock.Listen(port, &vsock.Config{})
+	l, err := vsock.Listen(uint32(port), &vsock.Config{})
 	if err != nil {
 		logger.Panic().Err(err).Msg("listening on vsock port failed")
 	}
@@ -171,7 +171,7 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("address must include port")
 	}
 	logport, err := strconv.ParseUint(logaddr[1], 10, 32)
-	if err != nil || logport < 0 || logport > int64(^uint32(0)) {
+	if err != nil {
 		return fmt.Errorf("port must be a valid uint32: %v", err)
 	}
 	logserve := nitro.NewVsockLogServer(ctx, uint32(logport))
