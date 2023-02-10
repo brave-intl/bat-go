@@ -8,7 +8,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/libs/middleware"
 )
 
 // ConfigurationMiddleware applies the current state of the service's configuration on the ctx

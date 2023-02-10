@@ -8,7 +8,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/custodian"
-	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/go-chi/chi"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"

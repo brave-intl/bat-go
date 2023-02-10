@@ -10,7 +10,7 @@ import (
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/shopspring/decimal"
 
-	"github.com/amzn/ion-go/ion"
+	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
