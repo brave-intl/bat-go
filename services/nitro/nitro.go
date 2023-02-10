@@ -8,13 +8,14 @@ import (
 	"strings"
 	"time"
 
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/nitro"
+	srvcmd "github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/payments"
-	"github.com/brave-intl/bat-go/services/payments/cmd"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/mdlayher/vsock"
@@ -31,33 +32,33 @@ func init() {
 	// log-address - sets the vosck address for the log server to listen on
 	NitroServeCmd.PersistentFlags().String("log-address", "", "vsock address for log server to bind on")
 
-	cmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
-	cmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
-	cmd.Must(viper.BindEnv("upstream-url", "UPSTREAM_URL"))
-	cmd.Must(NitroServeCmd.MarkPersistentFlagRequired("egress-address"))
-	cmd.Must(viper.BindPFlag("egress-address", NitroServeCmd.PersistentFlags().Lookup("egress-address")))
-	cmd.Must(viper.BindEnv("egress-address", "EGRESS_ADDRESS"))
-	cmd.Must(NitroServeCmd.MarkPersistentFlagRequired("log-address"))
-	cmd.Must(viper.BindPFlag("log-address", NitroServeCmd.PersistentFlags().Lookup("log-address")))
-	cmd.Must(viper.BindEnv("log-address", "LOG_ADDRESS"))
+	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
+	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
+	rootcmd.Must(viper.BindEnv("upstream-url", "UPSTREAM_URL"))
+	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("egress-address"))
+	rootcmd.Must(viper.BindPFlag("egress-address", NitroServeCmd.PersistentFlags().Lookup("egress-address")))
+	rootcmd.Must(viper.BindEnv("egress-address", "EGRESS_ADDRESS"))
+	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("log-address"))
+	rootcmd.Must(viper.BindPFlag("log-address", NitroServeCmd.PersistentFlags().Lookup("log-address")))
+	rootcmd.Must(viper.BindEnv("log-address", "LOG_ADDRESS"))
 
 	NitroServeCmd.AddCommand(OutsideNitroServeCmd)
 	NitroServeCmd.AddCommand(InsideNitroServeCmd)
-	cmd.ServeCmd.AddCommand(NitroServeCmd)
+	srvcmd.ServeCmd.AddCommand(NitroServeCmd)
 }
 
 // OutsideNitroServeCmd the nitro serve command
 var OutsideNitroServeCmd = &cobra.Command{
 	Use:   "outside-enclave",
 	Short: "subcommand to serve a nitro micro-service",
-	Run:   cmd.Perform("outside-enclave", RunNitroServerOutsideEnclave),
+	Run:   rootcmd.Perform("outside-enclave", RunNitroServerOutsideEnclave),
 }
 
 // InsideNitroServeCmd the nitro serve command
 var InsideNitroServeCmd = &cobra.Command{
 	Use:   "inside-enclave",
 	Short: "subcommand to serve a nitro micro-service",
-	Run:   cmd.Perform("inside-enclave", RunNitroServerInEnclave),
+	Run:   rootcmd.Perform("inside-enclave", RunNitroServerInEnclave),
 }
 
 // NitroServeCmd the nitro serve command
@@ -95,7 +96,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	}
 
 	// setup vsock listener
-	l, err := vsock.Listen(uint32(port))
+	l, err := vsock.Listen(uint32(port), &vsock.Config{})
 	if err != nil {
 		logger.Panic().Err(err).Msg("listening on vsock port failed")
 	}

@@ -1,4 +1,4 @@
-package payments
+package cmd
 
 import (
 	"net/http"
@@ -7,9 +7,10 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
-	"github.com/brave-intl/bat-go/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/payments"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
@@ -23,7 +24,7 @@ import (
 func RestRun(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
-	cmd.Must(err)
+	rootcmd.Must(err)
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
 		// pprof attaches routes to default serve mux

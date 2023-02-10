@@ -1,11 +1,11 @@
-package payments
+package cmd
 
 import (
 
 	// pprof imports
 	_ "net/http/pprof"
 
-	"github.com/brave-intl/bat-go/cmd"
+	srvcmd "github.com/brave-intl/bat-go/services/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +14,7 @@ func init() {
 	paymentsCmd.AddCommand(restCmd)
 
 	// add this command as a serve subcommand
-	cmd.ServeCmd.AddCommand(paymentsCmd)
+	srvcmd.ServeCmd.AddCommand(paymentsCmd)
 
 	// setup the flags
 

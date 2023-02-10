@@ -1,7 +1,7 @@
 //go:build custodianintegration
 // +build custodianintegration
 
-package custodian_test
+package provider_test
 
 import (
 	"context"

@@ -20,6 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.17.1
 	github.com/aws/smithy-go v1.13.5
 	github.com/awslabs/amazon-qldb-driver-go/v2 v2.0.2
+	github.com/awslabs/amazon-qldb-driver-go/v3 v3.0.1
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
@@ -53,7 +54,7 @@ require (
 	cloud.google.com/go/compute v1.12.1 // indirect
 	cloud.google.com/go/compute/metadata v0.1.1 // indirect
 	github.com/amzn/ion-go v1.1.3 // indirect
-	github.com/amzn/ion-hash-go v1.1.1 // indirect
+	github.com/amzn/ion-hash-go v1.1.2 // indirect
 	github.com/aws/aws-sdk-go v1.44.124 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.9 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.17.10 // indirect
@@ -73,6 +74,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
+	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect

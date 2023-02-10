@@ -79,7 +79,7 @@ func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		Str("cid", fmt.Sprintf("%v", cid)).
 		Str("port", fmt.Sprintf("%v", port)).
 		Msg("vsock dialing now")
-	return vsock.Dial(cid, port)
+	return vsock.Dial(cid, port, &vsock.Config{})
 }
 
 type proxyClientConfig struct {
@@ -156,7 +156,7 @@ func ServeOpenProxy(
 		Handler: openProxy{ConnectTimeout: connectTimeout},
 	}
 
-	l, err := vsock.Listen(port)
+	l, err := vsock.Listen(port, &vsock.Config{})
 	if err != nil {
 		logger.Error().Err(err).Msg(fmt.Sprintf("listening on vsock port: %v", port))
 		return fmt.Errorf("listening on vsock port failed: %v", err)

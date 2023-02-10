@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
+	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
-	"github.com/brave-intl/bat-go/libs/custodian"
+	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/shopspring/decimal"
 
@@ -30,7 +30,7 @@ type Service struct {
 	datastore              *qldbdriver.QLDBDriver
 	processTransaction     chan Transaction
 	stopProcessTransaction func()
-	custodians             map[string]custodian.Custodian
+	custodians             map[string]provider.Custodian
 
 	baseCtx   context.Context
 	secretMgr appsrv.SecretManager
@@ -90,7 +90,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 
 	service.processTransaction = processTransaction
 	service.stopProcessTransaction = stopProcessTransaction
-	service.custodians = map[string]custodian.Custodian{}
+	service.custodians = map[string]provider.Custodian{}
 	//custodian.Uphold:   upholdCustodian,
 	//custodian.Gemini:   geminiCustodian,
 	//custodian.Bitflyer: bitflyerCustodian,
@@ -123,7 +123,7 @@ func (s *Service) ProcessTransactions(ctx context.Context) error {
 				return handlers.WrapValidationError(err)
 			}
 			// create a custodian transaction from this transaction:
-			custodianTransaction, err := custodian.NewTransaction(
+			custodianTransaction, err := provider.NewTransaction(
 				ctx, transaction.IdempotencyKey, transaction.To, transaction.From, altcurrency.BAT, amount,
 			)
 

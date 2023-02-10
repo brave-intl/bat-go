@@ -7,7 +7,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
-	"github.com/brave-intl/bat-go/libs/custodian"
+	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/go-chi/chi"
 
@@ -229,7 +229,7 @@ func StatusHandler(service *Service) handlers.AppHandler {
 
 		// TODO: get the status from the custodian and add to resp
 		amount := fromIonDecimal(txn.Amount)
-		custodianTransaction, err := custodian.NewTransaction(
+		custodianTransaction, err := provider.NewTransaction(
 			ctx, txn.IdempotencyKey, txn.To, txn.From, altcurrency.BAT, *amount,
 		)
 

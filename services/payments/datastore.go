@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/aws/smithy-go"
-	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
+	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/google/uuid"
 )

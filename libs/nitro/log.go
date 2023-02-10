@@ -79,7 +79,7 @@ func NewVsockLogServer(ctx context.Context, port uint32) VsockLogServer {
 func (s VsockLogServer) Serve(l net.Listener) error {
 	if l == nil {
 		var err error
-		l, err = vsock.Listen(s.port)
+		l, err = vsock.Listen(s.port, &vsock.Config{})
 		if err != nil {
 			log.Panicln(err)
 		}
