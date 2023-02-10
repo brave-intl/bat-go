@@ -7,9 +7,9 @@ import (
 	"io/ioutil"
 	"strings"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
-	appaws "github.com/brave-intl/bat-go/utils/nitro/aws"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
+	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"

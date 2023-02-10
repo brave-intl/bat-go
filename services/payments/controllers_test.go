@@ -13,9 +13,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/cryptography"
-	"github.com/brave-intl/bat-go/utils/handlers"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/go-chi/chi"
 	"golang.org/x/crypto/nacl/box"
 )

@@ -7,9 +7,9 @@ import (
 	"fmt"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	loggingutils "github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	loggingutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )

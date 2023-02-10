@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payments"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/nitro"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/mdlayher/vsock"
@@ -206,7 +206,7 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	logger.Info().Msg("startup complete for utils")
+	logger.Info().Msg("startup complete for libs")
 
 	// wait forever
 	<-done

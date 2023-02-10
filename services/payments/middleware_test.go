@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/go-chi/chi"
 )
 

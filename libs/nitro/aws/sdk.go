@@ -11,8 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"golang.org/x/net/http2"
 
-	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/nitro"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/nitro"
 )
 
 // NewAWSConfig creates a new AWS SDK config that communicates via an HTTP

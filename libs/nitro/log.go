@@ -6,7 +6,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/libs/closers"
 	"github.com/mdlayher/vsock"
 )
 

@@ -3,7 +3,7 @@ package custodian
 import (
 	"context"
 
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 // upholdCustodian - implementation of the uphold custodian

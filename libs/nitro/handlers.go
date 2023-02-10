@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 // EnclaveHealthCheck - status check handler for nitro enclave service

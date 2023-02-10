@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	loggingutils "github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	loggingutils "github.com/brave-intl/bat-go/libs/logging"
 )
 
 // geminiCustodian - implementation of the gemini custodian

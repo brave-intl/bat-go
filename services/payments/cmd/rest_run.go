@@ -8,9 +8,9 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/brave-intl/bat-go/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payments"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"

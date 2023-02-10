@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/closers"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/mdlayher/vsock"
 )
 

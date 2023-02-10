@@ -8,11 +8,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/brave-intl/bat-go/utils/clients"
-	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	loggingutils "github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	loggingutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/gofrs/uuid"
 	"github.com/shopspring/decimal"
 )

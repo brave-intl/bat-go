@@ -6,15 +6,15 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/custodian"
 	"github.com/go-chi/chi"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
 type configurationHandlerRequest map[appctx.CTXKey]interface{}

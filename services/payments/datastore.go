@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/utils/logging"
-	appaws "github.com/brave-intl/bat-go/utils/nitro/aws"
+	"github.com/brave-intl/bat-go/libs/logging"
+	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/shopspring/decimal"
 
 	"github.com/amzn/ion-go/ion"
@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/aws/smithy-go"
 	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/google/uuid"
 )
 

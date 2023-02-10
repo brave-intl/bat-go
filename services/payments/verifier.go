@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 )
 
 // the list of payment verifiers, mapping to individuals in payments-ops

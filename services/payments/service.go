@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/custodian"
-	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/custodian"
+	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/shopspring/decimal"
 
 	"crypto/rand"
@@ -18,10 +18,10 @@ import (
 
 	"golang.org/x/crypto/nacl/box"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/cryptography"
-	"github.com/brave-intl/bat-go/utils/logging"
-	appsrv "github.com/brave-intl/bat-go/utils/service"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/logging"
+	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
 // Service - struct definition of payments service
