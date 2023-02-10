@@ -89,18 +89,14 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 
 	// setup listener
 	addr := viper.GetString("address")
-	port, err := strconv.Atoi(strings.Split(addr, ":")[1])
-	if err != nil || port > int64(^uint32(0)) {
+	port, err := strconv.ParseUint(strings.Split(addr, ":")[1], 10, 32)
+	if err != nil {
 		// panic if there is an error, or if the port is too large to fit in uint32
 		logger.Panic().Err(err).Msg("invalid --address")
 	}
 
-	if port > int64(^uint32(0)) {
-		logger.Panic().Err(err).Msg("invalid port, needs to be uint32")
-	}
-
 	// setup vsock listener
-	l, err := vsock.Listen(uint32(port), &vsock.Config{})
+	l, err := vsock.Listen(port, &vsock.Config{})
 	if err != nil {
 		logger.Panic().Err(err).Msg("listening on vsock port failed")
 	}
@@ -165,8 +161,8 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 	if len(egressaddr) != 2 {
 		return fmt.Errorf("address must include port")
 	}
-	egressport, err := strconv.Atoi(egressaddr[1])
-	if err != nil || egressport < 0 || egressport > int64(^uint32(0)) {
+	egressport, err := strconv.ParseUint(egressaddr[1], 10, 32)
+	if err != nil {
 		return fmt.Errorf("port must be a valid uint32: %v", err)
 	}
 

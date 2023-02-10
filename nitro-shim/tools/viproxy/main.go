@@ -33,17 +33,13 @@ func parseAddr(rawAddr string) net.Addr {
 	if len(fields) != 2 {
 		l.Fatal("Looks like we're given neither AF_INET nor AF_VSOCK addr.")
 	}
-	cid, err := strconv.Atoi(fields[0])
+	cid, err := strconv.ParseUint(fields[0], 10, 32)
 	if err != nil {
 		l.Fatal("Couldn't turn CID into integer.")
 	}
-	port, err := strconv.Atoi(fields[1])
+	port, err := strconv.ParseUint(fields[1], 10, 32)
 	if err != nil {
 		l.Fatal("Couldn't turn port into integer.")
-	}
-
-	if cid > int64(^uint32(0)) || port > int64(^uint32(0)) {
-		l.Fatal("invalid cid or port")
 	}
 
 	addr = &vsock.Addr{ContextID: uint32(cid), Port: uint32(port)}
