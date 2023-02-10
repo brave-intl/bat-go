@@ -64,6 +64,11 @@ func init() {
 		Bind("enable-job-workers").
 		Env("ENABLE_JOB_WORKERS")
 
+	flagBuilder.Flag().Bool("disable-disconnect", false,
+		"disable custodian ability to disconnect rewards wallets").
+		Bind("disable-disconnect").
+		Env("DISABLE_DISCONNECT")
+
 	flagBuilder.Flag().Bool("disable-uphold-linking", false,
 		"disable custodian linking to uphold").
 		Bind("disable-uphold-linking").
@@ -239,6 +244,21 @@ func init() {
 		"the appstore shared key").
 		Bind("apple-receipt-shared-key").
 		Env("APPLE_RECEIPT_SHARED_KEY")
+
+	flagBuilder.Flag().Bool("enable-store-signed-order-creds-consumer", true,
+		"enable store signed order creds consumer").
+		Bind("enable-store-signed-order-creds-consumer").
+		Env("ENABLE_STORE_SIGNED_ORDER_CREDS_CONSUMER")
+
+	flagBuilder.Flag().Int("number-store-signed-order-creds-consumer", 1,
+		"number of consumers to create for store signed order creds").
+		Bind("number-store-signed-order-creds-consumer").
+		Env("NUMBER_STORE_SIGNED_ORDER_CREDS_CONSUMER")
+
+	flagBuilder.Flag().String("kafka-brokers", "",
+		"kafka broker list").
+		Bind("kafka-brokers").
+		Env("KAFKA_BROKERS")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -366,7 +386,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 
-	// skus gemini varibles
+	// skus gemini variables
 	skuCtx := context.WithValue(ctx, appctx.GeminiSettlementAddressCTXKey, viper.GetString("skus-gemini-settlement-address"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiAPIKeyCTXKey, viper.GetString("skus-gemini-api-key"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiAPISecretCTXKey, viper.GetString("skus-gemini-api-secret"))
@@ -388,10 +408,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/credentials", skus.CredentialRouter(skusService))
 	r.Mount("/v2/credentials", skus.CredentialV2Router(skusService))
-	r.Mount("/v1/orders", skus.Router(skusService))
+	r.Mount("/v1/orders", skus.Router(skusService, middleware.InstrumentHandler))
 	// for skus webhook integrations
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
-	r.Mount("/v1/votes", skus.VoteRouter(skusService))
+	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		skusDB, err := skus.NewPostgres("", true, "merch_skus_db")
@@ -422,7 +442,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		Str("buildTime", buildTime).
 		Msg("server starting up")
 
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus))
+	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus, nil))
 
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
@@ -483,11 +503,14 @@ func GrantServer(
 		Msg("Starting server")
 
 	// add flags to context
+	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, viper.GetString("kafka-brokers"))
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
 	ctx = context.WithValue(ctx, appctx.UseCustodianRegionsCTXKey, viper.GetBool("use-custodian-regions"))
 	ctx = context.WithValue(ctx, appctx.ReputationWithdrawalOnDrainCTXKey, viper.GetBool("reputation-withdrawal-on-drain"))
+	// disable-disconnect wallet apis
+	ctx = context.WithValue(ctx, appctx.DisableDisconnectCTXKey, viper.GetBool("disable-disconnect"))
 
 	// bitflyer variables
 	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))
@@ -531,6 +554,14 @@ func GrantServer(
 
 	// custodian unlinking cooldown
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))
+
+	// skus enable store signed order creds consumer
+	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer,
+		viper.GetBool("enable-store-signed-order-creds-consumer"))
+
+	// skus number of consumers to create for store signed order creds
+	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer,
+		viper.GetInt("number-store-signed-order-creds-consumer"))
 
 	// playstore json key
 	// json key is base64

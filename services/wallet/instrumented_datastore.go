@@ -10,6 +10,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
@@ -196,20 +198,6 @@ func (_d DatastoreWithPrometheus) HasPriorLinking(ctx context.Context, walletID 
 	return _d.base.HasPriorLinking(ctx, walletID, providerLinkingID)
 }
 
-// IncreaseLinkingLimit implements Datastore
-func (_d DatastoreWithPrometheus) IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "IncreaseLinkingLimit", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.IncreaseLinkingLimit(ctx, providerLinkingID)
-}
-
 // InsertBitFlyerRequestID implements Datastore
 func (_d DatastoreWithPrometheus) InsertBitFlyerRequestID(ctx context.Context, requestID string) (err error) {
 	_since := time.Now()
@@ -222,6 +210,20 @@ func (_d DatastoreWithPrometheus) InsertBitFlyerRequestID(ctx context.Context, r
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBitFlyerRequestID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.InsertBitFlyerRequestID(ctx, requestID)
+}
+
+// InsertVerifiedWalletOutboxTx implements Datastore
+func (_d DatastoreWithPrometheus) InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, paymentID uuid.UUID, verifiedWallet bool) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertVerifiedWalletOutboxTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertVerifiedWalletOutboxTx(ctx, tx, paymentID, verifiedWallet)
 }
 
 // InsertWallet implements Datastore
@@ -329,8 +331,8 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 	return _d.base.RollbackTxAndHandle(tx)
 }
 
-// UnlinkWallet implements Datastore
-func (_d DatastoreWithPrometheus) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) (err error) {
+// SendVerifiedWalletOutbox implements Datastore
+func (_d DatastoreWithPrometheus) SendVerifiedWalletOutbox(ctx context.Context, client reputation.Client, retry backoff.RetryFunc) (b1 bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -338,9 +340,9 @@ func (_d DatastoreWithPrometheus) UnlinkWallet(ctx context.Context, walletID uui
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UnlinkWallet", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SendVerifiedWalletOutbox", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UnlinkWallet(ctx, walletID, custodian)
+	return _d.base.SendVerifiedWalletOutbox(ctx, client, retry)
 }
 
 // UpsertWallet implements Datastore

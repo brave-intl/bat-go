@@ -8,6 +8,8 @@ type CTXKey string
 const (
 	// MergeCustodialCTXKey - the context key for merge custodial
 	MergeCustodialCTXKey CTXKey = "merge_custodial"
+	// AWSClientCTXKey - the context key for an aws client
+	AWSClientCTXKey CTXKey = "aws_client"
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
 	// DatabaseTransactionCTXKey - context key for database transactions
@@ -89,6 +91,10 @@ const (
 	SkusGeminiAPISecretCTXKey CTXKey = "skus_gemini_api_secret"
 	// SkusGeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	SkusGeminiSettlementAddressCTXKey CTXKey = "skus_gemini_settlement_address"
+	// SkusEnableStoreSignedOrderCredsConsumer enables the store sigend order creds consumers
+	SkusEnableStoreSignedOrderCredsConsumer CTXKey = "skus_enable_store_signed_order_creds_consumer"
+	// SkusNumberStoreSignedOrderCredsConsumer number of consumers to create for store signed order creds
+	SkusNumberStoreSignedOrderCredsConsumer CTXKey = "skus_number_store_signed_order_creds_consumer"
 
 	// Kafka509CertCTXKey - context key for the build time of code
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
@@ -209,6 +215,14 @@ const (
 
 	// AppleReceiptSharedKeyCTXKey - the context key for appstore key
 	AppleReceiptSharedKeyCTXKey CTXKey = "apple_receipt_shared_key"
+
+	// DisableDisconnectCTXKey - the context key for rewards wallet disconnect capability key
+	DisableDisconnectCTXKey CTXKey = "disable_disconnect"
+
+	// ParametersVBATDeadlineCTXKey - the context key for getting the vbat deadline
+	ParametersVBATDeadlineCTXKey CTXKey = "parameters_vbat_deadline"
+	// ParametersTransitionCTXKey - the context key for getting the vbat deadline
+	ParametersTransitionCTXKey CTXKey = "parameters_transition"
 )
 
 var (

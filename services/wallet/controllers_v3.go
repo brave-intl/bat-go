@@ -207,7 +207,7 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }
 
@@ -275,7 +275,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }
 
@@ -354,7 +354,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }
 
@@ -516,35 +516,6 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 	return handlers.RenderContent(ctx, balanceToResponseV3(*result), w, http.StatusOK)
 }
 
-// UnlinkWalletV3 - unlink a particular wallet from a custodian.
-func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			ctx       = r.Context()
-			walletID  = chi.URLParam(r, "payment_id")
-			custodian = chi.URLParam(r, "custodian")
-		)
-		// get logger from context
-		logger := logging.Logger(ctx, "wallet.UnlinkWalletV3")
-
-		logger.Debug().
-			Str("walletID", walletID).
-			Str("custodian", custodian).
-			Msg("unlinking wallet from custodian")
-		err := s.UnlinkWallet(ctx, walletID, custodian)
-		if err != nil {
-			if errors.Is(err, ErrUnlinkingsExceeded) {
-				logger.Warn().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
-				return handlers.WrapError(err, "error unlinking wallet", http.StatusForbidden)
-			}
-			logger.Error().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
-			return handlers.WrapError(err, "error unlinking wallet", http.StatusBadRequest)
-		}
-
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
-	}
-}
-
 // GetLinkingInfoV3 - get linking metadata
 func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -656,6 +627,6 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 			return handlers.WrapError(err, "failed to disconnect custodian link", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }

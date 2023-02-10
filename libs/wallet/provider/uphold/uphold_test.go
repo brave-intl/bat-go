@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -112,9 +111,6 @@ func TestDecodeTransaction(t *testing.T) {
 		tmp := altcurrency.BAT
 		expected.Denomination.Currency = &tmp
 	}
-
-	fmt.Println("txn: ", txnReq)
-	fmt.Println("expected: ", expected)
 
 	if txnReq.Destination != expected.Destination {
 		t.Error("Decoded transaction does not match expected value")
@@ -281,6 +277,9 @@ func TestTransactions(t *testing.T) {
 	txInfo, err := destWallet.Transfer(ctx, altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
 	if err != nil {
 		t.Error(err)
+	}
+	if txInfo == nil {
+		t.Error("no tx information from transfer!")
 	}
 
 	balance, err = destWallet.GetBalance(ctx, true)

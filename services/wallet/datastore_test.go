@@ -12,8 +12,13 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
+	mock_reputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/datastore"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
 )
@@ -347,4 +352,50 @@ func (suite *WalletPostgresTestSuite) TestWaitAndLock() {
 	var lockCount int
 	err = row.Scan(&lockCount)
 	suite.Require().True(lockCount == 0, fmt.Sprintf("should have released all locks but found %d", lockCount))
+}
+
+func (suite *WalletPostgresTestSuite) TestSendVerifiedWalletOutbox() {
+	ctx := context.Background()
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	repClient := mock_reputation.NewMockClient(ctrl)
+
+	_, tx, _, commit, err := datastore.GetTx(ctx, pg)
+	suite.Require().NoError(err)
+
+	var paymentIDs []uuid.UUID
+	for i := 0; i < 5; i++ {
+
+		// Insert the outbox request.
+		paymentIDs = append(paymentIDs, uuid.NewV4())
+		err = pg.InsertVerifiedWalletOutboxTx(ctx, tx, paymentIDs[i], true)
+		suite.Require().NoError(err)
+
+		// Mock the reputation call, the requests are ordered by created at so should be
+		// processed in the order of insertion.
+		repClient.EXPECT().
+			UpdateReputationSummary(ctx, paymentIDs[i].String(), true).
+			Return(nil)
+	}
+
+	err = commit()
+	suite.Require().NoError(err)
+
+	// Send the requests
+	retryPolicy = retrypolicy.NoRetry
+	for i := 0; i < 5; i++ {
+		_, err = pg.SendVerifiedWalletOutbox(ctx, repClient, backoff.Retry)
+		suite.Require().NoError(err)
+	}
+
+	// Assert all request have been processed, the table should be empty.
+	var count int
+	err = pg.RawDB().GetContext(ctx, &count, `select count(*) from verified_wallet_outbox`)
+	suite.Require().NoError(err)
+	suite.Assert().Equal(0, count)
 }

@@ -167,7 +167,6 @@ func (c *SimpleHTTPClient) newRequest(
 		RawQuery: qs,
 	})
 
-	// m, _ := json.MarshalIndent(body, "", "  ")
 	if body != nil && method != "GET" {
 		buf = new(bytes.Buffer)
 		err := json.NewEncoder(buf).Encode(body)
@@ -296,6 +295,12 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 	return resp, errors.Wrap(err, ErrProtocolError)
 }
 
+// RespErrData - error data for http response
+type RespErrData struct {
+	ResponseHeaders interface{}
+	Body            interface{}
+}
+
 // Do the specified http request, decoding the JSON result into v
 func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
 	resp, err := c.do(ctx, req, v)
@@ -308,11 +313,8 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 			rb := string(b)
 			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 
-			errorData := struct {
-				ResponseHeaders interface{}
-				Body            interface{}
-			}{
-				// put response body/headers in the err state data
+			// put response body/headers in the err state data
+			errorData := RespErrData{
 				ResponseHeaders: resp.Header,
 				Body:            rb,
 			}

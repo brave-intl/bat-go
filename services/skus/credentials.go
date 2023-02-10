@@ -2,73 +2,60 @@ package skus
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/linkedin/goavro"
+
+	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
+	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/ptr"
 	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 )
 
 const (
-	defaultMaxTokensPerIssuer = 4000000 // ~1M BAT
+	defaultMaxTokensPerIssuer       = 4000000 // ~1M BAT
+	defaultCohort             int16 = 1
 )
 
-func decodeIssuerID(issuerID string) (string, string, error) {
-	var (
-		merchantID string
-		sku        string
-	)
+// Metrics
+var (
+	metricSignedOrderRequestLockGauge = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name:        "signed_order_request_lock_gauge",
+			Help:        "Monitors number of advisory locks the signed order request handler holds",
+			ConstLabels: prometheus.Labels{"service": "skus"},
+		})
+)
 
-	u, err := url.Parse(issuerID)
-	if err != nil {
-		return "", "", fmt.Errorf("parse issuer name: %w", err)
-	}
-
-	sku = u.Query().Get("sku")
-	u.RawQuery = ""
-	merchantID = u.String()
-
-	return merchantID, sku, nil
+func init() {
+	prometheus.MustRegister(metricSignedOrderRequestLockGauge)
 }
 
-func encodeIssuerID(merchantID, sku string) (string, error) {
-	v := url.Values{}
-	v.Add("sku", sku)
+// Retry and backoff variables
+var (
+	defaultExpiresAt   = time.Now().Add(17532 * time.Hour) // 2 years
+	retryPolicy        = retrypolicy.DefaultRetry
+	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden,
+		http.StatusInternalServerError, http.StatusConflict}
+)
 
-	u, err := url.Parse(merchantID + "?" + v.Encode())
-	if err != nil {
-		return "", fmt.Errorf("parse merchant id: %w", err)
-	}
-
-	return u.String(), nil
-}
-
-// CredentialBinding includes info needed to redeem a single credential
-type CredentialBinding struct {
-	PublicKey     string `json:"publicKey" valid:"base64"`
-	TokenPreimage string `json:"t" valid:"base64"`
-	Signature     string `json:"signature" valid:"base64"`
-}
-
-// DeduplicateCredentialBindings - given a list of tokens return a deduplicated list
-func DeduplicateCredentialBindings(tokens ...CredentialBinding) []CredentialBinding {
-	var (
-		seen   = map[string]bool{}
-		result = []CredentialBinding{}
-	)
-	for _, t := range tokens {
-		if !seen[t.TokenPreimage] {
-			seen[t.TokenPreimage] = true
-			result = append(result, t)
-		}
-	}
-	return result
-}
+// ErrOrderUnpaid - unpaid order variable
+var ErrOrderUnpaid = errors.New("order not paid")
 
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
@@ -78,38 +65,157 @@ type Issuer struct {
 	PublicKey  string    `json:"publicKey" db:"public_key"`
 }
 
-// CreateIssuer creates a new challenge bypass credential issuer, saving it's information into the datastore
-func (service *Service) CreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
-	issuer := &Issuer{MerchantID: merchantID}
-
-	err := service.cbClient.CreateIssuer(ctx, issuer.Name(), defaultMaxTokensPerIssuer)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := service.cbClient.GetIssuer(ctx, issuer.Name())
-	if err != nil {
-		return nil, err
-	}
-
-	issuer.PublicKey = resp.PublicKey
-
-	return service.Datastore.InsertIssuer(issuer)
-}
-
 // Name returns the name of the issuer as known by the challenge bypass server
 func (issuer *Issuer) Name() string {
 	return issuer.MerchantID
 }
 
-// GetOrCreateIssuer gets a matching issuer if one exists and otherwise creates one
-func (service *Service) GetOrCreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
-	issuer, err := service.Datastore.GetIssuer(merchantID)
-	if issuer == nil {
-		issuer, err = service.CreateIssuer(ctx, merchantID)
+// CreateIssuer creates a new v1 issuer if it does not exist. This only happens in the event of a new sku being created.
+func (s *Service) CreateIssuer(ctx context.Context, merchantID string, orderItem OrderItem) error {
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	if err != nil {
+		return errorutils.Wrap(err, "error encoding issuer name")
 	}
 
-	return issuer, err
+	issuer, err := s.Datastore.GetIssuer(issuerID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("error get issuer for issuerID %s: %w", issuerID, err)
+	}
+
+	if issuer == nil {
+		logging.FromContext(ctx).Info().
+			Msgf("creating new issuer %s", issuerID)
+
+		requestOperation := func() (interface{}, error) {
+			return nil, s.cbClient.CreateIssuer(ctx, issuerID, defaultMaxTokensPerIssuer)
+		}
+
+		// The create issuer endpoint returns a conflict if the issuer already exists
+		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil && !isConflict(err) {
+			return fmt.Errorf("error calling cbr create issuer: %w", err)
+		}
+
+		requestOperation = func() (interface{}, error) {
+			return s.cbClient.GetIssuer(ctx, issuerID)
+		}
+
+		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error getting issuer %s: %w", issuerID, err)
+		}
+
+		issuerResponse, ok := response.(*cbr.IssuerResponse)
+		if !ok {
+			return errors.New("error converting response to type issuer response")
+		}
+
+		_, err = s.Datastore.InsertIssuer(&Issuer{
+			MerchantID: issuerResponse.Name,
+			PublicKey:  issuerResponse.PublicKey,
+		})
+		if err != nil {
+			return fmt.Errorf("error creating new issuer: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// CreateIssuerV3 creates a new v3 issuer if it does not exist. This only happens in the event of a new sku being created.
+func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderItem OrderItem, issuerConfig IssuerConfig) error {
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	if err != nil {
+		return errorutils.Wrap(err, "error encoding issuer name")
+	}
+
+	issuer, err := s.Datastore.GetIssuer(issuerID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("error get issuer for issuerID %s: %w", issuerID, err)
+	}
+
+	// Create a new issuer if one is not present.
+	if issuer == nil {
+		logging.FromContext(ctx).Info().
+			Msgf("creating new v3 issuer %s", issuerID)
+
+		if orderItem.EachCredentialValidForISO == nil {
+			return fmt.Errorf("error each credential valid iso is empty for order item sku %s", orderItem.SKU)
+		}
+
+		createIssuerV3 := cbr.IssuerRequest{
+			Name:      issuerID,
+			Cohort:    defaultCohort,
+			MaxTokens: defaultMaxTokensPerIssuer,
+			ValidFrom: ptr.FromTime(time.Now()),
+			ExpiresAt: ptr.FromTime(defaultExpiresAt),
+			Duration:  *orderItem.EachCredentialValidForISO,
+			Buffer:    issuerConfig.buffer,
+			Overlap:   issuerConfig.overlap,
+		}
+
+		requestOperation := func() (interface{}, error) {
+			return nil, s.cbClient.CreateIssuerV3(ctx, createIssuerV3)
+		}
+
+		// The create issuer v3 endpoints returns a conflict if the issuer already exists.
+		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil && !isConflict(err) {
+			return fmt.Errorf("error calling cbr create issuer v3: %w", err)
+		}
+
+		requestOperation = func() (interface{}, error) {
+			return s.cbClient.GetIssuerV3(ctx, createIssuerV3.Name)
+		}
+
+		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error getting issuer %s: %w", createIssuerV3.Name, err)
+		}
+
+		issuerResponse, ok := response.(*cbr.IssuerResponse)
+		if !ok {
+			return fmt.Errorf("error converting v3 response to type issuer response")
+		}
+
+		_, err = s.Datastore.InsertIssuer(&Issuer{
+			MerchantID: issuerResponse.Name,
+			PublicKey:  issuerResponse.PublicKey,
+		})
+		if err != nil {
+			return fmt.Errorf("error creating new issuer: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func canRetry(nonRetriableErrors []int) func(error) bool {
+	return func(err error) bool {
+		var eb *errorutils.ErrorBundle
+		switch {
+		case errors.As(err, &eb):
+			if hs, ok := eb.Data().(clients.HTTPState); ok {
+				for _, httpStatusCode := range nonRetriableErrors {
+					if hs.Status == httpStatusCode {
+						return false
+					}
+				}
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func isConflict(err error) bool {
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		if httpState, ok := eb.Data().(clients.HTTPState); ok {
+			return httpState.Status == http.StatusConflict
+		}
+	}
+	return false
 }
 
 // OrderCreds encapsulates the credentials to be signed in response to a completed order
@@ -132,47 +238,73 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
-// CreateOrderCreds if the order is complete
-func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
-	order, err := service.Datastore.GetOrder(orderID)
+// CreateOrderItemCredentials creates the order credentials for the given order id using the supplied blinded credentials.
+// If the order is unpaid an error ErrOrderUnpaid is returned.
+func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
-		return errorutils.Wrap(err, "error finding order")
+		return fmt.Errorf("error retrieving order: %w", err)
+	}
+
+	if order == nil {
+		return fmt.Errorf("error retrieving orderID %s: %w", orderID, errorutils.ErrNotFound)
 	}
 
 	if !order.IsPaid() {
-		return errors.New("order has not yet been paid")
+		return ErrOrderUnpaid
 	}
 
-	// get the order items, need to create issuers based on the
-	// special sku values on the order items
-	for _, orderItem := range order.Items {
-		// generalized issuer based on sku and merchant id
-		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
-		if err != nil {
-			return errorutils.Wrap(err, "error encoding issuer name")
+	var orderItem *OrderItem
+	for _, item := range order.Items {
+		if item.ID == itemID {
+			orderItem = &item
+			break
 		}
+	}
 
-		// create the issuer
-		issuer, err := service.GetOrCreateIssuer(ctx, issuerID)
-		if err != nil {
-			return errorutils.Wrap(err, "error finding issuer")
-		}
+	if orderItem == nil {
+		return errors.New("order item does not exist for order")
+	}
 
-		if len(blindedCreds) > orderItem.Quantity {
-			blindedCreds = blindedCreds[:orderItem.Quantity]
-		}
+	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
+	if err != nil {
+		return errorutils.Wrap(err, "error encoding issuer name")
+	}
 
-		orderCreds := OrderCreds{
-			ID:           itemID,
-			OrderID:      orderID,
-			IssuerID:     issuer.ID,
-			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
-		}
+	issuer, err := s.Datastore.GetIssuer(issuerID)
+	if err != nil {
+		return fmt.Errorf("error getting issuer for issuerID %s: %w", issuerID, err)
+	}
 
-		err = service.Datastore.InsertOrderCreds(&orderCreds)
-		if err != nil {
-			return errorutils.Wrap(err, "error inserting order creds")
-		}
+	metadata := Metadata{
+		ItemID:         orderItem.ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: orderItem.CredentialType,
+	}
+
+	associatedData, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("error serializing associated data: %w", err)
+	}
+
+	requestID := uuid.NewV4()
+
+	signingOrderRequest := SigningOrderRequest{
+		RequestID: requestID.String(),
+		Data: []SigningOrder{
+			{
+				IssuerType:     issuerID,
+				IssuerCohort:   defaultCohort,
+				BlindedTokens:  blindedCreds,
+				AssociatedData: associatedData,
+			},
+		},
+	}
+
+	err = s.Datastore.InsertSigningOrderRequestOutbox(ctx, requestID, order.ID, orderItem.ID, signingOrderRequest)
+	if err != nil {
+		return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
 	}
 
 	return nil
@@ -184,9 +316,8 @@ type OrderWorker interface {
 }
 
 // SignOrderCreds signs the blinded credentials
-func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer Issuer, blindedCreds []string) (*OrderCreds, error) {
-
-	resp, err := service.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
+func (s *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer Issuer, blindedCreds []string) (*OrderCreds, error) {
+	resp, err := s.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
 	if err != nil {
 		return nil, err
 	}
@@ -204,10 +335,97 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 	return creds, nil
 }
 
+// SigningRequestWriter is the interface implemented by types that can write signing request messages.
+type SigningRequestWriter interface {
+	WriteMessage(ctx context.Context, message []byte) error
+	WriteMessages(ctx context.Context, messages []SigningOrderRequestOutbox) error
+}
+
+// WriteMessage writes a single message to the kafka topic configured on this writer.
+func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
+	native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(message)
+	if err != nil {
+		return fmt.Errorf("error converting native from textual: %w", err)
+	}
+
+	binary, err := s.codecs[kafkaUnsignedOrderCredsTopic].BinaryFromNative(nil, native)
+	if err != nil {
+		return fmt.Errorf("error converting binary from native: %w", err)
+	}
+
+	err = s.kafkaWriter.WriteMessages(ctx, kafka.Message{
+		Topic: kafkaUnsignedOrderCredsTopic,
+		Value: binary,
+	})
+	if err != nil {
+		return fmt.Errorf("error writting kafka message: %w", err)
+	}
+
+	return nil
+}
+
+// WriteMessages writes a batch of SigningOrderRequestOutbox messages to the kafka topic configured on this writer.
+func (s *Service) WriteMessages(ctx context.Context, messages []SigningOrderRequestOutbox) error {
+	msgs := make([]kafka.Message, len(messages))
+
+	for i := 0; i < len(messages); i++ {
+		native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(messages[i].Message)
+		if err != nil {
+			return fmt.Errorf("error converting native from textual: %w", err)
+		}
+
+		binary, err := s.codecs[kafkaUnsignedOrderCredsTopic].BinaryFromNative(nil, native)
+		if err != nil {
+			return fmt.Errorf("error converting binary from native: %w", err)
+		}
+
+		km := kafka.Message{
+			Topic: kafkaUnsignedOrderCredsTopic,
+			Key:   messages[i].RequestID.Bytes(),
+			Value: binary,
+		}
+
+		msgs[i] = km
+	}
+
+	err := s.kafkaWriter.WriteMessages(ctx, msgs...)
+	if err != nil {
+		return fmt.Errorf("error writting kafka message: %w", err)
+	}
+
+	return nil
+}
+
+// Decode decodes the kafka message using from the avro schema.
+func (s *Service) Decode(message kafka.Message) (*SigningOrderResult, error) {
+	codec, ok := s.codecs[kafkaSignedOrderCredsTopic]
+	if !ok {
+		return nil, fmt.Errorf("read message: could not find codec %s", kafkaSignedOrderCredsTopic)
+	}
+
+	native, _, err := codec.NativeFromBinary(message.Value)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
+	}
+
+	textual, err := codec.TextualFromNative(nil, native)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
+	}
+
+	var signedOrderResult SigningOrderResult
+	err = json.Unmarshal(textual, &signedOrderResult)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
+	}
+
+	return &signedOrderResult, nil
+}
+
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
 var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 	// deduplicate credential bindings
-	cb = DeduplicateCredentialBindings(cb...)
+	cb = deduplicateCredentialBindings(cb...)
 
 	var (
 		requestCredentials = make([]cbr.CredentialRedemption, len(cb))
@@ -241,4 +459,146 @@ var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBin
 		requestCredentials[i].Signature = cb[i].Signature
 	}
 	return requestCredentials, nil
+}
+
+// CredentialBinding includes info needed to redeem a single credential
+type CredentialBinding struct {
+	PublicKey     string `json:"publicKey" valid:"base64"`
+	TokenPreimage string `json:"t" valid:"base64"`
+	Signature     string `json:"signature" valid:"base64"`
+}
+
+// deduplicateCredentialBindings - given a list of tokens return a deduplicated list
+func deduplicateCredentialBindings(tokens ...CredentialBinding) []CredentialBinding {
+	var (
+		seen   = map[string]bool{}
+		result []CredentialBinding
+	)
+	for _, t := range tokens {
+		if !seen[t.TokenPreimage] {
+			seen[t.TokenPreimage] = true
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+func decodeIssuerID(issuerID string) (string, string, error) {
+	var (
+		merchantID string
+		sku        string
+	)
+
+	u, err := url.Parse(issuerID)
+	if err != nil {
+		return "", "", fmt.Errorf("parse issuer name: %w", err)
+	}
+
+	sku = u.Query().Get("sku")
+	u.RawQuery = ""
+	merchantID = u.String()
+
+	return merchantID, sku, nil
+}
+
+func encodeIssuerID(merchantID, sku string) (string, error) {
+	v := url.Values{}
+	v.Add("sku", sku)
+
+	u, err := url.Parse(merchantID + "?" + v.Encode())
+	if err != nil {
+		return "", fmt.Errorf("parse merchant id: %w", err)
+	}
+
+	return u.String(), nil
+}
+
+// SignedOrderCredentialsHandler - this is the handler for getting the signed order credentials
+type SignedOrderCredentialsHandler struct {
+	decoder   Decoder
+	datastore Datastore
+}
+
+// Handle processes Kafka message of type SigningOrderResult.
+func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafka.Message) (err error) {
+	signedOrderResult, err := s.decoder.Decode(message)
+	if err != nil {
+		return fmt.Errorf("error decoding message key %s partition %d offset %d: %w",
+			string(message.Key), message.Partition, message.Offset, err)
+	}
+
+	requestID, err := uuid.FromString(signedOrderResult.RequestID)
+	if err != nil {
+		return fmt.Errorf("error getting uuid from signed order request %w", err)
+	}
+
+	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.datastore)
+	defer rollback()
+
+	err = s.datastore.InsertSignedOrderCredentialsTx(ctx, tx, signedOrderResult)
+	if err != nil {
+		return fmt.Errorf("error inserting signed order credentials: %w", err)
+	}
+
+	err = s.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, time.Now())
+	if err != nil {
+		return fmt.Errorf("error updating signing order request outbox: %w", err)
+	}
+
+	err = commit()
+	if err != nil {
+		return fmt.Errorf("error commiting signing order request outbox: %w", err)
+	}
+
+	return nil
+}
+
+// Decoder - kafka message decoder interface
+type Decoder interface {
+	Decode(message kafka.Message) (*SigningOrderResult, error)
+}
+
+// SigningOrderResultDecoder - signed order result kafka message decoder interface
+type SigningOrderResultDecoder struct {
+	codec *goavro.Codec
+}
+
+// Decode decodes the kafka message using from the avro schema.
+func (s *SigningOrderResultDecoder) Decode(message kafka.Message) (*SigningOrderResult, error) {
+	native, _, err := s.codec.NativeFromBinary(message.Value)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
+	}
+
+	textual, err := s.codec.TextualFromNative(nil, native)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
+	}
+
+	var signedOrderResult SigningOrderResult
+	err = json.Unmarshal(textual, &signedOrderResult)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
+	}
+
+	return &signedOrderResult, nil
+}
+
+// SigningOrderResultErrorHandler - error handler for signing results
+type SigningOrderResultErrorHandler struct {
+	kafkaWriter *kafka.Writer
+}
+
+// Handle writes messages the SigningResultReader's dead letter queue.
+func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kafka.Message, errorMessage error) error {
+	message.Headers = append(message.Headers, kafka.Header{
+		Key:   "error-message",
+		Value: []byte(errorMessage.Error()),
+	})
+	message.Topic = kafkaSignedOrderCredsDLQTopic
+	err := s.kafkaWriter.WriteMessages(ctx, message)
+	if err != nil {
+		return fmt.Errorf("error writting message to signing result dlq: %w", err)
+	}
+	return nil
 }

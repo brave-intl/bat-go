@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -23,9 +25,11 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	srv "github.com/brave-intl/bat-go/libs/service"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/go-chi/chi"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -41,6 +45,21 @@ func isReputationGeoEnabled() bool {
 	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
 		var err error
 		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
+// VerifiedWalletEnable enable verified wallet call
+var VerifiedWalletEnable = isVerifiedWalletEnable()
+
+func isVerifiedWalletEnable() bool {
+	var toggle = false
+	if os.Getenv("VERIFIED_WALLET_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("VERIFIED_WALLET_ENABLED"))
 		if err != nil {
 			return false
 		}
@@ -71,12 +90,15 @@ type GeoValidator interface {
 
 // Service contains datastore connections
 type Service struct {
-	Datastore    Datastore
-	RoDatastore  ReadOnlyDatastore
-	repClient    reputation.Client
-	geminiClient gemini.Client
-	geoValidator GeoValidator
-	retry        backoff.RetryFunc
+	Datastore        Datastore
+	RoDatastore      ReadOnlyDatastore
+	repClient        reputation.Client
+	geminiClient     gemini.Client
+	geoValidator     GeoValidator
+	retry            backoff.RetryFunc
+	jobs             []srv.Job
+	crMu             *sync.RWMutex
+	custodianRegions custodian.Regions
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -84,6 +106,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient r
 	geminiClient gemini.Client, geoCountryValidator GeoValidator,
 	retry backoff.RetryFunc) (*Service, error) {
 	service := &Service{
+		crMu:         new(sync.RWMutex),
 		Datastore:    datastore,
 		RoDatastore:  roDatastore,
 		repClient:    repClient,
@@ -91,7 +114,13 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient r
 		geoValidator: geoCountryValidator,
 		retry:        retry,
 	}
+	// get the valid custodian regions
 	return service, nil
+}
+
+// Jobs - Implement srv.JobService interface
+func (service *Service) Jobs() []srv.Job {
+	return service.jobs
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
@@ -157,12 +186,15 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
-	useCustodianRegions, featureOK := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool)
-	if featureOK && useCustodianRegions && !bucketOK {
-		logger.Panic().Msg("failed to initialize wallet service, misconfiguration for custodian regions bucket")
-	}
+	// put the configured aws client on ctx
+	ctx = context.WithValue(ctx, appctx.AWSClientCTXKey, awsClient)
 
+	// get the s3 bucket and object
+	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+	if !bucketOK {
+		logger.Panic().Err(errors.New("bucket not in context")).
+			Msg("failed to initialize wallet service")
+	}
 	object, ok := ctx.Value(appctx.DisabledWalletGeoCountriesCTXKey).(string)
 	if !ok {
 		logger.Panic().Err(errors.New("wallet geo countries disabled ctx key value not found")).
@@ -181,20 +213,47 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	if useCustodianRegions {
-		// use client to put the custodian regions on ctx
-		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, awsClient, bucket)
-		if err != nil {
-			logger.Panic().Err(err).Msg("failed to initialize wallet service, unable to extract custodian regions")
-		}
-		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
+	_, err = s.RefreshCustodianRegionsWorker(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize custodian regions")
+	}
+
+	s.jobs = []srv.Job{
+		{
+			Func:    s.RunVerifiedWalletWorker,
+			Cadence: 15 * time.Second,
+			Workers: 1,
+		},
+		{
+			Func:    s.RefreshCustodianRegionsWorker,
+			Cadence: 15 * time.Minute,
+			Workers: 1,
+		},
+	}
+
+	err = cmd.SetupJobWorkers(ctx, s.Jobs())
+	if err != nil {
+		logger.Error().Err(err).Msg("error initializing job workers")
 	}
 
 	return ctx, s
 }
 
+func (service *Service) setCustodianRegions(custodianRegions custodian.Regions) {
+	service.crMu.Lock()
+	defer service.crMu.Unlock()
+	service.custodianRegions = custodianRegions
+}
+
+func (service *Service) getCustodianRegions() custodian.Regions {
+	service.crMu.RLock()
+	defer service.crMu.RUnlock()
+	return service.custodianRegions
+}
+
 // RegisterRoutes - register the wallet api routes given a chi.Mux
 func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
+	disableDisconnect, _ := ctx.Value(appctx.DisableDisconnectCTXKey).(bool) // defaults false
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
@@ -214,8 +273,10 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
-			r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			if !disableDisconnect { // if disable-disconnect is false then add this route
+				r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			}
 
 			// create wallet connect routes for our wallet providers
 			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
@@ -225,13 +286,11 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
-			r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			if !disableDisconnect { // if disable-disconnect is false then add this route
+				r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+			}
 		}
-
-		// unlink verified custodial wallet
-		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
-			middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
 
 		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
 			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
@@ -248,6 +307,7 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 	})
 
 	r.Route("/v4/wallets", func(r chi.Router) {
+		r.Use(middleware.RateLimiter(ctx, 2))
 		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
 		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
@@ -302,35 +362,6 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	return anonCard.SubmitTransaction(ctx, transaction, confirm)
 }
 
-// UnlinkWallet - unlink this wallet from the custodian
-func (service *Service) UnlinkWallet(ctx context.Context, walletID, custodian string) error {
-	id, err := uuid.FromString(walletID)
-	if err != nil {
-		return fmt.Errorf("unable to parse wallet id: %w", err)
-	}
-	switch custodian {
-	case "uphold", "bitflyer", "gemini", "brave":
-	default:
-		return fmt.Errorf("custodian '%s' not valid", custodian)
-	}
-
-	if err := service.Datastore.UnlinkWallet(ctx, id, custodian); err != nil {
-		return fmt.Errorf("unable to unlink wallet: %w", err)
-	}
-	return nil
-}
-
-// IncreaseLinkingLimit - increase this wallet's linking limit
-func (service *Service) IncreaseLinkingLimit(ctx context.Context, custodianID string) error {
-	// convert to provider id
-	providerLinkingID := uuid.NewV5(ClaimNamespace, custodianID)
-
-	if err := service.Datastore.IncreaseLinkingLimit(ctx, providerLinkingID); err != nil {
-		return fmt.Errorf("unable to increase linking limit: %w", err)
-	}
-	return nil
-}
-
 // GetLinkingInfo - Get data about the linking info
 func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, custodianID string) (map[string]LinkingInfo, error) {
 	// compute the provider linking id based on custodian id if there is one
@@ -379,6 +410,13 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		// no gemini client on context
 		return handlers.WrapError(
 			appctx.ErrNotInContext, "gemini client misconfigured", http.StatusInternalServerError)
+	}
+
+	// add custodian regions to ctx going to client
+	_, ok = ctx.Value(appctx.CustodianRegionsCTXKey).(custodian.Regions)
+	if !ok {
+		cr := service.getCustodianRegions()
+		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, &cr)
 	}
 
 	// perform an Account Validation call to gemini to get the accountID
@@ -444,6 +482,13 @@ func (service *Service) LinkWallet(
 		return handlers.WrapError(
 			errors.New("failed to verify transaction"), "transaction verification failure",
 			http.StatusForbidden)
+	}
+
+	// add custodian regions to ctx going to client
+	_, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(custodian.Regions)
+	if !ok {
+		cr := service.getCustodianRegions()
+		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, &cr)
 	}
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
@@ -579,6 +624,56 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 	}
 
 	return info, nil
+}
+
+// RefreshCustodianRegionsWorker - get the custodian regions from the merge param bucket
+func (service *Service) RefreshCustodianRegionsWorker(ctx context.Context) (bool, error) {
+	useCustodianRegions, featureOK := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool)
+	if featureOK && !useCustodianRegions {
+		// do not attempt no error
+		return false, nil
+	}
+	// get aws client
+	client, clientOK := ctx.Value(appctx.AWSClientCTXKey).(*appaws.Client)
+	if !clientOK {
+		return true, errors.New("cannot run refresh custodian regions, no client")
+	}
+	// get the bucket and if we are feature flagged on
+	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+	if !bucketOK {
+		return true, errors.New("cannot run refresh custodian regions, no bucket")
+	}
+
+	select {
+	case <-ctx.Done():
+		return true, ctx.Err()
+	default:
+		// use client to put the custodian regions on ctx
+		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, client, bucket)
+		if err != nil {
+			return true, fmt.Errorf("error running refresh custodian regions: %w", err)
+		}
+		// write custodian regions to service
+		service.setCustodianRegions(*custodianRegions)
+		return true, nil
+	}
+}
+
+func (service *Service) RunVerifiedWalletWorker(ctx context.Context) (bool, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return true, ctx.Err()
+		default:
+			_, err := service.Datastore.SendVerifiedWalletOutbox(ctx, service.repClient, service.retry)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return true, nil
+				}
+				return true, fmt.Errorf("error running send verified wallet request: %w", err)
+			}
+		}
+	}
 }
 
 func canRetry(nonRetriableErrors []int) func(error) bool {

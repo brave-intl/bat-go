@@ -23,6 +23,7 @@ type Client interface {
 	IsLinkingReputable(ctx context.Context, id uuid.UUID, country string) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	UpsertReputationSummary(ctx context.Context, paymentID, geoCountry string) error
+	UpdateReputationSummary(ctx context.Context, paymentID string, verifiedWallet bool) error
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -321,6 +322,29 @@ func (c *HTTPClient) UpsertReputationSummary(ctx context.Context, paymentID, geo
 	}
 
 	req, err := c.client.NewRequest(ctx, http.MethodPut, fmt.Sprintf("v1/reputation-summary/%s", paymentID), b, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.Do(ctx, req, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type reputationSummaryPatchRequest struct {
+	VerifiedWallet bool `json:"verifiedWallet"`
+}
+
+// UpdateReputationSummary calls the reputation summary update endpoint with the values.
+func (c *HTTPClient) UpdateReputationSummary(ctx context.Context, paymentID string, verifiedWallet bool) error {
+	r := reputationSummaryPatchRequest{
+		VerifiedWallet: verifiedWallet,
+	}
+
+	req, err := c.client.NewRequest(ctx, http.MethodPatch, fmt.Sprintf("v1/reputation-summary/%s", paymentID), r, nil)
 	if err != nil {
 		return err
 	}

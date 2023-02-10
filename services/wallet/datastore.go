@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/backoff"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -69,8 +71,6 @@ func init() {
 type Datastore interface {
 	datastore.Datastore
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error
-	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
-	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (bool, error)
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
@@ -97,6 +97,10 @@ type Datastore interface {
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
 	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
 	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error)
+	// InsertVerifiedWalletOutboxTx inserts a verifiedWalletOutbox for processing.
+	InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, paymentID uuid.UUID, verifiedWallet bool) error
+	// SendVerifiedWalletOutbox sends requests to reputation service.
+	SendVerifiedWalletOutbox(ctx context.Context, client reputation.Client, retry backoff.RetryFunc) (bool, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -547,82 +551,6 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 // ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
 var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
 
-// UnlinkWallet - unlink the wallet from the custodian completely
-func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
-	// get tx
-	ctx, tx, rollback, commit, err := getTx(ctx, pg)
-	if err != nil {
-		return fmt.Errorf("failed to create db transaction UnlinkWallet: %w", err)
-	}
-	// will rollback if tx created at this scope
-	defer rollback()
-
-	// lower bound based
-	lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey).(string)
-	if !ok {
-		return fmt.Errorf("misconfigured service, no unlink prior to duration configured")
-	}
-
-	d, err := timeutils.ParseDuration(lbDur)
-	if err != nil {
-		return fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
-	}
-
-	notBefore, err := d.FromNow()
-	if err != nil {
-		return fmt.Errorf("unable to get not before time from duration: %w", err)
-	}
-
-	// validate that no other linkages were unlinked in the duration specified
-	stmt := `
-		select
-			count(wc2.*)
-		from
-			wallet_custodian wc1 join wallet_custodian wc2 on wc1.linking_id=wc2.linking_id
-		where
-			wc1.wallet_id=$1 and wc1.custodian=$2 and wc2.unlinked_at>$3
-	`
-	var count int
-	err = tx.Get(&count, stmt, walletID, custodian, notBefore)
-	if err != nil {
-		return err
-	}
-
-	if count > 0 {
-		return ErrUnlinkingsExceeded
-	}
-
-	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
-	_, err = tx.ExecContext(ctx, statement, walletID, custodian)
-	if err != nil {
-		return err
-	}
-
-	// remove the user_deposit_destination, user_account_deposit_provider from the wallets table
-
-	statement = `update wallets set user_deposit_destination='',user_deposit_account_provider=null where id = $1`
-
-	_, err = tx.ExecContext(ctx, statement, walletID)
-	if err != nil {
-		return err
-	}
-
-	if err := commit(); err != nil {
-		return fmt.Errorf("failed to commit tx: %w", err)
-	}
-	return nil
-}
-
-// IncreaseLinkingLimit - increase the linking limit for the given walletID by one
-func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error {
-	statement := `INSERT INTO linking_limit_adjust (provider_linking_id) VALUES ($1)`
-	_, err := pg.RawDB().ExecContext(ctx, statement, providerLinkingID)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 var (
 	// ErrUnusualActivity - error for wallets with unusual activity
 	ErrUnusualActivity = errors.New("unusual activity")
@@ -632,8 +560,8 @@ var (
 
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error {
-
 	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
+	sublogger.Debug().Msg("linking wallet")
 
 	// rep check
 	if repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
@@ -703,6 +631,13 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		sublogger.Error().Err(err).
 			Msg("error connect custodian wallet")
 		return fmt.Errorf("error connect custodian wallet: %w", err)
+	}
+
+	if VerifiedWalletEnable {
+		err := pg.InsertVerifiedWalletOutboxTx(ctx, tx, id, true)
+		if err != nil {
+			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+		}
 	}
 
 	err = commit()
@@ -1019,6 +954,17 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		}
 	}
 
+	// evict any prior linkings that were not disconnected (across all custodians)
+	stmt = `
+		update wallet_custodian set disconnected_at=now() where wallet_id=$1 and disconnected_at is null
+	`
+	// perform query
+	if _, err := tx.ExecContext(ctx, stmt, cl.WalletID); err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to update wallet_custodian evicting prior linked")
+		return fmt.Errorf("error updating wallet_custodian evicting prior linked: %w", err)
+	}
+
 	stmt = `
 		insert into wallet_custodian (
 			wallet_id, custodian, linking_id
@@ -1067,6 +1013,58 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		return fmt.Errorf("failed to commit ConnectCustodialWallet transaction: %w", err)
 	}
 	return nil
+}
+
+// InsertVerifiedWalletOutboxTx inserts a verifiedWalletOutbox for processing.
+func (pg *Postgres) InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, walletID uuid.UUID, verifiedWallet bool) error {
+	_, err := tx.ExecContext(ctx, `insert into verified_wallet_outbox(payment_id, verified_wallet) 
+											values ($1, $2)`, walletID, verifiedWallet)
+	if err != nil {
+		return fmt.Errorf("error inserting values into vefified wallet outbox: %w", err)
+	}
+	return nil
+}
+
+// SendVerifiedWalletOutbox sends requests to reputation service.
+func (pg *Postgres) SendVerifiedWalletOutbox(ctx context.Context, client reputation.Client, retry backoff.RetryFunc) (bool, error) {
+	vw := struct {
+		ID             uuid.UUID `db:"id"`
+		PaymentID      uuid.UUID `db:"payment_id"`
+		VerifiedWallet bool      `db:"verified_wallet"`
+	}{}
+
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
+	if err != nil {
+		return false, fmt.Errorf("error getting tx for verified wallet: %w", err)
+	}
+	defer rollback()
+
+	err = tx.Get(&vw, `select id, payment_id, verified_wallet from verified_wallet_outbox 
+                                   order by created_at asc for update skip locked limit 1`)
+	if err != nil {
+		return false, fmt.Errorf("error get verified wallet: %w", err)
+	}
+
+	upsertReputationSummaryOp := func() (interface{}, error) {
+		return nil, client.UpdateReputationSummary(ctx, vw.PaymentID.String(), vw.VerifiedWallet)
+	}
+
+	_, err = retry(ctx, upsertReputationSummaryOp, retryPolicy, canRetry(nonRetriableErrors))
+	if err != nil {
+		return true, fmt.Errorf("error calling reputation for verified wallet: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "delete from verified_wallet_outbox where id = $1", vw.ID)
+	if err != nil {
+		return true, fmt.Errorf("error deleting verified wallet txn: %w", err)
+	}
+
+	err = commit()
+	if err != nil {
+		return true, fmt.Errorf("error commit verified wallet txn: %w", err)
+	}
+
+	return true, nil
 }
 
 // helper to make logger easier

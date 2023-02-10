@@ -20,6 +20,17 @@ func init() {
 	cmd.ServeCmd.AddCommand(rewardsCmd)
 
 	// setup the flags
+	// vbat-deadline - defaults to ""
+	rewardsCmd.PersistentFlags().String("vbat-deadline", "",
+		"vbat deadline parameter")
+	cmdutils.Must(viper.BindPFlag("vbat-deadline", rewardsCmd.PersistentFlags().Lookup("vbat-deadline")))
+	cmdutils.Must(viper.BindEnv("vbat-deadline", "VBAT_DEADLINE"))
+
+	// transition- defaults to false
+	rewardsCmd.PersistentFlags().Bool("transition", false,
+		"transition parameter")
+	cmdutils.Must(viper.BindPFlag("transition", rewardsCmd.PersistentFlags().Lookup("transition")))
+	cmdutils.Must(viper.BindEnv("transition", "TRANSITION"))
 
 	// merge_param_bucket - defaults to ""
 	rewardsCmd.PersistentFlags().String("merge-param-bucket", "",

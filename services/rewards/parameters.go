@@ -1,6 +1,10 @@
 package rewards
 
-import "github.com/brave-intl/bat-go/libs/custodian"
+import (
+	"time"
+
+	"github.com/brave-intl/bat-go/libs/custodian"
+)
 
 // AutoContribute - reward parameters about ac (votes)
 type AutoContribute struct {
@@ -21,4 +25,6 @@ type ParametersV1 struct {
 	BATRate          float64                 `json:"batRate,omitempty"`
 	AutoContribute   AutoContribute          `json:"autocontribute,omitempty"`
 	Tips             Tips                    `json:"tips,omitempty"`
+	Transition       bool                    `json:"vbatExpired"`
+	VBATDeadline     time.Time               `json:"vbatDeadline,omitempty"`
 }

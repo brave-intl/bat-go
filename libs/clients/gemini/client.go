@@ -429,20 +429,23 @@ func (c *HTTPClient) CheckTxStatus(ctx context.Context, APIKey string, clientID 
 	}
 
 	var body PayoutResult
-	resp, err := c.client.Do(ctx, req, &body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		notFoundReason := "404 From Gemini"
-		body = PayoutResult{
-			Result: "Error",
-			Reason: &notFoundReason,
-			TxRef:  txRef,
-		}
-		return &body, nil
-	}
+	_, err = c.client.Do(ctx, req, &body)                                                                                            
+        if err != nil {                                                                                                                  
+                var eb *errorutils.ErrorBundle                                                                                           
+                if errors.As(err, &eb) {                                                                                                  
+                        if httpState, ok := eb.Data().(clients.HTTPState); ok {                                                          
+                                if httpState.Status == http.StatusNotFound {                                                             
+                                        notFoundReason := "404 From Gemini"                                                              
+                                        return &PayoutResult{                                                                            
+                                                Result: "Error",                                                                         
+                                                Reason: &notFoundReason,                                                                 
+                                                TxRef:  txRef,                                                                           
+                                        }, nil                                                                                           
+                                }                                                                                                        
+                        }                                                                                                                
+                }                                                                                                                        
+                return nil, err                                                                                                          
+        }
 
 	return &body, err
 }

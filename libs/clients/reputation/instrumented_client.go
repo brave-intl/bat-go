@@ -110,6 +110,20 @@ func (_d ClientWithPrometheus) IsWalletReputable(ctx context.Context, id uuid.UU
 	return _d.base.IsWalletReputable(ctx, id, platform)
 }
 
+// UpdateReputationSummary implements Client
+func (_d ClientWithPrometheus) UpdateReputationSummary(ctx context.Context, paymentID string, verifiedWallet bool) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateReputationSummary", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UpdateReputationSummary(ctx, paymentID, verifiedWallet)
+}
+
 // UpsertReputationSummary implements Client
 func (_d ClientWithPrometheus) UpsertReputationSummary(ctx context.Context, paymentID string, geoCountry string) (err error) {
 	_since := time.Now()

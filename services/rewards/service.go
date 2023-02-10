@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -31,6 +33,7 @@ func NewService(ctx context.Context, ratio ratios.Client, s3client appaws.S3GetO
 
 	logger.Info().Str("s3client", fmt.Sprintf("%+v", s3client)).Msg("setup s3 client")
 	return &Service{
+		cacheMu:  new(sync.RWMutex),
 		jobs:     []srv.Job{},
 		ratios:   ratio,
 		s3Client: s3client,
@@ -39,6 +42,11 @@ func NewService(ctx context.Context, ratio ratios.Client, s3client appaws.S3GetO
 
 // Service contains datastore
 type Service struct {
+	lastPollTime         time.Time
+	lastPayoutStatus     *custodian.PayoutStatus
+	lastCustodianRegions *custodian.Regions
+	cacheMu              *sync.RWMutex
+
 	jobs []srv.Job
 	// ratios client
 	ratios   ratios.Client
@@ -103,32 +111,47 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 
 	var rate, _ = rateData.Payload[currencyStr].Float64()
 
-	// merge in static s3 attributes into response
-	var (
-		payoutStatus     *custodian.PayoutStatus
-		custodianRegions *custodian.Regions
-		bucket, ok       = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
-	)
-	logger.Debug().Str("bucket", bucket).Msg("merge bucket env var")
-	if ok {
-		// get payout status
-		logger.Debug().Str("bucket", bucket).Msg("extracting payout status")
-		payoutStatus, err = custodian.ExtractPayoutStatus(ctx, s.s3Client, bucket)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
-		}
-		logger.Debug().Str("bucket", bucket).Str("payout status", fmt.Sprintf("%+v", *payoutStatus)).Msg("payout status")
+	s.cacheMu.RLock()
+	lastPollTime := s.lastPollTime
+	s.cacheMu.RUnlock()
 
-		// get the custodian regions
-		logger.Debug().Str("bucket", bucket).Msg("extracting custodian regions")
-		custodianRegions, err = custodian.ExtractCustodianRegions(ctx, s.s3Client, bucket)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
+	if time.Now().After(lastPollTime.Add(15 * time.Minute)) {
+		// merge in static s3 attributes into response
+		var (
+			payoutStatus     *custodian.PayoutStatus
+			custodianRegions *custodian.Regions
+			bucket, ok       = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+		)
+		logger.Debug().Str("bucket", bucket).Msg("merge bucket env var")
+		if ok {
+			// get payout status
+			logger.Debug().Str("bucket", bucket).Msg("extracting payout status")
+			payoutStatus, err = custodian.ExtractPayoutStatus(ctx, s.s3Client, bucket)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
+			}
+			logger.Debug().Str("bucket", bucket).Str("payout status", fmt.Sprintf("%+v", *payoutStatus)).Msg("payout status")
+
+			// get the custodian regions
+			logger.Debug().Str("bucket", bucket).Msg("extracting custodian regions")
+			custodianRegions, err = custodian.ExtractCustodianRegions(ctx, s.s3Client, bucket)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
+			}
+			logger.Debug().Str("bucket", bucket).Str("custodian regions", fmt.Sprintf("%+v", *custodianRegions)).Msg("custodianRegions")
 		}
-		logger.Debug().Str("bucket", bucket).Str("custodian regions", fmt.Sprintf("%+v", *custodianRegions)).Msg("custodianRegions")
+		s.cacheMu.Lock()
+		s.lastPayoutStatus = payoutStatus         // update the payout status
+		s.lastCustodianRegions = custodianRegions // update the custodian regions
+		s.lastPollTime = time.Now()               // update the time to now
+		s.cacheMu.Unlock()
 	}
+	s.cacheMu.RLock()
+	defer s.cacheMu.RUnlock()
+	payoutStatus := s.lastPayoutStatus
+	custodianRegions := s.lastCustodianRegions
 
-	return &ParametersV1{
+	params := &ParametersV1{
 		PayoutStatus:     payoutStatus,
 		CustodianRegions: custodianRegions,
 		BATRate:          rate,
@@ -140,5 +163,17 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
-	}, nil
+	}
+
+	vbatDeadline, ok := ctx.Value(appctx.ParametersVBATDeadlineCTXKey).(time.Time)
+	if ok {
+		params.VBATDeadline = vbatDeadline
+	}
+
+	transition, ok := ctx.Value(appctx.ParametersTransitionCTXKey).(bool)
+	if ok {
+		params.Transition = transition
+	}
+
+	return params, nil
 }

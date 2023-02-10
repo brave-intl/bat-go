@@ -53,7 +53,7 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(ctx)
 	r.Get(
 		"/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}",
-		ratios.RatiosXBraveHeaderInstrumentHandler(
+		ratios.XBraveHeaderInstrumentHandler(
 			"GetRelativeHandler",
 			middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)),
 		).ServeHTTP)
@@ -63,7 +63,7 @@ func RestRun(command *cobra.Command, args []string) {
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initalize job workers")
+		logger.Fatal().Err(err).Msg("failed to initialize job workers")
 	}
 
 	// make sure exceptions go to sentry
