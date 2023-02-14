@@ -1,0 +1,1 @@
+CREATE INDEX CONCURRENTLY signing_order_request_outbox_created_at_submitted_at_isnull_idx ON signing_order_request_outbox(created_at) WHERE submitted_at IS NULL;
