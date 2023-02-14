@@ -1054,7 +1054,8 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 			join wallets w on w.id=cd.wallet_id
 		where
 			cd.erred = false and
-			w.user_deposit_account_provider = 'bitflyer'
+			w.user_deposit_account_provider = 'bitflyer' and
+			cd.batch_id in (select distinct batch_id from claim_drain where status='prepared')
 		group by
 			cd.batch_id
 		having bool_and(transaction_id is not null) = true 
