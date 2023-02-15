@@ -183,6 +183,7 @@ services:
     environment:
       - "POSTGRES_USER=grants"
       - "POSTGRES_PASSWORD=password"
+      - "TZ=UTC"
     networks:
       - grant
     command: ["postgres", "-c", "log_statement=all"]
@@ -193,6 +194,7 @@ services:
     environment:
       - "POSTGRES_USER=btokens"
       - "POSTGRES_PASSWORD=password"
+      - "TZ=UTC"
     networks:
       - grant
 
