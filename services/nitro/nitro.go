@@ -138,14 +138,9 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 	// submit will have an http signature from a known list of public keys
 	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
 	logger.Info().Msg("submit endpoint setup")
-	// status to get the status and submission results from the submit
-	r.Post("/v1/payments/{documentID}/status", middleware.InstrumentHandler("StatusHandler", payments.SubmitHandler(s)).ServeHTTP)
-	logger.Info().Msg("status endpoint setup")
 
 	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
 	logger.Info().Msg("get config endpoint setup")
-	r.Patch("/v1/configuration", handlers.AppHandler(payments.PatchConfigurationHandler(s)).ServeHTTP)
-	logger.Info().Msg("patch config endpoint setup")
 	return ctx, r
 }
 

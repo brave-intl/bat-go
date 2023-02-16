@@ -2,6 +2,7 @@ package nitro
 
 import (
 	"errors"
+	"log"
 
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
@@ -17,7 +18,7 @@ func Attest(nonce, userData, publicKey []byte) ([]byte, error) {
 	}
 	defer func() {
 		if err = s.Close(); err != nil {
-			elog.Printf("Attestation: Failed to close default NSM session: %s", err)
+			log.Printf("Attestation: Failed to close default NSM session: %s", err)
 		}
 	}()
 

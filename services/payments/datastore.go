@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/shopspring/decimal"
@@ -38,7 +39,13 @@ type Transaction struct {
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
 func (t *Transaction) SignTransaction(ctx context.Context) (string, string, error) {
 	// TODO: fill in
-	return "", "", errorutils.ErrNotYetImplemented
+	return "", "", errorutils.ErrNotImplemented
+}
+
+// BuildSigningBytes - the string format that payments will sign over per tx
+func (t Transaction) BuildSigningBytes() []byte {
+	return []byte(fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
+		1, t.To, t.Amount.String(), t.IdempotencyKey, t.Custodian, t.DocumentID, t.State))
 }
 
 // MarshalJSON - custom marshaling of transaction type
@@ -256,57 +263,54 @@ const (
 	StateSubmitted = "submitted"
 )
 
-// InsertTransactions - perform a qldb insertion on the transactions
-func (s Service) InsertTransactions(ctx context.Context, transactions ...*Transaction) ([]Transaction, error) {
-	enrichedTransactions, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+// InsertTransaction - perform a qldb insertion on the transactions
+func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
+	enrichedTransaction, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		// for all of the transactions load up a check to see if this transaction has already existed
 		// or not, then perform the insertion of the records.
-		resp := []Transaction{}
+		resp := Transaction{}
 
-		for _, transaction := range transactions {
-			// Check if a document with this idempotencyKey exists
-			result, err := txn.Execute("SELECT * FROM transactions WHERE idempotencyKey = ?", transaction.IdempotencyKey)
-			if err != nil {
-				return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
-			}
-			// Check if there are any results
-			if !result.Next(txn) {
-				// set transaction state to prepared
-				transaction.State = StatePrepared
-				// insert the transaction
-				_, err = txn.Execute("INSERT INTO transactions ?", transaction)
-				if err != nil {
-					return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
-				}
-			}
-			// get the document id for the inserted transaction
-			result, err = txn.Execute("SELECT data.*, metadata.id FROM _ql_committed_transactions as t WHERE t.data.idempotencyKey = ?", transaction.IdempotencyKey)
-			if err != nil {
-				return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
-			}
-			// Check if there are any results
-			if result.Next(txn) {
-
-				// get the enriched version of the transaction for the response
-				enriched := new(Transaction)
-				ionBinary := result.GetCurrentData()
-
-				// unmarshal enriched version
-				err := ion.Unmarshal(ionBinary, enriched)
-				if err != nil {
-					return nil, fmt.Errorf("failed to unmarshal enriched tx: %s due to: %w", transaction.IdempotencyKey, err)
-				}
-				// add to response
-				resp = append(resp, *enriched)
-			}
-
+		// Check if a document with this idempotencyKey exists
+		result, err := txn.Execute("SELECT * FROM transactions WHERE idempotencyKey = ?", transaction.IdempotencyKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
 		}
+		// Check if there are any results
+		if !result.Next(txn) {
+			// set transaction state to prepared
+			transaction.State = StatePrepared
+			// insert the transaction
+			_, err = txn.Execute("INSERT INTO transactions ?", transaction)
+			if err != nil {
+				return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
+			}
+		}
+		// get the document id for the inserted transaction
+		result, err = txn.Execute("SELECT data.*, metadata.id FROM _ql_committed_transactions as t WHERE t.data.idempotencyKey = ?", transaction.IdempotencyKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
+		}
+		// Check if there are any results
+		if result.Next(txn) {
+
+			// get the enriched version of the transaction for the response
+			enriched := new(Transaction)
+			ionBinary := result.GetCurrentData()
+
+			// unmarshal enriched version
+			err := ion.Unmarshal(ionBinary, enriched)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal enriched tx: %s due to: %w", transaction.IdempotencyKey, err)
+			}
+			resp = *enriched
+		}
+
 		return resp, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert transactions: %w", err)
+		return Transaction{}, fmt.Errorf("failed to insert transactions: %w", err)
 	}
-	return enrichedTransactions.([]Transaction), nil
+	return enrichedTransaction.(Transaction), nil
 }
 
 // UpdateTransactionsState - Change transaction state
@@ -337,20 +341,18 @@ func (s Service) UpdateTransactionsState(ctx context.Context, state string, tran
 	return nil
 }
 
-// AuthorizeTransactions - Add an Authorization for the Transaction
-func (s Service) AuthorizeTransactions(ctx context.Context, keyID string, transactions ...*Transaction) error {
+// AuthorizeTransaction - Add an Authorization for the Transaction
+func (s Service) AuthorizeTransaction(ctx context.Context, keyID string, transaction Transaction) error {
 	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		// for all of the transactions load up a check to see if this transaction has already existed
 		// or not, then perform the insertion of the records.
-		for _, transaction := range transactions {
-			auth := map[string]string{
-				"keyId":      keyID,
-				"documentId": transaction.DocumentID,
-			}
-			_, err := txn.Execute("INSERT INTO authorizations ?", auth)
-			if err != nil {
-				return nil, fmt.Errorf("failed to insert tx authorization: %+v due to: %w", auth, err)
-			}
+		auth := map[string]string{
+			"keyId":      keyID,
+			"documentId": transaction.DocumentID,
+		}
+		_, err := txn.Execute("INSERT INTO authorizations ?", auth)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert tx authorization: %+v due to: %w", auth, err)
 		}
 		return nil, nil
 	})

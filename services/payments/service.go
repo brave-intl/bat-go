@@ -41,26 +41,26 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	}
 
 	// setup our custodian integrations
-	upholdCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Uphold})
+	upholdCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Uphold})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create uphold custodian")
 		return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
 	}
-	geminiCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Gemini})
+	geminiCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Gemini})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create gemini custodian")
 		return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
 	}
-	bitflyerCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Bitflyer})
+	bitflyerCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Bitflyer})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create bitflyer custodian")
 		return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
 	}
 
 	service.custodians = map[string]provider.Custodian{
-		custodian.Uphold:   upholdCustodian,
-		custodian.Gemini:   geminiCustodian,
-		custodian.Bitflyer: bitflyerCustodian,
+		provider.Uphold:   upholdCustodian,
+		provider.Gemini:   geminiCustodian,
+		provider.Bitflyer: bitflyerCustodian,
 	}
 
 	return ctx, service, nil
@@ -69,7 +69,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 // decryptBootstrap - use service keyShares to reconstruct the decryption key
 func (s *Service) decryptBootstrap(ctx context.Context, ciphertext []byte) (map[appctx.CTXKey]interface{}, error) {
 	// combine the service configured key shares
-	key, err := shamir.Combine(keyShares)
+	key, err := shamir.Combine(s.keyShares)
 	if err != nil {
 		return nil, fmt.Errorf("failed to combine keyShares: %w", err)
 	}
@@ -78,8 +78,12 @@ func (s *Service) decryptBootstrap(ctx context.Context, ciphertext []byte) (map[
 	var nonce [32]byte
 	copy(nonce[:], ciphertext[:32]) // nonce is in first 32 bytes of ciphertext
 
+	// shove key into array
+	var k [32]byte
+	copy(k[:], key) // nonce is in first 32 bytes of ciphertext
+
 	// decrypted is the encryption key used to decrypt secrets now
-	v, err := cryptography.DecryptMessage(key, ciphertext[32:], nonce)
+	v, err := cryptography.DecryptMessage(k, ciphertext[32:], nonce[:])
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt secrets: %w", err)
 	}
