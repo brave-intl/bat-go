@@ -10,6 +10,7 @@ require (
 	github.com/brave-intl/bat-go/cmd v0.0.0-20230201160849-ae80459a65a9
 	github.com/brave-intl/bat-go/libs v0.0.0-20230201160849-ae80459a65a9
 	github.com/google/uuid v1.3.0
+	github.com/hashicorp/vault v1.12.3
 	github.com/redis/go-redis/v9 v9.0.2
 	github.com/schollz/progressbar/v3 v3.13.0
 	github.com/shopspring/decimal v1.3.1
@@ -46,7 +47,7 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
-	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

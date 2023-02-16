@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +19,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/tools/nitro-settlement/internal"
+	"github.com/hashicorp/vault/shamir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -78,6 +82,36 @@ func bootstrapRun(command *cobra.Command, args []string) error {
 
 	logging.Logger(ctx, "bootstrap").Info().Msg("bootstrap file read...")
 
+	// we need to come up with a random key to encrypt the file with
+	key := make([]byte, 32)
+
+	_, err = rand.Read(key)
+	if err != nil {
+		return internal.LogAndError(ctx, err, "bootstrap", "failed to create encryption key")
+	}
+
+	logging.Logger(ctx, "bootstrap").Info().Msg("bootstrap created encryption key...")
+
+	// we need to derive shamir shares to combine to get the random key we made
+	shares, err := shamir.Split(key, 5, 2)
+	if err != nil {
+		return internal.LogAndError(ctx, err, "bootstrap", "failed to create key shares for operators")
+	}
+
+	logging.Logger(ctx, "bootstrap").Info().Msg("bootstrap created key shares for operators...")
+
+	// we need to output the operator shares to reconstitute the random key (in enclave)
+	for i, v := range shares {
+		fmt.Printf("\t!!! OPERATOR SHARE %d: %s\n", i, hex.EncodeToString(v))
+	}
+
+	// we need to encrypt bootstrap with this random key
+	var k [32]byte
+	copy(k[:], key)
+
+	ciphertext, nonce, err := cryptography.EncryptMessage(k, bootstrap)
+	bootstrapCiphertext := append(nonce[:], ciphertext...) // put nonce at start of ciphertext
+
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -122,23 +156,15 @@ func bootstrapRun(command *cobra.Command, args []string) error {
 					return internal.LogAndError(ctx, err, "bootstrap", "failed to parse key policy conditions")
 				}
 				fmt.Printf("\nPrincipal: %+v \n\tConditions: %s\n", statement.Principal.AWS, string(conditions))
+				// TODO: validate with what we got back from enclave for measurements
 			}
 		}
-	}
-
-	var input = "no"
-	fmt.Printf("Would you like to continue? (yes|no) ")
-	fmt.Scanln(&input)
-
-	if strings.EqualFold(input, "no") {
-		logging.Logger(ctx, "bootstrap").Info().Msg("ending bootstrap process")
-		os.Exit(0)
 	}
 
 	// perform encryption of the bootstrap file
 	out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{
 		KeyId:     aws.String(viper.GetString(kmsKeyKey)),
-		Plaintext: bootstrap,
+		Plaintext: bootstrapCiphertext,
 	})
 	if err != nil {
 		return internal.LogAndError(ctx, err, "bootstrap", "failed to encrypt bootstrap file")
