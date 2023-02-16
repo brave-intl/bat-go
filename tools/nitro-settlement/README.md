@@ -16,7 +16,28 @@ Available commands are:
 1. `prepare`
 2. `bootstrap`
 3. `authorize`
-3. `validate`
+4. `validate`
+5. `enable`
+
+### Enable
+
+For the payments service to download relevant configurations, the operator will need to `enable`
+the system by encrypting their operator share (from bootstrap command) with a KMS key that only the enclave can decrypt from.
+Below is an example of how to run:
+
+```bash
+    aws-vault exec <operator aws role> -- \
+        go run main.go enable \
+            --kms-key="arn:aws:kms:*******:key/**********" \
+            --s3-bucket="*****************" \
+            --share="ba24835f48f31914a853588b6a0297c78b167ee98e95af2c02c1e1b44452b00f28"
+```
+
+This command will check the enclave measurements match the key policy for the kms encryption key, and
+then encrypt this share with the kms key and upload it to the enclave s3 bucket.  The payments service
+will wait for two objects to show up in the bucket that it can decrypt with KMS and then use the values
+to combine the Shamir shares and decrypt the bootstrap ciphertext.
+
 
 ### Bootstrap
 
@@ -34,7 +55,24 @@ configuration to s3.  Below is an example of how to run:
 ```
 
 bootstrap.json should be structured in a way that the payments service initialization is able to read
-parse and use it as it's configuration.
+parse and use it as it's configuration.  Output from this command will also be 5 shamir key shares with
+a threshold of 2 to reconstitute a randomly generated key which is used to encrypt the bootstrap file.
+
+The output will look something like this:
+
+```bash
+7:44AM INF bootstrap created encryption key... module=bootstrap
+7:44AM INF bootstrap created key shares for operators... module=bootstrap
+        !!! OPERATOR SHARE 0: ba24835f48f31914a853588b6a0297c78b167ee98e95af2c02c1e1b44452b00f28
+        !!! OPERATOR SHARE 1: 1de3cbd74c18020447dd421fe63ade57ff45b5440f9df7bd7d375346bee85171e9
+        !!! OPERATOR SHARE 2: 75127e4bec6597b29ab1ffcedaa043267065bf27e0c6f4e4d12f05fe5de527f5e8
+        !!! OPERATOR SHARE 3: 672b81e207635f33770b4bc098f5c0c33152a000f80b8a7dd9f201c8a62c1481c2
+        !!! OPERATOR SHARE 4: 36d990aee3c77a8e37d1570630fae8e1cb6665f05ed82666bbe5303b86ce11daa6
+```
+
+These operator shares should be discretely handed out to the various payment operators, two of which
+at any given time will need to perform the "enable" command with their secret share to allow a new
+enclave to process the secrets in the bootstrap file.
 
 ### Prepare
 
