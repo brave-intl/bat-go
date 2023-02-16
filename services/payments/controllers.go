@@ -1,7 +1,8 @@
 package payments
 
 import (
-	"encoding/hex"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 
@@ -20,22 +21,31 @@ import (
 type configurationHandlerRequest map[appctx.CTXKey]interface{}
 
 type getConfResponse struct {
-	PublicKey string `json:"publicKey"`
+	AttestationDocument string `json:"attestation"`
 }
 
-// GetConfigurationHandler - handler to get important payments configuration information,
-// namely the ed25519 public key by which we can encrypt the secrets so that only this instance
-// of the payments service can decrypt them.
+// GetConfigurationHandler - handler to get important payments configuration information, attested by nitro
 func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		var (
-			logger = logging.Logger(ctx, "GetConfigurationHandler")
-			resp   = &getConfResponse{
-				// return the service's public key
-				PublicKey: hex.EncodeToString(service.pubKey[:]),
-			}
-		)
+		logger := logging.Logger(ctx, "GetConfigurationHandler")
+		nonce := make([]byte, 64)
+		err := rand.Read(nonce)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create random nonce")
+			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
+		}
+
+		attestationDocument, err := nitro.Attest(nonce, []byte{}, []byte{})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get attestation from nitro")
+			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
+		}
+
+		resp = &getConfResponse{
+			// return the attestation document
+			AttestationDocument: base64.StdEncoding.EncodeToString(attestationDocument),
+		}
 
 		logger.Debug().Msg("handling configuration request")
 		// return ok, at this point all new requests will use the new baseCtx of the service
@@ -113,8 +123,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
-			req    = []*Transaction{}
-			txns   = []*Transaction{}
+			req    = new(Transaction)
 		)
 
 		// read the transactions in the body
@@ -124,24 +133,37 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		logger.Debug().Str("request", fmt.Sprintf("%+v", req)).Msg("structure of request")
-		// validate the list of transactions
+		// validate the transaction
 
-		for _, v := range req {
-			_, err = govalidator.ValidateStruct(v)
-			if err != nil {
-				logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
-				continue // skip txns that are malformed
-			}
-
-			txns = append(txns, v)
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
+			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
 		}
 
-		logger.Debug().Str("transactions", fmt.Sprintf("%+v", txns)).Msg("handling prepare request")
+		// sign the transaction
+		req.PublicKey, req.Signature := req.SignTransaction(ctx)
+		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
 
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.InsertTransactions(ctx, txns...)
+		resp, err := service.InsertTransactions(ctx, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
+		}
+
+		// create a random nonce for nitro attestation
+		nonce := make([]byte, 64)
+		err := rand.Read(nonce)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create random nonce")
+			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
+		}
+
+		// attest over the transaction
+		resp.AttestationDocument, err := nitro.Attest(nonce, resp.BuildSigningBytes(), []byte{})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get attestation from nitro")
+			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
@@ -156,8 +178,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "SubmitHandler")
-			req    = []Transaction{}
-			txns   = []Transaction{}
+			req    = &Transaction{}
 		)
 
 		// read the transactions in the body
@@ -166,14 +187,10 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		for _, v := range req {
-			_, err = govalidator.ValidateStruct(v)
-			if err != nil {
-				logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
-				continue // skip txns that are malformed
-			}
-
-			txns = append(txns, v)
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
+			continue // skip txns that are malformed
 		}
 
 		logger.Debug().Str("transactions", fmt.Sprintf("%+v", req)).Msg("handling submit request")
@@ -184,19 +201,37 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.AuthorizeTransactions(ctx, keyID, txns...)
+		// attempt authorization on the transaction
+		err = service.AuthorizeTransactions(ctx, keyID, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
 		// TODO: check if business logic was met from authorizers table in qldb for this transaction
+		// TODO: state machine handling for custodian submissions
 
-		for _, t := range txns {
-			// perform the custodian submission (channel to worker) if the number of authorizations is appropriate
-			service.processTransaction <- t
+		// get the current state of the transaction from qldb
+		resp, err = service.GetTransactionFromDocID(ctx, req.DocumentID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
+		}
+		
+		// create a random nonce for nitro attestation
+		nonce := make([]byte, 64)
+		err := rand.Read(nonce)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create random nonce")
+			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+		// attest over the transaction
+		resp.AttestationDocument, err := nitro.Attest(nonce, resp.BuildSigningBytes(), []byte{})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get attestation from nitro")
+			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }
 

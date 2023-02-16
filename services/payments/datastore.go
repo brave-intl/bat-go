@@ -23,13 +23,22 @@ import (
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey *uuid.UUID   `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
-	Amount         *ion.Decimal `json:"-" ion:"amount" valid:"required"`
-	To             *uuid.UUID   `json:"to,omitempty" ion:"to" valid:"required"`
-	From           *uuid.UUID   `json:"from,omitempty" ion:"from" valid:"required"`
-	Custodian      string       `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State          string       `json:"state,omitempty" ion:"state"`
-	DocumentID     string       `json:"documentId,omitempty" ion:"id"`
+	IdempotencyKey      *uuid.UUID   `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
+	Amount              *ion.Decimal `json:"-" ion:"amount" valid:"required"`
+	To                  *uuid.UUID   `json:"to,omitempty" ion:"to" valid:"required"`
+	From                *uuid.UUID   `json:"from,omitempty" ion:"from" valid:"required"`
+	Custodian           string       `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
+	State               string       `json:"state,omitempty" ion:"state"`
+	DocumentID          string       `json:"documentId,omitempty" ion:"id"`
+	AttestationDocument string       `json:"attestation,omitempty" ion:"-"`
+	Signature           string       `json:"-" ion:"signature"` // KMS signature only enclave can sign
+	PublicKey           string       `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
+}
+
+// SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
+func (t *Transaction) SignTransaction(ctx context.Context) (string, string, error) {
+	// TODO: fill in
+	return "", "", errorutils.ErrNotYetImplemented
 }
 
 // MarshalJSON - custom marshaling of transaction type
@@ -329,7 +338,7 @@ func (s Service) UpdateTransactionsState(ctx context.Context, state string, tran
 }
 
 // AuthorizeTransactions - Add an Authorization for the Transaction
-func (s Service) AuthorizeTransactions(ctx context.Context, keyID string, transactions ...Transaction) error {
+func (s Service) AuthorizeTransactions(ctx context.Context, keyID string, transactions ...*Transaction) error {
 	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		// for all of the transactions load up a check to see if this transaction has already existed
 		// or not, then perform the insertion of the records.
