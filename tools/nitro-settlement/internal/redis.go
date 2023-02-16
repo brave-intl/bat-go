@@ -95,7 +95,7 @@ func (c *client) PublishReport(ctx context.Context, payoutID string, report *Rep
 	}(ctx, report)
 
 	// spin up poolSize workers
-	for j := 0; j < poolSize; j++ {
+	for j := 0; j < poolSize/10; j++ {
 		go func(ctx context.Context) {
 			for {
 				select {
