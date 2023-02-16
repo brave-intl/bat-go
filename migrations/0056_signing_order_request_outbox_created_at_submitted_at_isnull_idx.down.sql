@@ -1,0 +1,1 @@
+DROP INDEX signing_order_request_outbox_created_at_submitted_at_isnull_idx;
