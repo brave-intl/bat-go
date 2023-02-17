@@ -1,21 +1,8 @@
 #!/bin/bash
 
 service="${1}"
-CID=""
+CID="${2}"
 PARENT_CID="3" # the CID of the EC2 instance
-
-# first get the cid of the enclave
-# wait for enclave to startup
-for i in `seq 0 5`
-do
-        sleep 20
-        nitro-cli describe-enclaves | jq -r .[].EnclaveCID
-        CID=$(nitro-cli describe-enclaves | jq -r .[].EnclaveCID)
-        if [ "${CID}" == "" ]; then
-                continue
-        fi
-        break
-done
 
 echo "cid is ${CID}"
 # at this point the enclave is up.  depending on what service we're running,
