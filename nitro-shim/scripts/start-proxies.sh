@@ -1,21 +1,8 @@
 #!/bin/bash
 
 service="${1}"
-CID=""
+CID="${2}"
 PARENT_CID="3" # the CID of the EC2 instance
-
-# first get the cid of the enclave
-# wait for enclave to startup
-for i in `seq 0 5`
-do
-        sleep 20
-        nitro-cli describe-enclaves | jq -r .[].EnclaveCID
-        CID=$(nitro-cli describe-enclaves | jq -r .[].EnclaveCID)
-        if [ "${CID}" == "" ]; then
-                continue
-        fi
-        break
-done
 
 echo "cid is ${CID}"
 # at this point the enclave is up.  depending on what service we're running,
@@ -25,35 +12,17 @@ if [ "${service}" = "/payments" ]; then
     export IN_ADDRS=":8080"
     export OUT_ADDRS="${CID}:8080"
     echo "${IN_ADDRS} to ${OUT_ADDRS}"
-elif [ "${service}" = "/ia2" ]; then
-    # setup proxy that allows the enclave to talk to Let's Encrypt and our Kafka
-    # cluster
-    export SOCKS_PROXY_ALLOWED_FQDNS="acme-v02.api.letsencrypt.org,${KAFKA_BROKERS}"
-    export SOCKS_PROXY_ALLOWED_ADDRS=""
-    export SOCKS_PROXY_LISTEN_ADDR="127.0.0.1:1080"
-    /enclave/socksproxy > /tmp/socksproxy.log &
-
-    # setup proxy that serves as an HTTP-to-Kafka bridge
-    export KAFKA_KEY_PATH="/etc/kafka/secrets/key"
-    export KAFKA_CERT_PATH="/etc/kafka/secrets/certificate"
-    export KAFKA_PROXY_LISTEN_ADDR="127.0.0.1:8081"
-    export KAFKA_TOPIC="ip_addr_anon.dev.repsys.upstream"
-    /enclave/kafkaproxy > /tmp/kafkaproxy.log &
-
-    # setup proxy for inbound traffic, ACME, and the enclave's SOCKS proxy
-    export IN_ADDRS=":8080,:80,${PARENT_CID}:1080"
-    export OUT_ADDRS="${CID}:8080,${CID}:80,127.0.0.1:1080"
+    # next startup the proxy
+    /enclave/viproxy > /tmp/viproxy.log &
 elif [ "${service}" = "/star-randsrv" ]; then
-    # setup proxy that allows the enclave to talk to Let's Encrypt
-    export SOCKS_PROXY_ALLOWED_FQDNS="acme-v02.api.letsencrypt.org"
-    export SOCKS_PROXY_ALLOWED_ADDRS=""
-    export SOCKS_PROXY_LISTEN_ADDR="127.0.0.1:1080"
-    /enclave/socksproxy > /tmp/socksproxy.log &
-
-    # setup proxy for inbound traffic, ACME, and the enclave's SOCKS proxy
-    export IN_ADDRS=":8443,:80,${PARENT_CID}:1080"
-    export OUT_ADDRS="${CID}:8443,${CID}:80,127.0.0.1:1080"
+    domain_socket="/tmp/network.sock"
+    /enclave/gvproxy \
+        -listen "vsock://:1024" \
+        -listen "unix://${domain_socket}" &
+    # instruct gvproxy to forward port 8443 to the enclave
+    curl \
+        -X POST \
+        --unix-socket "$domain_socket" \
+        -d '{"local":":8443","remote":"192.168.127.2:8443"}' \
+        "http:/unix/services/forwarder/expose"
 fi
-
-# next startup the proxy
-/enclave/viproxy > /tmp/viproxy.log &
