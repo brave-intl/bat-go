@@ -34,12 +34,12 @@ func init() {
 	viper.BindPFlag(shareKey, enableCmd.Flags().Lookup(shareKey))
 
 	// kms-key - the kms key arn to use to encrypt
-	enableCmd.Flags().String(enableKmsKeyKey, "", "the kms key to use to encrypt with")
-	viper.BindPFlag(enableKmsKeyKey, enableCmd.Flags().Lookup(enableKmsKeyKey))
+	enableCmd.Flags().String(kmsKeyKey, "", "the kms key to use to encrypt with")
+	viper.BindPFlag(enableKmsKeyKey, enableCmd.Flags().Lookup(kmsKeyKey))
 
 	// s3-bucket - the s3 bucket to store the enable data
-	enableCmd.Flags().String(enableS3BucketKey, "", "the s3 bucket to upload the enable file to")
-	viper.BindPFlag(enableS3BucketKey, enableCmd.Flags().Lookup(enableS3BucketKey))
+	enableCmd.Flags().String(s3BucketKey, "", "the s3 bucket to upload the enable file to")
+	viper.BindPFlag(enableS3BucketKey, enableCmd.Flags().Lookup(s3BucketKey))
 }
 
 // enableCmd is the nitro settlements prepare command, which loads transactions into workflow
@@ -50,8 +50,8 @@ var (
 		Run:   cmdutils.Perform("enable settlement", enableRun),
 	}
 	shareKey          = "share"
-	enableKmsKeyKey   = "kms-key"
-	enableS3BucketKey = "s3-bucket"
+	enableKmsKeyKey   = "enable-kms-key"
+	enableS3BucketKey = "enable-s3-bucket"
 )
 
 // enableRun - main entrypoint for the `enable` subcommand
