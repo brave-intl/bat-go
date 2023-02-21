@@ -9,12 +9,29 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type PrepareTx Tx
+
 // Tx - this is the tx going to prepare workers from report
 type Tx struct {
 	To        string          `json:"to"`
 	Amount    decimal.Decimal `json:"amount"`
 	ID        string          `json:"idempotencyKey"`
-	Custodian string          `json:"custodian"`
+	Custodian Custodian       `json:"custodian"`
+}
+
+type isTransaction interface {
+	GetCustodian() Custodian
+	GetAmount() decimal.Decimal
+}
+
+// GetCustodian returns the custodian of the transaction
+func (t *Tx) GetCustodian() Custodian {
+	return t.Custodian
+}
+
+// GetAmount returns the amount of the transaction
+func (t *Tx) GetAmount() decimal.Decimal {
+	return t.Amount
 }
 
 // MarshalJSON implements custom json marshaling (output json naming differences) for Tx
@@ -28,7 +45,7 @@ func (t *Tx) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements custom json unmarshaling (convert altcurrency) for Tx
-func (t *Tx) UnmarshalJSON(data []byte) error {
+func (t *PrepareTx) UnmarshalJSON(data []byte) error {
 	type TxAlias Tx
 	aux := &struct {
 		*TxAlias
@@ -47,7 +64,7 @@ func (t *Tx) UnmarshalJSON(data []byte) error {
 
 	t.Amount = altcurrency.BAT.FromProbi(aux.Amount)
 	t.To = aux.To
-	t.Custodian = aux.Custodian
+	t.Custodian = Custodian(aux.Custodian)
 
 	// uuidv5 with settlement namespace to get the idemptotency key for this publisher/transactionId
 	// transactionId is the settlement batch identifier, and publisher is the identifier of the recipient
@@ -59,14 +76,31 @@ func (t *Tx) UnmarshalJSON(data []byte) error {
 
 // An AttestedTx is a transaction that has been attested by an enclave
 type AttestedTx struct {
-	Version             string          `json:"version"`
-	To                  string          `json:"to"`
-	Amount              decimal.Decimal `json:"amount"`
-	ID                  string          `json:"idempotencyKey"`
-	Custodian           Custodian       `json:"custodian"`
-	State               string          `json:"state"`
-	DocumentID          string          `json:"documentId"`
-	AttestationDocument string          `json:"attestationDocument"` // base64 encoded
+	Tx
+	Version             string `json:"version"`
+	State               string `json:"state"`
+	DocumentID          string `json:"documentId"`
+	AttestationDocument string `json:"attestationDocument"` // base64 encoded
+}
+
+// UnmarshalJSON implements custom json unmarshaling
+func (at *AttestedTx) UnmarshalJSON(data []byte) error {
+	type AttestedTxAlias AttestedTx
+	aux := &AttestedTxAlias{}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	at.Amount = aux.Amount
+	at.To = aux.To
+	at.Custodian = Custodian(aux.Custodian)
+	at.ID = aux.ID
+	at.Version = aux.Version
+	at.State = aux.State
+	at.AttestationDocument = aux.AttestationDocument
+
+	return nil
 }
 
 // DigestBytes returns a digest byte string which operators can sign over, and attestation

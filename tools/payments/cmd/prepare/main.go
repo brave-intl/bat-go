@@ -20,6 +20,7 @@ The flags are:
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -28,6 +29,8 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	// command line flags
 	env := flag.String(
 		"e", "https://payments.bsg.brave.software",
@@ -43,17 +46,17 @@ func main() {
 		log.Printf("Environment: %s\n", *env)
 	}
 
-	report := payments.Report{}
+	report := payments.PreparedReport{}
 	if err := payments.ReadReport(&report, os.Stdin); err != nil {
 		log.Fatalf("failed to read report from stdin: %w\n", err)
 	}
 
-	client, err := payments.NewSettlementClient(*env)
+	client, err := payments.NewSettlementClient(ctx, *env)
 	if err != nil {
 		log.Fatalf("failed to create settlement client: %w\n", err)
 	}
 
-	if err := report.Prepare(client); err != nil {
+	if err := report.Prepare(ctx, client); err != nil {
 		log.Fatalf("failed to read report from stdin: %w\n", err)
 	}
 

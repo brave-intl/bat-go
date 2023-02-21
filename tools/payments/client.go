@@ -2,6 +2,7 @@ package payments
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -9,17 +10,28 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	"github.com/go-redis/redis"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
-	preparePrefix   = "prepare-"
-	authorizePrefix = "authorize-"
-	poolSize        = 100
+	preparePrefix = "prepare-"
+	submitPrefix  = "authorize-"
+)
+
+var (
+	payout        = strconv.FormatInt(time.Now().Unix(), 10)
+	prepareStream = preparePrefix + payout
+	submitStream  = preparePrefix + payout
+
+	prepareConfigStream = preparePrefix + "-configure-" + payout
+	submitConfigStream  = submitPrefix + "-configure-" + payout
 )
 
 // redisClient is an implementation of settlement client using clustered redis client
@@ -28,21 +40,28 @@ type redisClient struct {
 	redis *redis.ClusterClient
 }
 
-func newRedisClient(env string) (*redisClient, error) {
+func newRedisClient(ctx context.Context, env string) (*redisClient, error) {
 	tlsConfig := &tls.Config{
 		ServerName: "redis",
 		MinVersion: tls.VersionTLS12,
 		ClientAuth: 0,
 	}
+
+	addrs := strings.Split(os.Getenv("REDIS_ADDRS"), ",")
+	pass := os.Getenv("REDIS_PASS")
+	username := os.Getenv("REDIS_USERNAME")
+
+	// only if environment is local do we hardcode these values
 	if env == "local" {
 		certPool := x509.NewCertPool()
-		pem, err := ioutil.ReadFile("test/redis/tls/ca.crt")
+		pem, err := ioutil.ReadFile("redistest/test/redis/tls/ca.crt")
 		if err != nil {
 			return nil, fmt.Errorf("failed to read test-mode ca.crt: %w", err)
 		}
 		certPool.AppendCertsFromPEM(pem)
 		tlsConfig.RootCAs = certPool
 	}
+
 	rc := &redisClient{
 		env: env,
 		redis: redis.NewClusterClient(
@@ -53,12 +72,12 @@ func newRedisClient(env string) (*redisClient, error) {
 				MaxRetries:      5,
 				MinRetryBackoff: 5 * time.Millisecond,
 				MaxRetryBackoff: 500 * time.Millisecond,
-				PoolSize:        poolSize,
+				PoolSize:        10,
 				PoolTimeout:     30 * time.Second,
 				TLSConfig:       tlsConfig,
 			}),
 	}
-	err := rc.redis.Ping().Err()
+	err := rc.redis.Ping(ctx).Err()
 	if err != nil {
 		return nil, fmt.Errorf("failed to ping redis: %w", err)
 	}
@@ -66,21 +85,26 @@ func newRedisClient(env string) (*redisClient, error) {
 }
 
 // ConfigureWorker implements settlement client
-func (rc *redisClient) ConfigureWorker(stream string, config *WorkerConfig) error {
+func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, config *WorkerConfig) error {
 	_, err := rc.redis.XAdd(
-		&redis.XAddArgs{
+		ctx, &redis.XAddArgs{
 			Stream: stream,
 			Values: map[string]interface{}{
-				"data": conf}},
+				"data": config}},
 	).Result()
 	if err != nil {
-		return fmt.Errorf("failed to push config to workers: %w", error)
+		return fmt.Errorf("failed to push config to workers: %w", err)
 	}
 	return nil
 }
 
 // PrepareTransaction implements settlement client
-func (rc *redisClient) PrepareTransaction(t *Tx) error {
+func (rc *redisClient) PrepareTransaction(ctx context.Context, t *PrepareTx) error {
+	body, err := json.Marshal(t)
+	if err != nil {
+		return fmt.Errorf("failed to serialize transaction: %w", err)
+	}
+
 	// message wrapper for prepare
 	message := &prepareWrapper{
 		ID:        uuid.New(),
@@ -91,7 +115,7 @@ func (rc *redisClient) PrepareTransaction(t *Tx) error {
 	// add to stream
 	_, err = rc.redis.XAdd(
 		ctx, &redis.XAddArgs{
-			Stream: stream,
+			Stream: prepareStream,
 			Values: map[string]interface{}{
 				"data": message}},
 	).Result()
@@ -102,7 +126,7 @@ func (rc *redisClient) PrepareTransaction(t *Tx) error {
 }
 
 // SubmitTransaction implements settlement client
-func (rc *redisClient) SubmitTransaction(signer httpsignature.ParameterizedSignator, at *AttestedTx) error {
+func (rc *redisClient) SubmitTransaction(ctx context.Context, signer httpsignature.ParameterizedSignator, at *AttestedTx) error {
 	body, err := json.Marshal(at)
 	if err != nil {
 		return fmt.Errorf("failed to marshal attested transaction body: %w", err)
@@ -136,9 +160,9 @@ func (rc *redisClient) SubmitTransaction(signer httpsignature.ParameterizedSigna
 		Body:          string(body),
 	}
 
-	_, err = c.redis.XAdd(
+	_, err = rc.redis.XAdd(
 		ctx, &redis.XAddArgs{
-			Stream: stream,
+			Stream: submitStream,
 			Values: map[string]interface{}{
 				"data": message}},
 	).Result()
@@ -150,12 +174,12 @@ func (rc *redisClient) SubmitTransaction(signer httpsignature.ParameterizedSigna
 
 // SettlementClient describes functionality of the settlement client
 type SettlementClient interface {
-	ConfigureWorker(string, *WorkerConfig) error
-	PrepareTransactions(string, *Tx) error
-	SubmitTransaction(string, *AttestedTx) error
+	ConfigureWorker(context.Context, string, *WorkerConfig) error
+	PrepareTransaction(context.Context, *PrepareTx) error
+	SubmitTransaction(context.Context, httpsignature.ParameterizedSignator, *AttestedTx) error
 }
 
 // NewSettlementClient instanciates a new SettlementClient for use by tooling
-func NewSettlementClient(env string) (SettlementClient, error) {
-	return newRedisClient(env)
+func NewSettlementClient(ctx context.Context, env string) (SettlementClient, error) {
+	return newRedisClient(ctx, env)
 }

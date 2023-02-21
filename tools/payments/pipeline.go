@@ -1,56 +1,62 @@
 package payments
 
+import (
+	"context"
+
+	"github.com/schollz/progressbar/v3"
+)
+
 type result struct {
 	Err error
 }
 
-func pipeline(action func(interface{}) error) error{
+func pipeline[T any](ctx context.Context, numWorkers, numRecords int, action func(T) error, records ...T) error {
+	bar := progressbar.Default(int64(numRecords))
 	// fan out coordinator
-	in := chan interface{}
-	go coordinator(in, ar.Report...)
+	in := make(chan T, numRecords/numWorkers)
+	go coordinator(in, records...)
 
-	// spin up workers
-	out := chan result
-	stop := chan struct{}
-	defer func (){
-		for i:=0; i<submitWorkerCount; i++ {
-			stop <-struct{}
-		}
-		close(stop)
-		close(out)
+	out := make(chan result)
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer func() {
+		cancel()
 	}()
 
-	for i:=0; i<submitWorkerCount; i++ {
-		go worker(action, in, out, stop)
+	// spin up workers
+	for i := 0; i < numWorkers; i++ {
+		go worker(ctx, action, in, out)
 	}
 
 	// wait for workers to complete, if we get an error kill remaining workers (deferred)
-	for j:=0; j<len(ar.Report); j++ {
-		if result:=<-out; result.Err != nil {
-			close(in)
+	for j := 0; j < numRecords; j++ {
+		if result := <-out; result.Err != nil {
 			// return the error
 			return result.Err
 		}
+		bar.Add(1)
 	}
-	close(in)
 	return nil
 }
 
-func coordinator(fanOut chan interface{}, items ...interface{}) {
+// coordinator is a generic fan out coordinator that dumps items on out chan
+func coordinator[T any](out chan T, items ...T) {
 	for _, v := range items {
-		fanOut <- items
+		out <- v
 	}
 }
 
-func worker(process func(interface{}) error, in chan interface{}, out chan result, stop chan struct{}) {
+// worker is a pipeline worker that runs a Tx|AttestedTx processing function
+func worker[T any](ctx context.Context, process func(T) error, in <-chan T, out chan result) {
 	for {
 		select {
 		case m := <-in:
 			if err := process(m); err != nil {
 				out <- result{Err: err}
+				return
 			}
 			out <- result{}
-		case <-stop:
+		case <-ctx.Done():
 			return
 		}
 	}

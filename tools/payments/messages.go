@@ -54,7 +54,7 @@ type submitWrapper struct {
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis
 func (sw submitWrapper) MarshalBinary() (data []byte, err error) {
-	bytes, err := json.Marshal(aw)
+	bytes, err := json.Marshal(sw)
 	if err != nil {
 		return nil, fmt.Errorf("event message: error marshalling binary: %w", err)
 	}

@@ -20,6 +20,7 @@ The flags are:
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -28,6 +29,8 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	// command line flags
 	key := flag.String(
 		"k", "test/private.pem",
@@ -54,15 +57,20 @@ func main() {
 
 	if *verbose {
 		log.Printf("report stats: %d transactions; %s total bat\n",
-			report.Length(), report.SumBAT())
+			len(report), payments.SumBAT(report...))
 	}
 
-	client, err := payments.NewSettlementClient(*env)
+	client, err := payments.NewSettlementClient(ctx, *env)
 	if err != nil {
 		log.Fatalf("failed to create settlement client: %w\n", err)
 	}
 
-	if err := report.Submit(*key, client); err != nil {
+	priv, err := payments.GetOperatorPrivateKey(*key)
+	if err != nil {
+		log.Fatalf("failed to parse operator key file: %w\n", err)
+	}
+
+	if err := report.Submit(ctx, priv, client); err != nil {
 		log.Fatalf("failed to submit report: %w\n", err)
 	}
 
