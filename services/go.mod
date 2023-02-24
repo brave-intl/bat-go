@@ -10,9 +10,11 @@ replace github.com/brave-intl/bat-go/tools => ../tools
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
+	github.com/amazon-ion/ion-go v1.2.0
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/awa/go-iap v1.3.22
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.29.1
+	github.com/awslabs/amazon-qldb-driver-go v1.1.1
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
@@ -22,6 +24,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/golang/mock v1.6.0
 	github.com/gomodule/redigo v2.0.0+incompatible
+	github.com/jarcoal/httpmock v1.3.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.7
 	github.com/linkedin/goavro v2.1.0+incompatible
@@ -35,7 +38,8 @@ require (
 	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.8.1
 	github.com/stripe/stripe-go/v72 v72.122.0
-	golang.org/x/crypto v0.1.0
+	golang.org/x/crypto v0.3.0
+	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.6.0
 )
@@ -43,6 +47,9 @@ require (
 require (
 	cloud.google.com/go/compute v1.18.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
+	github.com/amzn/ion-go v1.1.3 // indirect
+	github.com/amzn/ion-hash-go v1.1.1 // indirect
+	github.com/aws/aws-sdk-go v1.44.206 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.17.5 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.9 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.17.10 // indirect
@@ -78,6 +85,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -100,6 +108,7 @@ require (
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/throttled/throttled v2.2.5+incompatible // indirect
 	go.opencensus.io v0.24.0 // indirect
