@@ -1696,7 +1696,7 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 		Items: []OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
-				Quantity: 1,
+				Quantity: 3,
 			},
 		},
 	}
