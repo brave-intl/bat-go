@@ -1,12 +1,14 @@
 # Build proxies that facilitate communication with the enclave.
-FROM golang:1.18 as builder
+FROM golang:1.19 as builder
 
 WORKDIR /src
 COPY tools/ ./
 RUN make -C ./viproxy/ viproxy
 RUN make -C ./gvproxy/ gvproxy
 
-FROM amazonlinux:2.0.20210126.0
+FROM amazonlinux:2.0.20230207.0
+
+RUN echo "timeout=60.0" >> /etc/yum.conf
 
 RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
     yum install aws-nitro-enclaves-cli-devel wget curl strace awscli -y && \
