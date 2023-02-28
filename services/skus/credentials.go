@@ -266,6 +266,12 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errors.New("order item does not exist for order")
 	}
 
+	if orderItem.CredentialType == "single-use" {
+		if len(blindedCreds) > orderItem.Quantity {
+			return errors.New("submitted more blinded creds than quantity of order item")
+		}
+	}
+
 	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
