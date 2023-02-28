@@ -37,8 +37,6 @@ type Datastore interface {
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetOrderByExternalID by the external id from the purchase vendor
 	GetOrderByExternalID(externalID string) (*Order, error)
-	// RenewOrder - renew the order with this id
-	RenewOrder(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
 	// UpdateOrderMetadata adds a key value pair to an order's metadata
@@ -58,7 +56,7 @@ type Datastore interface {
 	InsertIssuer(issuer *Issuer) (*Issuer, error)
 	GetIssuer(merchantID string) (*Issuer, error)
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
+	DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
 	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
@@ -78,13 +76,14 @@ type Datastore interface {
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
-	DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error
+	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
 	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
+	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID, completedAt time.Time) error
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
@@ -637,21 +636,6 @@ func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, order
 	return nil
 }
 
-// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
-//
-//	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
-
-	// renew order is an update order with paid status
-	// and an update order expires at with the new expiry time of the order
-	err := pg.UpdateOrder(orderID, OrderStatusPaid) // this performs a record order payment
-	if err != nil {
-		return fmt.Errorf("failed to set order status to paid: %w", err)
-	}
-
-	return pg.DeleteOrderCreds(orderID, true)
-}
-
 func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.Time) error {
 
 	// record the order payment
@@ -957,64 +941,28 @@ func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID
 	}, nil
 }
 
-func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error {
-	query := `
-		delete
-		from time_limited_v2_order_creds
-		where order_id = $1`
-
-	_, err := pg.RawDB().Exec(query, orderID)
-	if err != nil {
-		return err
-	}
-
-	return nil
-
-}
-
-// DeleteOrderCreds deletes the order credentials for a OrderID.
-func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
-
-	// does this order have credential_type time-limited?  if so there will not be order creds, success
-	order, err := pg.GetOrder(orderID)
-	if err != nil {
-		return err
-	}
-
-	if len(order.Items) > 0 {
-		if order.Items[0].CredentialType == "time-limited" {
-			// time-limited v1 credentials are not stored in order creds, do not attempt to check
-			return nil
-		}
-	}
-
-	query := `
-		delete
-		from order_creds
-		where order_id = $1`
-
+// DeleteSingleUseOrderCredsByOrderTx performs a hard delete all single use order credentials for a given OrderID.
+func (pg *Postgres) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, isSigned bool) error {
+	query := `delete from order_creds where order_id = $1`
 	if isSigned {
 		query += " and signed_creds is not null"
 	}
 
-	_, err = pg.RawDB().Exec(query, orderID)
+	_, err := tx.ExecContext(ctx, query, orderID)
 	if err != nil {
-		return err
+		return fmt.Errorf("error deleting single use order creds: %w", err)
 	}
 
-	// delete any time limited v2 credentials that are associated with this order
-	err = pg.DeleteTimeLimitedV2OrderCredsByOrder(orderID)
-	if err != nil {
-		return err
-	}
+	return nil
+}
 
-	// delete the associated signing request so another can be performed
-	query = `delete from signing_order_request_outbox where order_id = $1`
-	_, err = pg.RawDB().Exec(query, orderID)
+// DeleteTimeLimitedV2OrderCredsByOrderTx performs a hard delete for all time limited v2 order
+// credentials for a given OrderID.
+func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
+	_, err := tx.ExecContext(ctx, `delete from time_limited_v2_order_creds where order_id = $1`, orderID)
 	if err != nil {
-		return err
+		return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 	}
-
 	return nil
 }
 
@@ -1349,6 +1297,16 @@ func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, request
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
 	}
 
+	return nil
+}
+
+// DeleteSigningOrderRequestOutboxByOrderTx performs a hard delete of all signing order request outbox
+// messages for a given orderID.
+func (pg *Postgres) DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
+	_, err := tx.ExecContext(ctx, `delete from signing_order_request_outbox where order_id = $1`, orderID)
+	if err != nil {
+		return fmt.Errorf("error deleting signing order request outbox: %w", err)
+	}
 	return nil
 }
 

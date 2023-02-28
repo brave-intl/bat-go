@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/linkedin/goavro"
 
@@ -32,20 +30,6 @@ const (
 	defaultCohort             int16 = 1
 )
 
-// Metrics
-var (
-	metricSignedOrderRequestLockGauge = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name:        "signed_order_request_lock_gauge",
-			Help:        "Monitors number of advisory locks the signed order request handler holds",
-			ConstLabels: prometheus.Labels{"service": "skus"},
-		})
-)
-
-func init() {
-	prometheus.MustRegister(metricSignedOrderRequestLockGauge)
-}
-
 // Retry and backoff variables
 var (
 	defaultExpiresAt   = time.Now().Add(17532 * time.Hour) // 2 years
@@ -54,8 +38,16 @@ var (
 		http.StatusInternalServerError, http.StatusConflict}
 )
 
-// ErrOrderUnpaid - unpaid order variable
-var ErrOrderUnpaid = errors.New("order not paid")
+var (
+	// ErrOrderUnpaid - unpaid order variable
+	ErrOrderUnpaid = errors.New("order not paid")
+
+	// ErrOrderHasNoItems is an order has no order items error
+	ErrOrderHasNoItems = errors.New("order has no items")
+
+	// ErrSigningNotComplete is a singing not complete error
+	ErrSigningNotComplete = errors.New("signing not complete")
+)
 
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
@@ -606,5 +598,70 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 	if err != nil {
 		return fmt.Errorf("error writting message to signing result dlq: %w", err)
 	}
+	return nil
+}
+
+// DeleteOrderCreds performs a hard delete of all the order credentials associated with the given OrderID.
+// This includes both time limited v2 and single use credentials.
+// The isSigned param only applies to single use and will always be false for time limited v2.
+// Credentials cannot be deleted when an order is in the process of being signed.
+func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
+	order, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return err
+	}
+
+	if len(order.Items) == 0 {
+		return ErrOrderHasNoItems
+	}
+
+	if order.Items[0].CredentialType == timeLimited {
+		return nil
+	}
+
+	soros, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("error retrieving signing order request from outbox: %w", err)
+	}
+
+	if len(soros) == 0 {
+		return fmt.Errorf("error no signing order requests for order: %w", errNotFound)
+	}
+
+	for _, soro := range soros {
+		if soro.CompletedAt == nil {
+			return fmt.Errorf("error deleting order creds: %w", ErrSigningNotComplete)
+		}
+	}
+
+	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
+	if err != nil {
+		return fmt.Errorf("error retrieveing txn delete order cred")
+	}
+	defer rollback()
+
+	switch order.Items[0].CredentialType {
+	case singleUse:
+		err = s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned)
+		if err != nil {
+			return fmt.Errorf("error deleting single use order creds: %w", err)
+		}
+	case timeLimitedV2:
+		err = s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID)
+		if err != nil {
+			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
+		}
+	}
+
+	err = s.Datastore.DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID)
+	if err != nil {
+		return fmt.Errorf("error deleting order creds signing in progress")
+	}
+
+	err = commit()
+	if err != nil {
+		return fmt.Errorf("error commiting delete order creds: %w", err)
+	}
+
 	return nil
 }
