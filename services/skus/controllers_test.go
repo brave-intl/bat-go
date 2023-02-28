@@ -1441,7 +1441,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		Items: []OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
-				Quantity: 1,
+				Quantity: 3,
 			},
 		},
 	}
