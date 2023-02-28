@@ -680,20 +680,6 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 	return _d.base.RollbackTxAndHandle(tx)
 }
 
-// RunNextOrderJob implements Datastore
-func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker OrderWorker) (b1 bool, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextOrderJob", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.RunNextOrderJob(ctx, worker)
-}
-
 // SendSigningRequest implements Datastore
 func (_d DatastoreWithPrometheus) SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) (err error) {
 	_since := time.Now()

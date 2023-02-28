@@ -201,11 +201,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			Workers: 1,
 		},
 		{
-			Func:    service.RunNextOrderJob,
-			Cadence: 500 * time.Millisecond,
-			Workers: 3,
-		},
-		{
 			Func:    service.RunSendSigningRequestJob,
 			Cadence: 100 * time.Millisecond,
 			Workers: 1,
@@ -1346,19 +1341,6 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		return handlers.RenderContent(ctx, "Credentials could not be verified", w, http.StatusForbidden)
 	}
 	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
-}
-
-// RunNextOrderJob Deprecated. Takes the next order job and completes it.
-func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
-	for {
-		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
-		if err != nil {
-			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
-		}
-		if !attempted {
-			return attempted, err
-		}
-	}
 }
 
 // RunSendSigningRequestJob - send the order credentials signing requests
