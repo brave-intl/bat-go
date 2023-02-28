@@ -266,7 +266,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errors.New("order item does not exist for order")
 	}
 
-	if orderItem.SKU == UserWalletVoteSKU || orderItem.SKU == AnonCardVoteSKU {
+	if orderItem.CredentialType == "single-use" {
 		if len(blindedCreds) > orderItem.Quantity {
 			return errors.New("submitted more blinded creds than quantity of order item")
 		}
