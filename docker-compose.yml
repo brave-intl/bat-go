@@ -177,22 +177,24 @@ services:
 
   postgres:
     container_name: grant-postgres
-    image: postgres:10.4
+    image: postgres:14
     ports:
       - "3401:5432"
     environment:
       - "POSTGRES_USER=grants"
       - "POSTGRES_PASSWORD=password"
+      - "TZ=UTC"
     networks:
       - grant
     command: ["postgres", "-c", "log_statement=all"]
 
   challenge-bypass-postgres:
     container_name: challenge-bypass-postgres
-    image: postgres:10.4
+    image: postgres:14
     environment:
       - "POSTGRES_USER=btokens"
       - "POSTGRES_PASSWORD=password"
+      - "TZ=UTC"
     networks:
       - grant
 
@@ -232,7 +234,7 @@ services:
 
   zookeeper:
     container_name: grant-zookeeper
-    image: confluentinc/cp-zookeeper:7.1.2
+    image: confluentinc/cp-zookeeper:7.3.1
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
     ports:
@@ -242,7 +244,7 @@ services:
 
   kafka:
     container_name: grant-kafka
-    image: confluentinc/cp-kafka:7.1.2
+    image: confluentinc/cp-kafka:7.3.1
     ports:
       - "29092:29092"
     environment:
@@ -268,7 +270,7 @@ services:
 
   dynamodb:
     container_name: dynamodb
-    image: amazon/dynamodb-local:1.12.0
+    image: amazon/dynamodb-local:1.21.0
     networks:
       - grant
     ports:
