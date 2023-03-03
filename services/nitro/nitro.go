@@ -42,6 +42,10 @@ func init() {
 	rootcmd.Must(viper.BindPFlag("log-address", NitroServeCmd.PersistentFlags().Lookup("log-address")))
 	rootcmd.Must(viper.BindEnv("log-address", "LOG_ADDRESS"))
 
+	// enclave decrypt key template used to create decryption key in enclave
+	rootcmd.Must(viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret")))
+	rootcmd.Must(viper.BindEnv("enclave-decrypt-key-template-secret", "ENCLAVE_DECRYPT_KEY_TEMPLATE_SECRET"))
+
 	NitroServeCmd.AddCommand(OutsideNitroServeCmd)
 	NitroServeCmd.AddCommand(InsideNitroServeCmd)
 	srvcmd.ServeCmd.AddCommand(NitroServeCmd)
@@ -75,6 +79,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	writer := nitro.NewVsockWriter(logaddr)
 	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
 	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
+	ctx = context.WithValue(ctx, appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey, viper.GetString("enclave-decrypt-key-template-secret"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
 	// setup the service now

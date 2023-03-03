@@ -223,6 +223,9 @@ const (
 	ParametersVBATDeadlineCTXKey CTXKey = "parameters_vbat_deadline"
 	// ParametersTransitionCTXKey - the context key for getting the vbat deadline
 	ParametersTransitionCTXKey CTXKey = "parameters_transition"
+
+	// EnclaveDecryptKeyTemplateSecretIDCTXKey is the decrypt secret template for payments
+	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
 )
 
 var (
