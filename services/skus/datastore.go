@@ -95,6 +95,7 @@ type Datastore interface {
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
+	ExternalIDExists(context.Context, string) (bool, error)
 }
 
 const signingRequestBatchSize = 10
@@ -542,6 +543,27 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 	return true, *checkoutSession, nil
 }
 
+func (pg *Postgres) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
+	var (
+		ok  bool
+		md  datastore.Metadata
+		err error
+	)
+
+	err = pg.RawDB().Get(&md, `
+		SELECT metadata
+		FROM orders
+		WHERE metadata->>'externalID' = $1 AND metadata is not null
+	`, externalID)
+
+	if err == nil {
+		if v, ok := md["externalID"].(string); ok && v == externalID {
+			return ok, err
+		}
+	}
+	return ok, err
+}
+
 // IsStripeSub - is this order related to a stripe subscription, if so, true, subscription id returned
 func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
 	var (
@@ -623,7 +645,8 @@ func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, order
 }
 
 // RenewOrder updates the orders status to paid and paid at time, inserts record of this order
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
+//
+//	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 
 	// renew order is an update order with paid status
@@ -682,7 +705,8 @@ func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.T
 }
 
 // UpdateOrder updates the orders status.
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
+//
+//	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	ctx := context.Background()
 	// create tx

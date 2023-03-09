@@ -1251,6 +1251,16 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 		if len(validationErrMap) != 0 {
 			return handlers.ValidationError("error validating request", validationErrMap)
 		}
+		// does this external id exist already
+		exists, err := service.ExternalIDExists(ctx, externalID)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to lookup external id existance")
+			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+		}
+
+		if exists {
+			return handlers.WrapError(err, "receipt has already been submitted", http.StatusBadRequest)
+		}
 
 		// set order paid and include the vendor and external id to metadata
 		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
