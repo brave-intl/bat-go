@@ -230,6 +230,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	return service, nil
 }
 
+// ExternalIDExists checks if this external id has been used on any orders
+func (s *Service) CreateOrderFromRequest(ctx context.Context, externalID string) (bool, error) {
+	return s.Datastore.ExternalIDExists(ctx, externalID)
+}
+
 // CreateOrderFromRequest creates an order from the request
 func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
