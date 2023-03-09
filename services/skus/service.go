@@ -231,7 +231,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 }
 
 // ExternalIDExists checks if this external id has been used on any orders
-func (s *Service) CreateOrderFromRequest(ctx context.Context, externalID string) (bool, error) {
+func (s *Service) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
 	return s.Datastore.ExternalIDExists(ctx, externalID)
 }
 
