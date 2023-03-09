@@ -221,6 +221,21 @@ func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrder(orderI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrder", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrder), orderID)
 }
 
+// ExternalIDExists mocks base method.
+func (m *MockDatastore) ExternalIDExists(arg0 context.Context, arg1 string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExternalIDExists", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExternalIDExists indicates an expected call of ExternalIDExists.
+func (mr *MockDatastoreMockRecorder) ExternalIDExists(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExternalIDExists", reflect.TypeOf((*MockDatastore)(nil).ExternalIDExists), arg0, arg1)
+}
+
 // GetIssuer mocks base method.
 func (m *MockDatastore) GetIssuer(merchantID string) (*Issuer, error) {
 	m.ctrl.T.Helper()
