@@ -558,10 +558,10 @@ func (pg *Postgres) ExternalIDExists(ctx context.Context, externalID string) (bo
 
 	if err == nil {
 		if v, ok := md["externalID"].(string); ok && v == externalID {
-			return ok, v, err
+			return ok, err
 		}
 	}
-	return ok, "", err
+	return ok, err
 }
 
 // IsStripeSub - is this order related to a stripe subscription, if so, true, subscription id returned
