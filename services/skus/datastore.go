@@ -546,21 +546,19 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 func (pg *Postgres) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
 	var (
 		ok  bool
-		md  datastore.Metadata
 		err error
 	)
 
-	err = pg.RawDB().Get(&md, `
-		SELECT metadata
+	err = pg.RawDB().Get(&ok, `
+		SELECT true
 		FROM orders
 		WHERE metadata->>'externalID' = $1 AND metadata is not null
 	`, externalID)
 
-	if err == nil {
-		if v, ok := md["externalID"].(string); ok && v == externalID {
-			return ok, err
-		}
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
 	}
+
 	return ok, err
 }
 
