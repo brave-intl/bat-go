@@ -269,6 +269,13 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	return &orderItem, allowedPaymentMethods, issuerConfig, nil
 }
 
+// IsRadomPayable returns true if every item is payable by Stripe
+func (order Order) IsRadomPayable() bool {
+	// TODO: if not we need to look into subscription trials:
+	/// -> https://stripe.com/docs/billing/subscriptions/trials
+	return strings.Contains(strings.Join(order.AllowedPaymentMethods, ","), RadomPaymentMethod)
+}
+
 // IsStripePayable returns true if every item is payable by Stripe
 func (order Order) IsStripePayable() bool {
 	// TODO: if not we need to look into subscription trials:
@@ -278,7 +285,8 @@ func (order Order) IsStripePayable() bool {
 
 // CreateCheckoutSessionResponse - the structure of a checkout session response
 type CreateCheckoutSessionResponse struct {
-	SessionID string `json:"checkoutSessionId"`
+	SessionID  string `json:"checkoutSessionId"`
+	SessionURL string `json:"checkoutSessionUrl"`
 }
 
 func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
