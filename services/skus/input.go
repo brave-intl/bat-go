@@ -2,6 +2,7 @@ package skus
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,40 @@ import (
 	"github.com/square/go-jose"
 )
 
+// RadomKeyValue is the structure of the key value pairs
+type RadomKeyValue struct {
+	Key   string                 `json:"key"`
+	Value map[string]interface{} `json:"value"`
+}
+
+// RadomMetadata is the structure of metadata
+type RadomMetadata []RadomKeyValue
+
+// Get allows one to get a value based on key from the radom metadata
+func (rm *RadomMetadata) Get(key string) (map[string]interface{}, error) {
+	for _, v := range rm {
+		if subtle.ConstantTimeCompare(key, v.Key) {
+			return v.Result
+		}
+	}
+	return nil, errors.New("failed to get key from radom metadata")
+}
+
+// RadomWebhookRequest is the request from radom webhooks
+type RadomWebhookRequest struct {
+	EventName            string        `json:"eventName"`
+	BlockNumber          int64         `json:"blockNumber"`
+	TransactionHash      string        `json:"transactionHash"`
+	TransactionTimestamp int64         `json:"transactionTimestamp"`
+	SellerAddress        string        `json:"sellerAddress"`
+	CustomerAddress      string        `json:"customerAddress"`
+	PaymentHash          string        `json:"paymentHash"`
+	ChainID              int64         `json:"chainId"`
+	PaymentToken         string        `json:"paymentToken"`
+	PaymentAmount        string        `json:"paymentAmount"`
+	Metadata             RadomMetadata `json:"metadata"`
+}
+
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob
 type VerifyCredentialRequestV1 struct {
 	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
@@ -23,22 +58,22 @@ type VerifyCredentialRequestV1 struct {
 	Presentation string  `json:"presentation" valid:"base64"`
 }
 
-//GetSku - implement credential interface
+// GetSku - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetSku(ctx context.Context) string {
 	return vcr.SKU
 }
 
-//GetType - implement credential interface
+// GetType - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetType(ctx context.Context) string {
 	return vcr.Type
 }
 
-//GetMerchantID - implement credential interface
+// GetMerchantID - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetMerchantID(ctx context.Context) string {
 	return vcr.MerchantID
 }
 
-//GetPresentation - implement credential interface
+// GetPresentation - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetPresentation(ctx context.Context) string {
 	return vcr.Presentation
 }
@@ -51,12 +86,12 @@ type VerifyCredentialRequestV2 struct {
 	CredentialOpaque *VerifyCredentialOpaque `json:"-" valid:"-"`
 }
 
-//GetSku - implement credential interface
+// GetSku - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetSku(ctx context.Context) string {
 	return vcr.SKU
 }
 
-//GetType - implement credential interface
+// GetType - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetType(ctx context.Context) string {
 	if vcr.CredentialOpaque == nil {
 		return ""
@@ -64,12 +99,12 @@ func (vcr *VerifyCredentialRequestV2) GetType(ctx context.Context) string {
 	return vcr.CredentialOpaque.Type
 }
 
-//GetMerchantID - implement credential interface
+// GetMerchantID - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetMerchantID(ctx context.Context) string {
 	return vcr.MerchantID
 }
 
-//GetPresentation - implement credential interface
+// GetPresentation - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetPresentation(ctx context.Context) string {
 	if vcr.CredentialOpaque == nil {
 		return ""

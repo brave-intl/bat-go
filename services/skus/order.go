@@ -33,12 +33,13 @@ const (
 	AndroidPaymentMethod = "android"
 )
 
-//StripePaymentMethod - the label for stripe payment method
+// StripePaymentMethod - the label for stripe payment method
 const (
 	StripePaymentMethod               = "stripe"
 	StripeInvoiceUpdated              = "invoice.updated"
 	StripeInvoicePaid                 = "invoice.paid"
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
+	RadomPaymentMethod                = "radom"
 )
 
 var (

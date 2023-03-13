@@ -2,6 +2,7 @@ package skus
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -910,6 +911,7 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
 	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
 	return r
@@ -1040,6 +1042,96 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 			}
 		}
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+	}
+}
+
+// HandleRadomWebhook is the handler for radom checkout session webhooks
+func HandleRadomWebhook(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		// get logger
+		sublogger := logging.Logger(ctx, "payments").With().
+			Str("func", "HandleRadomWebhook").
+			Logger()
+
+		// get webhook secret from ctx
+		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.RadomWebhookSecretCTXKey)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to get radom_webhook_secret from context")
+			return handlers.WrapError(
+				err, "error getting radom_webhook_secret from context",
+				http.StatusInternalServerError)
+		}
+
+		// check verification key before doing anything else
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("radom-verification-key")), []byte(endpointSecret)) != 1 {
+			sublogger.Error().Err(err).Msg("invalid verification key from webhook")
+			return handlers.WrapError(err, "invalid verification key", http.StatusBadRequest)
+		}
+
+		req := RadomWebhookRequest{}
+		// read the payload
+		err := requestutils.ReadJson(r.Context(), r.Body, &req)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to read request body")
+			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
+		}
+
+		// log the event
+		sublogger.Debug().Str("event_type", req.EventName).Str("data", fmt.Sprintf("%+v", req)).Msg("webhook event captured")
+
+		// only accepting successful payment events
+		if req.EventName != "payment.successful" {
+			return handlers.WrapError(err, "event type not implemented", http.StatusBadRequest)
+		}
+
+		// lookup the order, the checkout session was created with orderId in metadata
+		v, err := req.Metadata.Get("brave-metadata")
+		if err != nil || v == nil {
+			return handlers.WrapError(err, "brave metadata not found in webhook", http.StatusBadRequest)
+		}
+		// get orderid from v
+		orderID, ok := v["orderId"].(string)
+		if !ok {
+			return handlers.WrapError(err, "order id not found in webhook", http.StatusBadRequest)
+		}
+
+		// set order id to paid, and update metadata values
+		err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to update order status")
+			return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+		}
+
+		err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "radomTransactionHash", req.TransactionHash)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to update order metadata")
+			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+		}
+		err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "customerAddress", req.CustomerAddress)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to update order metadata")
+			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+		}
+		err = service.Datastore.AppendOrderMetadataInt(ctx, &orderID, "chainId", req.ChainID)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to update order metadata")
+			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+		}
+		err = service.Datastore.AppendOrderMetadataInt(ctx, &orderID, "blockNumber", req.BlockNumber)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to update order metadata")
+			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+		}
+		// set paymentProcessor as radom
+		err = service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, RadomPaymentMethod)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
+			return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
+		}
+
+		sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
+		return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
 	}
 }
 

@@ -125,6 +125,9 @@ const (
 	// DisableBitflyerLinkingCTXKey - this informs if bitflyer linking is enabled
 	DisableBitflyerLinkingCTXKey CTXKey = "disable_bitflyer_linking"
 
+	// RadomWebhookSecretCTXKey - the webhook secret key for radom integration
+	RadomWebhookSecretCTXKey CTXKey = "radom_webhook_secret"
+
 	// stripe related keys
 
 	// StripeEnabledCTXKey - this informs if stripe is enabled
