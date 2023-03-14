@@ -423,7 +423,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
-	ExternalTransactionID uuid.UUID `json:"externalTransactionID" valid:"requiredUUID"`
+	ExternalTransactionID string `json:"externalTransactionId" valid:"required,uuid"`
 }
 
 // CreateGeminiTransaction creates a transaction against an order
@@ -451,7 +451,7 @@ func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 		}
 
 		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID.String())
+		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID)
 		if err != nil {
 			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
 		}
@@ -500,7 +500,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		}
 
 		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID.String())
+		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID)
 		if err != nil {
 			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
 		}
@@ -736,24 +736,19 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), *itemID.UUID(), false)
+		creds, status, err := service.GetItemCredentials(r.Context(), *orderID.UUID(), *itemID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
-		}
-
-		if creds == nil {
-			return &handlers.AppError{
-				Message: "Could not find credentials",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
+			if errors.Is(err, errSetRetryAfter) {
+				// error specifies a retry after period, add to response header
+				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
+				if err != nil {
+					return handlers.WrapError(err, "Error getting credential retry-after", status)
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
+			} else {
+				return handlers.WrapError(err, "Error getting credentials", status)
 			}
 		}
-
-		status := http.StatusOK
-		if creds.SignedCreds == nil {
-			status = http.StatusAccepted
-		}
-
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
