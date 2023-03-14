@@ -7,14 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 
-	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/datastore"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -64,8 +61,6 @@ type Datastore interface {
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
-	// RunNextOrderJob Deprecated.
-	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
 	GetKey(id uuid.UUID, showExpired bool) (*Key, error)
 	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
@@ -1137,107 +1132,6 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 		return fmt.Errorf("failed to insert vote to drain: %w", err)
 	}
 	return nil
-}
-
-// RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
-// TODO: deprecated, remove once all existing order creds have been processed.
-// TODO: This should not pick credentials waiting to be signed as they are only inserted with a non null batch proof.
-func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
-	tx, err := pg.RawDB().Beginx()
-	attempted := false
-	if err != nil {
-		return attempted, err
-	}
-	defer pg.RollbackTx(tx)
-
-	type SigningJob struct {
-		Issuer
-		OrderID      uuid.UUID                 `db:"order_id"`
-		BlindedCreds jsonutils.JSONStringArray `db:"blinded_creds"`
-	}
-
-	statement := `
-SELECT
-	order_cred_issuers.id,
-	order_cred_issuers.created_at,
-	order_cred_issuers.merchant_id,
-	order_cred_issuers.public_key,
-	order_cred.order_id,
-	order_cred.blinded_creds
-FROM
-	(
-		SELECT item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
-		FROM order_creds
-		WHERE batch_proof is null
-		FOR UPDATE skip locked
-		limit 1
-	) order_cred
-INNER JOIN order_cred_issuers
-ON order_cred.issuer_id = order_cred_issuers.id`
-
-	jobs := []SigningJob{}
-	err = tx.Select(&jobs, statement)
-	if err != nil {
-		return attempted, fmt.Errorf("order job: failed to retrieve jobs: %w", err)
-	}
-
-	if len(jobs) != 1 {
-		return attempted, nil
-	}
-
-	job := jobs[0]
-
-	attempted = true
-
-	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
-	if err != nil {
-		// is this a cbr client error
-		var eb *errorutils.ErrorBundle
-		if errors.As(err, &eb) {
-			// pull out the data and see if this is an http client error
-			if hs, ok := eb.Data().(clients.HTTPState); ok {
-				// see if you can't get the raw http response body for a check
-				if red, ok := hs.Body.(clients.RespErrData); ok {
-					if bodyStr, ok := red.Body.(string); ok {
-						// if the error is from CBR and contains "Cannot decompress Edwards point" this job will never complete
-						// and keep retrying over and over. We want to filter this out and set batch proof
-						// to empty string, so it will not be picked up again
-						if strings.Contains(strings.ToLower(bodyStr), "cannot decompress edwards point") {
-							_, err = tx.Exec(`update order_creds set batch_proof = $1 where order_id = $2`,
-								"BAD", job.OrderID)
-							if err != nil {
-								return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
-									job.ID, job.OrderID, err)
-							}
-						}
-					}
-				}
-			} else {
-				// this is a retry able error
-				return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
-					hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
-			}
-		} else {
-			// Unknown error
-			return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
-				job.ID, job.OrderID, err)
-		}
-	} else {
-		_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`,
-			creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
-		if err != nil {
-			return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
-				job.ID, job.OrderID, err)
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return attempted, fmt.Errorf("order job: failed to commit update for jobID %s orderID %s: %w",
-			job.ID, job.OrderID, err)
-	}
-
-	return attempted, nil
 }
 
 // UpdateOrderMetadata sets a key value pair to an order's metadata
