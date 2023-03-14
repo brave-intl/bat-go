@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,40 +13,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/square/go-jose"
 )
-
-// RadomKeyValue is the structure of the key value pairs
-type RadomKeyValue struct {
-	Key   string                 `json:"key"`
-	Value map[string]interface{} `json:"value"`
-}
-
-// RadomMetadata is the structure of metadata
-type RadomMetadata []RadomKeyValue
-
-// Get allows one to get a value based on key from the radom metadata
-func (rm *RadomMetadata) Get(key string) (map[string]interface{}, error) {
-	for _, v := range rm {
-		if subtle.ConstantTimeCompare(key, v.Key) {
-			return v.Result
-		}
-	}
-	return nil, errors.New("failed to get key from radom metadata")
-}
-
-// RadomWebhookRequest is the request from radom webhooks
-type RadomWebhookRequest struct {
-	EventName            string        `json:"eventName"`
-	BlockNumber          int64         `json:"blockNumber"`
-	TransactionHash      string        `json:"transactionHash"`
-	TransactionTimestamp int64         `json:"transactionTimestamp"`
-	SellerAddress        string        `json:"sellerAddress"`
-	CustomerAddress      string        `json:"customerAddress"`
-	PaymentHash          string        `json:"paymentHash"`
-	ChainID              int64         `json:"chainId"`
-	PaymentToken         string        `json:"paymentToken"`
-	PaymentAmount        string        `json:"paymentAmount"`
-	Metadata             RadomMetadata `json:"metadata"`
-}
 
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob
 type VerifyCredentialRequestV1 struct {

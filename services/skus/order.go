@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/logging"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
@@ -285,8 +286,7 @@ func (order Order) IsStripePayable() bool {
 
 // CreateCheckoutSessionResponse - the structure of a checkout session response
 type CreateCheckoutSessionResponse struct {
-	SessionID  string `json:"checkoutSessionId"`
-	SessionURL string `json:"checkoutSessionUrl"`
+	SessionID string `json:"checkoutSessionId"`
 }
 
 func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
@@ -305,6 +305,61 @@ func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
 	}
 	// if there is no record of an email, stripe will ask for it and make a new customer
 	return email
+}
+
+var (
+	acceptedChains = []int64{}
+	acceptedTokens = []radom.AcceptedToken{}
+)
+
+// CreateRadomCheckoutSession - Create a Stripe Checkout Session for an Order
+func (order *Order) CreateRadomCheckoutSession(radomClient radom.Client, sellerAddress string) (CreateCheckoutSessionResponse, error) {
+
+	if len(order.Items) < 1 {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no order items")
+	}
+
+	successURI, ok := order.Items[0].Metadata["radom_success_uri"].(string)
+	if !ok {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no success url in sku")
+	}
+	cancelURI, ok := order.Items[0].Metadata["radom_cancel_uri"].(string)
+	if !ok {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no cancel url in sku")
+	}
+	productID, ok := order.Items[0].Metadata["radom_product_id"].(string)
+	if !ok {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no product id in sku")
+	}
+
+	// create a checkout session
+	resp, err := radomClient.CreateCheckoutSession(&radom.CheckoutSessionRequest{
+		SuccessURL: successURI,
+		CancelURL:  cancelURI,
+		Currency:   "BAT",
+		Metadata: radom.Metadata(
+			[]radom.KeyValue{
+				{
+					Key: "brave-metadata",
+					Value: map[string]interface{}{
+						"orderId": order.ID.String(),
+					},
+				},
+			},
+		),
+		LineItems: []radom.LineItem{
+			{
+				ProductID: productID,
+			},
+		},
+		ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to get checkout session response: %w", err)
+	}
+	return CreateCheckoutSessionResponse{
+		SessionID: resp.CheckoutSessionID,
+	}, nil
 }
 
 // CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order

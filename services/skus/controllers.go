@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -1069,10 +1070,9 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "invalid verification key", http.StatusBadRequest)
 		}
 
-		req := RadomWebhookRequest{}
+		req := radom.WebhookRequest{}
 		// read the payload
-		err := requestutils.ReadJson(r.Context(), r.Body, &req)
-		if err != nil {
+		if err := requestutils.ReadJSON(r.Context(), r.Body, &req); err != nil {
 			sublogger.Error().Err(err).Msg("failed to read request body")
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
@@ -1091,9 +1091,14 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "brave metadata not found in webhook", http.StatusBadRequest)
 		}
 		// get orderid from v
-		orderID, ok := v["orderId"].(string)
+		orderIDStr, ok := v["orderId"].(string)
 		if !ok {
 			return handlers.WrapError(err, "order id not found in webhook", http.StatusBadRequest)
+		}
+
+		orderID, err := uuid.FromString(orderIDStr)
+		if err != nil || v == nil {
+			return handlers.WrapError(err, "invalid brave-metadata.orderId in request", http.StatusBadRequest)
 		}
 
 		// set order id to paid, and update metadata values
@@ -1113,12 +1118,12 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 			sublogger.Error().Err(err).Msg("failed to update order metadata")
 			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 		}
-		err = service.Datastore.AppendOrderMetadataInt(ctx, &orderID, "chainId", req.ChainID)
+		err = service.Datastore.AppendOrderMetadataInt64(ctx, &orderID, "chainId", req.ChainID)
 		if err != nil {
 			sublogger.Error().Err(err).Msg("failed to update order metadata")
 			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 		}
-		err = service.Datastore.AppendOrderMetadataInt(ctx, &orderID, "blockNumber", req.BlockNumber)
+		err = service.Datastore.AppendOrderMetadataInt64(ctx, &orderID, "blockNumber", req.BlockNumber)
 		if err != nil {
 			sublogger.Error().Err(err).Msg("failed to update order metadata")
 			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)

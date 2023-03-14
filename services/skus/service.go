@@ -34,6 +34,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
+	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
@@ -80,19 +81,21 @@ const (
 
 // Service contains datastore
 type Service struct {
-	wallet           *wallet.Service
-	cbClient         cbr.Client
-	geminiClient     gemini.Client
-	geminiConf       *gemini.Conf
-	scClient         *client.API
-	Datastore        Datastore
-	codecs           map[string]*goavro.Codec
-	kafkaWriter      *kafka.Writer
-	kafkaDialer      *kafka.Dialer
-	jobs             []srv.Job
-	pauseVoteUntil   time.Time
-	pauseVoteUntilMu sync.RWMutex
-	retry            backoff.RetryFunc
+	wallet             *wallet.Service
+	cbClient           cbr.Client
+	geminiClient       gemini.Client
+	geminiConf         *gemini.Conf
+	scClient           *client.API
+	Datastore          Datastore
+	codecs             map[string]*goavro.Codec
+	kafkaWriter        *kafka.Writer
+	kafkaDialer        *kafka.Dialer
+	jobs               []srv.Job
+	pauseVoteUntil     time.Time
+	pauseVoteUntilMu   sync.RWMutex
+	retry              backoff.RetryFunc
+	radomClient        radom.Client
+	radomSellerAddress string
 }
 
 // PauseWorker - pause worker until time specified
@@ -154,6 +157,21 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		scClient.Init(stripe.Key, nil)
 	}
 
+	var (
+		radomSellerAddress string
+		radomClient        radom.Client
+	)
+
+	// setup radom if exists in context and enabled
+	if enabled, ok := ctx.Value(appctx.RadomEnabledCTXKey).(bool); ok && enabled {
+		radomClient, err = radom.New()
+		sublogger.Debug().Msg("radom enabled")
+		radomSellerAddress, err = appctx.GetStringFromContext(ctx, appctx.RadomSellerAddressCTXKey)
+		if err != nil {
+			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
+		}
+	}
+
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
@@ -183,14 +201,16 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	}
 
 	service = &Service{
-		wallet:           walletService,
-		geminiClient:     geminiClient,
-		geminiConf:       geminiConf,
-		cbClient:         cbClient,
-		scClient:         scClient,
-		Datastore:        datastore,
-		pauseVoteUntilMu: sync.RWMutex{},
-		retry:            backoff.Retry,
+		wallet:             walletService,
+		geminiClient:       geminiClient,
+		geminiConf:         geminiConf,
+		cbClient:           cbClient,
+		scClient:           scClient,
+		Datastore:          datastore,
+		pauseVoteUntilMu:   sync.RWMutex{},
+		retry:              backoff.Retry,
+		radomClient:        radomClient,
+		radomSellerAddress: radomSellerAddress,
 	}
 
 	// setup runnable jobs
@@ -355,6 +375,21 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		}
 
 		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
+
+	if !order.IsPaid() && order.IsRadomPayable() {
+		// brand-new order, contains an email in the request
+		checkoutSession, err := order.CreateRadomCheckoutSession(
+			s.radomClient, s.radomSellerAddress, //TODO: fill in
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create checkout session: %w", err)
+		}
+
+		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "radomCheckoutSessionId", checkoutSession.SessionID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}

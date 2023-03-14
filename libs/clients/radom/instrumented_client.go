@@ -2,12 +2,11 @@
 // template: ../../../.prom-gowrap.tmpl
 // gowrap: http://github.com/hexdigest/gowrap
 
-package ratios
+package radom
 
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/libs/clients/-i Client -t ../../../.prom-gowrap.tmpl -o instrumented_client.go -l ""
 
 import (
-	"context"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,7 +22,7 @@ type ClientWithPrometheus struct {
 
 var clientDurationSummaryVec = promauto.NewSummaryVec(
 	prometheus.SummaryOpts{
-		Name:       "ratios_client_duration_seconds",
+		Name:       "client_duration_seconds",
 		Help:       "client runtime duration and result",
 		MaxAge:     time.Minute,
 		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
@@ -38,8 +37,8 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
-// FetchRate implements Client
-func (_d ClientWithPrometheus) FetchRate(ctx context.Context, base string, currency string) (rp1 *RateResponse, err error) {
+// CreateCheckoutSession implements Client
+func (_d ClientWithPrometheus) CreateCheckoutSession(cp1 *CheckoutSessionRequest) (cp2 *CheckoutSessionResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -47,7 +46,7 @@ func (_d ClientWithPrometheus) FetchRate(ctx context.Context, base string, curre
 			result = "error"
 		}
 
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchRate", result).Observe(time.Since(_since).Seconds())
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateCheckoutSession", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.FetchRate(ctx, base, currency)
+	return _d.base.CreateCheckoutSession(cp1)
 }
