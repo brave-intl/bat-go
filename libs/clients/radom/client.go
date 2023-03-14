@@ -66,7 +66,7 @@ type CheckoutSessionRequest struct {
 	LineItems      []LineItem             `json:"lineItems"`
 	Metadata       Metadata               `json:"metadata"`
 	SuccessURL     string                 `json:"successUrl"`
-	sellerAddress  string                 `json:"sellerAddress"`
+	SellerAddress  string                 `json:"sellerAddress"`
 	Total          decimal.Decimal        `json:"total"`
 }
 
