@@ -334,9 +334,12 @@ func (order *Order) CreateRadomCheckoutSession(radomClient radom.Client, sellerA
 
 	// create a checkout session
 	resp, err := radomClient.CreateCheckoutSession(&radom.CheckoutSessionRequest{
-		SuccessURL: successURI,
-		CancelURL:  cancelURI,
-		Currency:   "BAT",
+		SuccessURL:     successURI,
+		CancelURL:      cancelURI,
+		Currency:       "BAT",
+		AcceptedTokens: acceptedTokens,
+		AcceptedChains: acceptedChains,
+		SellerAddress:  sellerAddress,
 		Metadata: radom.Metadata(
 			[]radom.KeyValue{
 				{
