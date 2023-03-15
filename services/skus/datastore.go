@@ -7,14 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 
-	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/datastore"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -40,8 +37,6 @@ type Datastore interface {
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetOrderByExternalID by the external id from the purchase vendor
 	GetOrderByExternalID(externalID string) (*Order, error)
-	// RenewOrder - renew the order with this id
-	RenewOrder(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
 	// UpdateOrderMetadata adds a key value pair to an order's metadata
@@ -61,11 +56,9 @@ type Datastore interface {
 	InsertIssuer(issuer *Issuer) (*Issuer, error)
 	GetIssuer(merchantID string) (*Issuer, error)
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
+	DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
-	// RunNextOrderJob Deprecated.
-	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
 	GetKey(id uuid.UUID, showExpired bool) (*Key, error)
 	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
@@ -83,13 +76,14 @@ type Datastore interface {
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
-	DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error
+	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
 	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
+	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID, completedAt time.Time) error
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
@@ -642,21 +636,6 @@ func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, order
 	return nil
 }
 
-// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
-//
-//	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
-
-	// renew order is an update order with paid status
-	// and an update order expires at with the new expiry time of the order
-	err := pg.UpdateOrder(orderID, OrderStatusPaid) // this performs a record order payment
-	if err != nil {
-		return fmt.Errorf("failed to set order status to paid: %w", err)
-	}
-
-	return pg.DeleteOrderCreds(orderID, true)
-}
-
 func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.Time) error {
 
 	// record the order payment
@@ -962,64 +941,28 @@ func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID
 	}, nil
 }
 
-func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) error {
-	query := `
-		delete
-		from time_limited_v2_order_creds
-		where order_id = $1`
-
-	_, err := pg.RawDB().Exec(query, orderID)
-	if err != nil {
-		return err
-	}
-
-	return nil
-
-}
-
-// DeleteOrderCreds deletes the order credentials for a OrderID.
-func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
-
-	// does this order have credential_type time-limited?  if so there will not be order creds, success
-	order, err := pg.GetOrder(orderID)
-	if err != nil {
-		return err
-	}
-
-	if len(order.Items) > 0 {
-		if order.Items[0].CredentialType == "time-limited" {
-			// time-limited v1 credentials are not stored in order creds, do not attempt to check
-			return nil
-		}
-	}
-
-	query := `
-		delete
-		from order_creds
-		where order_id = $1`
-
+// DeleteSingleUseOrderCredsByOrderTx performs a hard delete all single use order credentials for a given OrderID.
+func (pg *Postgres) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, isSigned bool) error {
+	query := `delete from order_creds where order_id = $1`
 	if isSigned {
 		query += " and signed_creds is not null"
 	}
 
-	_, err = pg.RawDB().Exec(query, orderID)
+	_, err := tx.ExecContext(ctx, query, orderID)
 	if err != nil {
-		return err
+		return fmt.Errorf("error deleting single use order creds: %w", err)
 	}
 
-	// delete any time limited v2 credentials that are associated with this order
-	err = pg.DeleteTimeLimitedV2OrderCredsByOrder(orderID)
-	if err != nil {
-		return err
-	}
+	return nil
+}
 
-	// delete the associated signing request so another can be performed
-	query = `delete from signing_order_request_outbox where order_id = $1`
-	_, err = pg.RawDB().Exec(query, orderID)
+// DeleteTimeLimitedV2OrderCredsByOrderTx performs a hard delete for all time limited v2 order
+// credentials for a given OrderID.
+func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
+	_, err := tx.ExecContext(ctx, `delete from time_limited_v2_order_creds where order_id = $1`, orderID)
 	if err != nil {
-		return err
+		return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 	}
-
 	return nil
 }
 
@@ -1137,107 +1080,6 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 		return fmt.Errorf("failed to insert vote to drain: %w", err)
 	}
 	return nil
-}
-
-// RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
-// TODO: deprecated, remove once all existing order creds have been processed.
-// TODO: This should not pick credentials waiting to be signed as they are only inserted with a non null batch proof.
-func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
-	tx, err := pg.RawDB().Beginx()
-	attempted := false
-	if err != nil {
-		return attempted, err
-	}
-	defer pg.RollbackTx(tx)
-
-	type SigningJob struct {
-		Issuer
-		OrderID      uuid.UUID                 `db:"order_id"`
-		BlindedCreds jsonutils.JSONStringArray `db:"blinded_creds"`
-	}
-
-	statement := `
-SELECT
-	order_cred_issuers.id,
-	order_cred_issuers.created_at,
-	order_cred_issuers.merchant_id,
-	order_cred_issuers.public_key,
-	order_cred.order_id,
-	order_cred.blinded_creds
-FROM
-	(
-		SELECT item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
-		FROM order_creds
-		WHERE batch_proof is null
-		FOR UPDATE skip locked
-		limit 1
-	) order_cred
-INNER JOIN order_cred_issuers
-ON order_cred.issuer_id = order_cred_issuers.id`
-
-	jobs := []SigningJob{}
-	err = tx.Select(&jobs, statement)
-	if err != nil {
-		return attempted, fmt.Errorf("order job: failed to retrieve jobs: %w", err)
-	}
-
-	if len(jobs) != 1 {
-		return attempted, nil
-	}
-
-	job := jobs[0]
-
-	attempted = true
-
-	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
-	if err != nil {
-		// is this a cbr client error
-		var eb *errorutils.ErrorBundle
-		if errors.As(err, &eb) {
-			// pull out the data and see if this is an http client error
-			if hs, ok := eb.Data().(clients.HTTPState); ok {
-				// see if you can't get the raw http response body for a check
-				if red, ok := hs.Body.(clients.RespErrData); ok {
-					if bodyStr, ok := red.Body.(string); ok {
-						// if the error is from CBR and contains "Cannot decompress Edwards point" this job will never complete
-						// and keep retrying over and over. We want to filter this out and set batch proof
-						// to empty string, so it will not be picked up again
-						if strings.Contains(strings.ToLower(bodyStr), "cannot decompress edwards point") {
-							_, err = tx.Exec(`update order_creds set batch_proof = $1 where order_id = $2`,
-								"BAD", job.OrderID)
-							if err != nil {
-								return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
-									job.ID, job.OrderID, err)
-							}
-						}
-					}
-				}
-			} else {
-				// this is a retry able error
-				return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
-					hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
-			}
-		} else {
-			// Unknown error
-			return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
-				job.ID, job.OrderID, err)
-		}
-	} else {
-		_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`,
-			creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
-		if err != nil {
-			return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
-				job.ID, job.OrderID, err)
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return attempted, fmt.Errorf("order job: failed to commit update for jobID %s orderID %s: %w",
-			job.ID, job.OrderID, err)
-	}
-
-	return attempted, nil
 }
 
 // UpdateOrderMetadata sets a key value pair to an order's metadata
@@ -1455,6 +1297,16 @@ func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, request
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
 	}
 
+	return nil
+}
+
+// DeleteSigningOrderRequestOutboxByOrderTx performs a hard delete of all signing order request outbox
+// messages for a given orderID.
+func (pg *Postgres) DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
+	_, err := tx.ExecContext(ctx, `delete from signing_order_request_outbox where order_id = $1`, orderID)
+	if err != nil {
+		return fmt.Errorf("error deleting signing order request outbox: %w", err)
+	}
 	return nil
 }
 

@@ -193,32 +193,46 @@ func (mr *MockDatastoreMockRecorder) DeleteKey(id, delaySeconds interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteKey", reflect.TypeOf((*MockDatastore)(nil).DeleteKey), id, delaySeconds)
 }
 
-// DeleteOrderCreds mocks base method.
-func (m *MockDatastore) DeleteOrderCreds(orderID go_uuid.UUID, isSigned bool) error {
+// DeleteSigningOrderRequestOutboxByOrderTx mocks base method.
+func (m *MockDatastore) DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID go_uuid.UUID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteOrderCreds", orderID, isSigned)
+	ret := m.ctrl.Call(m, "DeleteSigningOrderRequestOutboxByOrderTx", ctx, tx, orderID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteOrderCreds indicates an expected call of DeleteOrderCreds.
-func (mr *MockDatastoreMockRecorder) DeleteOrderCreds(orderID, isSigned interface{}) *gomock.Call {
+// DeleteSigningOrderRequestOutboxByOrderTx indicates an expected call of DeleteSigningOrderRequestOutboxByOrderTx.
+func (mr *MockDatastoreMockRecorder) DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteOrderCreds", reflect.TypeOf((*MockDatastore)(nil).DeleteOrderCreds), orderID, isSigned)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSigningOrderRequestOutboxByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteSigningOrderRequestOutboxByOrderTx), ctx, tx, orderID)
 }
 
-// DeleteTimeLimitedV2OrderCredsByOrder mocks base method.
-func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrder(orderID go_uuid.UUID) error {
+// DeleteSingleUseOrderCredsByOrderTx mocks base method.
+func (m *MockDatastore) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID go_uuid.UUID, isSigned bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteTimeLimitedV2OrderCredsByOrder", orderID)
+	ret := m.ctrl.Call(m, "DeleteSingleUseOrderCredsByOrderTx", ctx, tx, orderID, isSigned)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteTimeLimitedV2OrderCredsByOrder indicates an expected call of DeleteTimeLimitedV2OrderCredsByOrder.
-func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrder(orderID interface{}) *gomock.Call {
+// DeleteSingleUseOrderCredsByOrderTx indicates an expected call of DeleteSingleUseOrderCredsByOrderTx.
+func (mr *MockDatastoreMockRecorder) DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrder", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrder), orderID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSingleUseOrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteSingleUseOrderCredsByOrderTx), ctx, tx, orderID, isSigned)
+}
+
+// DeleteTimeLimitedV2OrderCredsByOrderTx mocks base method.
+func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID go_uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteTimeLimitedV2OrderCredsByOrderTx", ctx, tx, orderID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteTimeLimitedV2OrderCredsByOrderTx indicates an expected call of DeleteTimeLimitedV2OrderCredsByOrderTx.
+func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrderTx), ctx, tx, orderID)
 }
 
 // ExternalIDExists mocks base method.
@@ -700,20 +714,6 @@ func (mr *MockDatastoreMockRecorder) RawDB() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawDB", reflect.TypeOf((*MockDatastore)(nil).RawDB))
 }
 
-// RenewOrder mocks base method.
-func (m *MockDatastore) RenewOrder(ctx context.Context, orderID go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RenewOrder", ctx, orderID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RenewOrder indicates an expected call of RenewOrder.
-func (mr *MockDatastoreMockRecorder) RenewOrder(ctx, orderID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewOrder", reflect.TypeOf((*MockDatastore)(nil).RenewOrder), ctx, orderID)
-}
-
 // RollbackTx mocks base method.
 func (m *MockDatastore) RollbackTx(tx *sqlx.Tx) {
 	m.ctrl.T.Helper()
@@ -738,21 +738,6 @@ func (m *MockDatastore) RollbackTxAndHandle(tx *sqlx.Tx) error {
 func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockDatastore)(nil).RollbackTxAndHandle), tx)
-}
-
-// RunNextOrderJob mocks base method.
-func (m *MockDatastore) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextOrderJob", ctx, worker)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RunNextOrderJob indicates an expected call of RunNextOrderJob.
-func (mr *MockDatastoreMockRecorder) RunNextOrderJob(ctx, worker interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextOrderJob", reflect.TypeOf((*MockDatastore)(nil).RunNextOrderJob), ctx, worker)
 }
 
 // SendSigningRequest mocks base method.

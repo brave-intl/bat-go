@@ -423,7 +423,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
-	ExternalTransactionID uuid.UUID `json:"externalTransactionID" valid:"requiredUUID"`
+	ExternalTransactionID string `json:"externalTransactionId" valid:"required,uuid"`
 }
 
 // CreateGeminiTransaction creates a transaction against an order
@@ -451,7 +451,7 @@ func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 		}
 
 		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID.String())
+		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID)
 		if err != nil {
 			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
 		}
@@ -500,7 +500,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		}
 
 		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID.String())
+		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID)
 		if err != nil {
 			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
 		}
@@ -677,7 +677,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 // DeleteOrderCreds is the handler for deleting order credentials
 func DeleteOrderCreds(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -696,13 +696,13 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 		// is signed param
 		isSigned := r.URL.Query().Get("isSigned") == "true"
 
-		err = service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
+		err = service.DeleteOrderCreds(r.Context(), *orderID.UUID(), isSigned)
 		if err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(r.Context(), "Order credentials successfully deleted", w, http.StatusOK)
-	})
+	}
 }
 
 // GetOrderCredsByID is the handler for fetching order credentials by an item id
@@ -736,24 +736,22 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), *itemID.UUID(), false)
+		creds, status, err := service.GetItemCredentials(r.Context(), *orderID.UUID(), *itemID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
-		}
-
-		if creds == nil {
-			return &handlers.AppError{
-				Message: "Could not find credentials",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
+			if errors.Is(err, errSetRetryAfter) {
+				// error specifies a retry after period, add to response header
+				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
+				if err != nil {
+					return handlers.WrapError(err, "Error getting credential retry-after", status)
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
+			} else {
+				return handlers.WrapError(err, "Error getting credentials", status)
 			}
 		}
-
-		status := http.StatusOK
-		if creds.SignedCreds == nil {
-			status = http.StatusAccepted
+		if creds == nil {
+			return handlers.RenderContent(r.Context(), map[string]interface{}{}, w, status)
 		}
-
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
@@ -1118,7 +1116,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				}
 				if ok && subID != "" {
 					// okay, this is a subscription renewal, not first time,
-					err = service.Datastore.RenewOrder(ctx, orderID)
+					err = service.RenewOrder(ctx, orderID)
 					if err != nil {
 						sublogger.Error().Err(err).Msg("failed to renew the order")
 						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
