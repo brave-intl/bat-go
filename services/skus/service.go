@@ -880,6 +880,26 @@ const (
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
 
+// GetItemCredentials - based on the order, get the associated credentials
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.UUID) (interface{}, int, error) {
+	orderCreds, status, err := s.GetCredentials(ctx, orderID)
+	if err != nil {
+		return nil, status, err
+	}
+
+	itemCreds := []OrderCreds{}
+
+	for _, oc := range orderCreds.([]OrderCreds) {
+		if oc.ID.Equal(itemID) {
+			itemCreds = append(itemCreds, oc)
+		}
+	}
+	if len(itemCreds) == 0 {
+		return nil, 404, errors.New("no credentials for item available")
+	}
+	return itemCreds
+}
+
 // GetCredentials - based on the order, get the associated credentials
 func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
 	var credentialType string
