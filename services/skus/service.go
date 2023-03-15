@@ -887,17 +887,13 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.U
 		return nil, status, err
 	}
 
-	itemCreds := []OrderCreds{}
-
 	for _, oc := range orderCreds.([]OrderCreds) {
 		if uuid.Equal(oc.ID, itemID) {
-			itemCreds = append(itemCreds, oc)
+			return oc
 		}
 	}
-	if len(itemCreds) == 0 {
-		return nil, 404, errors.New("no credentials for item available")
-	}
-	return itemCreds, status, nil
+
+	return nil, http.StatusNotFound, errors.New("no credentials for item available")
 }
 
 // GetCredentials - based on the order, get the associated credentials
