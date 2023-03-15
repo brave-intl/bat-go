@@ -677,7 +677,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 // DeleteOrderCreds is the handler for deleting order credentials
 func DeleteOrderCreds(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -696,13 +696,13 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 		// is signed param
 		isSigned := r.URL.Query().Get("isSigned") == "true"
 
-		err = service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
+		err = service.DeleteOrderCreds(r.Context(), *orderID.UUID(), isSigned)
 		if err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(r.Context(), "Order credentials successfully deleted", w, http.StatusOK)
-	})
+	}
 }
 
 // GetOrderCredsByID is the handler for fetching order credentials by an item id
@@ -1113,7 +1113,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				}
 				if ok && subID != "" {
 					// okay, this is a subscription renewal, not first time,
-					err = service.Datastore.RenewOrder(ctx, orderID)
+					err = service.RenewOrder(ctx, orderID)
 					if err != nil {
 						sublogger.Error().Err(err).Msg("failed to renew the order")
 						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)

@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"net/http"
+
 	"sync"
 	"testing"
 	"time"
@@ -15,8 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/linkedin/goavro"
-
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -24,6 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/brave-intl/bat-go/libs/test"
 	"github.com/golang/mock/gomock"
+	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
@@ -184,9 +185,6 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_RequestDupl
 	suite.Require().NotNil(creds)
 	suite.Assert().Len(creds.Credentials, 1)
 	suite.Assert().Equal(order.Items[0].ID, creds.Credentials[0].ItemID)
-	// cleanup
-	err = suite.storage.DeleteTimeLimitedV2OrderCredsByOrder(order.ID)
-	suite.NoError(err)
 }
 
 func TestCreateIssuer_NewIssuer(t *testing.T) {

@@ -1484,7 +1484,7 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
 		}
 	} else {
-		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+		if err = s.RenewOrder(ctx, o.ID); err != nil {
 			return fmt.Errorf("failed to renew subscription in skus: %w", err)
 		}
 	}
@@ -1521,7 +1521,7 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 		androidSubscriptionRestarted,
 		androidSubscriptionInGracePeriod,
 		androidSubscriptionPriceChangeConfirmed:
-		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+		if err = s.RenewOrder(ctx, o.ID); err != nil {
 			return fmt.Errorf("failed to renew subscription in skus: %w", err)
 		}
 	case androidSubscriptionExpired,
