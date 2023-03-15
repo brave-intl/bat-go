@@ -880,42 +880,6 @@ const (
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
 
-// GetItemCredentials - based on the order and item, get the associated credentials
-func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.UUID) (interface{}, int, error) {
-	var credentialType string
-
-	order, err := s.Datastore.GetOrder(orderID)
-	if err != nil {
-		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
-	}
-
-	if order == nil {
-		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
-	}
-
-	// look through order, find out what all the order item's credential types are
-	for i, v := range order.Items {
-		if i > 0 {
-			if v.CredentialType != credentialType {
-				// all the order items on the order need the same credential type
-				return nil, http.StatusConflict, fmt.Errorf("all items must have the same credential type")
-			}
-		} else {
-			credentialType = v.CredentialType
-		}
-	}
-
-	switch credentialType {
-	case singleUse:
-		return s.GetSingleUseCreds(ctx, order)
-	case timeLimited:
-		return s.GetTimeLimitedCreds(ctx, order)
-	case timeLimitedV2:
-		return s.GetTimeLimitedV2Creds(ctx, order)
-	}
-	return nil, http.StatusConflict, errInvalidCredentialType
-}
-
 // GetCredentials - based on the order, get the associated credentials
 func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
 	var credentialType string

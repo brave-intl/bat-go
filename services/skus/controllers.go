@@ -736,7 +736,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, status, err := service.GetItemCredentials(r.Context(), *orderID.UUID(), *itemID.UUID())
+		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
 			if errors.Is(err, errSetRetryAfter) {
 				// error specifies a retry after period, add to response header
@@ -749,6 +749,12 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error getting credentials", status)
 			}
 		}
+		if creds == nil {
+			return handlers.RenderContent(r.Context(), map[string]interface{}{}, w, status)
+		}
+		// FIXME: eventually we will break up the item creds from the main order "creds"
+		// when this happens we will have to pull out the particular item creds from the creds
+		// result here and just return that
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
