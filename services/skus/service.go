@@ -702,13 +702,13 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 		Logger()
 
 	// get the information from the custodian
-	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
+	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to get and validate custodian transaction")
 		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
 	}
 
-	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
+	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, *amount)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
 		return nil, errorutils.Wrap(err, "error recording transaction")
@@ -740,13 +740,13 @@ func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTr
 		Logger()
 
 	// get the information from the custodian
-	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
+	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to get and validate custodian transaction")
 		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
 	}
 
-	transaction, err := s.Datastore.UpdateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
+	transaction, err := s.Datastore.UpdateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, *amount)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
 		return nil, errorutils.Wrap(err, "error recording transaction")
@@ -879,6 +879,22 @@ const (
 )
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
+
+// GetItemCredentials - based on the order, get the associated credentials
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.UUID) (interface{}, int, error) {
+	orderCreds, status, err := s.GetCredentials(ctx, orderID)
+	if err != nil {
+		return nil, status, err
+	}
+
+	for _, oc := range orderCreds.([]OrderCreds) {
+		if uuid.Equal(oc.ID, itemID) {
+			return oc, status, nil
+		}
+	}
+	// order creds are not available yet
+	return nil, status, nil
+}
 
 // GetCredentials - based on the order, get the associated credentials
 func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
