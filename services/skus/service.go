@@ -892,8 +892,8 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.U
 			return oc, status, nil
 		}
 	}
-
-	return nil, http.StatusNotFound, errors.New("no credentials for item available")
+	// order creds are not available yet
+	return nil, status, nil
 }
 
 // GetCredentials - based on the order, get the associated credentials
