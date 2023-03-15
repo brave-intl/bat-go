@@ -889,7 +889,7 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.U
 
 	for _, oc := range orderCreds.([]OrderCreds) {
 		if uuid.Equal(oc.ID, itemID) {
-			return oc
+			return oc, status, nil
 		}
 	}
 
