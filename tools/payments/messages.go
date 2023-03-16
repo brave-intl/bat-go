@@ -10,9 +10,10 @@ import (
 
 // WorkerConfig defines the settlement worker configuration structure
 type WorkerConfig struct {
-	PayoutID string `json:"payoutId"`
-	Stream   string `json:"stream"`
-	Count    int    `json:"count"`
+	PayoutID      string `json:"payoutId"`
+	ConsumerGroup string `json:"consumerGroup"`
+	Stream        string `json:"stream"`
+	Count         int    `json:"count"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis

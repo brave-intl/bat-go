@@ -88,11 +88,22 @@ func newRedisClient(ctx context.Context, env, addrs, pass, username string) (*re
 
 // ConfigureWorker implements settlement client
 func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, config *WorkerConfig) error {
+	body, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to json encode config: %w", err)
+	}
+
+	cfg := &prepareWrapper{
+		ID:        uuid.New(),
+		Timestamp: time.Now(),
+		Body:      string(body),
+	}
+
 	_, err := rc.redis.XAdd(
 		ctx, &redis.XAddArgs{
 			Stream: stream,
 			Values: map[string]interface{}{
-				"data": config}},
+				"data": cfg}},
 	).Result()
 	if err != nil {
 		return fmt.Errorf("failed to push config to workers: %w", err)
@@ -136,12 +147,14 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 	pipe := rc.redis.Pipeline()
 
 	for _, v := range at {
-		body, err := json.Marshal(v)
+		buf := bytes.NewBuffer([]byte{})
+		err := json.NewEncoder(buf).Encode(v)
+		body := buf.Bytes()
 		if err != nil {
 			return fmt.Errorf("failed to marshal attested transaction body: %w", err)
 		}
 		// create a request
-		req, err := http.NewRequest("POST", rc.env+"/authorize", bytes.NewBuffer(body))
+		req, err := http.NewRequest("POST", rc.env+"/authorize", buf)
 		if err != nil {
 			return fmt.Errorf("failed to create request to sign: %w", err)
 		}
