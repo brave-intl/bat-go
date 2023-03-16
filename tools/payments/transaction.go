@@ -1,7 +1,6 @@
 package payments
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
@@ -10,6 +9,16 @@ import (
 )
 
 type PrepareTx Tx
+
+// GetAmount returns the amount of the transaction
+func (pt *PrepareTx) GetAmount() decimal.Decimal {
+	return pt.Amount
+}
+
+// GetCustodian returns the custodian of the transaction
+func (pt *PrepareTx) GetCustodian() Custodian {
+	return pt.Custodian
+}
 
 // Tx - this is the tx going to prepare workers from report
 type Tx struct {
@@ -101,11 +110,4 @@ func (at *AttestedTx) UnmarshalJSON(data []byte) error {
 	at.AttestationDocument = aux.AttestationDocument
 
 	return nil
-}
-
-// DigestBytes returns a digest byte string which operators can sign over, and attestation
-// userdata from nitro to be attested over
-func (at AttestedTx) DigestBytes() []byte {
-	return sha256.New().Sum([]byte(
-		at.Version + at.To + at.Amount.String() + at.ID + at.Custodian.String() + at.DocumentID + at.State))[:]
 }

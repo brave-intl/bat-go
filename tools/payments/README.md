@@ -1,36 +1,110 @@
-# Settlement CLI
+# Payments CLI
 
-The settlement CLI tooling allows settlement operators to enqueue
-validate, and authorize custodian transactions.
+The payments CLI tooling allows settlement operators to enqueue
+validate, bootstrap, configure and authorize custodian transactions.
+
+## To Build
+
+In order to build the cli tools run the following in this current directory.
+
+```bash
+make
+```
+
+If you make changes an easy way to bring each of the individual tool's dependencies up to date you
+can run the following:
+```bash
+make tidy
+```
+
+If you want to start clean, to remove the go cache and resulting `dist` binary files, run the following:
+
+```bash
+make clean
+```
 
 ### Setup Redis Locally
 ```bash
 // add `127.0.0.1 redis` to hosts file
-docker-compose -f docker-compose.redis.yml up -d # to start up the local redis cluster
+docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the local redis cluster
 ```
 
 ## Commands
 
 Available commands are:
 
-1. `prepare`
-2. `bootstrap`
-3. `authorize`
-4. `validate`
-5. `enable`
+1. `create-vault`
+2. `configure`
+3. `bootstrap`
+4. `prepare`
+5. `validate`
+6. `authorize`
 
-### Enable
+### Create Vault
 
-For the payments service to download relevant configurations, the operator will need to `enable`
-the system by encrypting their operator share (from bootstrap command) with a KMS key that only the enclave can decrypt from.
-Below is an example of how to run:
+Create generates a random asymmetric key pair, breaks the private key into operator shares, and outputs
+the number of shares at a given threshold to standard out, along with the public key.  After this is
+performed the private key is discarded.
 
-```bash
-    aws-vault exec <operator aws role> -- \
-        go run main.go enable \
-            --kms-key="arn:aws:kms:*******:key/**********" \
-            --s3-bucket="*****************" \
-            --share="ba24835f48f31914a853588b6a0297c78b167ee98e95af2c02c1e1b44452b00f28"
+Create takes as parameters the threshold and number of operator shares.
+
+```
+Usage:
+
+create-vault [flags]
+
+The flags are:
+
+	-t
+		The Shamir share threshold to reconstitute the private key
+	-n
+		The number of operator shares to output
+```
+
+### Configure
+Configure encrypts a configuration file for consumption by the payments service, the output of which
+is then uploaded to s3 and consumed by the payments service.
+
+Create takes as parameters the public key output from the create command, and a configuration file.
+
+```
+Usage:
+
+create [flags] [args]
+
+The flags are:
+
+	-k
+		The public key of the payments service (output from create command)
+
+The arguments are configuration files which are to be encrypted.
+```
+
+The resulting encrypted files are only able to be decrypted by the enclave when two operators
+perform the bootstrap command.
+
+
+### Bootstrap
+
+Bootstrap takes the provided operator shamir key share and encrypts the key with
+the provided KMS encryption key (that only the enclave can decrypt with) and then
+uploads the ciphertext to s3 for the enclave to download
+
+Bootstrap takes as parameters the operator share, kms key arn and s3 uri.
+
+```
+Usage:
+
+bootstrap [flags]
+
+The flags are:
+
+	-s
+		The operator's Shamir key share from the create command
+	-k
+		The KMS Key ARN to encrypt the key share with
+	-b
+		The S3 URI to upload the ciphertext to
 ```
 
 This command will check the enclave measurements match the key policy for the kms encryption key, and
@@ -77,8 +151,8 @@ enclave to process the secrets in the bootstrap file.
 ### Prepare
 
 The prepare command parses the payout report, and enqueues the transactions in 
-a new per payout stream identified by `--payout-id` parameter.  Tool uses redis streams
-to connect to `--redis-addrs` and `--redis-user` as well as `REDIS_PASS` env variable
+a new per payout stream.  Tool uses redis streams
+to connect to `-ra` and `-ru` as well as `-rp` variable
 to connect to redis to submit transactions for preparation.
 
 The payout report looks like the below:
@@ -101,13 +175,25 @@ to find that payout stream to start preparing the transactions.  Below is an exa
 how this is run:
 
 ```bash
-REDIS_PASS=whatever_the_pass_is \
-    go run main.go prepare \
-        --report test/report.json \
-        --payout-id 20230202_1 \
-        --redis-addrs redis:6380,redis:6383,redis:6381,redis:6382 \
-        --redis-user redis \
-        --test-mode # test mode is just for testing, not production
+Usage:
+
+prepare [flags] filename...
+
+The flags are:
+
+	-v
+		verbose logging enabled
+	-e
+		The environment to which the operator is sending transactions to be put in prepared state.
+		The environment is specified as the base URI of the payments service running in the
+		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
+			https://payments.bsg.brave.software
+	-ra
+		The redis cluster addresses comma seperated
+	-rp
+		The redis cluster password
+	-ru
+		The redis cluster user
 ```
 
 ### Validate
@@ -131,14 +217,20 @@ after settlement workers complete preparation.  The attested report has the foll
 
 The documentId is the QLDB document identifier for the transaction record stored by payments
 service from the enclave.  The attestation document is from nitro, and the userdata should be validated against
-the transaction.  The following signing string is used for the userdata in the attestation document:
+the transaction. 
+```
+Usage:
 
-```go
-// BuildSigningString - the string format that payments will sign over per tx
-func (at AuthorizeTx) BuildSigningBytes() []byte {
-    return []byte(fmt.Sprintf("%s|%s|%s|%s|%s",
-        at.To, at.Amount.String(), at.ID, at.Custodian, at.DocumentID))
-}
+validate [flags]
+
+The flags are:
+
+	-v
+		verbose logging enabled
+	-ar
+		Location on file system of the attested transaction report for signing
+	-pr
+		Location on file system of the original prepared report
 ```
 
 The validate command is run by the operator prior to the authorize command.  This command
@@ -147,18 +239,10 @@ performs the following feats:
 1. validates the number of transactions in the original report matches the attested report
 2. validates the amount of bat in the original report matches the attested report
 3. validates each transaction was attested by nitro through the payments service running in the enclave
-4. outputs based on custodian the amount of total BAT being paid out.
+4. outputs the amount of total BAT being paid out.
 
 If the validate command completes successfully, the operator can spot check the values manually
 and then perform the authorize command.  Below is an example of how to run the validate command:
-
-```bash
-go run main.go validate \
-    --report test/report.json \
-    --attested-report test/attested-report.json \
-    --nitro-cert ./certs/root.pem \
-    --test-mode # test mode just for testing, not production
-```
 
 ### Authorize
 
@@ -182,16 +266,25 @@ The headers used for the httpsignature computation are:
 Note: we are not using Date as at signing time we don't know what it will be.
 
 ```bash
-REDIS_PASS=whatever_the_pass_is 
-    go run main.go authorize \
-    --attested-report test/attested-report.json \ # the attested report you validated
-    --payout-id 20230202_1 \ # identifier of the payout
-    --redis-addrs redis:6380,redis:6383,redis:6381,redis:6382 \
-    --redis-user redis \ 
-    --key-file test/private.pem \ # this is your operator key, payments validates your key
-    --payments-host https://payments.bsg.brave.software \ # this is the host of the payments service in nitro
-    --test-mode # this is just for testing not prod
-```
+Usage:
 
-Business logic in payments service may require multiple independent operators to sign the transactions
-submitted prior to payout.
+authorize [flags] filename...
+
+The flags are:
+
+	-v
+		verbose logging enabled
+	-k
+		Location on file system of the operators private ED25519 signing key in PEM format.
+	-e
+		The environment to which the operator is sending approval for transactions.
+		The environment is specified as the base URI of the payments service running in the
+		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
+			https://payments.bsg.brave.software
+	-ra
+		The redis cluster addresses comma seperated
+	-rp
+		The redis cluster password
+	-ru
+		The redis cluster user
+```

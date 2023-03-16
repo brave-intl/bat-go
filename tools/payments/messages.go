@@ -42,14 +42,10 @@ func (pw prepareWrapper) MarshalBinary() (data []byte, err error) {
 
 // submitWrapper defines the settlement worker submit message structure
 type submitWrapper struct {
-	ID            uuid.UUID `json:"id"`
-	Timestamp     time.Time `json:"timestamp"`
-	Host          string    `json:"host"`
-	Digest        string    `json:"digest"`
-	Signature     string    `json:"signature"`
-	ContentLength string    `json:"contentLength"`
-	ContentType   string    `json:"contentType"`
-	Body          string    `json:"body"`
+	ID        uuid.UUID         `json:"id"`
+	Timestamp time.Time         `json:"timestamp"`
+	Headers   map[string]string `json:"headers"`
+	Body      string            `json:"body"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis

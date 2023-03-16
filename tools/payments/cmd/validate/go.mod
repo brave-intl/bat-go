@@ -1,4 +1,4 @@
-module github.com/brave-intl/bat-go/tools/payments/cmd/authorize
+module github.com/brave-intl/bat-go/tools/payments/cmd/validate
 
 replace github.com/brave-intl/bat-go/tools/payments => ../../
 

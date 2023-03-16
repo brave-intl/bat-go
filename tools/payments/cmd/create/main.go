@@ -7,7 +7,7 @@ Create takes as parameters the threshold and number of operator shares.
 
 Usage:
 
-create [flags]
+create-vault [flags]
 
 The flags are:
 
