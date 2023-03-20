@@ -80,7 +80,7 @@ type Datastore interface {
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
-	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
+	GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -1266,6 +1266,19 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context,
 	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
 		`select request_id, order_id, item_id, completed_at, message_data 
 				from signing_order_request_outbox where request_id = $1`, requestID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
+	}
+	return &signingRequestOutbox, nil
+}
+
+// GetSigningOrderRequestOutboxByRequestIDTx retrieves the SigningOrderRequestOutbox by requestID.
+// An error is returned if the result set is empty.
+func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
+	var signingRequestOutbox SigningOrderRequestOutbox
+	err := tx.GetContext(ctx, &signingRequestOutbox,
+		`select request_id, order_id, item_id, completed_at, message_data 
+				from signing_order_request_outbox where request_id = $1 for update`, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
