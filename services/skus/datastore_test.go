@@ -455,6 +455,9 @@ func createOrderAndIssuer(t *testing.T, ctx context.Context, storage Datastore, 
 		test.RandomString(), test.RandomString(), nil, orderItems, &methods)
 	assert.NoError(t, err)
 
+	err = storage.UpdateOrder(order.ID, OrderStatusPaid)
+	assert.NoError(t, err)
+
 	// create issuer
 	issuer := &Issuer{
 		MerchantID: test.RandomString(),
