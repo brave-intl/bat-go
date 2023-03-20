@@ -451,8 +451,9 @@ func createOrderAndIssuer(t *testing.T, ctx context.Context, storage Datastore, 
 		methods = append(methods, *method...)
 	}
 
+	validFor := 3600 * time.Second * 24
 	order, err := storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
-		test.RandomString(), test.RandomString(), nil, orderItems, &methods)
+		test.RandomString(), test.RandomString(), &validFor, orderItems, &methods)
 	assert.NoError(t, err)
 
 	err = storage.UpdateOrder(order.ID, OrderStatusPaid)
