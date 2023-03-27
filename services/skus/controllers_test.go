@@ -1593,6 +1593,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
+	err = service.Datastore.UpdateOrder(order.ID, OrderStatusPaid) // to update the last paid at
+	suite.Require().NoError(err)
+
 	// Create order credentials for the newly create order
 	data := CreateOrderCredsRequest{
 		ItemID: order.Items[0].ID,

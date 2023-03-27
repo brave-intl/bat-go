@@ -446,19 +446,19 @@ func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByOrderItem(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSigningOrderRequestOutboxByOrderItem", reflect.TypeOf((*MockDatastore)(nil).GetSigningOrderRequestOutboxByOrderItem), ctx, itemID)
 }
 
-// GetSigningOrderRequestOutboxByRequestID mocks base method.
-func (m *MockDatastore) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID go_uuid.UUID) (*SigningOrderRequestOutbox, error) {
+// GetSigningOrderRequestOutboxByRequestIDTx mocks base method.
+func (m *MockDatastore) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID go_uuid.UUID) (*SigningOrderRequestOutbox, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSigningOrderRequestOutboxByRequestID", ctx, requestID)
+	ret := m.ctrl.Call(m, "GetSigningOrderRequestOutboxByRequestIDTx", ctx, tx, requestID)
 	ret0, _ := ret[0].(*SigningOrderRequestOutbox)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetSigningOrderRequestOutboxByRequestID indicates an expected call of GetSigningOrderRequestOutboxByRequestID.
-func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByRequestID(ctx, requestID interface{}) *gomock.Call {
+// GetSigningOrderRequestOutboxByRequestIDTx indicates an expected call of GetSigningOrderRequestOutboxByRequestIDTx.
+func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByRequestIDTx(ctx, tx, requestID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSigningOrderRequestOutboxByRequestID", reflect.TypeOf((*MockDatastore)(nil).GetSigningOrderRequestOutboxByRequestID), ctx, requestID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSigningOrderRequestOutboxByRequestIDTx", reflect.TypeOf((*MockDatastore)(nil).GetSigningOrderRequestOutboxByRequestIDTx), ctx, tx, requestID)
 }
 
 // GetSumForTransactions mocks base method.

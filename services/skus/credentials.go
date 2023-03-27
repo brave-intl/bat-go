@@ -44,9 +44,6 @@ var (
 
 	// ErrOrderHasNoItems is an order has no order items error
 	ErrOrderHasNoItems = errors.New("order has no items")
-
-	// ErrSigningNotComplete is a singing not complete error
-	ErrSigningNotComplete = errors.New("signing not complete")
 )
 
 // Issuer includes information about a particular credential issuer
@@ -533,6 +530,16 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.datastore)
 	defer rollback()
 
+	// Check to see if the signing request has not been deleted whilst signing the request.
+	sor, err := s.datastore.GetSigningOrderRequestOutboxByRequestIDTx(ctx, tx, requestID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("error get signing order credentials tx: %w", err)
+	}
+
+	if sor == nil || sor.CompletedAt != nil {
+		return nil
+	}
+
 	err = s.datastore.InsertSignedOrderCredentialsTx(ctx, tx, signedOrderResult)
 	if err != nil {
 		return fmt.Errorf("error inserting signed order credentials: %w", err)
@@ -617,21 +624,6 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 
 	if order.Items[0].CredentialType == timeLimited {
 		return nil
-	}
-
-	soros, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, orderID)
-	if err != nil {
-		return fmt.Errorf("error retrieving signing order request from outbox: %w", err)
-	}
-
-	if len(soros) == 0 {
-		return fmt.Errorf("error no signing order requests for order: %w", errNotFound)
-	}
-
-	for _, soro := range soros {
-		if soro.CompletedAt == nil {
-			return fmt.Errorf("error deleting order creds: %w", ErrSigningNotComplete)
-		}
 	}
 
 	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
