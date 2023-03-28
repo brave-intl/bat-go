@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	mockUpholdHost = "https://mock.uphold.com"
+	mockUpholdHost = "fake://mock.uphold.com"
 
 	upholdWallet = uphold.Wallet{
 		Info: walletutils.Info{

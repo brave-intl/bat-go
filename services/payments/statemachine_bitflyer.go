@@ -14,29 +14,29 @@ func DriveBitflyerTransaction(
 	transactionSet bitflyer.WithdrawToDepositIDBulkPayload,
 ) (QLDBPaymentTransitionState, error) {
 	switch currentTransactionState.Data.Status {
-	case 0:
+	case Initialized:
 		if currentTransactionState.Metadata.Version == 0 {
-			return 0, nil
+			return Initialized, nil
 		}
-		return 1, nil
-	case 1:
-		return 2, nil
-	case 2:
+		return Prepared, nil
+	case Prepared:
+		return Authorized, nil
+	case Authorized:
 		if currentTransactionState.Metadata.Version == 500 {
-			return 2, nil
+			return Authorized, nil
 		}
-		return 3, nil
-	case 3:
+		return Pending, nil
+	case Pending:
 		if currentTransactionState.Metadata.Version == 404 {
-			return 3, nil
+			return Pending, nil
 		}
-		return 4, nil
-	case 4:
-		return 4, nil
-	case 5:
-		return 5, nil
+		return Paid, nil
+	case Paid:
+		return Paid, nil
+	case Failed:
+		return Failed, nil
 	default:
-		return 0, errors.New("Invalid transition state")
+		return Initialized, errors.New("Invalid transition state")
 	}
 	/*
 		Get transaction status

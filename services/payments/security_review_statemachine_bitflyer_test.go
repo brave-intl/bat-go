@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	mockBitflyerHost    = "https://mock.bitflyer.com"
+	mockBitflyerHost    = "fake://bitflyer.com"
 	bitflyerBulkPayload = bitflyer.WithdrawToDepositIDBulkPayload{
 		DryRun:      true,
 		Withdrawals: []bitflyer.WithdrawToDepositIDPayload{},

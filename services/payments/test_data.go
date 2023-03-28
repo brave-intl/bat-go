@@ -1,72 +1,83 @@
 package payments
 
+import "encoding/json"
+
+var (
+	status0, _ = json.Marshal(QLDBPaymentTransitionData{Status: 0})
+	status1, _ = json.Marshal(QLDBPaymentTransitionData{Status: 1})
+	status2, _ = json.Marshal(QLDBPaymentTransitionData{Status: 2})
+	status3, _ = json.Marshal(QLDBPaymentTransitionData{Status: 3})
+	status4, _ = json.Marshal(QLDBPaymentTransitionData{Status: 4})
+	status5, _ = json.Marshal(QLDBPaymentTransitionData{Status: 5})
+)
+
 var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 2}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 3}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 4}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 2}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 3}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 5}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 2}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 5}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 5}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 5}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
 	},
 }
 
 var transactionHistorySetFalse = [][]QLDBPaymentTransitionHistoryEntry{
 	// Transitions must always start at 0
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 1}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 2}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 3}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 4}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 5}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 4}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 5}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 4}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 3}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Status: 2}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
+		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
 	},
 }
 

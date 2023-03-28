@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	mockGeminiHost           = "https://mock.gemini.com"
+	mockGeminiHost           = "fake://mock.gemini.com"
 	geminiSucceedTransaction = custodian.Transaction{ProviderID: "1234"}
 	geminiFailTransaction    = custodian.Transaction{ProviderID: "1234"}
 	geminiBulkPayload        = gemini.BulkPayoutPayload{

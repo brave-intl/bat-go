@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/amazon-ion/ion-go/ion"
+	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	"github.com/awslabs/amazon-qldb-driver-go/qldbdriver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -16,6 +17,11 @@ import (
 
 // Unit testing the package code using a Mock Driver
 type MockDriver struct {
+	mock.Mock
+}
+
+// Unit testing the package code using a Mock QLDB SDK
+type MockSDKClient struct {
 	mock.Mock
 }
 
@@ -27,9 +33,9 @@ type mockTransaction struct {
 	mock.Mock
 }
 
-func (m *mockTransaction) Execute(statement string, parameters ...interface{}) (WrappedQldbResult, error) {
+func (m *mockTransaction) Execute(statement string, parameters ...interface{}) (wrappedQldbResult, error) {
 	args := m.Called(statement, parameters)
-	return args.Get(0).(WrappedQldbResult), args.Error(1)
+	return args.Get(0).(wrappedQldbResult), args.Error(1)
 }
 
 func (m *mockTransaction) BufferResult(res *qldbdriver.Result) (*qldbdriver.BufferedResult, error) {
@@ -53,9 +59,31 @@ func (m *mockResult) GetCurrentData() []byte {
 	args := m.Called()
 	return args.Get(0).([]byte)
 }
-func (m *mockResult) Next(txn WrappedQldbTxnAPI) bool {
+func (m *mockResult) Next(txn wrappedQldbTxnAPI) bool {
 	args := m.Called(txn)
 	return args.Get(0).(bool)
+}
+
+func (m *MockSDKClient) New() wrappedQldbSdkClient {
+	args := m.Called()
+	return args.Get(0).(wrappedQldbSdkClient)
+}
+func (m *MockSDKClient) GetDigest(
+	ctx context.Context,
+	params *qldb.GetDigestInput,
+	optFns ...func(*qldb.Options),
+) (*qldb.GetDigestOutput, error) {
+	args := m.Called()
+	return args.Get(0).(qldb.GetDigestOutput)
+}
+
+func (m *MockSDKClient) GetRevision(
+	ctx context.Context,
+	params *qldb.GetRevisionInput,
+	optFns ...func(*qldb.Options),
+) (*qldb.GetRevisionOutput, error) {
+	args := m.Called()
+	return args.Get(0).(qldb.GetRevisionOutput)
 }
 
 /*
@@ -73,6 +101,49 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 		valid, _ := TransitionHistoryIsValid(transactionHistorySet)
 		assert.False(t, valid)
 	}
+}
+
+func TestValidateRevision(t *testing.T) {
+	var (
+		mockSDKClient = new(MockSDKClient)
+		trueObject    = QLDBPaymentTransitionHistoryEntry{
+			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+				StrandID:   "strand1",
+				SequenceNo: 10,
+			},
+			Hash: "test2",
+			Data: QLDBPaymentTransitionHistoryEntryData{},
+			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+				ID:      "transitionid1",
+				Version: 10,
+				TxTime:  time.Now(),
+				TxID:    "",
+			},
+		}
+		falseObject = QLDBPaymentTransitionHistoryEntry{
+			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+				StrandID:   "strand2",
+				SequenceNo: 10,
+			},
+			Hash: "test2",
+			Data: QLDBPaymentTransitionHistoryEntryData{},
+			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+				ID:      "transitionid2",
+				Version: 10,
+				TxTime:  time.Now(),
+				TxID:    "",
+			},
+		}
+	)
+	ctx := context.Background()
+
+	mockSDKClient.On("GetDigest").Return(qldb.GetDigestOutput{})
+	mockSDKClient.On("GetRevision").Return(qldb.GetRevisionOutput{})
+	valid, _ := RevisionValidInTree(ctx, mockSDKClient, trueObject)
+	assert.True(t, valid)
+
+	valid, _ = RevisionValidInTree(ctx, mockSDKClient, falseObject)
+	assert.False(t, valid)
 }
 
 /*
@@ -119,13 +190,13 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		panic(err)
 	}
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
-		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
+		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
 		Data: QLDBPaymentTransitionHistoryEntryData{
-			Status:    0,
+			Data:      QLDBPaymentTransitionData{},
 			Signature: []byte{},
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
@@ -135,7 +206,11 @@ func TestQLDBSignedInteractions(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-	mockTransitionHistory.Data.Signature = ed25519.Sign(priv, mockTransitionHistory.BuildSigningBytes())
+	signingBytes, err := mockTransitionHistory.BuildSigningBytes()
+	if err != nil {
+		panic(err)
+	}
+	mockTransitionHistory.Data.Signature = ed25519.Sign(priv, signingBytes)
 	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
 	if err != nil {
 		panic(err)
@@ -163,7 +238,10 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	signedBytes := mockTransitionHistory.BuildSigningBytes()
+	signedBytes, err := mockTransitionHistory.BuildSigningBytes()
+	if err != nil {
+		panic(err)
+	}
 
 	// Mock read data
 	fetched, _ := GetQLDBObject(mockTxn, "")
