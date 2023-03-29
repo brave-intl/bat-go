@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brave-experiments/viproxy"
+	"github.com/brave/viproxy"
 	"github.com/mdlayher/vsock"
 )
 
