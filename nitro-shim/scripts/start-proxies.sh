@@ -19,6 +19,8 @@ elif [ "${service}" = "/star-randsrv" ]; then
     /enclave/gvproxy \
         -listen "vsock://:1024" \
         -listen "unix://${domain_socket}" &
+    # give gvproxy a second to start
+    sleep 1
     # instruct gvproxy to forward port 8443 to the enclave
     curl \
         -X POST \
