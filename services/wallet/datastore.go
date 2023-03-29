@@ -854,7 +854,8 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 		update
 			wallet_custodian
 		set
-			disconnected_at=now()
+			disconnected_at=now(),
+			updated_at=now()
 		where
 			wallet_id=$1 and
 			disconnected_at is null and
@@ -956,7 +957,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 
 	// evict any prior linkings that were not disconnected (across all custodians)
 	stmt = `
-		update wallet_custodian set disconnected_at=now() where wallet_id=$1 and disconnected_at is null
+		update wallet_custodian set disconnected_at=now(), updated_at=now() where wallet_id=$1 and disconnected_at is null
 	`
 	// perform query
 	if _, err := tx.ExecContext(ctx, stmt, cl.WalletID); err != nil {
