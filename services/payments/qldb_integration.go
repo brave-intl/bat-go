@@ -184,7 +184,6 @@ func RevisionValidInTree(
 	var (
 		hashes           [][32]byte
 		concatenatedHash [32]byte
-		startingHash     = []byte(transaction.Hash)
 	)
 
 	// This Ion unmarshal gives us the hashes as bytes. The documentation implies that
@@ -195,11 +194,11 @@ func RevisionValidInTree(
 		return false, fmt.Errorf("Failed to unmarshal revision proof: %w", err)
 	}
 
-	for _, providedHash := range hashes {
-		// If concatenatedHash is all zeroes, then we have yet to generate any
-		// hashes and need to populate the concatenatedHash with our initial value
-		if allZero(concatenatedHash) {
-			decodedHash, err := base64.StdEncoding.DecodeString(string(startingHash))
+	for i, providedHash := range hashes {
+		// During the first interation concatenatedHash hasn't been populated.
+		// Populate it with the hash from the provided transaction.
+		if i == 0 {
+			decodedHash, err := base64.StdEncoding.DecodeString(string(transaction.Hash))
 			if err != nil {
 				return false, err
 			}
@@ -224,11 +223,7 @@ func RevisionValidInTree(
 	decodedDigest, err := base64.StdEncoding.DecodeString(string(digest.Digest))
 
 	if err != nil {
-		return false, err
-	}
-
-	if len(concatenatedHash) != len(decodedDigest) {
-		return false, nil
+		return false, fmt.Errorf("Failed to base64 decode digest: %w", err)
 	}
 
 	if string(concatenatedHash[:]) == string(decodedDigest) {
@@ -285,13 +280,4 @@ func sortHashes(a, b []byte) ([][]byte, error) {
 		}
 	}
 	return [][]byte{a, b}, nil
-}
-
-func allZero(arr [32]byte) bool {
-	for _, v := range arr {
-		if v != 0 {
-			return false
-		}
-	}
-	return true
 }

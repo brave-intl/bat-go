@@ -107,6 +107,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	}
 }
 
+// Test that QLDB revisions are valid by generating a digest from a set of hashes.
 func TestValidateRevision(t *testing.T) {
 	/*
 		Hashes in below true object were calculated like so:
