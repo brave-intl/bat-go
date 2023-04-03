@@ -238,6 +238,9 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		Status: Initialized,
 	}
 	marshaledData, err := json.Marshal(testData)
+	if err != nil {
+		panic(err)
+	}
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
