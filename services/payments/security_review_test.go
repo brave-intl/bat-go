@@ -108,6 +108,20 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 }
 
 func TestValidateRevision(t *testing.T) {
+	/*
+		Hashes in below true object were calculated like so:
+			hash1 := sha256.Sum256([]byte{1})
+			hash2 := sha256.Sum256([]byte{2})
+			hash3 := sha256.Sum256([]byte{3})
+			hash4 := sha256.Sum256([]byte{4})
+			concatenated21 := append(hash2[:], hash1[:]...)
+			hash12 := sha256.Sum256(concatenated21)
+			concatenated34 := append(hash4[:], hash3[:]...)
+			hash34 := sha256.Sum256(concatenated34)
+			concatenatedDigest := append(hash34[:], hash12[:]...)
+			hashDigest := sha256.Sum256(concatenatedDigest)
+	*/
+
 	var (
 		mockSDKClient = new(MockSDKClient)
 		trueObject    = QLDBPaymentTransitionHistoryEntry{
@@ -132,7 +146,7 @@ func TestValidateRevision(t *testing.T) {
 				StrandID:   "strand2",
 				SequenceNo: 10,
 			},
-			Hash: "test2",
+			Hash: "dGVzdGVzdGVzdAo=",
 			Data: QLDBPaymentTransitionHistoryEntryData{
 				Signature: []byte{},
 				Data:      []byte{},
@@ -148,8 +162,8 @@ func TestValidateRevision(t *testing.T) {
 	ctx := context.Background()
 	tipAddress := "1234"
 	revision := "revision data"
-	testDigest := "mNZY+yhUCi7KKopZMMMJqcN/iZedSNAlpyw2p3p0UQ0="
-	testProofIonText := "[{{S/USLzRFVMU73i67jNK349FgCtYxw4Wl18ziPHeFRZo=}},{{daGrzIAO+Pkrfjsb4Wboenur2qBc+kgFvj38fA8LPik=}}]"
+	testDigest := "JotSZH8zgqzUSDG+yH1m5IetvWVZlS7q+g0H33FuupY="
+	testProofIonText := "[{{S/USLzRFVMU73i67jNK349FgCtYxw4Wl18ziPHeFRZo=}},{{fBBxpm1CZxVROypAOCfEGug6Gwg+zFOq2WFSGuHdt1w=}}]"
 
 	testDigestOutput := qldb.GetDigestOutput{
 		Digest:           []byte(testDigest),
@@ -165,13 +179,13 @@ func TestValidateRevision(t *testing.T) {
 	mockSDKClient.On("GetRevision").Return(&testRevisionOutput, nil)
 	valid, err := RevisionValidInTree(ctx, mockSDKClient, trueObject)
 	if err != nil {
-		fmt.Printf("%e", err)
+		fmt.Printf("Failed true: %e", err)
 	}
 	assert.True(t, valid)
 
 	valid, err = RevisionValidInTree(ctx, mockSDKClient, falseObject)
 	if err != nil {
-		fmt.Printf("%e", err)
+		fmt.Printf("Failed false: %e", err)
 	}
 	assert.False(t, valid)
 }

@@ -157,6 +157,8 @@ func TransitionHistoryIsValid(transactionHistory []QLDBPaymentTransitionHistoryE
 	return true, reason
 }
 
+// RevisionValidInTree verifies a document revision in QLDB using a digest and the Merkle
+// hashes to rederive the digest
 func RevisionValidInTree(
 	ctx context.Context,
 	client wrappedQldbSdkClient,
@@ -185,66 +187,51 @@ func RevisionValidInTree(
 		startingHash     = []byte(transaction.Hash)
 	)
 
+	// This Ion unmarshal gives us the hashes as bytes. The documentation implies that
+	// these are base64 encoded strings, but testing indicates that is not the case.
 	err = ion.UnmarshalString(*revision.Proof.IonText, &hashes)
-	fmt.Printf("hashes: %v\n", hashes)
 
 	if err != nil {
 		return false, fmt.Errorf("Failed to unmarshal revision proof: %w", err)
 	}
 
 	for _, providedHash := range hashes {
+		// If concatenatedHash is all zeroes, then we have yet to generate any
+		// hashes and need to populate the concatenatedHash with our initial value
 		if allZero(concatenatedHash) {
-			//fmt.Printf("nch: %v\n", concatenatedHash)
-			//fmt.Printf("sth: %v\n", startingHash)
 			decodedHash, err := base64.StdEncoding.DecodeString(string(startingHash))
-			fmt.Printf("sh: %s\n", startingHash)
-			fmt.Printf("dh: %v\n", decodedHash)
 			if err != nil {
 				return false, err
 			}
-			//fmt.Printf("dth: %v\nlen: %d\n", decodedHash, len(decodedHash))
 			copy(concatenatedHash[:], decodedHash)
-			//fmt.Printf("ach: %v\n", concatenatedHash)
 		}
+		// QLDB determines hash order by comparing the hashes byte by byte until
+		// one is greater than the other. The larger becomes the left hash and the
+		// smaller becomes the right hash for the next phase of hash generation.
+		// This is not documented, but can be inferred from the Java reference
+		// implementation here:
 		sortedHashes, err := sortHashes(providedHash[:], concatenatedHash[:])
 		if err != nil {
 			return false, err
 		}
+		// Concatenate the hashes and then hash the result to get the next hash
+		// in the tree.
 		concatenatedHash = sha256.Sum256(append(sortedHashes[0], sortedHashes[1]...))
-		fmt.Printf("ah: %v\n", append(sortedHashes[0], sortedHashes[1]...))
-		fmt.Printf("ph: %v\n", providedHash)
-		fmt.Printf("ch: %v\n", concatenatedHash[:])
-		fmt.Printf("chb64: %s\n", base64.StdEncoding.EncodeToString(concatenatedHash[:]))
-		fmt.Printf("sh: %v\n", sortedHashes)
 	}
-	fmt.Printf("digest: %v\n-----------------------\n", digest.Digest)
 
-	hash1 := sha256.Sum256([]byte{1})
-	fmt.Printf("hash1: %v\n", hash1)
-	hash2 := sha256.Sum256([]byte{2})
-	fmt.Printf("hash2: %v\n", hash2)
-	hash3 := sha256.Sum256([]byte{3})
-	//fmt.Printf("hash3: %s\n", base64.StdEncoding.EncodeToString(hash3[:]))
-	hash4 := sha256.Sum256([]byte{4})
-	//fmt.Printf("hash4: %s\n", base64.StdEncoding.EncodeToString(hash4[:]))
-	concatenated12 := append(hash1[:], hash2[:]...)
-	//fmt.Printf("concatenated12: %s\n", base64.StdEncoding.EncodeToString(concatenated12[:]))
-	hash12 := sha256.Sum256(concatenated12)
-	fmt.Printf("hash12: %v\n", hash12)
-	concatenated34 := append(hash3[:], hash4[:]...)
-	//fmt.Printf("concatenated34: %s\n", base64.StdEncoding.EncodeToString(concatenated34[:]))
-	hash34 := sha256.Sum256(concatenated34)
-	fmt.Printf("hash34: %v\n", base64.StdEncoding.EncodeToString(hash34[:]))
-	concatenatedDigest := append(hash12[:], hash34[:]...)
-	//fmt.Printf("concatenatedDigest: %s\n", base64.StdEncoding.EncodeToString(concatenatedDigest[:]))
-	hashDigest := sha256.Sum256(concatenatedDigest)
-	fmt.Printf("hashDigest: %s\n", base64.StdEncoding.EncodeToString(hashDigest[:]))
+	// The digest comes to us as a base64 encoded string. We need to decode it before
+	// using it.
+	decodedDigest, err := base64.StdEncoding.DecodeString(string(digest.Digest))
 
-	if len(concatenatedDigest) != len(digest.Digest) {
+	if err != nil {
+		return false, err
+	}
+
+	if len(concatenatedHash) != len(decodedDigest) {
 		return false, nil
 	}
 
-	if string(concatenatedDigest[:]) == string(digest.Digest) {
+	if string(concatenatedHash[:]) == string(decodedDigest) {
 		return true, nil
 	}
 
@@ -292,10 +279,8 @@ func sortHashes(a, b []byte) ([][]byte, error) {
 	}
 	for i := 0; i < len(a); i++ {
 		if a[i] > b[i] {
-			fmt.Printf("A: %v,\nB: %v\n", a, b)
 			return [][]byte{a, b}, nil
 		} else if a[i] < b[i] {
-			fmt.Printf("B: %v,\nA: %v\n", b, a)
 			return [][]byte{b, a}, nil
 		}
 	}
