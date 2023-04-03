@@ -511,7 +511,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	handler := CreateGeminiTransaction(service)
 
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: uuid.Must(uuid.FromString("150d7a21-c203-4ba4-8fdf-c5fc36aca004")),
+		ExternalTransactionID: "150d7a21-c203-4ba4-8fdf-c5fc36aca004",
 	}
 
 	body, err := json.Marshal(&createRequest)
@@ -568,7 +568,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	suite.Assert().Equal("gemini", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transaction.ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
 
 	// Check the order was updated to paid
@@ -667,7 +667,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 	suite.Require().NoError(err)
 
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: uuid.Must(uuid.FromString(tInfo.ID)),
+		ExternalTransactionID: tInfo.ID,
 	}
 
 	body, err := json.Marshal(&createRequest)
@@ -694,7 +694,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 	suite.Assert().Equal("uphold", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transaction.ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
 
 	// Check the order was updated to paid
@@ -728,7 +728,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	handler := CreateUpholdTransaction(suite.service)
 
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: uuid.Must(uuid.FromString("9d5b6a7d-795b-4f02-a91e-25eee2852ebf")),
+		ExternalTransactionID: "9d5b6a7d-795b-4f02-a91e-25eee2852ebf",
 	}
 
 	body, err := json.Marshal(&createRequest)
@@ -762,7 +762,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal("uphold", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transaction.ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transaction.OrderID)
 
 	// Check the order was updated to paid
@@ -796,7 +796,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal("uphold", transactions[0].Kind)
 	suite.Assert().Equal("completed", transactions[0].Status)
 	suite.Assert().Equal("BAT", transactions[0].Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transactions[0].ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID, transactions[0].ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transactions[0].OrderID)
 }
 
@@ -1441,7 +1441,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		Items: []OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
-				Quantity: 1,
+				Quantity: 3,
 			},
 		},
 	}
@@ -1593,6 +1593,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
+	err = service.Datastore.UpdateOrder(order.ID, OrderStatusPaid) // to update the last paid at
+	suite.Require().NoError(err)
+
 	// Create order credentials for the newly create order
 	data := CreateOrderCredsRequest{
 		ItemID: order.Items[0].ID,
@@ -1696,7 +1699,7 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 		Items: []OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
-				Quantity: 1,
+				Quantity: 3,
 			},
 		},
 	}
