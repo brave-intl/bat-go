@@ -36,7 +36,7 @@ require (
 	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.8.1
 	github.com/stripe/stripe-go/v72 v72.122.0
-	golang.org/x/crypto v0.1.0
+	golang.org/x/crypto v0.6.0
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.6.0
 )
