@@ -208,7 +208,7 @@ func RevisionValidInTree(
 		// one is greater than the other. The larger becomes the left hash and the
 		// smaller becomes the right hash for the next phase of hash generation.
 		// This is not documented, but can be inferred from the Java reference
-		// implementation here:
+		// implementation here: https://github.com/aws-samples/amazon-qldb-dmv-sample-java/blob/master/src/main/java/software/amazon/qldb/tutorial/Verifier.java#L60
 		sortedHashes, err := sortHashes(providedHash[:], concatenatedHash[:])
 		if err != nil {
 			return false, err
