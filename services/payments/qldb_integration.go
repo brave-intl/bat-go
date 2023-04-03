@@ -144,9 +144,8 @@ func TransitionHistoryIsValid(transactionHistory []QLDBPaymentTransitionHistoryE
 		if i == 0 {
 			if transactionData.Status != 0 {
 				return false, errors.New("Initial state is not valid")
-			} else {
-				continue
 			}
+			continue
 		}
 		var previousTransitionData QLDBPaymentTransitionData
 		json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
