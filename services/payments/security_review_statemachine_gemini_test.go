@@ -64,41 +64,42 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
+	currentVersion := 0
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.
-	newState, _ := DriveGeminiTransaction(ctx, QLDBPaymentTransitionHistoryEntry{}, geminiBulkPayload, geminiSucceedTransaction)
+	newState, _ := DriveGeminiTransaction(ctx, QLDBPaymentTransitionData{}, currentVersion, geminiBulkPayload, geminiSucceedTransaction)
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := QLDBPaymentTransitionHistoryEntry{}
+	currentState := QLDBPaymentTransitionData{}
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Data.Status = 1
-	currentState.Metadata.Version = 1
+	currentState.Status = 1
+	currentVersion = 1
 
 	// Should transition transaction into the Authorized state
-	newState, _ = DriveGeminiTransaction(ctx, currentState, geminiBulkPayload, geminiSucceedTransaction)
+	newState, _ = DriveGeminiTransaction(ctx, currentState, currentVersion, geminiBulkPayload, geminiSucceedTransaction)
 	assert.Equal(t, Authorized, newState)
 
-	currentState.Data.Status = 2
+	currentState.Status = 2
 	// Should transition transaction into the Pending state
-	newState, _ = DriveGeminiTransaction(ctx, currentState, geminiBulkPayload, geminiSucceedTransaction)
+	newState, _ = DriveGeminiTransaction(ctx, currentState, currentVersion, geminiBulkPayload, geminiSucceedTransaction)
 	assert.Equal(t, Pending, newState)
 
-	currentState.Data.Status = 3
+	currentState.Status = 3
 	// Should transition transaction into the Paid state
-	newState, _ = DriveGeminiTransaction(ctx, currentState, geminiBulkPayload, geminiSucceedTransaction)
+	newState, _ = DriveGeminiTransaction(ctx, currentState, currentVersion, geminiBulkPayload, geminiSucceedTransaction)
 	assert.Equal(t, Paid, newState)
 
-	currentState.Data.Status = 4
+	currentState.Status = 4
 	// Should transition transaction into the Authorized state when the payment fails
-	newState, _ = DriveGeminiTransaction(ctx, currentState, geminiBulkPayload, geminiFailTransaction)
+	newState, _ = DriveGeminiTransaction(ctx, currentState, currentVersion, geminiBulkPayload, geminiFailTransaction)
 	assert.Equal(t, Paid, newState)
 
-	currentState.Data.Status = 5
+	currentState.Status = 5
 	// Should transition transaction into the Authorized state when the payment fails
-	newState, _ = DriveGeminiTransaction(ctx, currentState, geminiBulkPayload, geminiFailTransaction)
+	newState, _ = DriveGeminiTransaction(ctx, currentState, currentVersion, geminiBulkPayload, geminiFailTransaction)
 	assert.Equal(t, Failed, newState)
 }
 
@@ -136,16 +137,16 @@ func TestGeminiStateMachine500FailureToPendingTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := QLDBPaymentTransitionHistoryEntry{}
+	currentState := QLDBPaymentTransitionData{}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Data.Status = 2
+	currentState.Status = 2
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the mean time.
-	currentState.Metadata.Version = 500
+	currentVersion := 500
 
 	// Should transition transaction into the Paid state
-	newState, _ := DriveGeminiTransaction(ctx, currentState, geminiBulkPayload, failTransaction)
+	newState, _ := DriveGeminiTransaction(ctx, currentState, currentVersion, geminiBulkPayload, failTransaction)
 	assert.Equal(t, Authorized, newState)
 }
 
@@ -185,15 +186,15 @@ func TestGeminiStateMachine404FailureToPaidTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := QLDBPaymentTransitionHistoryEntry{}
+	currentState := QLDBPaymentTransitionData{}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Data.Status = 3
+	currentState.Status = 3
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the mean time.
-	currentState.Metadata.Version = 404
+	currentVersion := 404
 
 	// Should transition transaction into the Paid state
-	newState, _ := DriveGeminiTransaction(ctx, currentState, geminiBulkPayload, failTransaction)
+	newState, _ := DriveGeminiTransaction(ctx, currentState, currentVersion, geminiBulkPayload, failTransaction)
 	assert.Equal(t, Pending, newState)
 }

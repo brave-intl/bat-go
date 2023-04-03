@@ -4,12 +4,16 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
+	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/awslabs/amazon-qldb-driver-go/qldbdriver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -64,9 +68,9 @@ func (m *mockResult) Next(txn wrappedQldbTxnAPI) bool {
 	return args.Get(0).(bool)
 }
 
-func (m *MockSDKClient) New() wrappedQldbSdkClient {
+func (m *MockSDKClient) New() *wrappedQldbSdkClient {
 	args := m.Called()
-	return args.Get(0).(wrappedQldbSdkClient)
+	return args.Get(0).(*wrappedQldbSdkClient)
 }
 func (m *MockSDKClient) GetDigest(
 	ctx context.Context,
@@ -74,7 +78,7 @@ func (m *MockSDKClient) GetDigest(
 	optFns ...func(*qldb.Options),
 ) (*qldb.GetDigestOutput, error) {
 	args := m.Called()
-	return args.Get(0).(qldb.GetDigestOutput)
+	return args.Get(0).(*qldb.GetDigestOutput), args.Error(1)
 }
 
 func (m *MockSDKClient) GetRevision(
@@ -83,7 +87,7 @@ func (m *MockSDKClient) GetRevision(
 	optFns ...func(*qldb.Options),
 ) (*qldb.GetRevisionOutput, error) {
 	args := m.Called()
-	return args.Get(0).(qldb.GetRevisionOutput)
+	return args.Get(0).(*qldb.GetRevisionOutput), args.Error(1)
 }
 
 /*
@@ -111,8 +115,11 @@ func TestValidateRevision(t *testing.T) {
 				StrandID:   "strand1",
 				SequenceNo: 10,
 			},
-			Hash: "test2",
-			Data: QLDBPaymentTransitionHistoryEntryData{},
+			Hash: "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY=",
+			Data: QLDBPaymentTransitionHistoryEntryData{
+				Signature: []byte{},
+				Data:      []byte{},
+			},
 			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid1",
 				Version: 10,
@@ -126,7 +133,10 @@ func TestValidateRevision(t *testing.T) {
 				SequenceNo: 10,
 			},
 			Hash: "test2",
-			Data: QLDBPaymentTransitionHistoryEntryData{},
+			Data: QLDBPaymentTransitionHistoryEntryData{
+				Signature: []byte{},
+				Data:      []byte{},
+			},
 			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid2",
 				Version: 10,
@@ -136,13 +146,33 @@ func TestValidateRevision(t *testing.T) {
 		}
 	)
 	ctx := context.Background()
+	tipAddress := "1234"
+	revision := "revision data"
+	testDigest := "mNZY+yhUCi7KKopZMMMJqcN/iZedSNAlpyw2p3p0UQ0="
+	testProofIonText := "[{{S/USLzRFVMU73i67jNK349FgCtYxw4Wl18ziPHeFRZo=}},{{daGrzIAO+Pkrfjsb4Wboenur2qBc+kgFvj38fA8LPik=}}]"
 
-	mockSDKClient.On("GetDigest").Return(qldb.GetDigestOutput{})
-	mockSDKClient.On("GetRevision").Return(qldb.GetRevisionOutput{})
-	valid, _ := RevisionValidInTree(ctx, mockSDKClient, trueObject)
+	testDigestOutput := qldb.GetDigestOutput{
+		Digest:           []byte(testDigest),
+		DigestTipAddress: &qldbTypes.ValueHolder{IonText: &tipAddress},
+		ResultMetadata:   middleware.Metadata{},
+	}
+	testRevisionOutput := qldb.GetRevisionOutput{
+		Revision:       &qldbTypes.ValueHolder{IonText: &revision},
+		Proof:          &qldbTypes.ValueHolder{IonText: &testProofIonText},
+		ResultMetadata: middleware.Metadata{},
+	}
+	mockSDKClient.On("GetDigest").Return(&testDigestOutput, nil)
+	mockSDKClient.On("GetRevision").Return(&testRevisionOutput, nil)
+	valid, err := RevisionValidInTree(ctx, mockSDKClient, trueObject)
+	if err != nil {
+		fmt.Printf("%e", err)
+	}
 	assert.True(t, valid)
 
-	valid, _ = RevisionValidInTree(ctx, mockSDKClient, falseObject)
+	valid, err = RevisionValidInTree(ctx, mockSDKClient, falseObject)
+	if err != nil {
+		fmt.Printf("%e", err)
+	}
 	assert.False(t, valid)
 }
 
@@ -189,6 +219,10 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+	testData := QLDBPaymentTransitionData{
+		Status: Initialized,
+	}
+	marshaledData, err := json.Marshal(testData)
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
@@ -196,7 +230,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		},
 		Hash: "test",
 		Data: QLDBPaymentTransitionHistoryEntryData{
-			Data:      QLDBPaymentTransitionData{},
+			Data:      marshaledData,
 			Signature: []byte{},
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
@@ -223,7 +257,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockDriver := new(MockDriver)
 	mockTxn.On(
 		"Execute",
-		"SELECT * FROM history(PaymentTransitions) AS h WHERE h.metadata.id = 'SOME_ID'",
+		"SELECT * FROM history(PaymentTransitions) AS h WHERE h.metadata.id = ?",
 		mock.Anything,
 	).Return(mockRes, nil)
 	mockTxn.On(

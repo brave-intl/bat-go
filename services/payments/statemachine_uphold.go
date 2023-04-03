@@ -11,25 +11,26 @@ import (
 // DriveUpholdTransaction returns a new, validly progressed transaction state.
 func DriveUpholdTransaction(
 	ctx context.Context,
-	currentTransactionState QLDBPaymentTransitionHistoryEntry,
+	currentTransactionState QLDBPaymentTransitionData,
+	currentTransactionVersion int,
 	wallet uphold.Wallet,
 	transaction custodian.Transaction,
 ) (QLDBPaymentTransitionState, error) {
-	switch currentTransactionState.Data.Status {
+	switch currentTransactionState.Status {
 	case Initialized:
-		if currentTransactionState.Metadata.Version == 0 {
+		if currentTransactionVersion == 0 {
 			return Initialized, nil
 		}
 		return Prepared, nil
 	case Prepared:
 		return Authorized, nil
 	case Authorized:
-		if currentTransactionState.Metadata.Version == 500 {
+		if currentTransactionVersion == 500 {
 			return Authorized, nil
 		}
 		return Pending, nil
 	case Pending:
-		if currentTransactionState.Metadata.Version == 404 {
+		if currentTransactionVersion == 404 {
 			return Pending, nil
 		}
 		return Paid, nil

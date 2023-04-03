@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ type wrappedQldbDriverAPI interface {
 }
 
 type wrappedQldbSdkClient interface {
-	New() qldb.Client
+	New() *wrappedQldbSdkClient
 	GetDigest(
 		ctx context.Context,
 		params *qldb.GetDigestInput,
@@ -72,7 +73,7 @@ type QLDBPaymentTransitionData struct {
 // QLDBPaymentTransitionHistoryEntryData defines data for QLDBPaymentTransitionHistoryEntry
 type QLDBPaymentTransitionHistoryEntryData struct {
 	Signature []byte `ion:"signature"`
-	Data      []byte `ion:data`
+	Data      []byte `ion:"data"`
 }
 
 // QLDBPaymentTransitionHistoryEntryMetadata defines metadata for QLDBPaymentTransitionHistoryEntry
@@ -94,9 +95,9 @@ type QLDBPaymentTransitionHistoryEntry struct {
 // BuildSigningBytes returns the bytes that should be signed over when creating a signature
 // for a QLDBPaymentTransitionHistoryEntry.
 func (e QLDBPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
-	marshaled, err := ion.MarshalBinary(e)
+	marshaled, err := ion.MarshalBinary(e.Data.Data)
 	if err != nil {
-		return nil, fmt.Errorf("Ion unmarshal failed: %w", err)
+		return nil, fmt.Errorf("Ion marshal failed: %w", err)
 	}
 
 	return marshaled, nil
@@ -138,7 +139,7 @@ func TransitionHistoryIsValid(transactionHistory []QLDBPaymentTransitionHistoryE
 	var reason error
 	for i, transaction := range transactionHistory {
 		var transactionData QLDBPaymentTransitionData
-		json.Unmarshal(transaction.Data.Data, transactionData)
+		json.Unmarshal(transaction.Data.Data, &transactionData)
 		// Transitions must always start at 0
 		if i == 0 {
 			if transactionData.Status != 0 {
@@ -148,7 +149,7 @@ func TransitionHistoryIsValid(transactionHistory []QLDBPaymentTransitionHistoryE
 			}
 		}
 		var previousTransitionData QLDBPaymentTransitionData
-		json.Unmarshal(transactionHistory[i-1].Data.Data, previousTransitionData)
+		json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
 		if !slices.Contains(Transitions[previousTransitionData.Status], transactionData.Status) {
 			return false, errors.New("Invalid transition")
 		}
@@ -163,37 +164,90 @@ func RevisionValidInTree(
 ) (bool, error) {
 	ledgerName := "LEDGER_NAME"
 	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &ledgerName})
+
 	if err != nil {
 		return false, fmt.Errorf("Failed to get digest: %w", err)
 	}
+
 	revision, err := client.GetRevision(ctx, &qldb.GetRevisionInput{
 		BlockAddress:     transaction.BlockAddress.ValueHolder(),
 		DocumentId:       &transaction.Metadata.ID,
 		Name:             &ledgerName,
 		DigestTipAddress: digest.DigestTipAddress,
 	})
+
 	if err != nil {
 		return false, fmt.Errorf("Failed to get revision: %w", err)
 	}
 	var (
-		hashes      [][]byte
-		currentHash [32]byte
+		hashes           [][32]byte
+		concatenatedHash [32]byte
+		startingHash     = []byte(transaction.Hash)
 	)
-	err = ion.Unmarshal([]byte(*revision.Proof.IonText), &hashes)
+
+	err = ion.UnmarshalString(*revision.Proof.IonText, &hashes)
+	fmt.Printf("hashes: %v\n", hashes)
+
 	if err != nil {
 		return false, fmt.Errorf("Failed to unmarshal revision proof: %w", err)
 	}
-	for hash := range hashes {
-		hashable := []byte(fmt.Sprintf("%s", hash))
-		// @TODO We need to hash two values together here, not just each single hash
-		currentHash = sha256.Sum256(hashable)
+
+	for _, providedHash := range hashes {
+		if allZero(concatenatedHash) {
+			//fmt.Printf("nch: %v\n", concatenatedHash)
+			//fmt.Printf("sth: %v\n", startingHash)
+			decodedHash, err := base64.StdEncoding.DecodeString(string(startingHash))
+			fmt.Printf("sh: %s\n", startingHash)
+			fmt.Printf("dh: %v\n", decodedHash)
+			if err != nil {
+				return false, err
+			}
+			//fmt.Printf("dth: %v\nlen: %d\n", decodedHash, len(decodedHash))
+			copy(concatenatedHash[:], decodedHash)
+			//fmt.Printf("ach: %v\n", concatenatedHash)
+		}
+		sortedHashes, err := sortHashes(providedHash[:], concatenatedHash[:])
+		if err != nil {
+			return false, err
+		}
+		concatenatedHash = sha256.Sum256(append(sortedHashes[0], sortedHashes[1]...))
+		fmt.Printf("ah: %v\n", append(sortedHashes[0], sortedHashes[1]...))
+		fmt.Printf("ph: %v\n", providedHash)
+		fmt.Printf("ch: %v\n", concatenatedHash[:])
+		fmt.Printf("chb64: %s\n", base64.StdEncoding.EncodeToString(concatenatedHash[:]))
+		fmt.Printf("sh: %v\n", sortedHashes)
 	}
-	if len(currentHash) != len(digest.Digest) {
+	fmt.Printf("digest: %v\n-----------------------\n", digest.Digest)
+
+	hash1 := sha256.Sum256([]byte{1})
+	fmt.Printf("hash1: %v\n", hash1)
+	hash2 := sha256.Sum256([]byte{2})
+	fmt.Printf("hash2: %v\n", hash2)
+	hash3 := sha256.Sum256([]byte{3})
+	//fmt.Printf("hash3: %s\n", base64.StdEncoding.EncodeToString(hash3[:]))
+	hash4 := sha256.Sum256([]byte{4})
+	//fmt.Printf("hash4: %s\n", base64.StdEncoding.EncodeToString(hash4[:]))
+	concatenated12 := append(hash1[:], hash2[:]...)
+	//fmt.Printf("concatenated12: %s\n", base64.StdEncoding.EncodeToString(concatenated12[:]))
+	hash12 := sha256.Sum256(concatenated12)
+	fmt.Printf("hash12: %v\n", hash12)
+	concatenated34 := append(hash3[:], hash4[:]...)
+	//fmt.Printf("concatenated34: %s\n", base64.StdEncoding.EncodeToString(concatenated34[:]))
+	hash34 := sha256.Sum256(concatenated34)
+	fmt.Printf("hash34: %v\n", base64.StdEncoding.EncodeToString(hash34[:]))
+	concatenatedDigest := append(hash12[:], hash34[:]...)
+	//fmt.Printf("concatenatedDigest: %s\n", base64.StdEncoding.EncodeToString(concatenatedDigest[:]))
+	hashDigest := sha256.Sum256(concatenatedDigest)
+	fmt.Printf("hashDigest: %s\n", base64.StdEncoding.EncodeToString(hashDigest[:]))
+
+	if len(concatenatedDigest) != len(digest.Digest) {
 		return false, nil
 	}
-	if string(currentHash[:]) == string(digest.Digest) {
+
+	if string(concatenatedDigest[:]) == string(digest.Digest) {
 		return true, nil
 	}
+
 	return false, nil
 }
 
@@ -230,4 +284,29 @@ func WriteQLDBObject(
 		return []byte{}, fmt.Errorf("QLDB execution failed: %w", err)
 	}
 	return dataSignature, nil
+}
+
+func sortHashes(a, b []byte) ([][]byte, error) {
+	if len(a) != len(b) {
+		return nil, errors.New("provided hashes do not have matching length")
+	}
+	for i := 0; i < len(a); i++ {
+		if a[i] > b[i] {
+			fmt.Printf("A: %v,\nB: %v\n", a, b)
+			return [][]byte{a, b}, nil
+		} else if a[i] < b[i] {
+			fmt.Printf("B: %v,\nA: %v\n", b, a)
+			return [][]byte{b, a}, nil
+		}
+	}
+	return [][]byte{a, b}, nil
+}
+
+func allZero(arr [32]byte) bool {
+	for _, v := range arr {
+		if v != 0 {
+			return false
+		}
+	}
+	return true
 }
