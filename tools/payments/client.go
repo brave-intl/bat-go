@@ -36,8 +36,8 @@ var (
 	prepareStream = preparePrefix + payout
 	submitStream  = preparePrefix + payout
 
-	prepareConfigStream = preparePrefix + "-configure"
-	submitConfigStream  = submitPrefix + "-configure"
+	prepareConfigStream = preparePrefix + "configure"
+	submitConfigStream  = submitPrefix + "configure"
 )
 
 // redisClient is an implementation of settlement client using clustered redis client

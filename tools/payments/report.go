@@ -40,6 +40,8 @@ func ReadReport(report any, reader io.Reader) error {
 	return nil
 }
 
+// rootAWSNitroCert is the root certificate for the nitro enclaves in aws,
+// retrieved from https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
 var rootAWSNitroCert = `-----BEGIN CERTIFICATE-----
 MIICETCCAZagAwIBAgIRAPkxdWgbkK/hHUbMtOTn+FYwCgYIKoZIzj0EAwMwSTEL
 MAkGA1UEBhMCVVMxDzANBgNVBAoMBkFtYXpvbjEMMAoGA1UECwwDQVdTMRswGQYD

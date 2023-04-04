@@ -2,11 +2,11 @@
 Configure encrypts a configuration file for consumption by the payments service, the output of which
 is then uploaded to s3 and consumed by the payments service.
 
-Create takes as parameters the public key output from the create command, and a configuration file.
+Configure takes as parameters the public key output from the configure command, and a configuration file.
 
 Usage:
 
-create [flags] [args]
+configure [flags] file [files]
 
 The flags are:
 
