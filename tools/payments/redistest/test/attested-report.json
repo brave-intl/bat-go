@@ -1,0 +1,27 @@
+[
+	{
+		"to":"a6a5ff0c-f45e-40ac-8ed3-b2bc32454066",
+		"amount":"3.27000000000003",
+		"idempotencyKey":"1d691291-f376-5591-8ab8-43db145d0e5e",
+		"custodian":"uphold",
+		"documentId":"1234",
+        "attestationDocument": "" // todo - generate real attestation document for test
+	},
+	{
+		"to":"002399e3-6eaa-47ce-bf92-7f531bb6a971",
+		"amount":"5.779826652242246656",
+		"idempotencyKey":"11705191-50e4-5401-ab9b-9fd8d88d934a",
+		"custodian":"gemini",
+		"documentId":"2345",
+        "attestationDocument": "" // todo - generate real attestation document for test
+	},
+	{
+		"to":"003694c1-def6-48c4-8a45-ca8c2fce50f3",
+		"amount":"1.971713439895352832",
+		"idempotencyKey":"431bd316-91e7-519c-9588-7fe6ff7408bb",
+		"custodian":"bitflyer",
+		"documentId":"3456",
+        "attestationDocument": "" // todo - generate real attestation document for test
+	}
+]
+
