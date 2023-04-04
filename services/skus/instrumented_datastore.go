@@ -421,8 +421,8 @@ func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrderItem(ctx co
 	return _d.base.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
 }
 
-// GetSigningOrderRequestOutboxByRequestID implements Datastore
-func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (sp1 *SigningOrderRequestOutbox, err error) {
+// GetSigningOrderRequestOutboxByRequestIDTx implements Datastore
+func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (sp1 *SigningOrderRequestOutbox, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -430,9 +430,9 @@ func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByRequestID(ctx co
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningOrderRequestOutboxByRequestID", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningOrderRequestOutboxByRequestIDTx", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
+	return _d.base.GetSigningOrderRequestOutboxByRequestIDTx(ctx, tx, requestID)
 }
 
 // GetSumForTransactions implements Datastore

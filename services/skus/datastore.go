@@ -80,7 +80,7 @@ type Datastore interface {
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
-	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
+	GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -1212,6 +1212,7 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sql
 		return fmt.Errorf("error marshaling signed creds: %w", err)
 	}
 
+	// continue to insert the credential
 	query := `insert into time_limited_v2_order_creds(item_id, order_id, issuer_id, blinded_creds,
                         signed_creds, batch_proof, public_key, valid_to, valid_from, request_id)
                     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) on conflict do nothing`
@@ -1266,6 +1267,19 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context,
 	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
 		`select request_id, order_id, item_id, completed_at, message_data 
 				from signing_order_request_outbox where request_id = $1`, requestID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
+	}
+	return &signingRequestOutbox, nil
+}
+
+// GetSigningOrderRequestOutboxByRequestIDTx retrieves the SigningOrderRequestOutbox by requestID.
+// An error is returned if the result set is empty.
+func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
+	var signingRequestOutbox SigningOrderRequestOutbox
+	err := tx.GetContext(ctx, &signingRequestOutbox,
+		`select request_id, order_id, item_id, completed_at, message_data 
+				from signing_order_request_outbox where request_id = $1 for update`, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
@@ -1465,6 +1479,15 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 			if err != nil {
 				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w",
 					metadata.OrderID, metadata.ItemID, err)
+			}
+
+			o, err := pg.GetOrder(metadata.OrderID)
+			if err != nil {
+				return fmt.Errorf("failed to get the order %s: %w", metadata.OrderID, err)
+			}
+			if o.ExpiresAt == nil || validFrom.After(*o.ExpiresAt) {
+				// filter out creds after the order expires
+				continue
 			}
 
 			cred := TimeAwareSubIssuedCreds{
