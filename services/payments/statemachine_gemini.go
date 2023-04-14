@@ -1,51 +1,56 @@
 package payments
 
-import (
-	"context"
-	"errors"
+// GeminiMachine is an implementation of TxStateMachine for uphold's use-case
+type GeminiMachine struct {
+	// client wallet gemini.BulkPayoutPayload
+	// transaction custodian.Transaction
+	version int
+}
 
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
-	"github.com/brave-intl/bat-go/libs/custodian"
-)
+// SetVersion assigns the version field in the GeminiMachine to the specified int
+func (gm *GeminiMachine) SetVersion(version int) {
+	gm.version = version
+}
 
-// DriveGeminiTransaction returns a new, validly progressed transaction state.
-func DriveGeminiTransaction(
-	ctx context.Context,
-	currentTransactionState QLDBPaymentTransitionData,
-	currentTransactionVersion int,
-	wallet gemini.BulkPayoutPayload,
-	transaction custodian.Transaction,
-) (QLDBPaymentTransitionState, error) {
-	switch currentTransactionState.Status {
-	case Initialized:
-		if currentTransactionVersion == 0 {
-			return Initialized, nil
-		}
-		return Prepared, nil
-	case Prepared:
-		return Authorized, nil
-	case Authorized:
-		if currentTransactionVersion == 500 {
-			return Authorized, nil
-		}
-		return Pending, nil
-	case Pending:
-		if currentTransactionVersion == 404 {
-			return Pending, nil
-		}
-		return Paid, nil
-	case Paid:
-		return Paid, nil
-	case Failed:
-		return Failed, nil
-	default:
-		return Initialized, errors.New("Invalid transition state")
+// Initialized implements TxStateMachine for uphold machine
+func (gm *GeminiMachine) Initialized() (QLDBPaymentTransitionState, error) {
+	if gm.version == 0 {
+		return Initialized, nil
 	}
-	/*
-		Get transaction status
-		Fork based on transaction status
-		Use contextual data to progress
-		Save new state after progression
-	*/
-	// geminiWallet.SubmitTransaction()
+	return Prepared, nil
+}
+
+// Prepared implements TxStateMachine for uphold machine
+func (gm *GeminiMachine) Prepared() (QLDBPaymentTransitionState, error) {
+	// if failure, do failed branch
+	if false {
+		return Failed, nil
+	}
+	return Authorized, nil
+}
+
+// Authorized implements TxStateMachine for uphold machine
+func (gm *GeminiMachine) Authorized() (QLDBPaymentTransitionState, error) {
+	if gm.version == 500 {
+		return Authorized, nil
+	}
+	return Pending, nil
+}
+
+// Pending implements TxStateMachine for uphold machine
+func (gm *GeminiMachine) Pending() (QLDBPaymentTransitionState, error) {
+	if gm.version == 404 {
+		return Pending, nil
+	}
+	return Paid, nil
+}
+
+// Paid implements TxStateMachine for uphold machine
+func (gm *GeminiMachine) Paid() (QLDBPaymentTransitionState, error) {
+	return Paid, nil
+}
+
+// Failed implements TxStateMachine for uphold machine
+func (gm *GeminiMachine) Failed() (QLDBPaymentTransitionState, error) {
+	return Failed, nil
 }

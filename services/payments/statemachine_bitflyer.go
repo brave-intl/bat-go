@@ -1,49 +1,56 @@
 package payments
 
-import (
-	"context"
-	"errors"
+// Bitflyer is an implementation of TxStateMachine for uphold's use-case
+type BitflyerMachine struct {
+	// client wallet.Bitflyer
+	// transactionSet bitflyer.WithdrawToDepositIDBulkPayload
+	version int
+}
 
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-)
+// SetVersion assigns the version field in the BitflyerMachine to the specified int
+func (bm *BitflyerMachine) SetVersion(version int) {
+	bm.version = version
+}
 
-// DriveBitflyerTransaction returns a new, validly progressed transaction state.
-func DriveBitflyerTransaction(
-	ctx context.Context,
-	currentTransactionState QLDBPaymentTransitionData,
-	currentTransactionVersion int,
-	transactionSet bitflyer.WithdrawToDepositIDBulkPayload,
-) (QLDBPaymentTransitionState, error) {
-	switch currentTransactionState.Status {
-	case Initialized:
-		if currentTransactionVersion == 0 {
-			return Initialized, nil
-		}
-		return Prepared, nil
-	case Prepared:
-		return Authorized, nil
-	case Authorized:
-		if currentTransactionVersion == 500 {
-			return Authorized, nil
-		}
-		return Pending, nil
-	case Pending:
-		if currentTransactionVersion == 404 {
-			return Pending, nil
-		}
-		return Paid, nil
-	case Paid:
-		return Paid, nil
-	case Failed:
-		return Failed, nil
-	default:
-		return Initialized, errors.New("Invalid transition state")
+// Initialized implements TxStateMachine for uphold machine
+func (bm *BitflyerMachine) Initialized() (QLDBPaymentTransitionState, error) {
+	if bm.version == 0 {
+		return Initialized, nil
 	}
-	/*
-		Get transaction status
-		Fork based on transaction status
-		Use contextual data to progress
-		Save new state after progression
-	*/
-	// bitflyerWallet.SubmitTransaction()
+	return Prepared, nil
+}
+
+// Prepared implements TxStateMachine for uphold machine
+func (bm *BitflyerMachine) Prepared() (QLDBPaymentTransitionState, error) {
+	// if failure, do failed branch
+	if false {
+		return Failed, nil
+	}
+	return Authorized, nil
+}
+
+// Authorized implements TxStateMachine for uphold machine
+func (bm *BitflyerMachine) Authorized() (QLDBPaymentTransitionState, error) {
+	if bm.version == 500 {
+		return Authorized, nil
+	}
+	return Pending, nil
+}
+
+// Pending implements TxStateMachine for uphold machine
+func (bm *BitflyerMachine) Pending() (QLDBPaymentTransitionState, error) {
+	if bm.version == 404 {
+		return Pending, nil
+	}
+	return Paid, nil
+}
+
+// Paid implements TxStateMachine for uphold machine
+func (bm *BitflyerMachine) Paid() (QLDBPaymentTransitionState, error) {
+	return Paid, nil
+}
+
+// Failed implements TxStateMachine for uphold machine
+func (bm *BitflyerMachine) Failed() (QLDBPaymentTransitionState, error) {
+	return Failed, nil
 }

@@ -68,33 +68,34 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	ctx := context.Background()
 	currentVersion := 0
+	bitflyerStateMachine := BitflyerMachine{}
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.
-	newState, _ := DriveBitflyerTransaction(ctx, QLDBPaymentTransitionData{}, currentVersion, bitflyerBulkPayload)
+	newState, _ := Drive(ctx, &bitflyerStateMachine, Initialized, currentVersion)
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := QLDBPaymentTransitionData{}
+	currentState := Initialized
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Status = 1
+	currentState = Prepared
 	currentVersion = 1
 
-	currentState.Status = 2
-	newState, _ = DriveBitflyerTransaction(ctx, currentState, currentVersion, bitflyerBulkPayload)
+	currentState = Authorized
+	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Pending, newState)
 
-	currentState.Status = 3
-	newState, _ = DriveBitflyerTransaction(ctx, currentState, currentVersion, bitflyerBulkPayload)
+	currentState = Pending
+	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Paid, newState)
 
-	currentState.Status = 4
-	newState, _ = DriveBitflyerTransaction(ctx, currentState, currentVersion, bitflyerBulkPayload)
+	currentState = Paid
+	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Paid, newState)
 
-	currentState.Status = 5
-	newState, _ = DriveBitflyerTransaction(ctx, currentState, currentVersion, bitflyerBulkPayload)
+	currentState = Failed
+	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Failed, newState)
 }
 
@@ -123,15 +124,15 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := QLDBPaymentTransitionData{}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Status = 2
+	currentState := Prepared
+	bitflyerStateMachine := BitflyerMachine{}
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the mean time.
 	currentVersion := 500
 
-	newState, _ := DriveBitflyerTransaction(ctx, currentState, currentVersion, bitflyerBulkPayload)
+	newState, _ := Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Authorized, newState)
 }
 
@@ -159,14 +160,14 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := QLDBPaymentTransitionData{}
+	currentState := Pending
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Status = 3
+	bitflyerStateMachine := BitflyerMachine{}
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the mean time.
 	currentVersion := 404
 
-	newState, _ := DriveBitflyerTransaction(ctx, currentState, currentVersion, bitflyerBulkPayload)
+	newState, _ := Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Pending, newState)
 }

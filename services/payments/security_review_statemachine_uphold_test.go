@@ -74,31 +74,32 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 
 	ctx := context.Background()
 	currentVersion := 0
+	upholdStateMachine := UpholdMachine{}
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.
-	newState, _ := DriveUpholdTransaction(ctx, QLDBPaymentTransitionData{}, currentVersion, upholdWallet, geminiSucceedTransaction)
+	newState, _ := Drive(ctx, &upholdStateMachine, Initialized, currentVersion)
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := QLDBPaymentTransitionData{}
+	currentState := Initialized
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Status = 1
+	currentState = Prepared
 	currentVersion = 1
 
 	// Should transition transaction into the Authorized state
-	newState, _ = DriveUpholdTransaction(ctx, currentState, currentVersion, upholdWallet, geminiSucceedTransaction)
+	newState, _ = Drive(ctx, &upholdStateMachine, currentState, currentVersion)
 	assert.Equal(t, Authorized, newState)
 
-	currentState.Status = 2
+	currentState = Authorized
 	// Should transition transaction into the Pending state
-	newState, _ = DriveUpholdTransaction(ctx, currentState, currentVersion, upholdWallet, geminiSucceedTransaction)
+	newState, _ = Drive(ctx, &upholdStateMachine, currentState, currentVersion)
 	assert.Equal(t, Pending, newState)
 
-	currentState.Status = 3
+	currentState = Pending
 	// Should transition transaction into the Paid state
-	newState, _ = DriveUpholdTransaction(ctx, currentState, currentVersion, upholdWallet, geminiSucceedTransaction)
+	newState, _ = Drive(ctx, &upholdStateMachine, currentState, currentVersion)
 	assert.Equal(t, Paid, newState)
 }
 
@@ -128,16 +129,16 @@ func TestUpholdStateMachine500FailureToPendingTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := QLDBPaymentTransitionData{}
+	currentState := Authorized
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Status = 2
+	upholdStateMachine := UpholdMachine{}
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the mean time.
 	currentVersion := 500
 
 	// Should fail to transition transaction into the Pending state
-	newState, _ := DriveUpholdTransaction(ctx, currentState, currentVersion, upholdWallet, geminiFailTransaction)
+	newState, _ := Drive(ctx, &upholdStateMachine, currentState, currentVersion)
 	assert.Equal(t, Authorized, newState)
 }
 
@@ -168,15 +169,15 @@ func TestUpholdStateMachine404FailureToPaidTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := QLDBPaymentTransitionData{}
+	currentState := Pending
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState.Status = 3
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the mean time.
 	currentVersion := 404
+	upholdStateMachine := UpholdMachine{}
 
 	// Should transition transaction into the Pending state
-	newState, _ := DriveUpholdTransaction(ctx, currentState, currentVersion, upholdWallet, geminiFailTransaction)
+	newState, _ := Drive(ctx, &upholdStateMachine, currentState, currentVersion)
 	assert.Equal(t, Pending, newState)
 }

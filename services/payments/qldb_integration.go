@@ -63,17 +63,17 @@ type QLDBPaymentTransitionHistoryEntryHash string
 // QLDBPaymentTransitionHistoryEntrySignature defines signature for QLDBPaymentTransitionHistoryEntry
 type QLDBPaymentTransitionHistoryEntrySignature []byte
 
+// QLDBPaymentTransitionHistoryEntryData defines data for QLDBPaymentTransitionHistoryEntry
+type QLDBPaymentTransitionHistoryEntryData struct {
+	Signature []byte `ion:"signature"`
+	Data      []byte `ion:"data"`
+}
+
 // QLDBPaymentTransitionData represents the data for a transaction. It is stored in QLDB
 // in a serialized format and needs to be separately deserialized from the QLDB ion
 // deserialization.
 type QLDBPaymentTransitionData struct {
 	Status QLDBPaymentTransitionState `ion:"status"`
-}
-
-// QLDBPaymentTransitionHistoryEntryData defines data for QLDBPaymentTransitionHistoryEntry
-type QLDBPaymentTransitionHistoryEntryData struct {
-	Signature []byte `ion:"signature"`
-	Data      []byte `ion:"data"`
 }
 
 // QLDBPaymentTransitionHistoryEntryMetadata defines metadata for QLDBPaymentTransitionHistoryEntry
@@ -140,16 +140,18 @@ func TransitionHistoryIsValid(transactionHistory []QLDBPaymentTransitionHistoryE
 	for i, transaction := range transactionHistory {
 		var transactionData QLDBPaymentTransitionData
 		json.Unmarshal(transaction.Data.Data, &transactionData)
+		transactionState := transactionData.Status
 		// Transitions must always start at 0
 		if i == 0 {
-			if transactionData.Status != 0 {
+			if transactionState != 0 {
 				return false, errors.New("Initial state is not valid")
 			}
 			continue
 		}
 		var previousTransitionData QLDBPaymentTransitionData
 		json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
-		if !slices.Contains(Transitions[previousTransitionData.Status], transactionData.Status) {
+		previousTransitionState := previousTransitionData.Status
+		if !slices.Contains(Transitions[previousTransitionState], transactionState) {
 			return false, errors.New("Invalid transition")
 		}
 	}

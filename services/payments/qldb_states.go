@@ -1,7 +1,22 @@
 package payments
 
+import (
+	"context"
+	"errors"
+)
+
 // QLDBPaymentTransitionState is an integer representing transaction status
 type QLDBPaymentTransitionState int64
+
+type TxStateMachine interface {
+	SetVersion(int)
+	Initialized() (QLDBPaymentTransitionState, error)
+	Prepared() (QLDBPaymentTransitionState, error)
+	Authorized() (QLDBPaymentTransitionState, error)
+	Pending() (QLDBPaymentTransitionState, error)
+	Paid() (QLDBPaymentTransitionState, error)
+	Failed() (QLDBPaymentTransitionState, error)
+}
 
 const (
 	// Initialized represents the first state that a transaction record
@@ -26,6 +41,31 @@ var Transitions = map[QLDBPaymentTransitionState][]QLDBPaymentTransitionState{
 	Pending:     {Paid, Failed},
 	Paid:        {},
 	Failed:      {},
+}
+
+func Drive[T TxStateMachine](
+	ctx context.Context,
+	machine T,
+	currentTransactionState QLDBPaymentTransitionState,
+	currentTransactionVersion int,
+) (QLDBPaymentTransitionState, error) {
+	machine.SetVersion(currentTransactionVersion)
+	switch currentTransactionState {
+	case Initialized:
+		return machine.Initialized()
+	case Prepared:
+		return machine.Prepared()
+	case Authorized:
+		return machine.Authorized()
+	case Pending:
+		return machine.Pending()
+	case Paid:
+		return machine.Paid()
+	case Failed:
+		return machine.Failed()
+	default:
+		return Initialized, errors.New("Invalid transition state")
+	}
 }
 
 // GetValidTransitions returns valid transitions
