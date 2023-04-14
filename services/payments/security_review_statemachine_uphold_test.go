@@ -82,10 +82,9 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := Initialized
+	currentState := Prepared
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState = Prepared
 	currentVersion = 1
 
 	// Should transition transaction into the Authorized state

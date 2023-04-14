@@ -1,6 +1,6 @@
 package payments
 
-// GeminiMachine is an implementation of TxStateMachine for uphold's use-case
+// GeminiMachine is an implementation of TxStateMachine for Gemini's use-case
 type GeminiMachine struct {
 	// client wallet gemini.BulkPayoutPayload
 	// transaction custodian.Transaction
@@ -12,7 +12,7 @@ func (gm *GeminiMachine) SetVersion(version int) {
 	gm.version = version
 }
 
-// Initialized implements TxStateMachine for uphold machine
+// Initialized implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Initialized() (QLDBPaymentTransitionState, error) {
 	if gm.version == 0 {
 		return Initialized, nil
@@ -20,7 +20,7 @@ func (gm *GeminiMachine) Initialized() (QLDBPaymentTransitionState, error) {
 	return Prepared, nil
 }
 
-// Prepared implements TxStateMachine for uphold machine
+// Prepared implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Prepared() (QLDBPaymentTransitionState, error) {
 	// if failure, do failed branch
 	if false {
@@ -29,7 +29,7 @@ func (gm *GeminiMachine) Prepared() (QLDBPaymentTransitionState, error) {
 	return Authorized, nil
 }
 
-// Authorized implements TxStateMachine for uphold machine
+// Authorized implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Authorized() (QLDBPaymentTransitionState, error) {
 	if gm.version == 500 {
 		return Authorized, nil
@@ -37,7 +37,7 @@ func (gm *GeminiMachine) Authorized() (QLDBPaymentTransitionState, error) {
 	return Pending, nil
 }
 
-// Pending implements TxStateMachine for uphold machine
+// Pending implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Pending() (QLDBPaymentTransitionState, error) {
 	if gm.version == 404 {
 		return Pending, nil
@@ -45,12 +45,12 @@ func (gm *GeminiMachine) Pending() (QLDBPaymentTransitionState, error) {
 	return Paid, nil
 }
 
-// Paid implements TxStateMachine for uphold machine
+// Paid implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Paid() (QLDBPaymentTransitionState, error) {
 	return Paid, nil
 }
 
-// Failed implements TxStateMachine for uphold machine
+// Failed implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Failed() (QLDBPaymentTransitionState, error) {
 	return Failed, nil
 }

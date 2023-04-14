@@ -7,23 +7,22 @@ import (
 	"os"
 	"testing"
 
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
 
 var (
-	mockBitflyerHost    = "fake://bitflyer.com"
-	bitflyerBulkPayload = bitflyer.WithdrawToDepositIDBulkPayload{
-		DryRun:      true,
-		Withdrawals: []bitflyer.WithdrawToDepositIDPayload{},
-		PriceToken:  "",
-		DryRunOption: &bitflyer.DryRunOption{
-			RequestAPITransferStatus: "",
-			ProcessTimeSec:           1,
-			StatusAPITransferStatus:  "",
-		},
-	}
+	mockBitflyerHost = "fake://bitflyer.com"
+	// bitflyerBulkPayload = bitflyer.WithdrawToDepositIDBulkPayload{
+	// 	DryRun:      true,
+	// 	Withdrawals: []bitflyer.WithdrawToDepositIDPayload{},
+	// 	PriceToken:  "",
+	// 	DryRunOption: &bitflyer.DryRunOption{
+	// 		RequestAPITransferStatus: "",
+	// 		ProcessTimeSec:           1,
+	// 		StatusAPITransferStatus:  "",
+	// 	},
+	// }
 )
 
 type ctxAuthKey struct{}
@@ -76,13 +75,11 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := Initialized
+	currentState := Authorized
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState = Prepared
 	currentVersion = 1
 
-	currentState = Authorized
 	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Pending, newState)
 

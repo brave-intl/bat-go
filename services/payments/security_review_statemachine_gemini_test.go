@@ -16,8 +16,8 @@ import (
 var (
 	mockGeminiHost           = "fake://mock.gemini.com"
 	geminiSucceedTransaction = custodian.Transaction{ProviderID: "1234"}
-	geminiFailTransaction    = custodian.Transaction{ProviderID: "1234"}
-	geminiBulkPayload        = gemini.BulkPayoutPayload{
+	// geminiFailTransaction    = custodian.Transaction{ProviderID: "1234"}
+	geminiBulkPayload = gemini.BulkPayoutPayload{
 		OauthClientID: "",
 		Payouts:       []gemini.PayoutPayload{},
 	}
@@ -73,10 +73,9 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := Initialized
+	currentState := Prepared
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState = Prepared
 	currentVersion = 1
 
 	// Should transition transaction into the Authorized state

@@ -8,6 +8,7 @@ import (
 // QLDBPaymentTransitionState is an integer representing transaction status
 type QLDBPaymentTransitionState int64
 
+// TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 type TxStateMachine interface {
 	SetVersion(int)
 	Initialized() (QLDBPaymentTransitionState, error)
@@ -43,6 +44,8 @@ var Transitions = map[QLDBPaymentTransitionState][]QLDBPaymentTransitionState{
 	Failed:      {},
 }
 
+// Drive switches on the provided currentTransactionState and executes the appropriate
+// method from the provided TxStateMachine to attempt to progress the state.
 func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
