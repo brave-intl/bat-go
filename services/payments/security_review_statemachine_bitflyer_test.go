@@ -75,10 +75,16 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := Authorized
+	currentState := Prepared
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	currentVersion = 1
+
+	// Should transition transaction into the Authorized state
+	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	assert.Equal(t, Authorized, newState)
+
+	currentState = Authorized
 
 	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
 	assert.Equal(t, Pending, newState)
