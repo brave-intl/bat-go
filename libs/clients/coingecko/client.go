@@ -151,7 +151,7 @@ type MarketChartResponse struct {
 	TotalVolumes [][]decimal.Decimal `json:"total_volumes"`
 }
 
-// FetchMarketChart fetches the history rate of a currency to BAT
+// FetchMarketChart fetches the history rate of a currency
 func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error) {
 	updated := time.Now()
 

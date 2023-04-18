@@ -6,12 +6,6 @@ package ratios_test
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"testing"
-	"time"
-
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/libs/clients/coingecko/mock"
@@ -24,6 +18,13 @@ import (
 	"github.com/gomodule/redigo/redis"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"regexp"
+	"strconv"
+	"testing"
+	"time"
 )
 
 type ControllersTestSuite struct {
@@ -195,6 +196,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Empty(rr.Header().Get("Cache-Control"))
 
 	// ErrCoingeckoCoinEmpty
 	rctx = chi.NewRouteContext()
@@ -206,6 +208,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Empty(rr.Header().Get("Cache-Control"))
 
 	// ErrCoingeckoCoinListLimit
 	rctx = chi.NewRouteContext()
@@ -218,6 +221,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Empty(rr.Header().Get("Cache-Control"))
 
 	// ErrCoingeckoVsCurrencyEmpty
 	rctx = chi.NewRouteContext()
@@ -229,6 +233,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Empty(rr.Header().Get("Cache-Control"))
 
 	// ErrCoingeckoVsCurrencyLimit
 	rctx = chi.NewRouteContext()
@@ -240,6 +245,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Empty(rr.Header().Get("Cache-Control"))
 
 	// ErrCoingeckoDurationInvalid
 	rctx = chi.NewRouteContext()
@@ -251,6 +257,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Empty(rr.Header().Get("Cache-Control"))
 
 	// Test success case
 	respy := coingecko.SimplePriceResponse(map[string]map[string]decimal.Decimal{
@@ -276,6 +283,16 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	handler.ServeHTTP(rr, req)
 	// validate response code matches
 	suite.Require().Equal(http.StatusOK, rr.Code)
+	// validate cache control header is set and is correct
+	cacheControl := rr.Header().Get("Cache-Control")
+	suite.Require().NotEmpty(cacheControl, "Cache-Control header is not present")
+	maxAgeRegex := regexp.MustCompile(`max-age=(\d+)`)
+	maxAgeMatch := maxAgeRegex.FindStringSubmatch(cacheControl)
+	suite.Require().Len(maxAgeMatch, 2, "Invalid max-age parameter in Cache-Control header")
+	maxAge, err := strconv.Atoi(maxAgeMatch[1])
+	suite.Require().NoError(err, "Invalid max-age parameter in Cache-Control header")
+	suite.Require().Greater(maxAge, 0, "Invalid max-age parameter in Cache-Control header")
+	suite.Require().LessOrEqual(maxAge, 900, "Invalid max-age parameter in Cache-Control header")
 
 	// example
 	// {"payload":{"bat":{"usd":1.3,"usd_timeframe_change":0.8356218194962891}}

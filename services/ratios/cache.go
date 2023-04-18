@@ -13,7 +13,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-//GetTopCoins - get the top coins
+const (
+	// The amount of seconds price data can be in the Redis cache
+	// before it is considered stale
+	GetRelativeTTL = 900
+)
+
+// GetTopCoins - get the top coins
 func (s *Service) GetTopCoins(ctx context.Context, limit int) (CoingeckoCoinList, error) {
 	conn := s.redis.Get()
 	defer closers.Log(ctx, conn)
@@ -35,7 +41,7 @@ func (s *Service) GetTopCoins(ctx context.Context, limit int) (CoingeckoCoinList
 	return resp, nil
 }
 
-//GetTopCurrencies - get the top currencies
+// GetTopCurrencies - get the top currencies
 func (s *Service) GetTopCurrencies(ctx context.Context, limit int) (CoingeckoVsCurrencyList, error) {
 	conn := s.redis.Get()
 	defer closers.Log(ctx, conn)
@@ -150,7 +156,7 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 			// the least recently updated
 			if r.LastUpdated.Before(updated) {
 				updated = r.LastUpdated
-				if time.Since(updated) > 15*time.Minute {
+				if time.Since(updated) > GetRelativeTTL*time.Second {
 					return nil, updated, fmt.Errorf("cached rate is too old: %s", updated)
 				}
 			}
