@@ -289,6 +289,40 @@ type Conf struct {
 	SettlementAddress string
 }
 
+var (
+	// ErrInvalidServerURL - invalid server url error
+	ErrInvalidServerURL = errors.New("invalid gemini server url")
+	// ErrInvalidToken - invalid token error
+	ErrInvalidToken = errors.New("invalid gemini token")
+)
+
+// NewWithContext returns a new HTTPClient, retrieving the base URL from the context
+func NewWithContext(ctx context.Context) (Client, error) {
+	// get the server url
+	serverURL, ok := ctx.Value(appctx.GeminiServerURLCTXKey).(string)
+	if !ok || len(serverURL) == 0 {
+		return nil, ErrInvalidServerURL
+	}
+
+	// get the proxy url if applicable
+	proxyURL, ok := ctx.Value(appctx.GeminiProxyURLCTXKey).(string)
+	if !ok || len(proxyURL) == 0 {
+		proxyURL = ""
+	}
+
+	// get the token
+	token, ok := ctx.Value(appctx.GeminiTokenCTXKey).(string)
+	if !ok || len(token) == 0 {
+		return nil, ErrInvalidToken
+	}
+
+	client, err := clients.NewWithProxy("gemini", serverURL, token, proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), err
+}
+
 // New returns a new HTTPClient, retrieving the base URL from the environment
 func New() (Client, error) {
 	serverEnvKey := "GEMINI_SERVER"

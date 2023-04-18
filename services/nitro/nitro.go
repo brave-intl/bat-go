@@ -16,6 +16,7 @@ import (
 
 	// TODO: when we have payments service merged fixme
 	// "github.com/brave-intl/bat-go/services/payments"
+
 	"github.com/go-chi/chi"
 	"github.com/mdlayher/vsock"
 	"github.com/spf13/cobra"

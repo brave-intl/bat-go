@@ -53,6 +53,7 @@ const (
 	BuildTimeCTXKey CTXKey = "build_time"
 	// ReputationClientCTXKey - context key for the build time of code
 	ReputationClientCTXKey CTXKey = "reputation_client"
+
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
 	// GeminiBrowserClientIDCTXKey - context key for the gemini browser client id
@@ -67,6 +68,12 @@ const (
 	GeminiAPISecretCTXKey CTXKey = "gemini_api_secret"
 	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
+	// GeminiServerURLCTXKey - context key for gemini server url
+	GeminiServerURLCTXKey CTXKey = "gemini_server_url"
+	// GeminiProxyURLCTXKey - context key for gemini proxy url
+	GeminiProxyURLCTXKey CTXKey = "gemini_proxy_url"
+	// GeminiTokenCTXKey - context key for gemini token
+	GeminiTokenCTXKey CTXKey = "gemini_token_url"
 
 	// for skus ac validation
 
@@ -99,6 +106,9 @@ const (
 	WalletOnPlatformPriorToCTXKey CTXKey = "wallet_on_platform_prior_to"
 	// LogLevelCTXKey - context key for application logging level
 	LogLevelCTXKey CTXKey = "log_level"
+
+	// Bitflyer Keys
+
 	// BitFlyerJWTKeyCTXKey - context key for the bitflyer jwt key
 	BitFlyerJWTKeyCTXKey CTXKey = "bitflyer_jwt_key"
 	// BitflyerExtraClientSecretCTXKey - context key for the extra client secret
@@ -107,6 +117,15 @@ const (
 	BitflyerClientSecretCTXKey CTXKey = "bitflyer_client_secret"
 	// BitflyerClientIDCTXKey - context key for the client secret
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
+	// BitflyerServerURLCTXKey - the service ctx key
+	BitflyerServerURLCTXKey CTXKey = "bitflyer_server"
+	// BitflyerProxyURLCTXKey - the service proxy ctx key
+	BitflyerProxyURLCTXKey CTXKey = "bitflyer_proxy"
+	// BitflyerTokenCTXKey - the service token ctx key
+	BitflyerTokenCTXKey CTXKey = "bitflyer_token"
+	// BitflyerSourceFromCTXKey - the source from for payouts
+	BitflyerSourceFromCTXKey CTXKey = "bitflyer_source_from"
+
 	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
 	// UseCustodianRegionsCTXKey - context key for getting the reputation on drain feature flag
@@ -161,14 +180,28 @@ const (
 	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"
 	// BlacklistedCountryCodesCTXKey - the context key for getting the ratios redis address
 	BlacklistedCountryCodesCTXKey CTXKey = "blacklisted_country_codes"
-
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
+	// SecretsURICTXKey - the context key for getting the application secrets file location
+	SecretsURICTXKey CTXKey = "secrets_uri"
+	// PaymentsEncryptionKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
+	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
+	// LogWriterKey - the context key for getting the zerolog writer
+	LogWriterKey CTXKey = "log_writer_key"
+	// PaymentsKMSWrapperCTXKey - the context key for getting the kms wrapper key
+	PaymentsKMSWrapperCTXKey CTXKey = "payments_kms_wrapper"
+	// AWSRegionCTXKey - reverse proxy address for egress traffic
+	AWSRegionCTXKey CTXKey = "aws_region"
+	// PaymentsQLDBRoleArnCTXKey - reverse proxy address for egress traffic
+	PaymentsQLDBRoleArnCTXKey CTXKey = "qldb_role_arn"
+	// PaymentsQLDBLedgerNameCTXKey - reverse proxy address for egress traffic
+	PaymentsQLDBLedgerNameCTXKey CTXKey = "qldb_ledger_name"
 
 	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
 	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
-	// AWSRegionCTXKey - the context key for getting the rate limit
-	AWSRegionCTXKey CTXKey = "aws_region"
+
 	// RequireUpholdCountryCTXKey - the context key for getting the rate limit
 	RequireUpholdCountryCTXKey CTXKey = "require_uphold_country"
 

@@ -31,9 +31,6 @@ func Execute(version, commit, buildTime string) {
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
 	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, viper.GetBool("debug"))
 	ctx, logger = logging.SetupLogger(ctx)
-	// setup ratios service values
-	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
-	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 
 	ctx = context.WithValue(ctx, appctx.VersionCTXKey, version)
 	ctx = context.WithValue(ctx, appctx.CommitCTXKey, commit)
