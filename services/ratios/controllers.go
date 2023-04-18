@@ -223,6 +223,8 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			logger.Error().Err(err).Msg("failed to get historical exchange rate")
 			return handlers.WrapError(err, "failed to get historical exchange rate", http.StatusInternalServerError)
 		}
+
+		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", duration.ToGetHistoryCacheDurationSeconds()))
 		return handlers.RenderContent(ctx, rates, w, http.StatusOK)
 	})
 }

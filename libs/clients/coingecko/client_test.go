@@ -123,11 +123,11 @@ func (suite *CoingeckoTestSuite) TestFetchSupportedVsCurrencies() {
 }
 
 func (suite *CoingeckoTestSuite) TestFetchMarketChart() {
-	resp, t, err := suite.client.FetchMarketChart(suite.ctx, "basic-attention-token", "usd", 1.0)
+	resp, t, err := suite.client.FetchMarketChart(suite.ctx, "basic-attention-token", "usd", 1.0, 3600)
 	suite.Require().NoError(err, "should be able to fetch the market chart")
 
 	// call again, make sure you get back the same resp and t
-	resp1, t1, err := suite.client.FetchMarketChart(suite.ctx, "basic-attention-token", "usd", 1.0)
+	resp1, t1, err := suite.client.FetchMarketChart(suite.ctx, "basic-attention-token", "usd", 1.0, 3600)
 	suite.Require().NoError(err, "should be able to fetch the market chart")
 
 	b, err := json.Marshal(resp)
