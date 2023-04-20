@@ -17,9 +17,11 @@ import (
 )
 
 const (
-	coinMarketsPageSize      = 250
-	coinMarketsCacheTTLHours = 1 // How long we consider Redis cached FetchCoinMarkets responses to be valid
-	coingeckoImageProxy      = "assets.cgproxy.brave.com"
+	// CoinMarketsCacheTTLSeconds is how long FetchCoinMarkets responses cached
+	// in Redis are considered valid
+	CoinMarketsCacheTTLSeconds = 60 * 60
+	coinMarketsPageSize        = 250
+	coingeckoImageProxy        = "assets.cgproxy.brave.com"
 )
 
 // Client abstracts over the underlying client
@@ -379,7 +381,7 @@ func (c *HTTPClient) FetchCoinMarkets(
 		}
 
 		// Check if cache is still fresh
-		if time.Since(entry.LastUpdated).Hours() < float64(coinMarketsCacheTTLHours) {
+		if time.Since(entry.LastUpdated).Seconds() < float64(CoinMarketsCacheTTLSeconds) {
 			body = (&body).applyLimit(params.Limit)
 			return &body, entry.LastUpdated, err
 		}
