@@ -125,7 +125,12 @@ func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (boo
 }
 
 // GetRelative - respond to caller with the relative exchange rates
-func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vsCurrencies CoingeckoVsCurrencyList, duration CoingeckoDuration) (*ratiosclient.RelativeResponse, error) {
+func (s *Service) GetRelative(
+	ctx context.Context,
+	coinIDs CoingeckoCoinList,
+	vsCurrencies CoingeckoVsCurrencyList,
+	duration CoingeckoDuration,
+) (*ratiosclient.RelativeResponse, error) {
 	// get logger from context
 	logger := logging.Logger(ctx, "ratios.GetRelative")
 
@@ -192,7 +197,7 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 	}, nil
 }
 
-//HistoryResponse - the response structure for history calls
+// HistoryResponse - the response structure for history calls
 type HistoryResponse struct {
 	Payload     coingecko.MarketChartResponse `json:"payload"`
 	LastUpdated time.Time                     `json:"lastUpdated"`

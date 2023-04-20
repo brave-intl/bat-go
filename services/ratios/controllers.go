@@ -2,7 +2,9 @@ package ratios
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -128,6 +130,11 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 			logger.Error().Err(err).Msg("failed to get relative exchange rate")
 			return handlers.WrapError(err, "failed to get relative exchange rate", http.StatusInternalServerError)
 		}
+
+		// Set Cache-Control header to match when the rates expire in the server cache,
+		// and would be fetched from Coingecko again.
+		maxAge := GetRelativeTTL*time.Second - time.Since(rates.LastUpdated)
+		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", int(maxAge.Seconds())))
 		return handlers.RenderContent(ctx, rates, w, http.StatusOK)
 	})
 }
@@ -220,7 +227,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 	})
 }
 
-//MappingResponse - the response structure for the current mappings
+// MappingResponse - the response structure for the current mappings
 type MappingResponse struct {
 	IDToSymbol            map[string]string `json:"idToSymbol"`
 	SymbolToID            map[string]string `json:"symbolToId"`
