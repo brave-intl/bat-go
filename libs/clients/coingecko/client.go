@@ -27,7 +27,7 @@ type Client interface {
 	FetchSimplePrice(ctx context.Context, ids string, vsCurrencies string, include24hrChange bool) (*SimplePriceResponse, error)
 	FetchCoinList(ctx context.Context, includePlatform bool) (*CoinListResponse, error)
 	FetchSupportedVsCurrencies(ctx context.Context) (*SupportedVsCurrenciesResponse, error)
-	FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error)
+	FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32, cacheDurationSeconds int) (*MarketChartResponse, time.Time, error)
 	FetchCoinMarkets(ctx context.Context, vsCurrency string, limit int) (*CoinMarketResponse, time.Time, error)
 }
 
@@ -152,7 +152,12 @@ type MarketChartResponse struct {
 }
 
 // FetchMarketChart fetches the history rate of a currency
-func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error) {
+func (c *HTTPClient) FetchMarketChart(
+	ctx context.Context,
+	id string, vsCurrency string,
+	days float32,
+	cacheDurationSeconds int,
+) (*MarketChartResponse, time.Time, error) {
 	updated := time.Now()
 
 	url := fmt.Sprintf("/api/v3/coins/%s/market_chart", id)
@@ -187,7 +192,8 @@ func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency
 		// 1d chart is cached for 1 hour
 		// 1w chart is cached for 7 hours
 		// etc
-		if time.Since(entry.LastUpdated).Hours() < float64(days) {
+		secondsSinceUpdate := int(time.Since(entry.LastUpdated).Seconds())
+		if secondsSinceUpdate < cacheDurationSeconds {
 			return &body, entry.LastUpdated, err
 		}
 	}

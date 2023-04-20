@@ -170,7 +170,13 @@ func (s *Service) GetRelative(
 
 		if len(coinIDs) == 1 {
 			// request history for duration to calculate change
-			chart, _, err := s.coingecko.FetchMarketChart(ctx, coinIDs[0].String(), vsCurrencies[0].String(), duration.ToDays())
+			chart, _, err := s.coingecko.FetchMarketChart(
+				ctx,
+				coinIDs[0].String(),
+				vsCurrencies[0].String(),
+				duration.ToDays(),
+				duration.ToGetHistoryCacheDurationSeconds(),
+			)
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to fetch chart from coingecko")
 				return nil, fmt.Errorf("failed to fetch chart from coingecko: %w", err)
@@ -213,7 +219,13 @@ func (s *Service) GetHistory(ctx context.Context, coinID CoingeckoCoin, vsCurren
 		logger.Error().Err(err).Msg("failed to record coin / currency statistics")
 	}
 
-	chart, updated, err := s.coingecko.FetchMarketChart(ctx, coinID.String(), vsCurrency.String(), duration.ToDays())
+	chart, updated, err := s.coingecko.FetchMarketChart(
+		ctx,
+		coinID.String(),
+		vsCurrency.String(),
+		duration.ToDays(),
+		duration.ToGetHistoryCacheDurationSeconds(),
+	)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to fetch chart from coingecko")
 		return nil, fmt.Errorf("failed to fetch chart from coingecko: %w", err)
