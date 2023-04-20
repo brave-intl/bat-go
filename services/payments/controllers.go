@@ -78,7 +78,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		// sign the transaction
-		req.PublicKey, req.Signature, err = req.SignTransaction(ctx)
+		req.PublicKey, req.Signature, err = req.SignTransaction(ctx, service.kmsSigningClient, service.kmsSigningKeyId)
 		if err != nil {
 			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to sign transaction")
 			return handlers.WrapError(err, "failed to sign transaction", http.StatusBadRequest)
@@ -108,6 +108,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		resp.AttestationDocument = base64.StdEncoding.EncodeToString(attestationDocument)
+		// Should be in QLDB in prepared state
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})

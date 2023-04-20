@@ -5,23 +5,24 @@ import (
 	"errors"
 )
 
-// QLDBPaymentTransitionState is an integer representing transaction status
-type QLDBPaymentTransitionState int64
+// TransactionState is an integer representing transaction status
+type TransactionState int64
 
 // TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 type TxStateMachine interface {
-	SetVersion(int)
-	Initialized() (QLDBPaymentTransitionState, error)
-	Prepared() (QLDBPaymentTransitionState, error)
-	Authorized() (QLDBPaymentTransitionState, error)
-	Pending() (QLDBPaymentTransitionState, error)
-	Paid() (QLDBPaymentTransitionState, error)
-	Failed() (QLDBPaymentTransitionState, error)
+	setVersion(int)
+	setTransaction(*Transaction)
+	Initialized() (TransactionState, error)
+	Prepared() (TransactionState, error)
+	Authorized() (TransactionState, error)
+	Pending() (TransactionState, error)
+	Paid() (TransactionState, error)
+	Failed() (TransactionState, error)
 }
 
 const (
 	// Initialized represents the first state that a transaction record
-	Initialized QLDBPaymentTransitionState = iota
+	Initialized TransactionState = iota
 	// Prepared represents a record that has been prepared for authorization
 	Prepared
 	// Authorized represents a record that has been authorized
@@ -35,7 +36,7 @@ const (
 )
 
 // Transitions represents the valid forward-transitions for each given state
-var Transitions = map[QLDBPaymentTransitionState][]QLDBPaymentTransitionState{
+var Transitions = map[TransactionState][]TransactionState{
 	Initialized: {Prepared, Failed},
 	Prepared:    {Authorized, Failed},
 	Authorized:  {Pending, Failed},
@@ -44,16 +45,28 @@ var Transitions = map[QLDBPaymentTransitionState][]QLDBPaymentTransitionState{
 	Failed:      {},
 }
 
+func StateMachineFromTransaction(transaction *Transaction) (TxStateMachine, error) {
+	var machine TxStateMachine
+	switch transaction.Custodian {
+	case "uphold":
+		machine = &UpholdMachine{}
+	case "bitflyer":
+		machine = &BitflyerMachine{}
+	case "gemini":
+		machine = &GeminiMachine{}
+	}
+	return machine, nil
+}
+
 // Drive switches on the provided currentTransactionState and executes the appropriate
 // method from the provided TxStateMachine to attempt to progress the state.
 func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
-	currentTransactionState QLDBPaymentTransitionState,
-	currentTransactionVersion int,
-) (QLDBPaymentTransitionState, error) {
-	machine.SetVersion(currentTransactionVersion)
-	switch currentTransactionState {
+	transaction *Transaction,
+) (TransactionState, error) {
+	machine.setTransaction(transaction)
+	switch transaction.State {
 	case Initialized:
 		return machine.Initialized()
 	case Prepared:
@@ -72,26 +85,26 @@ func Drive[T TxStateMachine](
 }
 
 // GetValidTransitions returns valid transitions
-func (q QLDBPaymentTransitionState) GetValidTransitions() []QLDBPaymentTransitionState {
+func (q TransactionState) GetValidTransitions() []TransactionState {
 	return Transitions[q]
 }
 
 // GetAllValidTransitionSequences returns all valid transition sequences
-func GetAllValidTransitionSequences() [][]QLDBPaymentTransitionState {
-	return recurseTransitionResolution(0, []QLDBPaymentTransitionState{})
+func GetAllValidTransitionSequences() [][]TransactionState {
+	return recurseTransitionResolution(0, []TransactionState{})
 }
 
 func recurseTransitionResolution(
-	state QLDBPaymentTransitionState,
-	currentTree []QLDBPaymentTransitionState,
-) [][]QLDBPaymentTransitionState {
+	state TransactionState,
+	currentTree []TransactionState,
+) [][]TransactionState {
 	var (
-		result      [][]QLDBPaymentTransitionState
+		result      [][]TransactionState
 		updatedTree = append(currentTree, state)
 	)
 	possibleStates := Transitions[state]
 	if len(possibleStates) == 0 {
-		tempTree := make([]QLDBPaymentTransitionState, len(updatedTree))
+		tempTree := make([]TransactionState, len(updatedTree))
 		copy(tempTree, updatedTree)
 		result = append(result, tempTree)
 		return result

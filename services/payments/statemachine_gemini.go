@@ -4,16 +4,22 @@ package payments
 type GeminiMachine struct {
 	// client wallet gemini.BulkPayoutPayload
 	// transaction custodian.Transaction
-	version int
+	version     int
+	transaction *Transaction
 }
 
-// SetVersion assigns the version field in the GeminiMachine to the specified int
-func (gm *GeminiMachine) SetVersion(version int) {
+// setVersion assigns the version field in the GeminiMachine to the specified int
+func (gm *GeminiMachine) setVersion(version int) {
 	gm.version = version
 }
 
+// setTransaction assigns the transaction field in the BitflyerMachine to the specified Transaction
+func (gm *GeminiMachine) setTransaction(transaction *Transaction) {
+	gm.transaction = transaction
+}
+
 // Initialized implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Initialized() (QLDBPaymentTransitionState, error) {
+func (gm *GeminiMachine) Initialized() (TransactionState, error) {
 	if gm.version == 0 {
 		return Initialized, nil
 	}
@@ -21,7 +27,7 @@ func (gm *GeminiMachine) Initialized() (QLDBPaymentTransitionState, error) {
 }
 
 // Prepared implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Prepared() (QLDBPaymentTransitionState, error) {
+func (gm *GeminiMachine) Prepared() (TransactionState, error) {
 	// if failure, do failed branch
 	if false {
 		return Failed, nil
@@ -30,7 +36,7 @@ func (gm *GeminiMachine) Prepared() (QLDBPaymentTransitionState, error) {
 }
 
 // Authorized implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Authorized() (QLDBPaymentTransitionState, error) {
+func (gm *GeminiMachine) Authorized() (TransactionState, error) {
 	if gm.version == 500 {
 		return Authorized, nil
 	}
@@ -38,7 +44,7 @@ func (gm *GeminiMachine) Authorized() (QLDBPaymentTransitionState, error) {
 }
 
 // Pending implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Pending() (QLDBPaymentTransitionState, error) {
+func (gm *GeminiMachine) Pending() (TransactionState, error) {
 	if gm.version == 404 {
 		return Pending, nil
 	}
@@ -46,11 +52,11 @@ func (gm *GeminiMachine) Pending() (QLDBPaymentTransitionState, error) {
 }
 
 // Paid implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Paid() (QLDBPaymentTransitionState, error) {
+func (gm *GeminiMachine) Paid() (TransactionState, error) {
 	return Paid, nil
 }
 
 // Failed implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Failed() (QLDBPaymentTransitionState, error) {
+func (gm *GeminiMachine) Failed() (TransactionState, error) {
 	return Failed, nil
 }

@@ -2,44 +2,57 @@ package payments
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/logging"
-	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/shopspring/decimal"
 
 	"github.com/amazon-ion/ion-go/ion"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
-	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/smithy-go"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/google/uuid"
 )
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey      *uuid.UUID   `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
-	Amount              *ion.Decimal `json:"-" ion:"amount" valid:"required"`
-	To                  *uuid.UUID   `json:"to,omitempty" ion:"to" valid:"required"`
-	From                *uuid.UUID   `json:"from,omitempty" ion:"from" valid:"required"`
-	Custodian           string       `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State               string       `json:"state,omitempty" ion:"state"`
-	DocumentID          string       `json:"documentId,omitempty" ion:"id"`
-	AttestationDocument string       `json:"attestation,omitempty" ion:"-"`
-	Signature           string       `json:"-" ion:"signature"` // KMS signature only enclave can sign
-	PublicKey           string       `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
+	IdempotencyKey      *uuid.UUID       `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
+	Amount              *ion.Decimal     `json:"-" ion:"amount" valid:"required"`
+	To                  *uuid.UUID       `json:"to,omitempty" ion:"to" valid:"required"`
+	From                *uuid.UUID       `json:"from,omitempty" ion:"from" valid:"required"`
+	Custodian           string           `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
+	State               TransactionState `json:"state,omitempty" ion:"state"`
+	DocumentID          string           `json:"documentId,omitempty" ion:"id"`
+	AttestationDocument string           `json:"attestation,omitempty" ion:"-"`
+	Signature           string           `json:"-" ion:"signature"` // KMS signature only enclave can sign
+	PublicKey           string           `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
 }
 
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
-func (t *Transaction) SignTransaction(ctx context.Context) (string, string, error) {
-	// TODO: fill in
-	return "", "", errorutils.ErrNotImplemented
+func (t *Transaction) SignTransaction(ctx context.Context, kmsClient *kms.Client, keyId string) (string, string, error) {
+	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
+		KeyId: &keyId,
+	})
+
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to get public key: %w", err)
+	}
+
+	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
+		KeyId:            &keyId,
+		Message:          t.BuildSigningBytes(),
+		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
+	})
+
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to sign transaction: %w", err)
+	}
+
+	return hex.EncodeToString(pubkeyOutput.PublicKey), hex.EncodeToString(signingOutput.Signature), nil
 }
 
 // BuildSigningBytes - the string format that payments will sign over per tx
@@ -149,168 +162,23 @@ func (s *Service) setupLedger(ctx context.Context) error {
 	return nil
 }
 
-func isQLDBReady(ctx context.Context) bool {
-	logger := logging.Logger(ctx, "payments.isQLDBReady")
-	// decrypt the aws region
-	qldbArn, qldbArnOK := ctx.Value(appctx.PaymentsQLDBRoleArnCTXKey).(string)
-	// decrypt the aws region
-	region, regionOK := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	// get proxy address for outbound
-	egressAddr, egressOK := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
-	if regionOK && egressOK && qldbArnOK {
-		return true
-	}
-	logger.Warn().
-		Str("region", region).
-		Str("egressAddr", egressAddr).
-		Str("qldbArn", qldbArn).
-		Msg("service is not configured to access qldb")
-	return false
-}
-
-// newQLDBDatastore - create a new qldbDatastore
-func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
-	logger := logging.Logger(ctx, "payments.newQLDBDatastore")
-
-	if !isQLDBReady(ctx) {
-		return nil, ErrNotConfiguredYet
-	}
-
-	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("failed to get egress proxy for qldb")
-	}
-
-	// decrypt the aws region
-	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	if !ok {
-		err := errors.New("empty aws region")
-		logger.Error().Err(err).Str("region", region).Msg("aws region")
-		return nil, err
-	}
-
-	// qldb role arn
-	qldbRoleArn, ok := ctx.Value(appctx.PaymentsQLDBRoleArnCTXKey).(string)
-	if !ok {
-		err := errors.New("empty qldb role arn")
-		logger.Error().Err(err).Str("qldbRoleArn", qldbRoleArn).Msg("qldb role arn empty")
-		return nil, err
-	}
-
-	// qldb ledger name
-	qldbLedgerName, ok := ctx.Value(appctx.PaymentsQLDBLedgerNameCTXKey).(string)
-	if !ok {
-		err := errors.New("empty qldb ledger name")
-		logger.Error().Err(err).Str("qldbLedgerName", qldbLedgerName).Msg("qldb ledger name empty")
-		return nil, err
-	}
-
-	logger.Info().
-		Str("egress", egressProxyAddr).
-		Str("region", region).
-		Str("qldbRoleArn", qldbRoleArn).
-		Str("qldbLedgerName", qldbLedgerName).
-		Msg("qldb details")
-
-	cfg, err := appaws.NewAWSConfig(ctx, egressProxyAddr, region)
-	if err != nil {
-		logger.Error().Err(err).Str("region", region).Msg("aws config failed")
-		return nil, fmt.Errorf("failed to create aws config: %w", err)
-	}
-	awsCfg, ok := cfg.(aws.Config)
-	if !ok {
-		return nil, fmt.Errorf("invalid aws configuration: %w", err)
-	}
-
-	// assume correct role for qldb access
-	creds := stscreds.NewAssumeRoleProvider(sts.NewFromConfig(awsCfg), qldbRoleArn)
-	awsCfg.Credentials = aws.NewCredentialsCache(creds)
-
-	client := qldbsession.NewFromConfig(awsCfg)
-	// create our qldb driver
-	driver, err := qldbdriver.New(
-		qldbLedgerName, // the ledger to attach to
-		client,         // the qldb session
-		func(options *qldbdriver.DriverOptions) {
-			// debug mode?
-			debug, err := appctx.GetBoolFromContext(ctx, appctx.DebugLoggingCTXKey)
-			if err == nil && debug {
-				options.LoggerVerbosity = qldbdriver.LogDebug
-			} else {
-				// default to info
-				options.LoggerVerbosity = qldbdriver.LogInfo
-			}
-		})
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup the qldb driver: %w", err)
-	}
-	// setup a retry policy
-	// Configuring an exponential backoff strategy with base of 20 milliseconds
-	retryPolicy2 := qldbdriver.RetryPolicy{
-		MaxRetryLimit: 2,
-		Backoff:       qldbdriver.ExponentialBackoffStrategy{SleepBase: 20, SleepCap: 4000}}
-
-	// Overrides the retry policy set by the driver instance
-	driver.SetRetryPolicy(retryPolicy2)
-
-	return driver, nil
-}
-
-const (
-	// StatePrepared - transaction prepared state
-	StatePrepared = "prepared"
-	// StateSubmitted - transaction prepared state
-	StateSubmitted = "submitted"
-)
-
 // InsertTransaction - perform a qldb insertion on the transactions
 func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
-	enrichedTransaction, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		// for all of the transactions load up a check to see if this transaction has already existed
-		// or not, then perform the insertion of the records.
-		resp := Transaction{}
-
-		// Check if a document with this idempotencyKey exists
-		result, err := txn.Execute("SELECT * FROM transactions WHERE idempotencyKey = ?", transaction.IdempotencyKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
-		}
-		// Check if there are any results
-		if !result.Next(txn) {
-			// set transaction state to prepared
-			transaction.State = StatePrepared
-			// insert the transaction
-			_, err = txn.Execute("INSERT INTO transactions ?", transaction)
-			if err != nil {
-				return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
-			}
-		}
-		// get the document id for the inserted transaction
-		result, err = txn.Execute("SELECT data.*, metadata.id FROM _ql_committed_transactions as t WHERE t.data.idempotencyKey = ?", transaction.IdempotencyKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
-		}
-		// Check if there are any results
-		if result.Next(txn) {
-
-			// get the enriched version of the transaction for the response
-			enriched := new(Transaction)
-			ionBinary := result.GetCurrentData()
-
-			// unmarshal enriched version
-			err := ion.Unmarshal(ionBinary, enriched)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal enriched tx: %s due to: %w", transaction.IdempotencyKey, err)
-			}
-			resp = *enriched
-		}
-
-		return resp, nil
-	})
+	stateMachine, err := StateMachineFromTransaction(transaction)
 	if err != nil {
-		return Transaction{}, fmt.Errorf("failed to insert transactions: %w", err)
+		return Transaction{}, fmt.Errorf("Failed to insert transaction: %w", err)
 	}
-	return enrichedTransaction.(Transaction), nil
+	var transactionState TransactionState
+
+	for transactionState < Prepared {
+		transactionState, err = Drive(ctx, stateMachine, transaction)
+		if err != nil {
+			return Transaction{}, fmt.Errorf("Failed to drive state machine: %w", err)
+		}
+	}
+
+	// Enriched includes DocumentID along with the transaction.
+	return *transaction, nil
 }
 
 // UpdateTransactionsState - Change transaction state

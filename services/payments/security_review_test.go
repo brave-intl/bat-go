@@ -198,7 +198,7 @@ impact the set of valid transitions.
 */
 func TestGenerateAllValidTransitions(t *testing.T) {
 	allValidTransitionSequences := GetAllValidTransitionSequences()
-	knownValidTransitionSequences := [][]QLDBPaymentTransitionState{
+	knownValidTransitionSequences := [][]TransactionState{
 		{0, 1, 2, 3, 4},
 		{0, 1, 2, 3, 5},
 		{0, 1, 2, 5},
