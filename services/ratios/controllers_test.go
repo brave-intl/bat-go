@@ -430,26 +430,25 @@ func (suite *ControllersTestSuite) TestGetCoinMarketsHandler() {
 	suite.mockClient.EXPECT().
 		FetchCoinMarkets(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingeckoResp, time.Now(), nil)
-
-	// new request for coin markets handler
 	req, err := http.NewRequest("GET", "/v2/market/provider/coingecko?vsCurrency=usd&limit=1", nil)
 	suite.Require().NoError(err)
-
 	rctx := chi.NewRouteContext()
-
-	// add in our suite ctx
 	req = req.WithContext(suite.ctx)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	// validate response code matches
 	suite.Require().Equal(http.StatusOK, rr.Code)
-
 	var resp = new(ratios.GetCoinMarketsResponse)
 	err = json.Unmarshal(rr.Body.Bytes(), resp)
 	suite.Require().NoError(err)
-
 	suite.Require().Equal(len(resp.Payload), 1)
 	suite.Require().Equal(resp.Payload[0].Symbol, "btc")
+	cacheControl := rr.Header().Get("Cache-Control")
+	suite.Require().NotEmpty(cacheControl, "Cache-Control header is not present")
+	maxAgeRegex := regexp.MustCompile(`max-age=(\d+)`)
+	maxAgeMatch := maxAgeRegex.FindStringSubmatch(cacheControl)
+	suite.Require().Len(maxAgeMatch, 2, "Invalid max-age parameter in Cache-Control header")
+	maxAge, err := strconv.Atoi(maxAgeMatch[1])
+	suite.Require().Greater(maxAge, 0, "Invalid max-age parameter in Cache-Control header")
+	suite.Require().LessOrEqual(maxAge, 3600, "Invalid max-age parameter in Cache-Control header")
 }
