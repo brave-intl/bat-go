@@ -39,6 +39,7 @@ func Consume(ctx context.Context, reader Consumer, handler Handler, errorHandler
 
 			err = handler.Handle(ctx, message)
 			if err != nil {
+				sentry.CaptureException(err)
 				logger.Err(err).Msg("error processing message sending to dlq")
 				err := errorHandler.Handle(ctx, message, err)
 				if err != nil {
