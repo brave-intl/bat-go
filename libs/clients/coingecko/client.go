@@ -17,9 +17,11 @@ import (
 )
 
 const (
-	coinMarketsPageSize      = 250
-	coinMarketsCacheTTLHours = 1 // How long we consider Redis cached FetchCoinMarkets responses to be valid
-	coingeckoImageProxy      = "assets.cgproxy.brave.com"
+	// CoinMarketsCacheTTLSeconds is how long FetchCoinMarkets responses cached
+	// in Redis are considered valid
+	CoinMarketsCacheTTLSeconds = 60 * 60
+	coinMarketsPageSize        = 250
+	coingeckoImageProxy        = "assets.cgproxy.brave.com"
 )
 
 // Client abstracts over the underlying client
@@ -27,7 +29,7 @@ type Client interface {
 	FetchSimplePrice(ctx context.Context, ids string, vsCurrencies string, include24hrChange bool) (*SimplePriceResponse, error)
 	FetchCoinList(ctx context.Context, includePlatform bool) (*CoinListResponse, error)
 	FetchSupportedVsCurrencies(ctx context.Context) (*SupportedVsCurrenciesResponse, error)
-	FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error)
+	FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32, cacheDurationSeconds int) (*MarketChartResponse, time.Time, error)
 	FetchCoinMarkets(ctx context.Context, vsCurrency string, limit int) (*CoinMarketResponse, time.Time, error)
 }
 
@@ -152,7 +154,12 @@ type MarketChartResponse struct {
 }
 
 // FetchMarketChart fetches the history rate of a currency
-func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error) {
+func (c *HTTPClient) FetchMarketChart(
+	ctx context.Context,
+	id string, vsCurrency string,
+	days float32,
+	cacheDurationSeconds int,
+) (*MarketChartResponse, time.Time, error) {
 	updated := time.Now()
 
 	url := fmt.Sprintf("/api/v3/coins/%s/market_chart", id)
@@ -187,7 +194,8 @@ func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency
 		// 1d chart is cached for 1 hour
 		// 1w chart is cached for 7 hours
 		// etc
-		if time.Since(entry.LastUpdated).Hours() < float64(days) {
+		secondsSinceUpdate := int(time.Since(entry.LastUpdated).Seconds())
+		if secondsSinceUpdate < cacheDurationSeconds {
 			return &body, entry.LastUpdated, err
 		}
 	}
@@ -373,7 +381,7 @@ func (c *HTTPClient) FetchCoinMarkets(
 		}
 
 		// Check if cache is still fresh
-		if time.Since(entry.LastUpdated).Hours() < float64(coinMarketsCacheTTLHours) {
+		if time.Since(entry.LastUpdated).Seconds() < float64(CoinMarketsCacheTTLSeconds) {
 			body = (&body).applyLimit(params.Limit)
 			return &body, entry.LastUpdated, err
 		}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
@@ -223,6 +224,8 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			logger.Error().Err(err).Msg("failed to get historical exchange rate")
 			return handlers.WrapError(err, "failed to get historical exchange rate", http.StatusInternalServerError)
 		}
+
+		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", duration.ToGetHistoryCacheDurationSeconds()))
 		return handlers.RenderContent(ctx, rates, w, http.StatusOK)
 	})
 }
@@ -303,6 +306,11 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 			logger.Error().Err(err).Msg("failed to get top currencies")
 			return handlers.WrapError(err, "failed to get top currencies", http.StatusInternalServerError)
 		}
+
+		// Set Cache-Control header to match when the market data in the Reis cache expires,
+		// and would be fetched from Coingecko again.
+		maxAge := coingecko.CoinMarketsCacheTTLSeconds*time.Second - time.Since(data.LastUpdated)
+		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", int(maxAge.Seconds())))
 		return handlers.RenderContent(ctx, data, w, http.StatusOK)
 	})
 }
