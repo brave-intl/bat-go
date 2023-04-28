@@ -2,17 +2,18 @@ package payments
 
 import (
 	"context"
-
-	"github.com/amazon-ion/ion-go/ion"
-	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
+	"fmt"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 )
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case
 type BitflyerMachine struct {
 	// client wallet.Bitflyer
 	// transactionSet bitflyer.WithdrawToDepositIDBulkPayload
-	version     int
-	transaction *Transaction
+	version             int
+	transaction         *Transaction
+	connection          wrappedQldbDriverAPI
+	kmsSigningKeyClient *kms.Client
 }
 
 // setVersion assigns the version field in the BitflyerMachine to the specified int
@@ -25,31 +26,26 @@ func (bm *BitflyerMachine) setTransaction(transaction *Transaction) {
 	bm.transaction = transaction
 }
 
+// setConnection assigns the connection field in the BitflyerMachine to the specified wrappedQldbDriverAPI
+func (bm *BitflyerMachine) setConnection(connection wrappedQldbDriverAPI) {
+	bm.connection = connection
+}
+
 // Initialized implements TxStateMachine for the Bitflyer machine
 func (bm *BitflyerMachine) Initialized() (TransactionState, error) {
-	p, err := qldbdriver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		result, err := txn.Execute("SELECT firstName, lastName, age FROM People WHERE age = 54")
-		if err != nil {
-			return nil, err
-		}
-
-		// Assume the result is not empty
-		hasNext := result.Next(txn)
-		if !hasNext && result.Err() != nil {
-			return nil, result.Err()
-		}
-
-		ionBinary := result.GetCurrentData()
-
-		temp := new(Person)
-		err = ion.Unmarshal(ionBinary, temp)
-		if err != nil {
-			return nil, err
-		}
-
-		return *temp, nil
-	})
-	GetQLDBObject(bm.transaction.DocumentID)
+	//if !idempotencyKeyIsValid(bm.transaction) {
+	//	return Initialized, errors.New("provided idempotencyKey does not match transaction")
+	//}
+	ctx := context.Background()
+	entry, err := GetQLDBObject(bm.connection, bm.transaction.DocumentID)
+	if err != nil {
+		return Initialized, fmt.Errorf("Failed to query QLDB: %w", err)
+	}
+	if entry != nil {
+		// Transition from initialized to prepared
+		entry, err = WriteQLDBObject(ctx, bm.connection, bm.kmsSigningKeyClient, entry)
+	}
+	// Otherwise, it doesn't exist, and we need to initialize it
 	if bm.version == 0 {
 		return Initialized, nil
 	}

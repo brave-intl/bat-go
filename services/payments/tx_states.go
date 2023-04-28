@@ -9,17 +9,6 @@ import (
 type TransactionState int64
 
 // TxStateMachine describes types with the appropriate methods to be Driven as a state machine
-type TxStateMachine interface {
-	setVersion(int)
-	setTransaction(*Transaction)
-	Initialized() (TransactionState, error)
-	Prepared() (TransactionState, error)
-	Authorized() (TransactionState, error)
-	Pending() (TransactionState, error)
-	Paid() (TransactionState, error)
-	Failed() (TransactionState, error)
-}
-
 const (
 	// Initialized represents the first state that a transaction record
 	Initialized TransactionState = iota
@@ -29,7 +18,7 @@ const (
 	Authorized
 	// Pending represents a record that is being or has been submitted to a processor
 	Pending
-	// Paid represents a record that has entered a finalzed success state with a processor
+	// Paid represents a record that has entered a finalized success state with a processor
 	Paid
 	// Failed represents a record that has failed processing permanently
 	Failed
@@ -64,8 +53,10 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 	transaction *Transaction,
+	connection wrappedQldbDriverAPI,
 ) (TransactionState, error) {
 	machine.setTransaction(transaction)
+	machine.setConnection(connection)
 	switch transaction.State {
 	case Initialized:
 		return machine.Initialized()
@@ -80,7 +71,7 @@ func Drive[T TxStateMachine](
 	case Failed:
 		return machine.Failed()
 	default:
-		return Initialized, errors.New("Invalid transition state")
+		return Initialized, errors.New("invalid transition state")
 	}
 }
 

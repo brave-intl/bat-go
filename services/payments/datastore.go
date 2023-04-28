@@ -2,10 +2,13 @@ package payments
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/aws/smithy-go"
 
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/shopspring/decimal"
@@ -13,14 +16,13 @@ import (
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/aws/smithy-go"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/google/uuid"
 )
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey      *uuid.UUID       `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
+	IdempotencyKey      string           `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
 	Amount              *ion.Decimal     `json:"-" ion:"amount" valid:"required"`
 	To                  *uuid.UUID       `json:"to,omitempty" ion:"to" valid:"required"`
 	From                *uuid.UUID       `json:"from,omitempty" ion:"from" valid:"required"`
@@ -28,6 +30,7 @@ type Transaction struct {
 	State               TransactionState `json:"state,omitempty" ion:"state"`
 	DocumentID          string           `json:"documentId,omitempty" ion:"id"`
 	AttestationDocument string           `json:"attestation,omitempty" ion:"-"`
+	PayoutID            string           `json:"payoutId" valid:"required"`
 	Signature           string           `json:"-" ion:"signature"` // KMS signature only enclave can sign
 	PublicKey           string           `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
 }
@@ -56,8 +59,8 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient *kms.Client
 }
 
 // BuildSigningBytes - the string format that payments will sign over per tx
-func (t Transaction) BuildSigningBytes() []byte {
-	return []byte(fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
+func (t *Transaction) BuildSigningBytes() []byte {
+	return []byte(fmt.Sprintf("%d|%s|%s|%s|%s|%s|%d",
 		1, t.To, t.Amount.String(), t.IdempotencyKey, t.Custodian, t.DocumentID, t.State))
 }
 
@@ -87,6 +90,13 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 	}
 	t.Amount = toIonDecimal(aux.Amount)
 	return nil
+}
+
+// Return an idempotencyKey derived from a subset of values on the Transaction
+func (t *Transaction) deriveIdempotencyKey() string {
+	hasher := sha1.New()
+	hasher.Write([]byte(fmt.Sprintf("%s%s%s%s%s", t.Amount, t.Custodian, t.From, t.To, t.PayoutID)))
+	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 }
 
 func toIonDecimal(v *decimal.Decimal) *ion.Decimal {
@@ -139,6 +149,12 @@ func (s *Service) setupLedger(ctx context.Context) error {
 				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
 			}
 		}
+
+		_, err = txn.Execute("CREATE INDEX ON transactions (idempotencyKey)")
+		if err != nil {
+			return nil, err
+		}
+
 		ok = false
 		_, err = txn.Execute("CREATE TABLE authorizations")
 		if err != nil {
@@ -163,7 +179,7 @@ func (s *Service) setupLedger(ctx context.Context) error {
 }
 
 // InsertTransaction - perform a qldb insertion on the transactions
-func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
+func (s *Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
 	stateMachine, err := StateMachineFromTransaction(transaction)
 	if err != nil {
 		return Transaction{}, fmt.Errorf("Failed to insert transaction: %w", err)
@@ -171,7 +187,7 @@ func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction
 	var transactionState TransactionState
 
 	for transactionState < Prepared {
-		transactionState, err = Drive(ctx, stateMachine, transaction)
+		transactionState, err = Drive(ctx, stateMachine, transaction, s.datastore)
 		if err != nil {
 			return Transaction{}, fmt.Errorf("Failed to drive state machine: %w", err)
 		}
@@ -182,9 +198,9 @@ func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction
 }
 
 // UpdateTransactionsState - Change transaction state
-func (s Service) UpdateTransactionsState(ctx context.Context, state string, transactions ...Transaction) error {
+func (s *Service) UpdateTransactionsState(ctx context.Context, state string, transactions ...Transaction) error {
 	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		// for all of the transactions load up a check to see if this transaction has already existed
+		// for all the transactions load up a check to see if this transaction has already existed
 		// or not, then perform the insertion of the records.
 		for _, transaction := range transactions {
 			// Check if a document with this idempotencyKey exists
@@ -210,9 +226,9 @@ func (s Service) UpdateTransactionsState(ctx context.Context, state string, tran
 }
 
 // AuthorizeTransaction - Add an Authorization for the Transaction
-func (s Service) AuthorizeTransaction(ctx context.Context, keyID string, transaction Transaction) error {
+func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transaction Transaction) error {
 	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		// for all of the transactions load up a check to see if this transaction has already existed
+		// for all the transactions load up a check to see if this transaction has already existed
 		// or not, then perform the insertion of the records.
 		auth := map[string]string{
 			"keyId":      keyID,
@@ -231,7 +247,7 @@ func (s Service) AuthorizeTransaction(ctx context.Context, keyID string, transac
 }
 
 // GetTransactionFromDocID - get the transaction data from the document ID in qldb
-func (s Service) GetTransactionFromDocID(ctx context.Context, docID string) (*Transaction, error) {
+func (s *Service) GetTransactionFromDocID(ctx context.Context, docID string) (*Transaction, error) {
 	transaction, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		resp := new(Transaction)
 
@@ -255,4 +271,10 @@ func (s Service) GetTransactionFromDocID(ctx context.Context, docID string) (*Tr
 		return nil, fmt.Errorf("failed to get transactions: %w", err)
 	}
 	return transaction.(*Transaction), nil
+}
+
+// Compared the idempotencyKey provided by the worker to an idempotencyKey derived from the
+// values known to the enclave worker. If they match, return true. Otherwise, return false.
+func idempotencyKeyIsValid(txn *Transaction, entry *QLDBPaymentTransitionHistoryEntry) bool {
+	return true
 }

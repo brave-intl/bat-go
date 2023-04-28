@@ -36,7 +36,10 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	os.Setenv("BITFLYER_ENVIRONMENT", "test")
+	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
+	if err != nil {
+		panic("failed to set environment variable")
+	}
 
 	// Mock transaction creation that will succeed
 	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitSuccessResponse)
@@ -66,39 +69,39 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentVersion := 0
 	bitflyerStateMachine := BitflyerMachine{}
+	mockDriver := new(MockDriver)
+	transaction := Transaction{State: Initialized}
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.
-	newState, _ := Drive(ctx, &bitflyerStateMachine, Initialized, currentVersion)
+	newState, _ := Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := Prepared
+	transaction.State = Prepared
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentVersion = 1
 
 	// Should transition transaction into the Authorized state
-	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	newState, _ = Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Authorized, newState)
 
-	currentState = Authorized
+	transaction.State = Authorized
 
-	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	newState, _ = Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Pending, newState)
 
-	currentState = Pending
-	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	transaction.State = Pending
+	newState, _ = Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Paid, newState)
 
-	currentState = Paid
-	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	transaction.State = Paid
+	newState, _ = Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Paid, newState)
 
-	currentState = Failed
-	newState, _ = Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	transaction.State = Failed
+	newState, _ = Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Failed, newState)
 }
 
@@ -110,7 +113,10 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	os.Setenv("BITFLYER_ENVIRONMENT", "test")
+	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
+	if err != nil {
+		panic("failed to set environment variable")
+	}
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitFailureResponse)
@@ -128,25 +134,32 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentState := Prepared
+	mockDriver := new(MockDriver)
+	transaction := Transaction{State: Prepared}
 	bitflyerStateMachine := BitflyerMachine{}
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
-	// correct value and allow this test to pass in the mean time.
-	currentVersion := 500
+	// correct value and allow this test to pass in the meantime.
+	// @TODO: Make this test fail
+	// currentVersion := 500
 
-	newState, _ := Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	newState, _ := Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Authorized, newState)
 }
 
-/* TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
+/*
+	TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
+
 Failure with 404 error when attempting to transfer from Pending to Paid
 */
 func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	os.Setenv("BITFLYER_ENVIRONMENT", "test")
+	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
+	if err != nil {
+		panic("failed to set environment variable")
+	}
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(bitflyerTransactionCheckStatusFailureResponse)
@@ -163,14 +176,16 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := Pending
+	mockDriver := new(MockDriver)
+	transaction := Transaction{State: Pending}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	bitflyerStateMachine := BitflyerMachine{}
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
-	// correct value and allow this test to pass in the mean time.
-	currentVersion := 404
+	// correct value and allow this test to pass in the meantime.
+	// @TODO: Make this test fail
+	// currentVersion := 404
 
-	newState, _ := Drive(ctx, &bitflyerStateMachine, currentState, currentVersion)
+	newState, _ := Drive(ctx, &bitflyerStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Pending, newState)
 }

@@ -2,26 +2,26 @@ package payments
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/config"
+	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"strings"
 	"time"
 
 	"github.com/amazon-ion/ion-go/ion"
-	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
-	"github.com/brave-intl/bat-go/libs/nitro"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/hashicorp/vault/shamir"
 	"golang.org/x/exp/slices"
@@ -38,7 +38,7 @@ import (
 // Service - struct definition of payments service
 type Service struct {
 	// concurrent safe
-	datastore  *wrappedQldbDriverAPI
+	datastore  wrappedQldbDriverAPI
 	custodians map[string]provider.Custodian
 
 	baseCtx          context.Context
@@ -47,39 +47,7 @@ type Service struct {
 	kmsDecryptKeyArn string
 	kmsSigningKeyId  string
 	kmsSigningClient *kms.Client
-}
-
-// wrappedQldbDriverAPI defines the API for QLDB methods that we'll be using
-type wrappedQldbDriverAPI interface {
-	Execute(ctx context.Context, fn func(txn qldbdriver.Transaction) (interface{}, error)) (interface{}, error)
-	Shutdown(ctx context.Context)
-}
-
-type wrappedQldbSdkClient interface {
-	New() *wrappedQldbSdkClient
-	GetDigest(
-		ctx context.Context,
-		params *qldb.GetDigestInput,
-		optFns ...func(*qldb.Options),
-	) (*qldb.GetDigestOutput, error)
-	GetRevision(
-		ctx context.Context,
-		params *qldb.GetRevisionInput,
-		optFns ...func(*qldb.Options),
-	) (*qldb.GetRevisionOutput, error)
-}
-
-// wrappedQldbTxnAPI defines the API for QLDB methods that we'll be using
-type wrappedQldbTxnAPI interface {
-	Execute(statement string, parameters ...interface{}) (wrappedQldbResult, error)
-	Abort() error
-	BufferResult(*qldbdriver.Result) (*qldbdriver.BufferedResult, error)
-}
-
-// wrappedQldbResult defines the Result characteristics for QLDB methods that we'll be using
-type wrappedQldbResult interface {
-	Next(wrappedQldbTxnAPI) bool
-	GetCurrentData() []byte
+	pubKey           []byte
 }
 
 // qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for QLDBPaymentTransitionHistoryEntry
@@ -123,7 +91,7 @@ type QLDBPaymentTransitionHistoryEntry struct {
 	Metadata     QLDBPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
 
-// createKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
+// configureKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
 func (s *Service) configureKMSKey(ctx context.Context) error {
 	// perform enclave attestation
 	nonce := make([]byte, 64)
@@ -131,10 +99,11 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create nonce for attestation: %w", err)
 	}
-	document, err := nitro.Attest(nonce, nil, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create attestation document: %w", err)
-	}
+	// @TODO: Do something with this attested document
+	// document, err := nitro.Attest(nonce, nil, nil)
+	// if err != nil {
+	//	return fmt.Errorf("failed to create attestation document: %w", err)
+	//}
 
 	// get the aws configuration loaded
 	cfg, err := config.LoadDefaultConfig(ctx)
@@ -168,7 +137,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 		return errors.New("secret is not defined in secrets manager")
 	}
 
-	keyPolicy := o.SecretString
+	keyPolicy := *o.SecretString
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<IMAGE_SHA384>", imageSha384)
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR0>", pcr0)
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR1>", pcr1)
@@ -181,12 +150,12 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 		Policy: aws.String(keyPolicy),
 	}
 
-	result, err := awsutils.MakeKey(ctx, client, input)
+	result, err := kClient.CreateKey(ctx, input)
 	if err != nil {
 		return fmt.Errorf("failed to make key: %w", err)
 	}
 
-	service.kmsDecryptKeyArn = *result.KeyMetadata.KeyId
+	s.kmsDecryptKeyArn = *result.KeyMetadata.KeyId
 	return nil
 }
 
@@ -207,7 +176,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Fatal().Msg("could not configure datastore")
 	}
 
-	// setup our custodian integrations
+	// set up our custodian integrations
 	upholdCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Uphold})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create uphold custodian")
@@ -267,13 +236,18 @@ func (s *Service) decryptBootstrap(ctx context.Context, ciphertext []byte) (map[
 
 // BuildSigningBytes returns the bytes that should be signed over when creating a signature
 // for a QLDBPaymentTransitionHistoryEntry.
-func (e QLDBPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
+func (e *QLDBPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
 	marshaled, err := ion.MarshalBinary(e.Data.Data)
 	if err != nil {
 		return nil, fmt.Errorf("Ion marshal failed: %w", err)
 	}
 
 	return marshaled, nil
+}
+
+// getIdempotencyKey returns a base64 hash of a series of values to be used as an idempotency key in QLDB
+func (e *QLDBPaymentTransitionHistoryEntry) getIdempotencyKey() string {
+	return ""
 }
 
 // ValueHolder converts a QLDBPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder
@@ -287,7 +261,7 @@ func (b qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.
 // GetTransitionHistory returns a slice of entries representing the entire state history
 // for a given id.
 func GetTransitionHistory(txn wrappedQldbTxnAPI, id string) ([]QLDBPaymentTransitionHistoryEntry, error) {
-	result, err := txn.Execute("SELECT * FROM history(PaymentTransitions) AS h WHERE h.metadata.id = ?", id)
+	result, err := txn.Execute("SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?", id)
 	if err != nil {
 		return nil, fmt.Errorf("QLDB transaction failed: %w", err)
 	}
@@ -307,12 +281,18 @@ func GetTransitionHistory(txn wrappedQldbTxnAPI, id string) ([]QLDBPaymentTransi
 }
 
 // TransitionHistoryIsValid returns whether a slice of entries representing the entire state
-// history for a given id include exculsively valid transitions.
+// history for a given id include exclusively valid transitions.
 func TransitionHistoryIsValid(transactionHistory []QLDBPaymentTransitionHistoryEntry) (bool, error) {
-	var reason error
+	var (
+		reason error
+		err    error
+	)
 	for i, transaction := range transactionHistory {
 		var transactionData QLDBPaymentTransitionData
-		json.Unmarshal(transaction.Data.Data, &transactionData)
+		err = json.Unmarshal(transaction.Data.Data, &transactionData)
+		if err != nil {
+			return false, fmt.Errorf("failed to unmarshal transation data: %w", err)
+		}
 		transactionState := transactionData.Status
 		// Transitions must always start at 0
 		if i == 0 {
@@ -322,17 +302,20 @@ func TransitionHistoryIsValid(transactionHistory []QLDBPaymentTransitionHistoryE
 			continue
 		}
 		var previousTransitionData QLDBPaymentTransitionData
-		json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
+		err = json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
+		if err != nil {
+			return false, fmt.Errorf("failed to unmarshal previous transition history record: %w", err)
+		}
 		previousTransitionState := previousTransitionData.Status
 		if !slices.Contains(Transitions[previousTransitionState], transactionState) {
-			return false, errors.New("Invalid transition")
+			return false, errors.New("invalid transition")
 		}
 	}
 	return true, reason
 }
 
 // RevisionValidInTree verifies a document revision in QLDB using a digest and the Merkle
-// hashes to rederive the digest
+// hashes to re-derive the digest
 func RevisionValidInTree(
 	ctx context.Context,
 	client wrappedQldbSdkClient,
@@ -369,7 +352,7 @@ func RevisionValidInTree(
 	}
 
 	for i, providedHash := range hashes {
-		// During the first interation concatenatedHash hasn't been populated.
+		// During the first integration concatenatedHash hasn't been populated.
 		// Populate it with the hash from the provided transaction.
 		if i == 0 {
 			decodedHash, err := base64.StdEncoding.DecodeString(string(transaction.Hash))
@@ -409,37 +392,70 @@ func RevisionValidInTree(
 
 // GetQLDBObject returns the latests state of an entry for a given ID after validating its
 // transition history.
-func GetQLDBObject(txn wrappedQldbTxnAPI, id string) (QLDBPaymentTransitionHistoryEntry, error) {
-	result, err := GetTransitionHistory(txn, id)
+func GetQLDBObject(connection wrappedQldbDriverAPI, id string) (*QLDBPaymentTransitionHistoryEntry, error) {
+	data, err := connection.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		// Fetch all historical states for this record
+		result, err := GetTransitionHistory(txn, id)
+		if err != nil {
+			return QLDBPaymentTransitionHistoryEntry{}, fmt.Errorf("Failed to get transition history: %w", err)
+		}
+		if len(result) < 1 {
+			return nil, nil
+		}
+		// Ensure that all state changes in record history were valid
+		valid, err := TransitionHistoryIsValid(result)
+		if valid {
+			// We only want the latest state of this record once its
+			// history is verified
+			return result[0], nil
+		}
+		return nil, fmt.Errorf("Invalid transition history: %w", err)
+	})
 	if err != nil {
-		return QLDBPaymentTransitionHistoryEntry{}, fmt.Errorf("Failed to get transition history: %w", err)
+		return nil, fmt.Errorf("Failed to query QLDB: %w", err)
 	}
-	valid, err := TransitionHistoryIsValid(result)
-	if valid {
-		return result[0], nil
+	// If no record was found, return nothing
+	if data == nil {
+		return nil, nil
 	}
-	return QLDBPaymentTransitionHistoryEntry{}, fmt.Errorf("Invalid transition history: %w", err)
+	assertedData, ok := data.(QLDBPaymentTransitionHistoryEntry)
+	if !ok {
+		return nil, fmt.Errorf("Database response was the wrong type: %w", err)
+	}
+	return &assertedData, nil
 }
 
 // WriteQLDBObject persists an object in a transaction after verifying that its change
 // represents a valid state transition.
 func WriteQLDBObject(
+	ctx context.Context,
 	driver wrappedQldbDriverAPI,
-	key ed25519.PrivateKey,
-	object QLDBPaymentTransitionHistoryEntry,
-) (QLDBPaymentTransitionHistoryEntrySignature, error) {
-	b, err := json.Marshal(object)
+	key wrappedKMSClient,
+	object *QLDBPaymentTransitionHistoryEntry,
+) (*QLDBPaymentTransitionHistoryEntry, error) {
+	b, err := object.BuildSigningBytes()
+	// @TODO: Get key ID
+	todoString := "nil"
 	if err != nil {
-		return []byte{}, fmt.Errorf("JSON marshal failed: %w", err)
+		return nil, fmt.Errorf("JSON marshal failed: %w", err)
 	}
-	dataSignature := ed25519.Sign(key, b)
-	_, err = driver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		return txn.Execute("INSERT INTO PaymentTransitions {'some_key': 'some_value'}")
+	signingOutput, _ := key.Sign(ctx, &kms.SignInput{
+		KeyId:            &todoString,
+		Message:          b,
+		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
+	})
+	object.Data.Signature = signingOutput.Signature
+	entry, err := driver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		return txn.Execute("INSERT INTO transactions ?", object)
 	})
 	if err != nil {
-		return []byte{}, fmt.Errorf("QLDB execution failed: %w", err)
+		return nil, fmt.Errorf("QLDB execution failed: %w", err)
 	}
-	return dataSignature, nil
+	assertedEntry, ok := entry.(QLDBPaymentTransitionHistoryEntry)
+	if !ok {
+		return nil, errors.New("QLDB record is of the wrong type")
+	}
+	return &assertedEntry, nil
 }
 
 func sortHashes(a, b []byte) ([][]byte, error) {
@@ -551,7 +567,7 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup the qldb driver: %w", err)
 	}
-	// setup a retry policy
+	// set up a retry policy
 	// Configuring an exponential backoff strategy with base of 20 milliseconds
 	retryPolicy2 := qldbdriver.RetryPolicy{
 		MaxRetryLimit: 2,

@@ -40,7 +40,10 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	os.Setenv("UPHOLD_ENVIRONMENT", "test")
+	err := os.Setenv("UPHOLD_ENVIRONMENT", "test")
+	if err != nil {
+		panic("failed to set environment variable")
+	}
 
 	// Mock transaction creation
 	jsonResponse, err := json.Marshal(upholdCreateTransactionSuccessResponse)
@@ -73,32 +76,32 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentVersion := 0
 	upholdStateMachine := UpholdMachine{}
+	mockDriver := new(MockDriver)
+	transaction := Transaction{State: Initialized}
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.
-	newState, _ := Drive(ctx, &upholdStateMachine, Initialized, currentVersion)
+	newState, _ := Drive(ctx, &upholdStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Initialized, newState)
 
 	// Create a sample state to represent the now-initialized entity.
-	currentState := Prepared
+	transaction.State = Prepared
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	currentVersion = 1
 
 	// Should transition transaction into the Authorized state
-	newState, _ = Drive(ctx, &upholdStateMachine, currentState, currentVersion)
+	newState, _ = Drive(ctx, &upholdStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Authorized, newState)
 
-	currentState = Authorized
+	transaction.State = Authorized
 	// Should transition transaction into the Pending state
-	newState, _ = Drive(ctx, &upholdStateMachine, currentState, currentVersion)
+	newState, _ = Drive(ctx, &upholdStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Pending, newState)
 
-	currentState = Pending
+	transaction.State = Pending
 	// Should transition transaction into the Paid state
-	newState, _ = Drive(ctx, &upholdStateMachine, currentState, currentVersion)
+	newState, _ = Drive(ctx, &upholdStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Paid, newState)
 }
 
@@ -128,16 +131,18 @@ func TestUpholdStateMachine500FailureToPendingTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := Authorized
+	mockDriver := new(MockDriver)
+	transaction := Transaction{State: Authorized}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	upholdStateMachine := UpholdMachine{}
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
-	// correct value and allow this test to pass in the mean time.
-	currentVersion := 500
+	// correct value and allow this test to pass in the meantime.
+	// @TODO: Make this test fail
+	// currentVersion := 500
 
 	// Should fail to transition transaction into the Pending state
-	newState, _ := Drive(ctx, &upholdStateMachine, currentState, currentVersion)
+	newState, _ := Drive(ctx, &upholdStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Authorized, newState)
 }
 
@@ -149,7 +154,10 @@ func TestUpholdStateMachine404FailureToPaidTransitions(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
-	os.Setenv("UPHOLD_ENVIRONMENT", "test")
+	err := os.Setenv("UPHOLD_ENVIRONMENT", "test")
+	if err != nil {
+		panic("failed to set environment variable")
+	}
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(upholdCommitTransactionFailureResponse)
@@ -168,15 +176,17 @@ func TestUpholdStateMachine404FailureToPaidTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	currentState := Pending
+	transaction := Transaction{State: Pending}
+	mockDriver := new(MockDriver)
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the mean time.
-	currentVersion := 404
+	// @TODO: Make this test fail
+	// currentVersion := 404
 	upholdStateMachine := UpholdMachine{}
 
 	// Should transition transaction into the Pending state
-	newState, _ := Drive(ctx, &upholdStateMachine, currentState, currentVersion)
+	newState, _ := Drive(ctx, &upholdStateMachine, &transaction, mockDriver)
 	assert.Equal(t, Pending, newState)
 }

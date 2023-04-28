@@ -6,6 +6,7 @@ type GeminiMachine struct {
 	// transaction custodian.Transaction
 	version     int
 	transaction *Transaction
+	connection  wrappedQldbDriverAPI
 }
 
 // setVersion assigns the version field in the GeminiMachine to the specified int
@@ -13,9 +14,14 @@ func (gm *GeminiMachine) setVersion(version int) {
 	gm.version = version
 }
 
-// setTransaction assigns the transaction field in the BitflyerMachine to the specified Transaction
+// setTransaction assigns the transaction field in the GeminiMachine to the specified Transaction
 func (gm *GeminiMachine) setTransaction(transaction *Transaction) {
 	gm.transaction = transaction
+}
+
+// setConnection assigns the connection field in the GeminiMachine to the specified wrappedQldbDriverAPI
+func (gm *GeminiMachine) setConnection(connection wrappedQldbDriverAPI) {
+	gm.connection = connection
 }
 
 // Initialized implements TxStateMachine for the Gemini machine

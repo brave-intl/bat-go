@@ -6,6 +6,7 @@ type UpholdMachine struct {
 	// transaction custodian.Transaction
 	version     int
 	transaction *Transaction
+	connection  wrappedQldbDriverAPI
 }
 
 // setVersion assigns the version field in the UpholdMachine to the specified int
@@ -16,6 +17,11 @@ func (um *UpholdMachine) setVersion(version int) {
 // setTransaction assigns the transaction field in the UpholdMachine to the specified Transaction
 func (um *UpholdMachine) setTransaction(transaction *Transaction) {
 	um.transaction = transaction
+}
+
+// setConnection assigns the connection field in the UpholdMachine to the specified wrappedQldbDriverAPI
+func (um *UpholdMachine) setConnection(connection wrappedQldbDriverAPI) {
+	um.connection = connection
 }
 
 // Initialized implements TxStateMachine for uphold machine

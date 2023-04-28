@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"reflect"
 	"testing"
 	"time"
@@ -14,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/smithy-go/middleware"
-	"github.com/awslabs/amazon-qldb-driver-go/qldbdriver"
+	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -34,6 +35,10 @@ type mockResult struct {
 }
 
 type mockTransaction struct {
+	mock.Mock
+}
+
+type mockKMSClient struct {
 	mock.Mock
 }
 
@@ -88,6 +93,11 @@ func (m *MockSDKClient) GetRevision(
 ) (*qldb.GetRevisionOutput, error) {
 	args := m.Called()
 	return args.Get(0).(*qldb.GetRevisionOutput), args.Error(1)
+}
+
+func (m *mockKMSClient) Sign(ctx context.Context, params *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error) {
+	args := m.Called()
+	return args.Get(0).(*kms.SignOutput), args.Error(1)
 }
 
 /*
@@ -267,7 +277,9 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+	ctx := context.Background()
 	mockTxn := new(mockTransaction)
+	mockKMS := new(mockKMSClient)
 	mockRes := new(mockResult)
 	mockRes.On("Next", mockTxn).Return(true).Once()
 	mockRes.On("Next", mockTxn).Return(false)
@@ -286,7 +298,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockDriver.On("Execute", context.Background(), mock.Anything).Return(mockTxn, nil)
 
 	// Mock write data
-	_, err = WriteQLDBObject(mockDriver, priv, mockTransitionHistory)
+	_, err = WriteQLDBObject(ctx, mockDriver, mockKMS, &mockTransitionHistory)
 	if err != nil {
 		panic(err)
 	}
@@ -296,6 +308,6 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	}
 
 	// Mock read data
-	fetched, _ := GetQLDBObject(mockTxn, "")
+	fetched, _ := GetQLDBObject(mockDriver, "")
 	assert.True(t, ed25519.Verify(pub, signedBytes, fetched.Data.Signature), nil)
 }

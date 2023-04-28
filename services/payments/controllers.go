@@ -20,6 +20,7 @@ type configurationHandlerRequest map[appctx.CTXKey]interface{}
 
 type getConfResponse struct {
 	AttestationDocument string `json:"attestation"`
+	PublicKey           string
 }
 
 // GetConfigurationHandler - handler to get important payments configuration information, attested by nitro
