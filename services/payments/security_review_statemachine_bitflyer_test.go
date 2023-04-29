@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/mock"
 	"os"
 	"testing"
 
@@ -71,7 +72,16 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	ctx := context.Background()
 	bitflyerStateMachine := BitflyerMachine{}
 	mockDriver := new(MockDriver)
+	mockTxn := new(mockTransaction)
+	mockRes := new(mockResult)
+	mockDriver.On("Execute", context.Background(), mock.Anything).Return(mockRes, nil)
+	mockTxn.On(
+		"Execute",
+		"SELECT * FROM history(transaction) AS h WHERE h.metadata.id = ?",
+		mock.Anything,
+	).Return(mockRes, nil)
 	transaction := Transaction{State: Initialized}
+	mockRes.On("Next", mockTxn).Return(true).Once()
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.

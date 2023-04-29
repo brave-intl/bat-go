@@ -2,11 +2,10 @@ package payments
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"reflect"
 	"testing"
 	"time"
@@ -56,8 +55,8 @@ func (m *mockTransaction) Abort() error {
 }
 
 func (m *MockDriver) Execute(ctx context.Context, fn func(txn qldbdriver.Transaction) (interface{}, error)) (interface{}, error) {
-	args := m.Called(ctx)
-	return args.Get(0).(*mockTransaction), args.Error(1)
+	args := m.Called(ctx, fn)
+	return args.Get(0).(*mockResult), args.Error(1)
 }
 
 func (m *MockDriver) Shutdown(ctx context.Context) {
@@ -96,8 +95,13 @@ func (m *MockSDKClient) GetRevision(
 }
 
 func (m *mockKMSClient) Sign(ctx context.Context, params *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error) {
-	args := m.Called()
+	args := m.Called(ctx, params, optFns)
 	return args.Get(0).(*kms.SignOutput), args.Error(1)
+}
+
+func (m *mockKMSClient) Verify(ctx context.Context, params *kms.VerifyInput, optFns ...func(*kms.Options)) (*kms.VerifyOutput, error) {
+	args := m.Called(ctx, params, optFns)
+	return args.Get(0).(*kms.VerifyOutput), args.Error(1)
 }
 
 /*
@@ -107,12 +111,12 @@ Should include exhaustive passing and failing tests.
 func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		valid, _ := TransitionHistoryIsValid(transactionHistorySet)
+		valid, _ := validateTransitionHistory(transactionHistorySet)
 		assert.True(t, valid)
 	}
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		valid, _ := TransitionHistoryIsValid(transactionHistorySet)
+		valid, _ := validateTransitionHistory(transactionHistorySet)
 		assert.False(t, valid)
 	}
 }
@@ -240,10 +244,6 @@ func TestGenerateAllValidTransitions(t *testing.T) {
 // TestQLDBSignedInteractions mocks QLDB to test signing and verifying of records that are
 // persisted into QLDB
 func TestQLDBSignedInteractions(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		panic(err)
-	}
 	testData := QLDBPaymentTransitionData{
 		Status: Initialized,
 	}
@@ -268,46 +268,34 @@ func TestQLDBSignedInteractions(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-	signingBytes, err := mockTransitionHistory.BuildSigningBytes()
-	if err != nil {
-		panic(err)
-	}
-	mockTransitionHistory.Data.Signature = ed25519.Sign(priv, signingBytes)
+
 	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
 	if err != nil {
 		panic(err)
 	}
 	ctx := context.Background()
-	mockTxn := new(mockTransaction)
 	mockKMS := new(mockKMSClient)
 	mockRes := new(mockResult)
-	mockRes.On("Next", mockTxn).Return(true).Once()
-	mockRes.On("Next", mockTxn).Return(false)
 	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
 	mockDriver := new(MockDriver)
-	mockTxn.On(
-		"Execute",
-		"SELECT * FROM history(PaymentTransitions) AS h WHERE h.metadata.id = ?",
-		mock.Anything,
-	).Return(mockRes, nil)
-	mockTxn.On(
-		"Execute",
-		"INSERT INTO PaymentTransitions {'some_key': 'some_value'}",
-		mock.Anything,
-	).Return(mockRes, nil)
-	mockDriver.On("Execute", context.Background(), mock.Anything).Return(mockTxn, nil)
+	mockDriver.On("Execute", context.Background(), mock.Anything).Return(mockRes, nil)
+	mockKMS.On("Sign", context.Background(), mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
+	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
+	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 
-	// Mock write data
+	todoString := ""
+	message := []byte("test")
+	signingOutput, _ := mockKMS.Sign(ctx, &kms.SignInput{
+		KeyId:            &todoString,
+		Message:          message,
+		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
+	})
+	mockTransitionHistory.Data.Signature = signingOutput.Signature
+
+	// First write should succeed because Verify returns true
 	_, err = WriteQLDBObject(ctx, mockDriver, mockKMS, &mockTransitionHistory)
-	if err != nil {
-		panic(err)
-	}
-	signedBytes, err := mockTransitionHistory.BuildSigningBytes()
-	if err != nil {
-		panic(err)
-	}
-
-	// Mock read data
-	fetched, _ := GetQLDBObject(mockDriver, "")
-	assert.True(t, ed25519.Verify(pub, signedBytes, fetched.Data.Signature), nil)
+	assert.NoError(t, err)
+	// Second write of the same object should fail because Verify returns false
+	_, err = WriteQLDBObject(ctx, mockDriver, mockKMS, &mockTransitionHistory)
+	assert.Error(t, err)
 }

@@ -32,16 +32,8 @@ type wrappedQldbDriverAPI interface {
 
 type wrappedQldbSdkClient interface {
 	New() *wrappedQldbSdkClient
-	GetDigest(
-		ctx context.Context,
-		params *qldb.GetDigestInput,
-		optFns ...func(*qldb.Options),
-	) (*qldb.GetDigestOutput, error)
-	GetRevision(
-		ctx context.Context,
-		params *qldb.GetRevisionInput,
-		optFns ...func(*qldb.Options),
-	) (*qldb.GetRevisionOutput, error)
+	GetDigest(ctx context.Context, params *qldb.GetDigestInput, optFns ...func(*qldb.Options)) (*qldb.GetDigestOutput, error)
+	GetRevision(ctx context.Context, params *qldb.GetRevisionInput, optFns ...func(*qldb.Options)) (*qldb.GetRevisionOutput, error)
 }
 
 // wrappedQldbTxnAPI defines the API for QLDB methods that we'll be using
@@ -58,6 +50,8 @@ type wrappedQldbResult interface {
 	GetCurrentData() []byte
 }
 
+// wrappedKMSClient defines the characteristics for KMS methods that we'll be using
 type wrappedKMSClient interface {
 	Sign(ctx context.Context, params *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error)
+	Verify(ctx context.Context, params *kms.VerifyInput, optFns ...func(*kms.Options)) (*kms.VerifyOutput, error)
 }
