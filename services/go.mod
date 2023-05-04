@@ -21,6 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/qldb v1.15.6
 	github.com/aws/aws-sdk-go-v2/service/qldbsession v1.14.10
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.29.1
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.19.7
 	github.com/aws/aws-sdk-go-v2/service/sts v1.17.1
 	github.com/aws/smithy-go v1.13.5
 	github.com/awslabs/amazon-qldb-driver-go v1.1.1
@@ -40,6 +41,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.7
 	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/mdlayher/vsock v1.2.0
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/zerolog v1.28.0
 	github.com/satori/go.uuid v1.2.0
@@ -100,7 +102,6 @@ require (
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mdlayher/socket v0.4.0 // indirect
-	github.com/mdlayher/vsock v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mssola/user_agent v0.5.3 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect

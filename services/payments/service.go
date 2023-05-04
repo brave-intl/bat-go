@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
@@ -17,6 +18,7 @@ import (
 
 	"encoding/json"
 
+	awsutils "github.com/brave-intl/bat-go/libs/aws"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -47,6 +49,8 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create attestation document: %w", err)
 	}
+	var logger = logging.Logger(ctx, "payments.configureKMSKey")
+	logger.Debug().Msgf("document: %+v", document)
 
 	// get the aws configuration loaded
 	cfg, err := config.LoadDefaultConfig(ctx)
@@ -66,7 +70,6 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 		return errors.New("template secret id for enclave decrypt key not found on context")
 	}
 
-	// TODO: get from secrets manager the key policy template
 	smClient := secretsmanager.NewFromConfig(cfg)
 	o, err := smClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(templateSecretID),
@@ -80,15 +83,14 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 		return errors.New("secret is not defined in secrets manager")
 	}
 
-	keyPolicy := o.SecretString
+	keyPolicy := *o.SecretString
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<IMAGE_SHA384>", imageSha384)
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR0>", pcr0)
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR1>", pcr1)
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR2>", pcr2)
 
-	kClient := kms.NewFromConfig(cfg)
+	client := kms.NewFromConfig(cfg)
 
-	// TODO: use the policy string as the policy in the create key input
 	input := &kms.CreateKeyInput{
 		Policy: aws.String(keyPolicy),
 	}
@@ -98,7 +100,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 		return fmt.Errorf("failed to make key: %w", err)
 	}
 
-	service.kmsDecryptKeyArn = *result.KeyMetadata.KeyId
+	s.kmsDecryptKeyArn = *result.KeyMetadata.KeyId
 	return nil
 }
 
@@ -145,8 +147,8 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	return ctx, service, nil
 }
 
-// decryptBootstrap - use service keyShares to reconstruct the decryption key
-func (s *Service) decryptBootstrap(ctx context.Context, ciphertext []byte) (map[appctx.CTXKey]interface{}, error) {
+// DecryptBootstrap - use service keyShares to reconstruct the decryption key
+func (s *Service) DecryptBootstrap(ctx context.Context, ciphertext []byte) (map[appctx.CTXKey]interface{}, error) {
 	// combine the service configured key shares
 	key, err := shamir.Combine(s.keyShares)
 	if err != nil {

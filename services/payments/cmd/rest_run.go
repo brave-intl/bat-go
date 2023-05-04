@@ -34,9 +34,6 @@ func RestRun(command *cobra.Command, args []string) {
 		}()
 	}
 
-	// add our command line params to context
-	//ctx = context.WithValue(ctx, appctx.CoingeckoServerCTXKey, viper.Get("coingecko-service"))
-
 	// setup the service now
 	ctx, s, err := payments.NewService(ctx)
 	if err != nil {

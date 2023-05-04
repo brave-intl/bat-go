@@ -16,13 +16,6 @@ func init() {
 	// add this command as a serve subcommand
 	srvcmd.ServeCmd.AddCommand(paymentsCmd)
 
-	// setup the flags
-
-	//paymentsCmd.PersistentFlags().String("coingecko-token", "",
-	//	"the coingecko service token for this service")
-	//cmd.Must(viper.BindPFlag("coingecko-token", paymentsCmd.PersistentFlags().Lookup("coingecko-token")))
-	//cmd.Must(viper.BindEnv("coingecko-token", "COINGECKO_TOKEN"))
-
 }
 
 var (

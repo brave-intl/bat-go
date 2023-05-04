@@ -34,18 +34,18 @@ type Transaction struct {
 	AttestationDocument string       `json:"attestation,omitempty" ion:"-"`
 	Signature           string       `json:"-" ion:"signature"` // KMS signature only enclave can sign
 	PublicKey           string       `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
+	DryRun              *string      `json:"dryRun" ion:"-"`    // determines dry-run
 }
+
+var (
+	prepareFailure = "prepare"
+	submitFailure  = "submit"
+)
 
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
 func (t *Transaction) SignTransaction(ctx context.Context) (string, string, error) {
 	// TODO: fill in
 	return "", "", errorutils.ErrNotImplemented
-}
-
-// BuildSigningBytes - the string format that payments will sign over per tx
-func (t Transaction) BuildSigningBytes() []byte {
-	return []byte(fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
-		1, t.To, t.Amount.String(), t.IdempotencyKey, t.Custodian, t.DocumentID, t.State))
 }
 
 // MarshalJSON - custom marshaling of transaction type

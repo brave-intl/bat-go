@@ -16,10 +16,9 @@ import (
 	"github.com/brave-intl/bat-go/libs/nitro"
 	srvcmd "github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/payments"
+	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
 
-	// TODO: when we have payments service merged fixme
-	// "github.com/brave-intl/bat-go/services/payments"
 	"github.com/go-chi/chi"
 	"github.com/mdlayher/vsock"
 	"github.com/spf13/cobra"
@@ -93,9 +92,6 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// setup router
 	ctx, r := setupRouter(ctx, s)
 	logger.Info().Msg("payments routes setup")
-
-	r := chi.NewRouter()
-	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
 
 	// setup listener
 	addr := viper.GetString("address")
