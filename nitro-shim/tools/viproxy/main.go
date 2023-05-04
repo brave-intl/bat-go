@@ -37,8 +37,9 @@ func parseAddr(rawAddr string) net.Addr {
 	if err != nil {
 		l.Fatal("Couldn't turn CID into integer.")
 	}
+	// cid ports are 32 bits
 	port, err := strconv.ParseUint(fields[1], 10, 32)
-	if err != nil {
+	if err != nil || port == 0 {
 		l.Fatal("Couldn't turn port into integer.")
 	}
 

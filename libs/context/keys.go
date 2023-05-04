@@ -224,7 +224,12 @@ const (
 	// ParametersTransitionCTXKey - the context key for getting the vbat deadline
 	ParametersTransitionCTXKey CTXKey = "parameters_transition"
 
-	// EnclaveDecryptKeyTemplateSecretIDCTXKey is the decrypt secret template for payments
+	// Nitro
+	// LogWriterCTXKey - the context key for getting the log writer
+	LogWriterCTXKey CTXKey = "log_writer"
+	// EgressProxyAddrCTXKey - the context key for getting the egress proxy address
+	EgressProxyAddrCTXKey CTXKey = "egress_proxy_addr"
+	// EnclaveDecryptKeyTemplateSecretIDCTXKey - the context key for getting the key template for key creation
 	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
 )
 

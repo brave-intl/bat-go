@@ -16,10 +16,12 @@ import (
 	"github.com/brave-intl/bat-go/libs/nitro"
 	srvcmd "github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/payments"
-	"github.com/go-chi/chi"
-	chiware "github.com/go-chi/chi/middleware"
-	"github.com/mdlayher/vsock"
 	"github.com/rs/zerolog/hlog"
+
+	// TODO: when we have payments service merged fixme
+	// "github.com/brave-intl/bat-go/services/payments"
+	"github.com/go-chi/chi"
+	"github.com/mdlayher/vsock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -77,7 +79,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 
 	logaddr := viper.GetString("log-address")
 	writer := nitro.NewVsockWriter(logaddr)
-	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
+	ctx = context.WithValue(ctx, appctx.LogWriterCTXKey, writer)
 	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
 	ctx = context.WithValue(ctx, appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey, viper.GetString("enclave-decrypt-key-template-secret"))
 	// special logger with writer
@@ -92,10 +94,13 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx, r := setupRouter(ctx, s)
 	logger.Info().Msg("payments routes setup")
 
+	r := chi.NewRouter()
+	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
+
 	// setup listener
 	addr := viper.GetString("address")
 	port, err := strconv.ParseUint(strings.Split(addr, ":")[1], 10, 32)
-	if err != nil {
+	if err != nil || port != 0 {
 		// panic if there is an error, or if the port is too large to fit in uint32
 		logger.Panic().Err(err).Msg("invalid --address")
 	}
@@ -162,8 +167,8 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("address must include port")
 	}
 	egressport, err := strconv.ParseUint(egressaddr[1], 10, 32)
-	if err != nil {
-		return fmt.Errorf("port must be a valid uint32: %v", err)
+	if err != nil || egressport == 0 {
+		return fmt.Errorf("port must be a valid uint32 and not 0: %v", err)
 	}
 
 	logaddr := strings.Split(viper.GetString("log-address"), ":")
@@ -171,8 +176,8 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("address must include port")
 	}
 	logport, err := strconv.ParseUint(logaddr[1], 10, 32)
-	if err != nil {
-		return fmt.Errorf("port must be a valid uint32: %v", err)
+	if err != nil || logport == 0 {
+		return fmt.Errorf("port must be a valid uint32 and not 0: %v", err)
 	}
 	logserve := nitro.NewVsockLogServer(ctx, uint32(logport))
 

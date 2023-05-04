@@ -655,6 +655,7 @@ type CustodianLink struct {
 	WalletID           *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
 	Custodian          string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
 	CreatedAt          time.Time  `json:"created_at" db:"created_at" valid:"-"`
+	UpdatedAt          *time.Time `json:"updated_at" db:"updated_at" valid:"-"`
 	LinkedAt           time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
 	DisconnectedAt     *time.Time `json:"disconnected_at" db:"disconnected_at" valid:"-"`
 	DepositDestination string     `json:"deposit_destination" db:"deposit_destination" valid:"-"`
@@ -854,7 +855,8 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 		update
 			wallet_custodian
 		set
-			disconnected_at=now()
+			disconnected_at=now(),
+			updated_at=now()
 		where
 			wallet_id=$1 and
 			disconnected_at is null and
@@ -956,7 +958,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 
 	// evict any prior linkings that were not disconnected (across all custodians)
 	stmt = `
-		update wallet_custodian set disconnected_at=now() where wallet_id=$1 and disconnected_at is null
+		update wallet_custodian set disconnected_at=now(), updated_at=now() where wallet_id=$1 and disconnected_at is null
 	`
 	// perform query
 	if _, err := tx.ExecContext(ctx, stmt, cl.WalletID); err != nil {
@@ -972,7 +974,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 			$1, $2, $3
 		)
 		on conflict (wallet_id, custodian, linking_id) 
-		do update set disconnected_at=null, unlinked_at=null, linked_at=now()
+		do update set updated_at=now(), disconnected_at=null, unlinked_at=null, linked_at=now()
 		returning *
 	`
 

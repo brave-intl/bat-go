@@ -13,7 +13,7 @@ type Transaction struct {
 	OrderID               uuid.UUID       `json:"orderId" db:"order_id"`
 	CreatedAt             time.Time       `json:"createdAt" db:"created_at"`
 	UpdatedAt             time.Time       `json:"updatedAt" db:"updated_at"`
-	ExternalTransactionID string          `json:"external_transaction_id" db:"external_transaction_id"`
+	ExternalTransactionID string          `json:"externalTransactionId" db:"external_transaction_id"`
 	Status                string          `json:"status" db:"status"`
 	Currency              string          `json:"currency" db:"currency"`
 	Kind                  string          `json:"kind" db:"kind"`

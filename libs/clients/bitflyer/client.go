@@ -21,9 +21,9 @@ import (
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/requestutils"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/google/go-querystring/query"
 	"github.com/shopspring/decimal"
-	"github.com/square/go-jose/jwt"
 )
 
 var (

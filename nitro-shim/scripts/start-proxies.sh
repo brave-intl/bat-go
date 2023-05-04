@@ -21,10 +21,10 @@ elif [ "${service}" = "/star-randsrv" ]; then
         -listen "unix://${domain_socket}" &
     # give gvproxy a second to start
     sleep 1
-    # instruct gvproxy to forward port 8443 to the enclave
+    # instruct gvproxy to forward port 443 to the enclave
     curl \
         -X POST \
         --unix-socket "$domain_socket" \
-        -d '{"local":":8443","remote":"192.168.127.2:8443"}' \
+        -d '{"local":":443","remote":"192.168.127.2:443"}' \
         "http:/unix/services/forwarder/expose"
 fi

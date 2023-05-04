@@ -1,5 +1,5 @@
 # Build proxies that facilitate communication with the enclave.
-FROM golang:1.19 as builder
+FROM golang:1.20 as builder
 
 WORKDIR /src
 COPY tools/ ./

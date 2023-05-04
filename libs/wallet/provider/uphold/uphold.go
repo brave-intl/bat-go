@@ -81,6 +81,7 @@ var (
 	upholdProxy            = os.Getenv("UPHOLD_HTTP_PROXY")
 	upholdAPIBase          = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
+		"test":    "https://mock.uphold.com",
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
 	}[environment]
