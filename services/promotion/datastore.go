@@ -1091,8 +1091,8 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 				Str("error bundle", eb.DataToString()).
 				Msg("failed to submit batch transfers: error bundle")
 		}
+		logger.Error().Err(err).Msg("failed to submit batch transfers")
 
-		logger.Error().Err(err).Msg("run next batch payments: failed to submit batch transfers")
 		status, errCode, _ := errToDrainCode(err)
 		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
 		countClaimDrainStatus.With(prometheus.Labels{"custodian": "bitflyer", "status": "failed"}).Inc()
