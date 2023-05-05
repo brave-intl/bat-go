@@ -31,25 +31,23 @@ func (bm *BitflyerMachine) setConnection(connection wrappedQldbDriverAPI) {
 	bm.connection = connection
 }
 
-// Initialized implements TxStateMachine for the Bitflyer machine
+// Initialized implements TxStateMachine for the Bitflyer machine. It will attempt to Initialize a record in QLDB
+// returning the state of the record in QLDB. If the record already exists, in a state other than Initialize, an
+// error is returned.
 func (bm *BitflyerMachine) Initialized() (TransactionState, error) {
 	//if !idempotencyKeyIsValid(bm.transaction) {
 	//	return Initialized, errors.New("provided idempotencyKey does not match transaction")
 	//}
 	ctx := context.Background()
-	entry, err := GetQLDBObject(bm.connection, bm.transaction.DocumentID)
+	// Attempt to write
+	entry, err := WriteQLDBObject(ctx, bm.connection, bm.kmsSigningKeyClient, bm.transaction)
 	if err != nil {
-		return Initialized, fmt.Errorf("Failed to query QLDB: %w", err)
+		return Initialized, fmt.Errorf("failed to write transaction: %w", err)
 	}
-	if entry != nil {
-		// Transition from initialized to prepared
-		entry, err = WriteQLDBObject(ctx, bm.connection, bm.kmsSigningKeyClient, entry)
+	if entry.State != Initialized {
+		return entry.State, fmt.Errorf("QLDB record exists and is in %s state", entry.State.String())
 	}
-	// Otherwise, it doesn't exist, and we need to initialize it
-	if bm.version == 0 {
-		return Initialized, nil
-	}
-	return Prepared, nil
+	return entry.State, nil
 }
 
 // Prepared implements TxStateMachine for the Bitflyer machine

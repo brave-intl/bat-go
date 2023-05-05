@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/google/uuid"
 	"strings"
 	"time"
 
@@ -67,13 +68,6 @@ type QLDBPaymentTransitionHistoryEntryData struct {
 	Signature      []byte `ion:"signature"`
 	Data           []byte `ion:"data"`
 	IdempotencyKey string `ion:"idempotencyKey"`
-}
-
-// QLDBPaymentTransitionData represents the data for a transaction. It is stored in QLDB
-// in a serialized format and needs to be separately deserialized from the QLDB ion
-// deserialization.
-type QLDBPaymentTransitionData struct {
-	Status TransactionState `ion:"status"`
 }
 
 // QLDBPaymentTransitionHistoryEntryMetadata defines metadata for QLDBPaymentTransitionHistoryEntry
@@ -246,11 +240,6 @@ func (e *QLDBPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) 
 	return marshaled, nil
 }
 
-// getIdempotencyKey returns a base64 hash of a series of values to be used as an idempotency key in QLDB
-func (e *QLDBPaymentTransitionHistoryEntry) getIdempotencyKey() string {
-	return ""
-}
-
 // ValueHolder converts a QLDBPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder
 func (b qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
 	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)
@@ -261,7 +250,7 @@ func (b qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.
 
 // getTransitionHistory returns a slice of entries representing the entire state history
 // for a given id.
-func getTransitionHistory(txn wrappedQldbTxnAPI, id string) ([]QLDBPaymentTransitionHistoryEntry, error) {
+func getTransitionHistory(txn wrappedQldbTxnAPI, id *uuid.UUID) ([]QLDBPaymentTransitionHistoryEntry, error) {
 	result, err := txn.Execute("SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?", id)
 	if err != nil {
 		return nil, fmt.Errorf("QLDB transaction failed: %w", err)
@@ -281,35 +270,54 @@ func getTransitionHistory(txn wrappedQldbTxnAPI, id string) ([]QLDBPaymentTransi
 	return nil, nil
 }
 
-// validateTransitionHistory returns whether a slice of entries representing the entire state
-// history for a given id include exclusively valid transitions.
-func validateTransitionHistory(transactionHistory []QLDBPaymentTransitionHistoryEntry) (bool, error) {
+// validateTransitionHistory returns whether a slice of entries representing the entire state history for a given id
+// include exclusively valid transitions. It also verifies IdempotencyKeys among states and the Merkle tree position of each state
+func validateTransitionHistory(ctx context.Context, idempotencyKey *uuid.UUID, transactionHistory []QLDBPaymentTransitionHistoryEntry) (bool, error) {
 	var (
 		reason error
 		err    error
 	)
 	for i, transaction := range transactionHistory {
-		var transactionData QLDBPaymentTransitionData
+		var transactionData Transaction
 		err = json.Unmarshal(transaction.Data.Data, &transactionData)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal transation data: %w", err)
 		}
-		transactionState := transactionData.Status
+		// GetIdempotencyKey will verify that the ID is internally consistent within the Transaction.
+		dataIdempotencyKey, err := transactionData.GetIdempotencyKey(ctx)
+		if err != nil {
+			return false, fmt.Errorf("IdempotencyKey invalid: %w", err)
+		}
+		// The data object is serialized in QLDB, but when deserialized should contain an IdempotencyKey that matches
+		// the IdempotencyKey on the top level of the QLDB record
+		if dataIdempotencyKey != idempotencyKey {
+			return false, fmt.Errorf("top level IdempotencyKey does not match Transaction IdempotencyKey: %s, %s", dataIdempotencyKey, idempotencyKey)
+		}
+		transactionState := transactionData.State
 		// Transitions must always start at 0
 		if i == 0 {
 			if transactionState != 0 {
-				return false, errors.New("Initial state is not valid")
+				return false, errors.New("initial state is not valid")
 			}
 			continue
 		}
-		var previousTransitionData QLDBPaymentTransitionData
+		var previousTransitionData Transaction
 		err = json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal previous transition history record: %w", err)
 		}
-		previousTransitionState := previousTransitionData.Status
+		previousIdempotencyKey, err := previousTransitionData.GetIdempotencyKey(ctx)
+		if err != nil {
+			return false, fmt.Errorf("IdempotencyKey invalid: %w", err)
+		}
+		// The IdempotencyKeys of all records in the transition history of a Transaction should match
+		if dataIdempotencyKey != previousIdempotencyKey {
+			return false, fmt.Errorf("IdempotencyKeys in transition history do not match: %s, %s", idempotencyKey.String(), previousIdempotencyKey.String())
+		}
+		previousTransitionState := previousTransitionData.State
+		// New transaction state should be present in the list of valid next states for the "previous" (current) state.
 		if !slices.Contains(Transitions[previousTransitionState], transactionState) {
-			return false, errors.New("invalid transition")
+			return false, errors.New("invalid state transition")
 		}
 	}
 	return true, reason
@@ -391,7 +399,7 @@ func RevisionValidInTree(
 	return false, nil
 }
 
-func transitionHistoryIsValid(txn wrappedQldbTxnAPI, id string) (bool, *QLDBPaymentTransitionHistoryEntry, error) {
+func transitionHistoryIsValid(ctx context.Context, txn wrappedQldbTxnAPI, id *uuid.UUID) (bool, *QLDBPaymentTransitionHistoryEntry, error) {
 	// Fetch all historical states for this record
 	result, err := getTransitionHistory(txn, id)
 	if err != nil {
@@ -401,7 +409,7 @@ func transitionHistoryIsValid(txn wrappedQldbTxnAPI, id string) (bool, *QLDBPaym
 		return false, nil, errors.New("record not found")
 	}
 	// Ensure that all state changes in record history were valid
-	valid, err := validateTransitionHistory(result)
+	valid, err := validateTransitionHistory(ctx, id, result)
 	if valid {
 		// We only want the latest state of this record once its
 		// history is verified
@@ -410,11 +418,14 @@ func transitionHistoryIsValid(txn wrappedQldbTxnAPI, id string) (bool, *QLDBPaym
 	return false, &result[0], fmt.Errorf("invalid transition history: %w", err)
 }
 
-// GetQLDBObject returns the latest state of an entry for a given ID after validating its
-// transition history.
-func GetQLDBObject(connection wrappedQldbDriverAPI, id string) (*QLDBPaymentTransitionHistoryEntry, error) {
-	data, err := connection.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		valid, result, err := transitionHistoryIsValid(txn, id)
+// getQLDBObject returns the latest version of an entry for a given ID after doing all requisite validation
+func getQLDBObject(
+	ctx context.Context,
+	txn wrappedQldbTxnAPI,
+	id *uuid.UUID,
+) (*QLDBPaymentTransitionHistoryEntry, error) {
+	data, err := txn.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		valid, result, err := transitionHistoryIsValid(ctx, txn, id)
 		if err != nil || result == nil || !valid {
 			return nil, fmt.Errorf("failed to get transition history: %w", err)
 		}
@@ -434,31 +445,63 @@ func GetQLDBObject(connection wrappedQldbDriverAPI, id string) (*QLDBPaymentTran
 	return &assertedData, nil
 }
 
+// GetQLDBObject returns the latest version of a record from QLDB if it exists, after doing all requisite validation
+func GetQLDBObject(
+	ctx context.Context,
+	qldbDriver wrappedQldbDriverAPI,
+	id *uuid.UUID,
+) (*QLDBPaymentTransitionHistoryEntry, error) {
+	data, err := qldbDriver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		entry, err := getQLDBObject(ctx, txn, id)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get QLDB record: %w", err)
+		}
+		return entry, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query QLDB: %w", err)
+	}
+	assertedData, ok := data.(QLDBPaymentTransitionHistoryEntry)
+	if !ok {
+		return nil, fmt.Errorf("database response was the wrong type: %w", err)
+	}
+	return &assertedData, nil
+}
+
 // WriteQLDBObject persists an object in a transaction after verifying that its change
 // represents a valid state transition.
 func WriteQLDBObject(
 	ctx context.Context,
-	driver wrappedQldbDriverAPI,
-	key wrappedKMSClient,
-	object *QLDBPaymentTransitionHistoryEntry,
-) (*QLDBPaymentTransitionHistoryEntry, error) {
-	b, err := object.BuildSigningBytes()
+	qldbDriver wrappedQldbDriverAPI,
+	kmsClient wrappedKMSClient,
+	transaction *Transaction,
+) (*Transaction, error) {
+	// Determine if the transaction already exists or if it needs to be initialized. This call will do all necessary
+	// record and history validation if they exist for this record
+	entry, err := GetQLDBObject(ctx, qldbDriver, transaction.IdempotencyKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query QLDB: %w", err)
+	}
+	if entry != nil {
+		if
+	}
+	b, err := entry.BuildSigningBytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build signing bytes: %w", err)
+	}
 	// @TODO: Get key ID
 	todoString := "nil"
 	if err != nil {
 		return nil, fmt.Errorf("JSON marshal failed: %w", err)
 	}
-	signingOutput, _ := key.Sign(ctx, &kms.SignInput{
+	signingOutput, _ := kmsClient.Sign(ctx, &kms.SignInput{
 		KeyId:            &todoString,
 		Message:          b,
 		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 	})
 	object.Data.Signature = signingOutput.Signature
-	result, err := driver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		valid, result, err := transitionHistoryIsValid(txn, object.Data.IdempotencyKey)
-		if err != nil || result == nil || !valid {
-			return nil, fmt.Errorf("failed to verify record: %w", err)
-		}
+
+	result, err := qldbDriver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		res, err := txn.Execute("INSERT INTO transactions ?", object)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert transaction: %w", err)

@@ -76,8 +76,27 @@ func Drive[T TxStateMachine](
 }
 
 // GetValidTransitions returns valid transitions
-func (q TransactionState) GetValidTransitions() []TransactionState {
-	return Transitions[q]
+func (ts TransactionState) GetValidTransitions() []TransactionState {
+	return Transitions[ts]
+}
+
+// String implements ToString for TransactionState
+func (ts TransactionState) String() string {
+	switch ts {
+	case Initialized:
+		return "initialized"
+	case Prepared:
+		return "prepared"
+	case Authorized:
+		return "authorized"
+	case Pending:
+		return "pending"
+	case Paid:
+		return "paid"
+	case Failed:
+		return "failed"
+	}
+	return ""
 }
 
 // GetAllValidTransitionSequences returns all valid transition sequences

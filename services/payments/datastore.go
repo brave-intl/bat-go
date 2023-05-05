@@ -22,7 +22,7 @@ import (
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey      string           `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
+	IdempotencyKey      *uuid.UUID       `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
 	Amount              *ion.Decimal     `json:"-" ion:"amount" valid:"required"`
 	To                  *uuid.UUID       `json:"to,omitempty" ion:"to" valid:"required"`
 	From                *uuid.UUID       `json:"from,omitempty" ion:"from" valid:"required"`
@@ -33,6 +33,32 @@ type Transaction struct {
 	PayoutID            string           `json:"payoutId" valid:"required"`
 	Signature           string           `json:"-" ion:"signature"` // KMS signature only enclave can sign
 	PublicKey           string           `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
+	Currency            string           `json:"-" ion:"currency"`
+}
+
+// GetIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
+// an error
+func (t *Transaction) GetIdempotencyKey(ctx context.Context) (*uuid.UUID, error) {
+	namespace, ok := ctx.Value("namespaceUUID").(uuid.UUID)
+	if !ok {
+		return nil, errors.New("context namespaceUUID is of type uuid.UUID")
+	}
+	generatedIdempotencyKey := uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
+	if generatedIdempotencyKey == *t.IdempotencyKey {
+		return t.IdempotencyKey, nil
+	}
+	return nil, errors.New("IdempotencyKey does not match transaction fields")
+}
+
+// SetIdempotencyKey assigns a UUID v5 value to Transaction.ID
+func (t *Transaction) SetIdempotencyKey(ctx context.Context) error {
+	namespace, ok := ctx.Value("namespaceUUID").(uuid.UUID)
+	if !ok {
+		return errors.New("context namespaceUUID is of type uuid.UUID")
+	}
+	generatedIdempotencyKey := uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
+	t.IdempotencyKey = &generatedIdempotencyKey
+	return nil
 }
 
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
