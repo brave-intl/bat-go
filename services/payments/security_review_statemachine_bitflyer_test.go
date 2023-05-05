@@ -158,8 +158,7 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 }
 
 /*
-	TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
-
+TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
 Failure with 404 error when attempting to transfer from Pending to Paid
 */
 func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {

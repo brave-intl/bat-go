@@ -10,12 +10,14 @@ import (
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	srvcmd "github.com/brave-intl/bat-go/services/cmd"
-
-	// TODO: when we have payments service merged fixme
-	// "github.com/brave-intl/bat-go/services/payments"
+	"github.com/brave-intl/bat-go/services/payments"
+	chiware "github.com/go-chi/chi/middleware"
+	"github.com/rs/zerolog/hlog"
 
 	"github.com/go-chi/chi"
 	"github.com/mdlayher/vsock"
@@ -82,20 +84,14 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
 	// setup the service now
-	/*
-		// TODO: when we have payments service merged fixme
-		ctx, s, err := payments.NewService(ctx)
-		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to initalize payments service")
-		}
-		logger.Info().Msg("payments service setup")
-		// setup router
-		ctx, r := setupRouter(ctx, s)
-		logger.Info().Msg("payments routes setup")
-	*/
-
-	r := chi.NewRouter()
-	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
+	ctx, s, err := payments.NewService(ctx)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initialize payments service")
+	}
+	logger.Info().Msg("payments service setup")
+	// setup router
+	ctx, r := setupRouter(ctx, s)
+	logger.Info().Msg("payments routes setup")
 
 	// setup listener
 	addr := viper.GetString("address")
@@ -123,7 +119,6 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-/*
 func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *chi.Mux) {
 	// base service logger
 	logger := logging.Logger(ctx, "payments")
@@ -154,7 +149,6 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 	logger.Info().Msg("get config endpoint setup")
 	return ctx, r
 }
-*/
 
 // RunNitroServerOutsideEnclave - start up all the services which are outside
 func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {

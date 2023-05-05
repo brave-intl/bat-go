@@ -34,6 +34,7 @@ type Transaction struct {
 	Signature           string           `json:"-" ion:"signature"` // KMS signature only enclave can sign
 	PublicKey           string           `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
 	Currency            string           `json:"-" ion:"currency"`
+	DryRun              *string          `json:"dryRun" ion:"-"` // determines dry-run
 }
 
 // GetIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
@@ -60,6 +61,11 @@ func (t *Transaction) SetIdempotencyKey(ctx context.Context) error {
 	t.IdempotencyKey = &generatedIdempotencyKey
 	return nil
 }
+
+var (
+	prepareFailure = "prepare"
+	submitFailure  = "submit"
+)
 
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
 func (t *Transaction) SignTransaction(ctx context.Context, kmsClient *kms.Client, keyId string) (string, string, error) {

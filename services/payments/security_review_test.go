@@ -268,7 +268,6 @@ func TestQLDBSignedInteractions(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-
 	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
 	if err != nil {
 		panic(err)

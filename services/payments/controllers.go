@@ -3,20 +3,18 @@ package payments
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/middleware"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 )
-
-type configurationHandlerRequest map[appctx.CTXKey]interface{}
 
 type getConfResponse struct {
 	AttestationDocument string `json:"attestation"`
@@ -69,6 +67,16 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
+		// if dryrun and prepare we will fail here
+		if req.DryRun != nil {
+			if *req.DryRun != prepareFailure {
+				// return a success
+				return handlers.RenderContent(r.Context(), req, w, http.StatusOK)
+			}
+			// return a failure
+			return handlers.WrapError(errors.New("dry run forced error"), "Error in request body", http.StatusBadRequest)
+		}
+
 		logger.Debug().Str("request", fmt.Sprintf("%+v", req)).Msg("structure of request")
 		// validate the transaction
 
@@ -98,11 +106,16 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		_, err = rand.Read(nonce)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to create random nonce")
-			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
+			return handlers.WrapError(err, "failed to create random nonce", http.StatusInternalServerError)
 		}
 
-		// attest over the transaction
-		attestationDocument, err := nitro.Attest(nonce, resp.BuildSigningBytes(), []byte{})
+		tx, err := resp.MarshalJSON()
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create transaction json blob")
+			return handlers.WrapError(err, "failed to create transaction json blob", http.StatusInternalServerError)
+		}
+
+		attestationDocument, err := nitro.Attest(nonce, tx, []byte{})
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get attestation from nitro")
 			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
@@ -132,6 +145,16 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
+		// if dryrun and submit we will fail here
+		if req.DryRun != nil {
+			if *req.DryRun != submitFailure {
+				// return a success
+				return handlers.RenderContent(r.Context(), req, w, http.StatusOK)
+			}
+			// return a failure
+			return handlers.WrapError(errors.New("dry run forced error"), "Error in request body", http.StatusBadRequest)
+		}
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
@@ -159,23 +182,6 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
-
-		// create a random nonce for nitro attestation
-		nonce := make([]byte, 64)
-		_, err = rand.Read(nonce)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create random nonce")
-			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
-		}
-
-		// attest over the transaction
-		attestationDocument, err := nitro.Attest(nonce, resp.BuildSigningBytes(), []byte{})
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to get attestation from nitro")
-			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
-		}
-
-		resp.AttestationDocument = base64.StdEncoding.EncodeToString(attestationDocument)
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})

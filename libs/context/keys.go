@@ -184,21 +184,6 @@ const (
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
 	// SecretsURICTXKey - the context key for getting the application secrets file location
 	SecretsURICTXKey CTXKey = "secrets_uri"
-	// PaymentsEncryptionKeyCTXKey - the context key for getting the application secrets file location
-	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
-	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
-	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
-	// LogWriterKey - the context key for getting the zerolog writer
-	LogWriterKey CTXKey = "log_writer_key"
-	// PaymentsKMSWrapperCTXKey - the context key for getting the kms wrapper key
-	PaymentsKMSWrapperCTXKey CTXKey = "payments_kms_wrapper"
-	// AWSRegionCTXKey - reverse proxy address for egress traffic
-	AWSRegionCTXKey CTXKey = "aws_region"
-	// PaymentsQLDBRoleArnCTXKey - reverse proxy address for egress traffic
-	PaymentsQLDBRoleArnCTXKey CTXKey = "qldb_role_arn"
-	// PaymentsQLDBLedgerNameCTXKey - reverse proxy address for egress traffic
-	PaymentsQLDBLedgerNameCTXKey CTXKey = "qldb_ledger_name"
-
 	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
 	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
 
@@ -223,6 +208,21 @@ const (
 	ParametersTransitionCTXKey CTXKey = "parameters_transition"
 
 	// Nitro
+	// PaymentsEncryptionKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
+	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
+	// LogWriterKey - the context key for getting the zerolog writer
+	LogWriterKey CTXKey = "log_writer_key"
+	// PaymentsKMSWrapperCTXKey - the context key for getting the kms wrapper key
+	PaymentsKMSWrapperCTXKey CTXKey = "payments_kms_wrapper"
+	// AWSRegionCTXKey - reverse proxy address for egress traffic
+	AWSRegionCTXKey CTXKey = "aws_region"
+	// PaymentsQLDBRoleArnCTXKey - reverse proxy address for egress traffic
+	PaymentsQLDBRoleArnCTXKey CTXKey = "qldb_role_arn"
+	// PaymentsQLDBLedgerNameCTXKey - reverse proxy address for egress traffic
+	PaymentsQLDBLedgerNameCTXKey CTXKey = "qldb_ledger_name"
+
 	// LogWriterCTXKey - the context key for getting the log writer
 	LogWriterCTXKey CTXKey = "log_writer"
 	// EgressProxyAddrCTXKey - the context key for getting the egress proxy address
