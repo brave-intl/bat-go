@@ -45,6 +45,8 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 var (
@@ -64,12 +66,14 @@ var (
 )
 
 const (
+	// TODO(pavelb): Gradually replace it everywhere.
+	//
 	// OrderStatusCanceled - string literal used in db for canceled status
-	OrderStatusCanceled = "canceled"
+	OrderStatusCanceled = model.OrderStatusCanceled
 	// OrderStatusPaid - string literal used in db for canceled status
-	OrderStatusPaid = "paid"
+	OrderStatusPaid = model.OrderStatusPaid
 	// OrderStatusPending - string literal used in db for pending status
-	OrderStatusPending = "pending"
+	OrderStatusPending = model.OrderStatusPending
 )
 
 // Default issuer V3 config default values
@@ -343,7 +347,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
 			parseURLAddOrderIDParam(stripeCancelURI, order.ID),
-			order.getTrialDays(),
+			order.GetTrialDays(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
@@ -414,7 +418,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			getEmailFromCheckoutSession(stripeSession),
 			stripeSession.SuccessURL, stripeSession.CancelURL,
-			order.getTrialDays(),
+			order.GetTrialDays(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
@@ -527,7 +531,7 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			getEmailFromCheckoutSession(stripeSession),
 			stripeSession.SuccessURL, stripeSession.CancelURL,
-			order.getTrialDays(),
+			order.GetTrialDays(),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create checkout session: %w", err)
