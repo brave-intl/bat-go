@@ -244,8 +244,8 @@ func TestGenerateAllValidTransitions(t *testing.T) {
 // TestQLDBSignedInteractions mocks QLDB to test signing and verifying of records that are
 // persisted into QLDB
 func TestQLDBSignedInteractions(t *testing.T) {
-	testData := QLDBPaymentTransitionData{
-		Status: Initialized,
+	testData := Transaction{
+		State: Initialized,
 	}
 	marshaledData, err := json.Marshal(testData)
 	if err != nil {

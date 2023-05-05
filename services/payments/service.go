@@ -142,7 +142,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR1>", pcr1)
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR2>", pcr2)
 
-	client := kms.NewFromConfig(cfg)
+	kClient := kms.NewFromConfig(cfg)
 
 	input := &kms.CreateKeyInput{
 		Policy: aws.String(keyPolicy),
