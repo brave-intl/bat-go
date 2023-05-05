@@ -1085,6 +1085,13 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	err = worker.SubmitBatchTransfer(ctx, batchID)
 	if err != nil {
 
+		var eb *errorutils.ErrorBundle
+		if errors.As(err, &eb) {
+			logger.Error().
+				Str("error bundle", eb.DataToString()).
+				Msg("failed to submit batch transfers: error bundle")
+		}
+
 		logger.Error().Err(err).Msg("run next batch payments: failed to submit batch transfers")
 		status, errCode, _ := errToDrainCode(err)
 		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
