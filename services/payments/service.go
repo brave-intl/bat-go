@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/google/uuid"
 	"strings"
 	"time"
