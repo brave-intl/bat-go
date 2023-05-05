@@ -21,6 +21,10 @@ import (
 )
 
 const (
+	ErrOrderNotFound Error = "model: order not found"
+)
+
+const (
 	StripePaymentMethod = "stripe"
 
 	// OrderStatus* represent order statuses at runtime and in db.
@@ -228,4 +232,10 @@ func (l OrderItemList) stripeLineItems() []*stripe.CheckoutSessionLineItemParams
 	}
 
 	return result
+}
+
+type Error string
+
+func (e Error) Error() string {
+	return string(e)
 }

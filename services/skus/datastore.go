@@ -9,21 +9,28 @@ import (
 	"strconv"
 	"time"
 
+	// needed for magic migration
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
+	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/ptr"
-	"github.com/getsentry/sentry-go"
-	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
+	"github.com/brave-intl/bat-go/services/skus/model"
+)
 
-	// needed for magic migration
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+const (
+	signingRequestBatchSize = 10
+
+	errNotFound = model.Error("not found")
 )
 
 // Datastore abstracts over the underlying datastore
@@ -92,9 +99,9 @@ type Datastore interface {
 	ExternalIDExists(context.Context, string) (bool, error)
 }
 
-const signingRequestBatchSize = 10
-
-var errNotFound = errors.New("not found")
+type orderStore interface {
+	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+}
 
 // VoteRecord - how the ac votes are stored in the queue
 type VoteRecord struct {
@@ -109,17 +116,39 @@ type VoteRecord struct {
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
 	datastore.Postgres
+
+	orderRepo orderStore
 }
 
-// NewPostgres creates a new Postgres Datastore
+// NewPostgres creates a new Postgres Datastore.
 func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := datastore.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	pg, err := newPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
-		return &DatastoreWithPrometheus{
-			base: &Postgres{*pg}, instanceName: "payment_datastore",
-		}, err
+		return &DatastoreWithPrometheus{base: pg, instanceName: "payment_datastore"}, err
 	}
+
 	return nil, err
+}
+
+// NewPostgresWithOrder returns a refactoring-in-progress Datastore that delegates operations on orders to orderRepo.
+func NewPostgresWithOrder(orderRepo orderStore, databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := newPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	if err != nil {
+		return nil, err
+	}
+
+	pg.orderRepo = orderRepo
+
+	return &DatastoreWithPrometheus{base: pg, instanceName: "payment_datastore"}, nil
+}
+
+func newPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (*Postgres, error) {
+	pg, err := datastore.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Postgres{Postgres: *pg}, nil
 }
 
 // CreateKey creates an encrypted key in the database based on the merchant
@@ -222,7 +251,7 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 		SET
 			trial_days = $1,
 			updated_at = now()
-		WHERE 
+		WHERE
 			id = $2
 		RETURNING
 			id, created_at, currency, updated_at, total_price,
@@ -273,7 +302,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 
 	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
-		insert into order_items 
+		insert into order_items
 			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval)
 		values `
 	params := []interface{}{}
@@ -316,9 +345,9 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 // GetOrderByExternalID by the external id from the purchase vendor
 func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
 	statement := `
-		SELECT 
-			id, created_at, currency, updated_at, total_price, 
-			merchant_id, location, status, allowed_payment_methods, 
+		SELECT
+			id, created_at, currency, updated_at, total_price,
+			merchant_id, location, status, allowed_payment_methods,
 			metadata, valid_for, last_paid_at, expires_at, trial_days
 		FROM orders WHERE metadata->>'externalID' = $1`
 	order := Order{}
@@ -361,41 +390,33 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 	return seconds, nil
 }
 
-// GetOrder queries the database and returns an order
+// GetOrder returns an order from the database.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	statement := `
-		SELECT 
-			id, created_at, currency, updated_at, total_price, 
-			merchant_id, location, status, allowed_payment_methods, 
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE id = $1`
-	order := Order{}
-	err := pg.RawDB().Get(&order, statement, orderID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
+	// Fallback to the legacy method in case the datastore has been initialised using NewPostgres.
+	if pg.orderRepo == nil {
+		return pg.getOrderLegacy(orderID)
 	}
 
-	foundOrderItems := []OrderItem{}
-	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-		FROM order_items WHERE order_id = $1`
-	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
-
-	order.Items = foundOrderItems
+	result, err := pg.orderRepo.Get(context.TODO(), pg.RawDB(), orderID)
 	if err != nil {
+		// Preserve the legacy behaviour.
+		// TODO: Propagate the sentinel error, and handle in the business logic properly.
+		if errors.Is(err, model.ErrOrderNotFound) {
+			return nil, nil
+		}
+
 		return nil, err
 	}
-	return &order, nil
+
+	return result, nil
 }
 
 // GetOrderItem retrieves the order item for the given identifier.
 // This function will return sql.ErrNoRows if the result set is empty.
 func (pg *Postgres) GetOrderItem(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
 	var orderItem OrderItem
-	err := pg.GetContext(ctx, &orderItem, `SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, 
-       (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval 
+	err := pg.GetContext(ctx, &orderItem, `SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price,
+       (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
 			from order_items where id = $1`, itemID)
 	if err != nil {
 		return nil, err
@@ -515,7 +536,7 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 	err = pg.RawDB().Get(&checkoutSession, `
 		SELECT metadata->>'stripeCheckoutSessionId' as checkout_session
 		FROM orders
-		WHERE id = $1 
+		WHERE id = $1
 			AND metadata is not null
 			AND status='pending'
 			AND updated_at<now() - interval '1 hour'
@@ -620,7 +641,7 @@ func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, order
 		SET
 			updated_at = CURRENT_TIMESTAMP,
 			expires_at = $1
-		WHERE 
+		WHERE
 			id = $2
 	`, expiresAt, orderID)
 
@@ -1239,7 +1260,7 @@ type SigningOrderRequestOutbox struct {
 func (pg *Postgres) GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where order_id = $1`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
@@ -1252,7 +1273,7 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrder(ctx context.Context, ord
 func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where item_id = $1`, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing requests from outbox: %w", err)
@@ -1265,7 +1286,7 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context,
 func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox SigningOrderRequestOutbox
 	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where request_id = $1`, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
@@ -1278,7 +1299,7 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context,
 func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox SigningOrderRequestOutbox
 	err := tx.GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where request_id = $1 for update`, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
@@ -1305,7 +1326,7 @@ func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, request
 		return fmt.Errorf("error marshalling signing order request: %w", err)
 	}
 
-	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(request_id, order_id, item_id, message_data) 
+	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(request_id, order_id, item_id, message_data)
 											values ($1, $2, $3, $4)`, requestID, orderID, itemID, message)
 	if err != nil {
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
@@ -1335,8 +1356,8 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	defer rollback()
 
 	var soro []SigningOrderRequestOutbox
-	err = tx.SelectContext(ctx, &soro, `select request_id, order_id, item_id, message_data from signing_order_request_outbox 
-													where submitted_at is null order by created_at asc 
+	err = tx.SelectContext(ctx, &soro, `select request_id, order_id, item_id, message_data from signing_order_request_outbox
+													where submitted_at is null order by created_at asc
 													for update skip locked limit $1`, signingRequestBatchSize)
 	if err != nil {
 		return fmt.Errorf("error could not get signing order request outbox: %w", err)
@@ -1374,7 +1395,7 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 		soroIDs[i] = soro[i].RequestID
 	}
 
-	qry, args, err := sqlx.In(`update signing_order_request_outbox 
+	qry, args, err := sqlx.In(`update signing_order_request_outbox
 										set submitted_at = now() where request_id IN (?)`, soroIDs)
 	if err != nil {
 		return fmt.Errorf("error creating sql update statement: %w", err)
@@ -1594,4 +1615,32 @@ func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error 
 	}
 
 	return commit()
+}
+
+func (pg *Postgres) getOrderLegacy(orderID uuid.UUID) (*Order, error) {
+	statement := `
+		SELECT
+			id, created_at, currency, updated_at, total_price,
+			merchant_id, location, status, allowed_payment_methods,
+			metadata, valid_for, last_paid_at, expires_at, trial_days
+		FROM orders WHERE id = $1`
+	order := Order{}
+	err := pg.RawDB().Get(&order, statement, orderID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement = `
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
+		FROM order_items WHERE order_id = $1`
+	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
 }
