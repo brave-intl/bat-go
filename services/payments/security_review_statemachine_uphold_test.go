@@ -77,7 +77,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 
 	ctx := context.Background()
 	upholdStateMachine := UpholdMachine{}
-	mockDriver := new(MockDriver)
+	mockDriver := new(mockDriver)
 	transaction := Transaction{State: Initialized}
 
 	// Should create a transaction in QLDB. Current state argument is empty because
@@ -131,7 +131,7 @@ func TestUpholdStateMachine500FailureToPendingTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	mockDriver := new(MockDriver)
+	mockDriver := new(mockDriver)
 	transaction := Transaction{State: Authorized}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	upholdStateMachine := UpholdMachine{}
@@ -177,7 +177,7 @@ func TestUpholdStateMachine404FailureToPaidTransitions(t *testing.T) {
 
 	ctx := context.Background()
 	transaction := Transaction{State: Pending}
-	mockDriver := new(MockDriver)
+	mockDriver := new(mockDriver)
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the

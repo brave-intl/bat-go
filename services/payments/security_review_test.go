@@ -20,12 +20,12 @@ import (
 )
 
 // Unit testing the package code using a Mock Driver
-type MockDriver struct {
+type mockDriver struct {
 	mock.Mock
 }
 
 // Unit testing the package code using a Mock QLDB SDK
-type MockSDKClient struct {
+type mockSDKClient struct {
 	mock.Mock
 }
 
@@ -54,12 +54,12 @@ func (m *mockTransaction) Abort() error {
 	panic("not used")
 }
 
-func (m *MockDriver) Execute(ctx context.Context, fn func(txn qldbdriver.Transaction) (interface{}, error)) (interface{}, error) {
+func (m *mockDriver) Execute(ctx context.Context, fn func(txn qldbdriver.Transaction) (interface{}, error)) (interface{}, error) {
 	args := m.Called(ctx, fn)
 	return args.Get(0).(*mockResult), args.Error(1)
 }
 
-func (m *MockDriver) Shutdown(ctx context.Context) {
+func (m *mockDriver) Shutdown(ctx context.Context) {
 	return
 }
 
@@ -72,11 +72,11 @@ func (m *mockResult) Next(txn wrappedQldbTxnAPI) bool {
 	return args.Get(0).(bool)
 }
 
-func (m *MockSDKClient) New() *wrappedQldbSdkClient {
+func (m *mockSDKClient) New() *wrappedQldbSdkClient {
 	args := m.Called()
 	return args.Get(0).(*wrappedQldbSdkClient)
 }
-func (m *MockSDKClient) GetDigest(
+func (m *mockSDKClient) GetDigest(
 	ctx context.Context,
 	params *qldb.GetDigestInput,
 	optFns ...func(*qldb.Options),
@@ -85,7 +85,7 @@ func (m *MockSDKClient) GetDigest(
 	return args.Get(0).(*qldb.GetDigestOutput), args.Error(1)
 }
 
-func (m *MockSDKClient) GetRevision(
+func (m *mockSDKClient) GetRevision(
 	ctx context.Context,
 	params *qldb.GetRevisionInput,
 	optFns ...func(*qldb.Options),
@@ -109,14 +109,15 @@ Traverse QLDB history for a transaction and ensure that only valid transitions h
 Should include exhaustive passing and failing tests.
 */
 func TestVerifyPaymentTransitionHistory(t *testing.T) {
+	ctx := context.Background()
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		valid, _ := validateTransitionHistory(transactionHistorySet)
+		valid, _ := validateTransitionHistory(ctx, transactionHistorySet[len(transactionHistorySet)-1].Data.IdempotencyKey, transactionHistorySet)
 		assert.True(t, valid)
 	}
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		valid, _ := validateTransitionHistory(transactionHistorySet)
+		valid, _ := validateTransitionHistory(ctx, transactionHistorySet[len(transactionHistorySet)-1].Data.IdempotencyKey, transactionHistorySet)
 		assert.False(t, valid)
 	}
 }
@@ -138,7 +139,7 @@ func TestValidateRevision(t *testing.T) {
 	*/
 
 	var (
-		mockSDKClient = new(MockSDKClient)
+		mockSDKClient = new(mockSDKClient)
 		trueObject    = QLDBPaymentTransitionHistoryEntry{
 			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 				StrandID:   "strand1",
@@ -192,13 +193,13 @@ func TestValidateRevision(t *testing.T) {
 	}
 	mockSDKClient.On("GetDigest").Return(&testDigestOutput, nil)
 	mockSDKClient.On("GetRevision").Return(&testRevisionOutput, nil)
-	valid, err := RevisionValidInTree(ctx, mockSDKClient, trueObject)
+	valid, err := revisionValidInTree(ctx, mockSDKClient, &trueObject)
 	if err != nil {
 		fmt.Printf("Failed true: %e", err)
 	}
 	assert.True(t, valid)
 
-	valid, err = RevisionValidInTree(ctx, mockSDKClient, falseObject)
+	valid, err = revisionValidInTree(ctx, mockSDKClient, &falseObject)
 	if err != nil {
 		fmt.Printf("Failed false: %e", err)
 	}
@@ -276,7 +277,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockKMS := new(mockKMSClient)
 	mockRes := new(mockResult)
 	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
-	mockDriver := new(MockDriver)
+	mockDriver := new(mockDriver)
 	mockDriver.On("Execute", context.Background(), mock.Anything).Return(mockRes, nil)
 	mockKMS.On("Sign", context.Background(), mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
@@ -292,9 +293,9 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockTransitionHistory.Data.Signature = signingOutput.Signature
 
 	// First write should succeed because Verify returns true
-	_, err = WriteQLDBObject(ctx, mockDriver, mockKMS, &mockTransitionHistory)
+	_, err = WriteQLDBObject(ctx, mockDriver, nil, mockKMS, &testData)
 	assert.NoError(t, err)
 	// Second write of the same object should fail because Verify returns false
-	_, err = WriteQLDBObject(ctx, mockDriver, mockKMS, &mockTransitionHistory)
+	_, err = WriteQLDBObject(ctx, mockDriver, nil, mockKMS, &testData)
 	assert.Error(t, err)
 }

@@ -71,7 +71,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	ctx := context.Background()
 	bitflyerStateMachine := BitflyerMachine{}
-	mockDriver := new(MockDriver)
+	mockDriver := new(mockDriver)
 	mockTxn := new(mockTransaction)
 	mockRes := new(mockResult)
 	mockDriver.On("Execute", context.Background(), mock.Anything).Return(mockRes, nil)
@@ -144,7 +144,7 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	mockDriver := new(MockDriver)
+	mockDriver := new(mockDriver)
 	transaction := Transaction{State: Prepared}
 	bitflyerStateMachine := BitflyerMachine{}
 	// When the implementation is in place, this Version value will not be necessary.
@@ -185,7 +185,7 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	mockDriver := new(MockDriver)
+	mockDriver := new(mockDriver)
 	transaction := Transaction{State: Pending}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	bitflyerStateMachine := BitflyerMachine{}

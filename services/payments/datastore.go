@@ -31,7 +31,7 @@ type Transaction struct {
 	DocumentID          string           `json:"documentId,omitempty" ion:"id"`
 	AttestationDocument string           `json:"attestation,omitempty" ion:"-"`
 	PayoutID            string           `json:"payoutId" valid:"required"`
-	Signature           string           `json:"-" ion:"signature"` // KMS signature only enclave can sign
+	Signature           []byte           `json:"-" ion:"signature"` // KMS signature only enclave can sign
 	PublicKey           string           `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
 	Currency            string           `json:"-" ion:"currency"`
 	DryRun              *string          `json:"dryRun" ion:"-"` // determines dry-run

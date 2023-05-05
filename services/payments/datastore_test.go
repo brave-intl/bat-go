@@ -14,8 +14,9 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 	if err != nil {
 		panic("failed to parse test UUIDs")
 	}
+	id := uuid.New()
 	transaction := Transaction{
-		IdempotencyKey:      "",
+		IdempotencyKey:      &id,
 		Amount:              ion.MustParseDecimal("12.234"),
 		To:                  &to,
 		From:                &from,

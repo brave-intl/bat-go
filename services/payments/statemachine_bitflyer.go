@@ -40,7 +40,7 @@ func (bm *BitflyerMachine) Initialized() (TransactionState, error) {
 	//}
 	ctx := context.Background()
 	// Attempt to write
-	entry, err := WriteQLDBObject(ctx, bm.connection, bm.kmsSigningKeyClient, bm.transaction)
+	entry, err := WriteQLDBObject(ctx, bm.connection, nil, bm.kmsSigningKeyClient, bm.transaction)
 	if err != nil {
 		return Initialized, fmt.Errorf("failed to write transaction: %w", err)
 	}

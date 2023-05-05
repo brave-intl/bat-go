@@ -22,8 +22,6 @@ import (
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
@@ -33,7 +31,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	awsutils "github.com/brave-intl/bat-go/libs/aws"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -69,9 +66,9 @@ type QLDBPaymentTransitionHistoryEntrySignature []byte
 
 // QLDBPaymentTransitionHistoryEntryData defines data for QLDBPaymentTransitionHistoryEntry
 type QLDBPaymentTransitionHistoryEntryData struct {
-	Signature      []byte `ion:"signature"`
-	Data           []byte `ion:"data"`
-	IdempotencyKey string `ion:"idempotencyKey"`
+	Signature      []byte     `ion:"signature"`
+	Data           []byte     `ion:"data"`
+	IdempotencyKey *uuid.UUID `ion:"idempotencyKey"`
 }
 
 // QLDBPaymentTransitionHistoryEntryMetadata defines metadata for QLDBPaymentTransitionHistoryEntry
@@ -326,12 +323,12 @@ func validateTransitionHistory(ctx context.Context, idempotencyKey *uuid.UUID, t
 	return true, reason
 }
 
-// RevisionValidInTree verifies a document revision in QLDB using a digest and the Merkle
+// revisionValidInTree verifies a document revision in QLDB using a digest and the Merkle
 // hashes to re-derive the digest
-func RevisionValidInTree(
+func revisionValidInTree(
 	ctx context.Context,
 	client wrappedQldbSdkClient,
-	transaction QLDBPaymentTransitionHistoryEntry,
+	transaction *QLDBPaymentTransitionHistoryEntry,
 ) (bool, error) {
 	ledgerName := "LEDGER_NAME"
 	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &ledgerName})
@@ -413,6 +410,9 @@ func transitionHistoryIsValid(ctx context.Context, txn wrappedQldbTxnAPI, id *uu
 	}
 	// Ensure that all state changes in record history were valid
 	valid, err := validateTransitionHistory(ctx, id, result)
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to validate history: %w", err)
+	}
 	if valid {
 		// We only want the latest state of this record once its
 		// history is verified
@@ -425,37 +425,36 @@ func transitionHistoryIsValid(ctx context.Context, txn wrappedQldbTxnAPI, id *uu
 func getQLDBObject(
 	ctx context.Context,
 	txn wrappedQldbTxnAPI,
+	client wrappedQldbSdkClient,
 	id *uuid.UUID,
 ) (*QLDBPaymentTransitionHistoryEntry, error) {
-	data, err := txn.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		valid, result, err := transitionHistoryIsValid(ctx, txn, id)
-		if err != nil || result == nil || !valid {
-			return nil, fmt.Errorf("failed to get transition history: %w", err)
-		}
-		return result, nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("Failed to query QLDB: %w", err)
+	valid, result, err := transitionHistoryIsValid(ctx, txn, id)
+	if err != nil || !valid {
+		return nil, fmt.Errorf("failed to validate transition history: %w", err)
 	}
 	// If no record was found, return nothing
-	if data == nil {
+	if result == nil {
 		return nil, nil
 	}
-	assertedData, ok := data.(QLDBPaymentTransitionHistoryEntry)
-	if !ok {
-		return nil, fmt.Errorf("Database response was the wrong type: %w", err)
+	merkleValid, err := revisionValidInTree(ctx, client, result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
 	}
-	return &assertedData, nil
+	if !merkleValid {
+		return nil, fmt.Errorf("invalid Merkle tree for record: %#v", result)
+	}
+	return result, nil
 }
 
 // GetQLDBObject returns the latest version of a record from QLDB if it exists, after doing all requisite validation
 func GetQLDBObject(
 	ctx context.Context,
 	qldbDriver wrappedQldbDriverAPI,
+	qldbSDK wrappedQldbSdkClient,
 	id *uuid.UUID,
 ) (*QLDBPaymentTransitionHistoryEntry, error) {
 	data, err := qldbDriver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		entry, err := getQLDBObject(ctx, txn, id)
+		entry, err := getQLDBObject(ctx, txn, qldbSDK, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get QLDB record: %w", err)
 		}
@@ -476,54 +475,40 @@ func GetQLDBObject(
 func WriteQLDBObject(
 	ctx context.Context,
 	qldbDriver wrappedQldbDriverAPI,
+	qldbSDK wrappedQldbSdkClient,
 	kmsClient wrappedKMSClient,
 	transaction *Transaction,
 ) (*Transaction, error) {
-	// Determine if the transaction already exists or if it needs to be initialized. This call will do all necessary
-	// record and history validation if they exist for this record
-	entry, err := GetQLDBObject(ctx, qldbDriver, transaction.IdempotencyKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query QLDB: %w", err)
-	}
-	if entry != nil {
-		if
-	}
-	b, err := entry.BuildSigningBytes()
-	if err != nil {
-		return nil, fmt.Errorf("failed to build signing bytes: %w", err)
-	}
-	// @TODO: Get key ID
-	todoString := "nil"
-	if err != nil {
-		return nil, fmt.Errorf("JSON marshal failed: %w", err)
-	}
-	signingOutput, _ := kmsClient.Sign(ctx, &kms.SignInput{
-		KeyId:            &todoString,
-		Message:          b,
-		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-	})
-	object.Data.Signature = signingOutput.Signature
-
-	result, err := qldbDriver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		res, err := txn.Execute("INSERT INTO transactions ?", object)
+	_, err := qldbDriver.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
+		// Determine if the transaction already exists or if it needs to be initialized. This call will do all necessary
+		// record and history validation if they exist for this record
+		record, err := getQLDBObject(ctx, txn, qldbSDK, transaction.IdempotencyKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to insert transaction: %w", err)
+			return nil, fmt.Errorf("failed to query QLDB: %w", err)
 		}
-		return res, nil
+		signingBytes := transaction.BuildSigningBytes()
+		// @TODO: Get key ID
+		todoString := "nil"
+		if err != nil {
+			return nil, fmt.Errorf("JSON marshal failed: %w", err)
+		}
+		signingOutput, _ := kmsClient.Sign(ctx, &kms.SignInput{
+			KeyId:            &todoString,
+			Message:          signingBytes,
+			SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
+		})
+		transaction.Signature = signingOutput.Signature
+
+		if record == nil {
+			return txn.Execute("INSERT INTO transactions ?", transaction)
+		} else {
+			return txn.Execute("UPDATE transactions SET state = ? WHERE id = ?", transaction.State, transaction.IdempotencyKey)
+		}
 	})
 	if err != nil {
-		return nil, fmt.Errorf("QLDB execution failed: %w", err)
+		return nil, fmt.Errorf("QLDB write execution failed: %w", err)
 	}
-	assertedResult, ok := result.(wrappedQldbResult)
-	if !ok {
-		return nil, errors.New("QLDB record is of the wrong type")
-	}
-	var entry QLDBPaymentTransitionHistoryEntry
-	err = ion.Unmarshal(assertedResult.GetCurrentData(), &entry)
-	if err != nil {
-		return nil, errors.New("failed to unmarshal entry")
-	}
-	return &entry, nil
+	return transaction, nil
 }
 
 func sortHashes(a, b []byte) ([][]byte, error) {

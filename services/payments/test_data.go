@@ -3,12 +3,12 @@ package payments
 import "encoding/json"
 
 var (
-	status0, _ = json.Marshal(QLDBPaymentTransitionData{Status: 0})
-	status1, _ = json.Marshal(QLDBPaymentTransitionData{Status: 1})
-	status2, _ = json.Marshal(QLDBPaymentTransitionData{Status: 2})
-	status3, _ = json.Marshal(QLDBPaymentTransitionData{Status: 3})
-	status4, _ = json.Marshal(QLDBPaymentTransitionData{Status: 4})
-	status5, _ = json.Marshal(QLDBPaymentTransitionData{Status: 5})
+	status0, _ = json.Marshal(Transaction{State: 0})
+	status1, _ = json.Marshal(Transaction{State: 1})
+	status2, _ = json.Marshal(Transaction{State: 2})
+	status3, _ = json.Marshal(Transaction{State: 3})
+	status4, _ = json.Marshal(Transaction{State: 4})
+	status5, _ = json.Marshal(Transaction{State: 5})
 )
 
 var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{
