@@ -1,14 +1,18 @@
 package payments
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"github.com/google/uuid"
+)
 
 var (
-	status0, _ = json.Marshal(Transaction{State: 0})
-	status1, _ = json.Marshal(Transaction{State: 1})
-	status2, _ = json.Marshal(Transaction{State: 2})
-	status3, _ = json.Marshal(Transaction{State: 3})
-	status4, _ = json.Marshal(Transaction{State: 4})
-	status5, _ = json.Marshal(Transaction{State: 5})
+	generatedUUID, _ = uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
+	status0, _       = json.Marshal(Transaction{State: Initialized, IdempotencyKey: &generatedUUID})
+	status1, _       = json.Marshal(Transaction{State: Prepared, IdempotencyKey: &generatedUUID})
+	status2, _       = json.Marshal(Transaction{State: Authorized, IdempotencyKey: &generatedUUID})
+	status3, _       = json.Marshal(Transaction{State: Pending, IdempotencyKey: &generatedUUID})
+	status4, _       = json.Marshal(Transaction{State: Paid, IdempotencyKey: &generatedUUID})
+	status5, _       = json.Marshal(Transaction{State: Failed, IdempotencyKey: &generatedUUID})
 )
 
 var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{

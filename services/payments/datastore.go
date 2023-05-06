@@ -27,11 +27,11 @@ type Transaction struct {
 	To                  *uuid.UUID       `json:"to,omitempty" ion:"to" valid:"required"`
 	From                *uuid.UUID       `json:"from,omitempty" ion:"from" valid:"required"`
 	Custodian           string           `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State               TransactionState `json:"state,omitempty" ion:"state"`
+	State               TransactionState `json:"state" ion:"state"`
 	DocumentID          string           `json:"documentId,omitempty" ion:"id"`
 	AttestationDocument string           `json:"attestation,omitempty" ion:"-"`
 	PayoutID            string           `json:"payoutId" valid:"required"`
-	Signature           []byte           `json:"-" ion:"signature"` // KMS signature only enclave can sign
+	Signature           string           `json:"-" ion:"signature"` // KMS signature only enclave can sign
 	PublicKey           string           `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
 	Currency            string           `json:"-" ion:"currency"`
 	DryRun              *string          `json:"dryRun" ion:"-"` // determines dry-run
@@ -68,7 +68,7 @@ var (
 )
 
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
-func (t *Transaction) SignTransaction(ctx context.Context, kmsClient *kms.Client, keyId string) (string, string, error) {
+func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSClient, keyId string) (string, string, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyId,
 	})
@@ -221,7 +221,7 @@ func (s *Service) InsertTransaction(ctx context.Context, transaction *Transactio
 	for transactionState < Prepared {
 		transactionState, err = Drive(ctx, stateMachine, transaction, s.datastore)
 		if err != nil {
-			return Transaction{}, fmt.Errorf("Failed to drive state machine: %w", err)
+			return Transaction{}, fmt.Errorf("failed to drive state machine: %w", err)
 		}
 	}
 

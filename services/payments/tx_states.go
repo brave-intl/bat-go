@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // TransactionState is an integer representing transaction status
@@ -97,6 +98,37 @@ func (ts TransactionState) String() string {
 		return "failed"
 	}
 	return ""
+}
+
+// MarshalJSON implements JSON marshal for TransactionState
+func (ts TransactionState) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("\"%s\"", ts.String())), nil
+}
+
+// UnmarshalJSON implements JSON unmarshal for TransactionState
+func (ts *TransactionState) UnmarshalJSON(data []byte) error {
+	stringData := string(data)
+	// Ignore null
+	if stringData == "null" || stringData == `""` {
+		return nil
+	}
+	switch stringData {
+	case "initialized":
+		*ts = Initialized
+	case "prepared":
+		*ts = Prepared
+	case "authorized":
+		*ts = Authorized
+	case "pending":
+		*ts = Pending
+	case "paid":
+		*ts = Paid
+	case "failed":
+		*ts = Failed
+	default:
+		return errors.New("cannot unmarshal unknown transition state")
+	}
+	return nil
 }
 
 // GetAllValidTransitionSequences returns all valid transition sequences

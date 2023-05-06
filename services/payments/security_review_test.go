@@ -104,6 +104,11 @@ func (m *mockKMSClient) Verify(ctx context.Context, params *kms.VerifyInput, opt
 	return args.Get(0).(*kms.VerifyOutput), args.Error(1)
 }
 
+func (m *mockKMSClient) GetPublicKey(ctx context.Context, params *kms.GetPublicKeyInput, optFns ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
+	args := m.Called(ctx, params, optFns)
+	return args.Get(0).(*kms.GetPublicKeyOutput), args.Error(1)
+}
+
 /*
 Traverse QLDB history for a transaction and ensure that only valid transitions have occurred.
 Should include exhaustive passing and failing tests.
@@ -112,6 +117,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	ctx := context.Background()
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
+		fmt.Printf("TEST: %s\n", transactionHistorySet[0].Data.Data)
 		valid, _ := validateTransitionHistory(ctx, transactionHistorySet[len(transactionHistorySet)-1].Data.IdempotencyKey, transactionHistorySet)
 		assert.True(t, valid)
 	}
@@ -282,6 +288,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockKMS.On("Sign", context.Background(), mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
+	mockKMS.On("GetPublicKey", context.Background(), mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)
 
 	todoString := ""
 	message := []byte("test")

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/config"
-	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/google/uuid"
@@ -486,18 +485,12 @@ func WriteQLDBObject(
 		if err != nil {
 			return nil, fmt.Errorf("failed to query QLDB: %w", err)
 		}
-		signingBytes := transaction.BuildSigningBytes()
 		// @TODO: Get key ID
 		todoString := "nil"
+		_, transaction.Signature, err = transaction.SignTransaction(ctx, kmsClient, todoString)
 		if err != nil {
-			return nil, fmt.Errorf("JSON marshal failed: %w", err)
+			return nil, fmt.Errorf("failed to sign transaction: %w", err)
 		}
-		signingOutput, _ := kmsClient.Sign(ctx, &kms.SignInput{
-			KeyId:            &todoString,
-			Message:          signingBytes,
-			SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-		})
-		transaction.Signature = signingOutput.Signature
 
 		if record == nil {
 			return txn.Execute("INSERT INTO transactions ?", transaction)
