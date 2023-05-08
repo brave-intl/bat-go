@@ -548,7 +548,7 @@ func handleBitflyerError(ctx context.Context, e error, resp *http.Response) erro
 			return err
 		}
 	}
-	fmt.Println("here 3")
+
 	if len(bfError.Label) == 0 {
 		return e
 	}
