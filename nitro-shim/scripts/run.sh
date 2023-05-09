@@ -1,14 +1,16 @@
 #!/bin/bash
 
 service="${1}"
+cpu_count=${2:-2}
+memory=${3:-512}
 cid="4"
 
 set -eux
 
 nitro-cli run-enclave \
     --enclave-cid "${cid}" \
-    --cpu-count 2 \
-    --memory 512 \
+    --cpu-count ${cpu_count} \
+    --memory ${memory} \
     --eif-path nitro-image.eif > /tmp/output.json
 cat /tmp/output.json
 
