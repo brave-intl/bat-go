@@ -4,9 +4,7 @@ CREATE TABLE IF NOT EXISTS transaction_history (
     executed_by text NOT NULL DEFAULT current_user,
     recorded_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     transaction_id uuid NOT NULL,
-    -- order_id is nullable in the upstream table.
-    -- However, application code does not seem to allow that.
-    order_id uuid,
+    order_id uuid NOT NULL,
     value_before jsonb,
     value_after jsonb
 );
