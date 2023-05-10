@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"golang.org/x/exp/slices"
 )
 
 // TransactionState is an integer representing transaction status
@@ -11,10 +12,8 @@ type TransactionState int64
 
 // TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 const (
-	// Initialized represents the first state that a transaction record
-	Initialized TransactionState = iota
 	// Prepared represents a record that has been prepared for authorization
-	Prepared
+	Prepared TransactionState = iota
 	// Authorized represents a record that has been authorized
 	Authorized
 	// Pending represents a record that is being or has been submitted to a processor
@@ -27,23 +26,22 @@ const (
 
 // Transitions represents the valid forward-transitions for each given state
 var Transitions = map[TransactionState][]TransactionState{
-	Initialized: {Prepared, Failed},
-	Prepared:    {Authorized, Failed},
-	Authorized:  {Pending, Failed},
-	Pending:     {Paid, Failed},
-	Paid:        {},
-	Failed:      {},
+	Prepared:   {Authorized, Failed},
+	Authorized: {Pending, Failed},
+	Pending:    {Paid, Failed},
+	Paid:       {},
+	Failed:     {},
 }
 
-func StateMachineFromTransaction(transaction *Transaction) (TxStateMachine, error) {
+func StateMachineFromTransaction(transaction *Transaction, service *Service) (TxStateMachine, error) {
 	var machine TxStateMachine
 	switch transaction.Custodian {
 	case "uphold":
-		machine = &UpholdMachine{}
+		machine = NewUpholdMachine(transaction, service)
 	case "bitflyer":
-		machine = &BitflyerMachine{}
+		machine = NewBitflyerMachine(transaction, service)
 	case "gemini":
-		machine = &GeminiMachine{}
+		machine = NewGeminiMachine(transaction, service)
 	}
 	return machine, nil
 }
@@ -53,26 +51,41 @@ func StateMachineFromTransaction(transaction *Transaction) (TxStateMachine, erro
 func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
-	transaction *Transaction,
-	connection wrappedQldbDriverAPI,
-) (TransactionState, error) {
+) (*Transaction, error) {
+	// Make sure the transaction we have has an ID that matches its contents before we check if it exists
+	generatedID, err := machine.GenerateTransactionID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.GetTransactionID(), err)
+	}
+	if generatedID != machine.GetTransactionID() {
+		return nil, errors.New("provided idempotencyKey does not match transaction")
+	}
+	// Check if the transaction exists so that we know whether to create it or progress it
+	transaction, err := machine.GetService().GetTransactionById(ctx, generatedID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction from QLDB: %w", err)
+	}
+	// If the transaction doesn't exist in the database, prepare it
+	if transaction == nil {
+		return machine.Prepare(ctx)
+	}
+	// Set the machine's transaction to the values retrieved from the database. This helps avoid cases where the State
+	// in the transaction provided by the client is out of date with the database
 	machine.setTransaction(transaction)
-	machine.setConnection(connection)
-	switch transaction.State {
-	case Initialized:
-		return machine.Initialized()
+	// If the transaction does exist in the database, attempt to drive the state machine forward
+	switch machine.GetState() {
 	case Prepared:
-		return machine.Prepared()
+		return machine.Authorize(ctx)
 	case Authorized:
-		return machine.Authorized()
+		return machine.Pay(ctx)
 	case Pending:
-		return machine.Pending()
+		return machine.Pay(ctx)
 	case Paid:
-		return machine.Paid()
+		return machine.Pay(ctx)
 	case Failed:
-		return machine.Failed()
+		return machine.Fail(ctx)
 	default:
-		return Initialized, errors.New("invalid transition state")
+		return nil, errors.New("invalid transition state")
 	}
 }
 
@@ -81,11 +94,20 @@ func (ts TransactionState) GetValidTransitions() []TransactionState {
 	return Transitions[ts]
 }
 
+func nextStateValid(txn *Transaction, nextState TransactionState) bool {
+	if txn.State == nextState {
+		return true
+	}
+	// New transaction state should be present in the list of valid next states for the current state.
+	if !slices.Contains(Transitions[txn.State], nextState) {
+		return false
+	}
+	return true
+}
+
 // String implements ToString for TransactionState
 func (ts TransactionState) String() string {
 	switch ts {
-	case Initialized:
-		return "initialized"
 	case Prepared:
 		return "prepared"
 	case Authorized:
@@ -113,17 +135,15 @@ func (ts *TransactionState) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	switch stringData {
-	case "initialized":
-		*ts = Initialized
-	case "prepared":
+	case "\"prepared\"":
 		*ts = Prepared
-	case "authorized":
+	case "\"authorized\"":
 		*ts = Authorized
-	case "pending":
+	case "\"pending\"":
 		*ts = Pending
-	case "paid":
+	case "\"paid\"":
 		*ts = Paid
-	case "failed":
+	case "\"failed\"":
 		*ts = Failed
 	default:
 		return errors.New("cannot unmarshal unknown transition state")

@@ -52,7 +52,7 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 
 // PrepareHandler - handler to get current relative exchange rates
 func PrepareHandler(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
 		ctx := r.Context()
 
@@ -125,12 +125,12 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		// Should be in QLDB in prepared state
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
-	})
+	}
 }
 
 // SubmitHandler - handler to perform submission of transactions to custodian
 func SubmitHandler(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
 		ctx := r.Context()
 
@@ -184,5 +184,5 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
-	})
+	}
 }

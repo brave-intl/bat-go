@@ -16,12 +16,12 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 	}
 	id := uuid.New()
 	transaction := Transaction{
-		IdempotencyKey:      &id,
+		ID:                  &id,
 		Amount:              ion.MustParseDecimal("12.234"),
 		To:                  &to,
 		From:                &from,
 		Custodian:           "uphold",
-		State:               Initialized,
+		State:               Prepared,
 		DocumentID:          "1234",
 		AttestationDocument: "4567",
 		PayoutID:            "78910",

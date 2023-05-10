@@ -2,6 +2,7 @@ package payments
 
 import (
 	"context"
+	"github.com/google/uuid"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
@@ -13,15 +14,16 @@ type IdempotentObject interface {
 }
 
 type TxStateMachine interface {
-	setVersion(int)
 	setTransaction(*Transaction)
-	setConnection(wrappedQldbDriverAPI)
-	Initialized() (TransactionState, error)
-	Prepared() (TransactionState, error)
-	Authorized() (TransactionState, error)
-	Pending() (TransactionState, error)
-	Paid() (TransactionState, error)
-	Failed() (TransactionState, error)
+	setService(*Service)
+	GetState() TransactionState
+	GetService() *Service
+	GetTransactionID() *uuid.UUID
+	GenerateTransactionID(ctx context.Context) (*uuid.UUID, error)
+	Prepare(context.Context) (*Transaction, error)
+	Authorize(context.Context) (*Transaction, error)
+	Pay(context.Context) (*Transaction, error)
+	Fail(context.Context) (*Transaction, error)
 }
 
 // wrappedQldbDriverAPI defines the API for QLDB methods that we'll be using

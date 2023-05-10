@@ -3,22 +3,22 @@ package payments
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
+
+	"github.com/google/uuid"
 )
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case
 type BitflyerMachine struct {
-	// client wallet.Bitflyer
-	// transactionSet bitflyer.WithdrawToDepositIDBulkPayload
-	version             int
-	transaction         *Transaction
-	connection          wrappedQldbDriverAPI
-	kmsSigningKeyClient *kms.Client
+	transaction *Transaction
+	service     *Service
 }
 
-// setVersion assigns the version field in the BitflyerMachine to the specified int
-func (bm *BitflyerMachine) setVersion(version int) {
-	bm.version = version
+// NewBitflyerMachine returns an BitflyerMachine with values specified
+func NewBitflyerMachine(transaction *Transaction, service *Service) *BitflyerMachine {
+	machine := BitflyerMachine{}
+	machine.setService(service)
+	machine.setTransaction(transaction)
+	return &machine
 }
 
 // setTransaction assigns the transaction field in the BitflyerMachine to the specified Transaction
@@ -27,60 +27,109 @@ func (bm *BitflyerMachine) setTransaction(transaction *Transaction) {
 }
 
 // setConnection assigns the connection field in the BitflyerMachine to the specified wrappedQldbDriverAPI
-func (bm *BitflyerMachine) setConnection(connection wrappedQldbDriverAPI) {
-	bm.connection = connection
+func (bm *BitflyerMachine) setService(service *Service) {
+	bm.service = service
 }
 
-// Initialized implements TxStateMachine for the Bitflyer machine. It will attempt to Initialize a record in QLDB
-// returning the state of the record in QLDB. If the record already exists, in a state other than Initialize, an
+// GetState returns the state of the machine's associated transaction
+func (bm *BitflyerMachine) GetState() TransactionState {
+	return bm.transaction.State
+}
+
+// GetService returns the service associated with the machine
+func (bm *BitflyerMachine) GetService() *Service {
+	return bm.service
+}
+
+// GetTransactionID returns the ID that is on the associated transaction
+func (bm *BitflyerMachine) GetTransactionID() *uuid.UUID {
+	return bm.transaction.ID
+}
+
+// GenerateTransactionID returns an ID generated from the values of the transaction
+func (bm *BitflyerMachine) GenerateTransactionID(ctx context.Context) (*uuid.UUID, error) {
+	return bm.transaction.GenerateIdempotencyKey(ctx)
+}
+
+// Prepare implements TxStateMachine for the Bitflyer machine. It will attempt to initialize a record in QLDB
+// returning the state of the record in QLDB. If the record already exists, in a state other than Prepared, an
 // error is returned.
-func (bm *BitflyerMachine) Initialized() (TransactionState, error) {
-	//if !idempotencyKeyIsValid(bm.transaction) {
-	//	return Initialized, errors.New("provided idempotencyKey does not match transaction")
-	//}
-	ctx := context.Background()
-	// Attempt to write
-	entry, err := WriteQLDBObject(ctx, bm.connection, nil, bm.kmsSigningKeyClient, bm.transaction)
+func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
+	if !shouldDryRun(bm.transaction) {
+		// Do bitflyer stuff
+	}
+	nextState := Prepared
+	if !nextStateValid(bm.transaction, nextState) {
+		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
+	}
+	bm.transaction.State = nextState
+	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
 	if err != nil {
-		return Initialized, fmt.Errorf("failed to write transaction: %w", err)
+		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
-	if entry.State != Initialized {
-		return entry.State, fmt.Errorf("QLDB record exists and is in %s state", entry.State.String())
-	}
-	return entry.State, nil
+	bm.transaction = entry
+	return entry, nil
 }
 
-// Prepared implements TxStateMachine for the Bitflyer machine
-func (bm *BitflyerMachine) Prepared() (TransactionState, error) {
-	// if failure, do failed branch
-	if false {
-		return Failed, nil
+// Authorize implements TxStateMachine for the Bitflyer machine
+func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) {
+	if !shouldDryRun(bm.transaction) {
+		// Do bitflyer stuff
 	}
-	return Authorized, nil
-}
-
-// Authorized implements TxStateMachine for the Bitflyer machine
-func (bm *BitflyerMachine) Authorized() (TransactionState, error) {
-	if bm.version == 500 {
-		return Authorized, nil
+	nextState := Authorized
+	if !nextStateValid(bm.transaction, nextState) {
+		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 	}
-	return Pending, nil
-}
-
-// Pending implements TxStateMachine for the Bitflyer machine
-func (bm *BitflyerMachine) Pending() (TransactionState, error) {
-	if bm.version == 404 {
-		return Pending, nil
+	bm.transaction.State = nextState
+	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
-	return Paid, nil
+	bm.transaction = entry
+	return entry, nil
 }
 
-// Paid implements TxStateMachine for the Bitflyer machine
-func (bm *BitflyerMachine) Paid() (TransactionState, error) {
-	return Paid, nil
+// Pay implements TxStateMachine for the Bitflyer machine
+func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
+	if !shouldDryRun(bm.transaction) {
+		// Do bitflyer stuff
+	}
+	var nextState TransactionState
+	if bm.transaction.State == Pending {
+		nextState = Paid
+		if !nextStateValid(bm.transaction, nextState) {
+			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
+		}
+		bm.transaction.State = nextState
+	} else {
+		nextState = Pending
+		if !nextStateValid(bm.transaction, nextState) {
+			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
+		}
+		bm.transaction.State = nextState
+	}
+	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write transaction: %w", err)
+	}
+	bm.transaction = entry
+	return entry, nil
 }
 
-// Failed implements TxStateMachine for the Bitflyer machine
-func (bm *BitflyerMachine) Failed() (TransactionState, error) {
-	return Failed, nil
+// Fail implements TxStateMachine for the Bitflyer machine
+func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
+	if !shouldDryRun(bm.transaction) {
+		// Do bitflyer stuff
+	}
+	nextState := Failed
+	if !nextStateValid(bm.transaction, nextState) {
+		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
+	}
+	bm.transaction.State = nextState
+	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write transaction: %w", err)
+	}
+	bm.transaction = entry
+	return entry, nil
 }
