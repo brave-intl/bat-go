@@ -1,10 +1,20 @@
 version: "3.4"
 
+volumes:
+  out:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+
 services:
   dev:
     volumes:
       - ".:/src"
+      - "out:/out"
+    security_opt:
+      - no-new-privileges:true
     environment:
+      - OUTPUT_DIR="/out"
       - "CHALLENGE_BYPASS_DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
       - "VAULT_ADDR=http://vault:8200"
       - TEST_TAGS

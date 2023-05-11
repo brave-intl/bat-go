@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -9,7 +11,7 @@ import (
 )
 
 var (
-	id int = 0
+	id int
 )
 
 // FlagBuilder creates a flag builder
@@ -58,6 +60,14 @@ func (fb *FlagBuilder) String(key string, defaultValue string, description strin
 	return fb.SetKey(key).
 		loopCommands(func(command *cobra.Command) {
 			command.Flags().String(key, defaultValue, description)
+		})
+}
+
+// BoolP attaches a boolean flag to the command
+func (fb *FlagBuilder) BoolP(key string, shortKey string, defaultValue bool, description string) *FlagBuilder {
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().BoolP(key, shortKey, defaultValue, description)
 		})
 }
 
@@ -146,4 +156,13 @@ func (fb *FlagBuilder) loopCommands(iterator func(*cobra.Command)) *FlagBuilder 
 		iterator(command)
 	}
 	return fb
+}
+
+// Must helper to make sure there is no errors
+func Must(err error) {
+	if err != nil {
+		log.Printf("failed to initialize: %s\n", err.Error())
+		// exit with failure
+		os.Exit(1)
+	}
 }

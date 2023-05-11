@@ -8,11 +8,14 @@ services:
   # every time a file changes.
   dev-refresh:
     container_name: grant-dev-refresh
-    image: golang:1.16
+    image: golang:1.18
     ports:
       - "3335:3333"
       - "6061:6061"
-    command: "go run main.go serve grant"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    command: "cd main && go run main.go serve grant"
     volumes:
       - .:/src
       - ./test/secrets:/etc/kafka/secrets

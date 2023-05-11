@@ -3,14 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/clients"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -24,15 +23,6 @@ var (
 	}
 	ctx = context.Background()
 )
-
-// Must helper to make sure there is no errors
-func Must(err error) {
-	if err != nil {
-		log.Printf("failed to initialize: %s\n", err.Error())
-		// exit with failure
-		os.Exit(1)
-	}
-}
 
 // Execute - the main entrypoint for all subcommands in bat-go
 func Execute(version, commit, buildTime string) {
