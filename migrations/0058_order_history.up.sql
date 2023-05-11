@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS order_history (
-    id serial PRIMARY KEY,
+    id bigserial PRIMARY KEY,
     operation text NOT NULL,
     executed_by text NOT NULL DEFAULT current_user,
     recorded_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
