@@ -392,11 +392,6 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 
 // GetOrder returns an order from the database.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	// Fallback to the legacy method in case the datastore has been initialised using NewPostgres.
-	if pg.orderRepo == nil {
-		return pg.getOrderLegacy(orderID)
-	}
-
 	result, err := pg.orderRepo.Get(context.TODO(), pg.RawDB(), orderID)
 	if err != nil {
 		// Preserve the legacy behaviour.
@@ -1615,32 +1610,4 @@ func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error 
 	}
 
 	return commit()
-}
-
-func (pg *Postgres) getOrderLegacy(orderID uuid.UUID) (*Order, error) {
-	statement := `
-		SELECT
-			id, created_at, currency, updated_at, total_price,
-			merchant_id, location, status, allowed_payment_methods,
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE id = $1`
-	order := Order{}
-	err := pg.RawDB().Get(&order, statement, orderID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	foundOrderItems := []OrderItem{}
-	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-		FROM order_items WHERE order_id = $1`
-	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
-
-	order.Items = foundOrderItems
-	if err != nil {
-		return nil, err
-	}
-	return &order, nil
 }
