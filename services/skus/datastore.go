@@ -346,11 +346,6 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 
 // GetOrderByExternalID returns an order by the external id from the purchase vendor.
 func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
-	// Fallback to the legacy method in case the datastore has been initialised using NewPostgres.
-	if pg.orderRepo == nil {
-		return pg.getOrderByExternalIDLegacy(externalID)
-	}
-
 	result, err := pg.orderRepo.GetByExternalID(context.TODO(), pg.RawDB(), externalID)
 	if err != nil {
 		// Preserve the legacy behaviour.
@@ -386,11 +381,6 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 
 // GetOrder returns an order from the database.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	// Fallback to the legacy method in case the datastore has been initialised using NewPostgres.
-	if pg.orderRepo == nil {
-		return pg.getOrderLegacy(orderID)
-	}
-
 	result, err := pg.orderRepo.Get(context.TODO(), pg.RawDB(), orderID)
 	if err != nil {
 		// Preserve the legacy behaviour.
@@ -409,11 +399,6 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 //
 // It returns sql.ErrNoRows if the item is not found.
 func (pg *Postgres) GetOrderItem(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
-	// Fallback to the legacy method in case the datastore has been initialised using NewPostgres.
-	if pg.orderRepo == nil {
-		return pg.getOrderItemLegacy(ctx, itemID)
-	}
-
 	result, err := pg.orderRepo.GetOrderItem(ctx, pg.RawDB(), itemID)
 	if err != nil {
 		// Preserve the legacy behaviour.
@@ -1619,71 +1604,4 @@ func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error 
 	}
 
 	return commit()
-}
-
-func (pg *Postgres) getOrderLegacy(orderID uuid.UUID) (*Order, error) {
-	statement := `
-		SELECT
-			id, created_at, currency, updated_at, total_price,
-			merchant_id, location, status, allowed_payment_methods,
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE id = $1`
-	order := Order{}
-	err := pg.RawDB().Get(&order, statement, orderID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	foundOrderItems := []OrderItem{}
-	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-		FROM order_items WHERE order_id = $1`
-	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
-
-	order.Items = foundOrderItems
-	if err != nil {
-		return nil, err
-	}
-	return &order, nil
-}
-
-func (pg *Postgres) getOrderByExternalIDLegacy(externalID string) (*Order, error) {
-	statement := `
-		SELECT
-			id, created_at, currency, updated_at, total_price,
-			merchant_id, location, status, allowed_payment_methods,
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE metadata->>'externalID' = $1`
-	order := Order{}
-	err := pg.RawDB().Get(&order, statement, externalID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	foundOrderItems := []OrderItem{}
-	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-		FROM order_items WHERE order_id = $1`
-	err = pg.RawDB().Select(&foundOrderItems, statement, order.ID)
-
-	order.Items = foundOrderItems
-	if err != nil {
-		return nil, err
-	}
-	return &order, nil
-}
-
-func (pg *Postgres) getOrderItemLegacy(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
-	var orderItem OrderItem
-	err := pg.GetContext(ctx, &orderItem, `SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price,
-       (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-			from order_items where id = $1`, itemID)
-	if err != nil {
-		return nil, err
-	}
-	return &orderItem, nil
 }
