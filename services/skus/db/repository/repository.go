@@ -44,11 +44,37 @@ func (r *Order) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) 
 	return result, nil
 }
 
+func (r *Order) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+	const q = `SELECT
+		id, created_at, currency, updated_at, total_price,
+		merchant_id, location, status, allowed_payment_methods,
+		metadata, valid_for, last_paid_at, expires_at, trial_days
+	FROM orders WHERE metadata->>'externalID' = $1`
+
+	result := &model.Order{}
+	if err := sqlx.GetContext(ctx, dbi, result, q, extID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, model.ErrOrderNotFound
+		}
+
+		return nil, err
+	}
+
+	items, err := r.fetchOrderItems(ctx, dbi, result.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Items = items
+
+	return result, nil
+}
+
 func (r *Order) fetchOrderItems(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
 	const q = `SELECT
 		id, order_id, sku, created_at, updated_at, currency,
 		quantity, price, (quantity * price) as subtotal,
-		location, description, credential_type,metadata, valid_for_iso, issuance_interval
+		location, description, credential_type, metadata, valid_for_iso, issuance_interval
 	FROM order_items WHERE order_id = $1`
 
 	result := make([]model.OrderItem, 0)

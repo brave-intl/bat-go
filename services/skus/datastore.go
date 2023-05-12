@@ -101,6 +101,7 @@ type Datastore interface {
 
 type orderStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -342,33 +343,25 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 	return &order, nil
 }
 
-// GetOrderByExternalID by the external id from the purchase vendor
+// GetOrderByExternalID returns an order by the external id from the purchase vendor.
 func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
-	statement := `
-		SELECT
-			id, created_at, currency, updated_at, total_price,
-			merchant_id, location, status, allowed_payment_methods,
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE metadata->>'externalID' = $1`
-	order := Order{}
-	err := pg.RawDB().Get(&order, statement, externalID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
+	// Fallback to the legacy method in case the datastore has been initialised using NewPostgres.
+	if pg.orderRepo == nil {
+		return pg.getOrderByExternalIDLegacy(externalID)
 	}
 
-	foundOrderItems := []OrderItem{}
-	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-		FROM order_items WHERE order_id = $1`
-	err = pg.RawDB().Select(&foundOrderItems, statement, order.ID)
-
-	order.Items = foundOrderItems
+	result, err := pg.orderRepo.GetByExternalID(context.TODO(), pg.RawDB(), externalID)
 	if err != nil {
+		// Preserve the legacy behaviour.
+		// TODO: Propagate the sentinel error, and handle in the business logic properly.
+		if errors.Is(err, model.ErrOrderNotFound) {
+			return nil, nil
+		}
+
 		return nil, err
 	}
-	return &order, nil
+
+	return result, nil
 }
 
 // GetOutboxMovAvgDurationSeconds - get the number of seconds it takes to clear the last 20 outbox messages
@@ -1637,6 +1630,34 @@ func (pg *Postgres) getOrderLegacy(orderID uuid.UUID) (*Order, error) {
 		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+func (pg *Postgres) getOrderByExternalIDLegacy(externalID string) (*Order, error) {
+	statement := `
+		SELECT
+			id, created_at, currency, updated_at, total_price,
+			merchant_id, location, status, allowed_payment_methods,
+			metadata, valid_for, last_paid_at, expires_at, trial_days
+		FROM orders WHERE metadata->>'externalID' = $1`
+	order := Order{}
+	err := pg.RawDB().Get(&order, statement, externalID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement = `
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
+		FROM order_items WHERE order_id = $1`
+	err = pg.RawDB().Select(&foundOrderItems, statement, order.ID)
 
 	order.Items = foundOrderItems
 	if err != nil {
