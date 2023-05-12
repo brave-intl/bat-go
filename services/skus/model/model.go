@@ -214,6 +214,12 @@ func EmptyCreateCheckoutSessionResponse() CreateCheckoutSessionResponse {
 
 type OrderItemList []OrderItem
 
+func (l OrderItemList) SetOrderID(orderID uuid.UUID) {
+	for i := range l {
+		l[i].OrderID = orderID
+	}
+}
+
 func (l OrderItemList) stripeLineItems() []*stripe.CheckoutSessionLineItemParams {
 	result := make([]*stripe.CheckoutSessionLineItemParams, 0, len(l))
 
