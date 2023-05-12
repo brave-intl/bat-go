@@ -102,6 +102,7 @@ type Datastore interface {
 type orderStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	GetOrderItem(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -405,16 +406,26 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 }
 
 // GetOrderItem retrieves the order item for the given identifier.
-// This function will return sql.ErrNoRows if the result set is empty.
+//
+// It returns sql.ErrNoRows if the item is not found.
 func (pg *Postgres) GetOrderItem(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
-	var orderItem OrderItem
-	err := pg.GetContext(ctx, &orderItem, `SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price,
-       (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-			from order_items where id = $1`, itemID)
+	// Fallback to the legacy method in case the datastore has been initialised using NewPostgres.
+	if pg.orderRepo == nil {
+		return pg.getOrderItemLegacy(ctx, itemID)
+	}
+
+	result, err := pg.orderRepo.GetOrderItem(ctx, pg.RawDB(), itemID)
 	if err != nil {
+		// Preserve the legacy behaviour.
+		// TODO: Propagate the sentinel error, and handle in the business logic properly.
+		if errors.Is(err, model.ErrOrderItemNotFound) {
+			return nil, sql.ErrNoRows
+		}
+
 		return nil, err
 	}
-	return &orderItem, nil
+
+	return result, nil
 }
 
 // GetPagedMerchantTransactions - get a paginated list of transactions for a merchant
@@ -1664,4 +1675,15 @@ func (pg *Postgres) getOrderByExternalIDLegacy(externalID string) (*Order, error
 		return nil, err
 	}
 	return &order, nil
+}
+
+func (pg *Postgres) getOrderItemLegacy(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
+	var orderItem OrderItem
+	err := pg.GetContext(ctx, &orderItem, `SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price,
+       (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
+			from order_items where id = $1`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	return &orderItem, nil
 }

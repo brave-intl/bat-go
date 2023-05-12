@@ -44,6 +44,7 @@ func (r *Order) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) 
 	return result, nil
 }
 
+// GetByExternalID retrieves the order by metadata.externalID.
 func (r *Order) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
 	const q = `SELECT
 		id, created_at, currency, updated_at, total_price,
@@ -66,6 +67,26 @@ func (r *Order) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, ex
 	}
 
 	result.Items = items
+
+	return result, nil
+}
+
+// GetOrderItem retrieves the order item by the given id.
+func (r *Order) GetOrderItem(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+	const q = `SELECT
+		id, order_id, sku, created_at, updated_at, currency,
+		quantity, price, (quantity * price) as subtotal,
+		location, description, credential_type,metadata, valid_for_iso, issuance_interval
+	FROM order_items WHERE id = $1`
+
+	result := &model.OrderItem{}
+	if err := sqlx.GetContext(ctx, dbi, result, q, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, model.ErrOrderItemNotFound
+		}
+
+		return nil, err
+	}
 
 	return result, nil
 }

@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	ErrOrderNotFound Error = "model: order not found"
+	ErrOrderNotFound     Error = "model: order not found"
+	ErrOrderItemNotFound Error = "model: order item not found"
 )
 
 const (
