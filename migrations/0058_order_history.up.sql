@@ -10,20 +10,20 @@ CREATE TABLE IF NOT EXISTS order_history (
 
 CREATE OR REPLACE FUNCTION save_order_history() RETURNS TRIGGER AS $$
     BEGIN
-        IF TG_OP = 'INSERT' THEN
+        IF (TG_OP = 'INSERT') THEN
             INSERT INTO order_history(operation, order_id, value_after)
             VALUES (TG_OP, NEW.id, row_to_json(NEW)::jsonb);
 
             -- Can return NULL because it's used in an AFTER trigger.
             RETURN NEW;
 
-        ELSIF TG_OP = 'UPDATE' THEN
+        ELSIF (TG_OP = 'UPDATE') THEN
             INSERT INTO order_history(operation, order_id, value_before, value_after)
             VALUES (TG_OP, NEW.id, row_to_json(OLD)::jsonb, row_to_json(NEW)::jsonb);
 
             RETURN NEW;
 
-        ELSIF TG_OP = 'DELETE' THEN
+        ELSIF (TG_OP = 'DELETE') THEN
             INSERT INTO order_history(operation, order_id, value_before)
             VALUES (TG_OP, OLD.id, row_to_json(OLD)::jsonb);
 
@@ -32,4 +32,5 @@ CREATE OR REPLACE FUNCTION save_order_history() RETURNS TRIGGER AS $$
     END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER handle_order_change AFTER INSERT OR UPDATE OR DELETE ON orders FOR EACH ROW EXECUTE FUNCTION save_order_history();
+CREATE OR REPLACE TRIGGER handle_order_change
+AFTER INSERT OR UPDATE OR DELETE ON orders FOR EACH ROW EXECUTE FUNCTION save_order_history();
