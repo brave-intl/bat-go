@@ -1,9 +1,5 @@
-DROP TRIGGER IF EXISTS handle_order_insert ON orders;
-DROP TRIGGER IF EXISTS handle_order_update ON orders;
-DROP TRIGGER IF EXISTS handle_order_delete ON orders;
+DROP TRIGGER IF EXISTS handle_order_change ON orders;
 
-DROP FUNCTION IF EXISTS fn_order_insert;
-DROP FUNCTION IF EXISTS fn_order_update;
-DROP FUNCTION IF EXISTS fn_order_delete;
+DROP FUNCTION IF EXISTS save_order_history;
 
 DROP TABLE IF EXISTS order_history;
