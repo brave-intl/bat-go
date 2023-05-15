@@ -8,10 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/shopspring/decimal"
-	"time"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -258,24 +259,25 @@ func (s *Service) setupLedger(ctx context.Context) error {
 	return nil
 }
 
-// InsertTransaction - perform a qldb insertion on the transaction
-func (s *Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
+func (s *Service) progressTransacton(ctx context.Context, transaction *Transaction) (Transaction, error) {
 	stateMachine, err := StateMachineFromTransaction(transaction, s)
 	if err != nil {
 		return Transaction{}, fmt.Errorf("failed to insert transaction: %w", err)
 	}
-	var transactionState TransactionState
 
-	for transactionState < Prepared {
-		txn, err := Drive(ctx, stateMachine)
-		if err != nil {
-			return Transaction{}, fmt.Errorf("failed to drive state machine: %w", err)
-		}
-		transactionState = txn.State
+	// Only drive the Transaction into the targetState
+	transaction, err = Drive(ctx, stateMachine)
+	if err != nil {
+		return Transaction{}, fmt.Errorf("failed to drive state machine: %w", err)
 	}
 
 	// Enriched includes DocumentID along with the transaction.
 	return *transaction, nil
+}
+
+// InsertTransaction - perform a qldb insertion on the transaction
+func (s *Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
+	return s.progressTransacton(ctx, transaction)
 }
 
 // AuthorizeTransaction - Add an Authorization for the Transaction
@@ -295,6 +297,10 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 	})
 	if err != nil {
 		return fmt.Errorf("failed to update transactions: %w", err)
+	}
+	transaction, err = s.progressTransacton(ctx, &transaction)
+	if err != nil {
+		return fmt.Errorf("failed to progress transaction: %w", err)
 	}
 	return nil
 }

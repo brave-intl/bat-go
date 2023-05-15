@@ -86,20 +86,13 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
 		}
 
-		// sign the transaction
-		req.PublicKey, req.Signature, err = req.SignTransaction(ctx, service.kmsSigningClient, service.kmsSigningKeyId)
-		if err != nil {
-			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to sign transaction")
-			return handlers.WrapError(err, "failed to sign transaction", http.StatusBadRequest)
-		}
-
-		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
-
 		// returns an enriched list of transactions, which includes the document metadata
 		resp, err := service.InsertTransaction(ctx, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}
+
+		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
 
 		// create a random nonce for nitro attestation
 		nonce := make([]byte, 64)
