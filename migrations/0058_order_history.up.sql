@@ -14,7 +14,7 @@ CREATE OR REPLACE FUNCTION save_order_history() RETURNS TRIGGER AS $$
             INSERT INTO order_history(operation, order_id, value_after)
             VALUES (TG_OP, NEW.id, row_to_json(NEW)::jsonb);
 
-            -- Can return NULL because it's used in an AFTER trigger.
+            -- Here and below, can return NULL because it's used in an AFTER trigger.
             RETURN NEW;
 
         ELSIF (TG_OP = 'UPDATE') THEN
