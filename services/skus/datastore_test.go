@@ -37,7 +37,7 @@ func TestPostgresTestSuite(t *testing.T) {
 
 func (suite *PostgresTestSuite) SetupSuite() {
 	skustest.Migrate(suite.T())
-	storage, _ := NewPostgres("", false, "")
+	storage, _ := NewPostgresWithOrder(repository.NewOrder(), "", false, "")
 	suite.storage = storage
 }
 
