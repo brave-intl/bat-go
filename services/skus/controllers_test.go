@@ -47,6 +47,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/services/skus/db/repository"
 )
 
 var (

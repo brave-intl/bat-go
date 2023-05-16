@@ -9,13 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brave-intl/bat-go/libs/test"
-
 	"github.com/asaskevich/govalidator"
+	"github.com/stretchr/testify/suite"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/test"
+	"github.com/brave-intl/bat-go/services/skus/db/repository"
 	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
-	"github.com/stretchr/testify/suite"
 )
 
 type OrderTestSuite struct {

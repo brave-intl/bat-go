@@ -29,6 +29,8 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/brave-intl/bat-go/services/skus/db/repository"
 )
 
 type CredentialsTestSuite struct {

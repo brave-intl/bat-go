@@ -24,6 +24,8 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/services/skus/db/repository"
 )
 
 type PostgresTestSuite struct {
