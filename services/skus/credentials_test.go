@@ -29,6 +29,8 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/brave-intl/bat-go/services/skus/db/repository"
 )
 
 type CredentialsTestSuite struct {
@@ -42,7 +44,7 @@ func TestCredentialsTestSuite(t *testing.T) {
 
 func (suite *CredentialsTestSuite) SetupSuite() {
 	skustest.Migrate(suite.T())
-	storage, _ := NewPostgres("", false, "")
+	storage, _ := NewPostgresWithOrder(repository.NewOrder(), "", false, "")
 	suite.storage = storage
 }
 
