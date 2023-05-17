@@ -91,15 +91,6 @@ func (r *Order) Create(
 		return nil, err
 	}
 
-	// TODO: Handle payment history.
-
-	// itemsNew, err := r.createOrderItems(ctx, dbi, result.ID, items)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// result.Items = itemsNew
-
 	return result, nil
 }
 
