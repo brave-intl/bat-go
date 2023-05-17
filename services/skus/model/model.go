@@ -21,8 +21,10 @@ import (
 )
 
 const (
-	ErrOrderNotFound     Error = "model: order not found"
-	ErrOrderItemNotFound Error = "model: order item not found"
+	ErrOrderNotFound                Error = "model: order not found"
+	ErrOrderItemNotFound            Error = "model: order item not found"
+	ErrNoRowsChangedOrder           Error = "model: no rows changed in orders"
+	ErrNoRowsChangedOrderPayHistory Error = "model: no rows changed in order_payment_history"
 )
 
 const (
@@ -213,6 +215,12 @@ func EmptyCreateCheckoutSessionResponse() CreateCheckoutSessionResponse {
 }
 
 type OrderItemList []OrderItem
+
+func (l OrderItemList) SetOrderID(orderID uuid.UUID) {
+	for i := range l {
+		l[i].OrderID = orderID
+	}
+}
 
 func (l OrderItemList) stripeLineItems() []*stripe.CheckoutSessionLineItemParams {
 	result := make([]*stripe.CheckoutSessionLineItemParams, 0, len(l))

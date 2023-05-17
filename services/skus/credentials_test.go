@@ -44,7 +44,7 @@ func TestCredentialsTestSuite(t *testing.T) {
 
 func (suite *CredentialsTestSuite) SetupSuite() {
 	skustest.Migrate(suite.T())
-	storage, _ := NewPostgresWithOrder(repository.NewOrder(), "", false, "")
+	storage, _ := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.storage = storage
 }
 

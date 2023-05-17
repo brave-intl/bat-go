@@ -382,8 +382,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
 
 	skuOrderRepo := repository.NewOrder()
+	skuOrderItemRepo := repository.NewOrderItem()
+	skuOrderPayHistRepo := repository.NewOrderPayHistory()
 
-	skusPG, err := skus.NewPostgresWithOrder(skuOrderRepo, "", true, "skus_db")
+	skusPG, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "skus_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -417,7 +419,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgresWithOrder(skuOrderRepo, "", true, "merch_skus_db")
+		skusDB, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "merch_skus_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")

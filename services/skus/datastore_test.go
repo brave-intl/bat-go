@@ -39,7 +39,7 @@ func TestPostgresTestSuite(t *testing.T) {
 
 func (suite *PostgresTestSuite) SetupSuite() {
 	skustest.Migrate(suite.T())
-	storage, _ := NewPostgresWithOrder(repository.NewOrder(), "", false, "")
+	storage, _ := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.storage = storage
 }
 
@@ -61,8 +61,13 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 			}
 		}
 	}()
-	// inject our mock db into our postgres
-	pg := &Postgres{Postgres: datastore.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")}}
+
+	pg := &Postgres{
+		Postgres: datastore.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")}
+		orderRepo: repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		orderPayHistory: repository.NewOrderPayHistory(),
+	}
 
 	// setup inputs
 	merchantID := uuid.NewV4()
