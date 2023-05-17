@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	// needed for magic migration
@@ -14,7 +13,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -102,7 +100,25 @@ type Datastore interface {
 type orderStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
-	GetOrderItem(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	Create(
+		ctx context.Context,
+		dbi sqlx.ExtContext,
+		totalPrice decimal.Decimal,
+		merchantID, status, currency, location string,
+		paymentMethods *model.Methods,
+		validFor *time.Duration,
+	) (*model.Order, error)
+	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+}
+
+type orderItemStore interface {
+	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
+	InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+}
+
+type orderPayHistoryStore interface {
+	Insert(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -119,27 +135,29 @@ type VoteRecord struct {
 type Postgres struct {
 	datastore.Postgres
 
-	orderRepo orderStore
+	orderRepo       orderStore
+	orderItemRepo   orderItemStore
+	orderPayHistory orderPayHistoryStore
 }
 
 // NewPostgres creates a new Postgres Datastore.
-func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := newPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
-	if pg != nil {
-		return &DatastoreWithPrometheus{base: pg, instanceName: "payment_datastore"}, err
-	}
-
-	return nil, err
-}
-
-// NewPostgresWithOrder returns a refactoring-in-progress Datastore that delegates operations on orders to orderRepo.
-func NewPostgresWithOrder(orderRepo orderStore, databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+func NewPostgres(
+	orderRepo orderStore,
+	orderItemRepo orderItemStore,
+	orderPayHistory orderPayHistoryStore,
+	databaseURL string,
+	performMigration bool,
+	migrationTrack string,
+	dbStatsPrefix ...string,
+) (Datastore, error) {
 	pg, err := newPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if err != nil {
 		return nil, err
 	}
 
 	pg.orderRepo = orderRepo
+	pg.orderItemRepo = orderItemRepo
+	pg.orderPayHistory = orderPayHistory
 
 	return &DatastoreWithPrometheus{base: pg, instanceName: "payment_datastore"}, nil
 }
@@ -279,74 +297,47 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 	return &order, tx.Commit()
 }
 
-// CreateOrder creates orders given the total price, merchant ID, status and items of the order
+// CreateOrder creates an order with the given total price, merchant ID, status and orderItems.
 func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
-	tx := pg.RawDB().MustBegin()
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer pg.RollbackTx(tx)
 
-	var order Order
-	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency, location, allowed_payment_methods, valid_for)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods, valid_for
-		`,
-		totalPrice, merchantID, status, currency, location, pq.Array(*allowedPaymentMethods), validFor)
+	ctx := context.TODO()
 
+	result, err := pg.orderRepo.Create(ctx, tx, totalPrice, merchantID, status, currency, location, allowedPaymentMethods, validFor)
 	if err != nil {
 		return nil, err
 	}
 
 	if status == OrderStatusPaid {
-		// record the order payment
-		if err := recordOrderPayment(context.Background(), tx, order.ID, time.Now()); err != nil {
+		if err := pg.recordOrderPayment(ctx, tx, result.ID, time.Now()); err != nil {
 			return nil, fmt.Errorf("failed to record order payment: %w", err)
 		}
 	}
 
-	// TODO: We should make a generalized helper to handle bulk inserts
-	query := `
-		insert into order_items
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval)
-		values `
-	params := []interface{}{}
-	for i := 0; i < len(orderItems); i++ {
-		// put all our params together
-		params = append(params,
-			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
-			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
-			orderItems[i].Location, orderItems[i].Description,
-			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor,
-			orderItems[i].ValidForISO,
-			orderItems[i].IssuanceIntervalISO,
-		)
-		numFields := 13 // the number of fields you are inserting
-		n := i * numFields
+	model.OrderItemList(orderItems).SetOrderID(result.ID)
 
-		query += `(`
-		for j := 0; j < numFields; j++ {
-			query += `$` + strconv.Itoa(n+j+1) + `,`
-		}
-		query = query[:len(query)-1] + `),`
-	}
-	query = query[:len(query)-1] // remove the trailing comma
-	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for`
-
-	order.Items = []OrderItem{}
-
-	err = tx.Select(&order.Items, query, params...)
-	if err != nil {
-		return nil, err
-	}
-	err = tx.Commit()
+	result.Items, err = pg.orderItemRepo.InsertMany(ctx, tx, orderItems...)
 	if err != nil {
 		return nil, err
 	}
 
-	return &order, nil
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // GetOrderByExternalID returns an order by the external id from the purchase vendor.
 func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
-	result, err := pg.orderRepo.GetByExternalID(context.TODO(), pg.RawDB(), externalID)
+	ctx := context.TODO()
+	dbi := pg.RawDB()
+
+	result, err := pg.orderRepo.GetByExternalID(ctx, dbi, externalID)
 	if err != nil {
 		// Preserve the legacy behaviour.
 		// TODO: Propagate the sentinel error, and handle in the business logic properly.
@@ -354,6 +345,11 @@ func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
 			return nil, nil
 		}
 
+		return nil, err
+	}
+
+	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, dbi, result.ID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -381,7 +377,10 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 
 // GetOrder returns an order from the database.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	result, err := pg.orderRepo.Get(context.TODO(), pg.RawDB(), orderID)
+	ctx := context.TODO()
+	dbi := pg.RawDB()
+
+	result, err := pg.orderRepo.Get(ctx, dbi, orderID)
 	if err != nil {
 		// Preserve the legacy behaviour.
 		// TODO: Propagate the sentinel error, and handle in the business logic properly.
@@ -392,6 +391,11 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 		return nil, err
 	}
 
+	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, dbi, orderID)
+	if err != nil {
+		return nil, err
+	}
+
 	return result, nil
 }
 
@@ -399,7 +403,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 //
 // It returns sql.ErrNoRows if the item is not found.
 func (pg *Postgres) GetOrderItem(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
-	result, err := pg.orderRepo.GetOrderItem(ctx, pg.RawDB(), itemID)
+	result, err := pg.orderItemRepo.Get(ctx, pg.RawDB(), itemID)
 	if err != nil {
 		// Preserve the legacy behaviour.
 		// TODO: Propagate the sentinel error, and handle in the business logic properly.
@@ -1604,4 +1608,12 @@ func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error 
 	}
 
 	return commit()
+}
+
+func (pg *Postgres) recordOrderPayment(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+	if err := pg.orderPayHistory.Insert(ctx, dbi, id, when); err != nil {
+		return err
+	}
+
+	return pg.orderRepo.SetLastPaidAt(ctx, dbi, id, when)
 }

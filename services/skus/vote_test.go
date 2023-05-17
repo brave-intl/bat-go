@@ -63,7 +63,9 @@ func TestVoteAnonCard(t *testing.T) {
 			Postgres: datastore.Postgres{
 				DB: sqlx.NewDb(db, "postgres"),
 			},
-			orderRepo: repository.NewOrder(),
+			orderRepo:       repository.NewOrder(),
+			orderItemRepo:   repository.NewOrderItem(),
+			orderPayHistory: repository.NewOrderPayHistory(),
 		},
 	)
 
