@@ -221,11 +221,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			Workers: 1,
 		},
 		{
-			Func:    service.RunNextOrderJob,
-			Cadence: 500 * time.Millisecond,
-			Workers: 3,
-		},
-		{
 			Func:    service.RunSendSigningRequestJob,
 			Cadence: 100 * time.Millisecond,
 			Workers: 1,
@@ -742,13 +737,13 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 		Logger()
 
 	// get the information from the custodian
-	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
+	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to get and validate custodian transaction")
 		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
 	}
 
-	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
+	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, *amount)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
 		return nil, errorutils.Wrap(err, "error recording transaction")
@@ -780,13 +775,13 @@ func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTr
 		Logger()
 
 	// get the information from the custodian
-	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
+	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to get and validate custodian transaction")
 		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
 	}
 
-	transaction, err := s.Datastore.UpdateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
+	transaction, err := s.Datastore.UpdateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, *amount)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
 		return nil, errorutils.Wrap(err, "error recording transaction")
@@ -919,6 +914,22 @@ const (
 )
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
+
+// GetItemCredentials - based on the order, get the associated credentials
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.UUID) (interface{}, int, error) {
+	orderCreds, status, err := s.GetCredentials(ctx, orderID)
+	if err != nil {
+		return nil, status, err
+	}
+
+	for _, oc := range orderCreds.([]OrderCreds) {
+		if uuid.Equal(oc.ID, itemID) {
+			return oc, status, nil
+		}
+	}
+	// order creds are not available yet
+	return nil, status, nil
+}
 
 // GetCredentials - based on the order, get the associated credentials
 func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
@@ -1388,19 +1399,6 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
 }
 
-// RunNextOrderJob Deprecated. Takes the next order job and completes it.
-func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
-	for {
-		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
-		if err != nil {
-			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
-		}
-		if !attempted {
-			return attempted, err
-		}
-	}
-}
-
 // RunSendSigningRequestJob - send the order credentials signing requests
 func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
 	return true, s.Datastore.SendSigningRequest(ctx, s)
@@ -1501,7 +1499,7 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
 		}
 	} else {
-		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+		if err = s.RenewOrder(ctx, o.ID); err != nil {
 			return fmt.Errorf("failed to renew subscription in skus: %w", err)
 		}
 	}
@@ -1538,7 +1536,7 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 		androidSubscriptionRestarted,
 		androidSubscriptionInGracePeriod,
 		androidSubscriptionPriceChangeConfirmed:
-		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+		if err = s.RenewOrder(ctx, o.ID); err != nil {
 			return fmt.Errorf("failed to renew subscription in skus: %w", err)
 		}
 	case androidSubscriptionExpired,

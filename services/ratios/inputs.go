@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -206,6 +207,36 @@ func (cd *CoingeckoDuration) String() string {
 // ToDays - get duration in days
 func (cd *CoingeckoDuration) ToDays() float32 {
 	return durationDays[string(*cd)]
+}
+
+// ToGetHistoryCacheDurationSeconds returns the length of time a GetHistory
+// cache entry is considered valid based on it's duration
+func (cd *CoingeckoDuration) ToGetHistoryCacheDurationSeconds() int {
+	var defaultCacheDurationSeconds, dayInSeconds int
+
+	// Default cache duration seconds is calculated according to this formula:
+	//
+	// Cache time in seconds = 60 * 60 * (fraction of 1 day the duration is)
+	//
+	// E.g.
+	//
+	// 1h: 60 * 60 * 1/24 = 150 seconds
+	// 1d: 60 * 60 * 24/24 = 3600 seconds (1 hour)
+	// 1w: 60 * 60 * 7 = 25200 seconds (7 hours)
+	// 1m: 60 * 60 * 30 = 108000 seconds (30 hours)
+	// 3m: 60 * 60 * 90 = 324000 seconds (3.75 days)
+	// 1y: 60 * 60 * 365 = 31536000 seconds (15.2 days)
+	// all: 60 * 60 * 365*10 = 315360000 seconds (152 days)
+	days := cd.ToDays()
+	defaultCacheDurationSeconds = int(math.Round(float64(60 * 60 * days)))
+
+	// For any duration that would have a default cache duration greater
+	// than 1 day, use 1 day instead.
+	dayInSeconds = 60 * 60 * 24
+	if defaultCacheDurationSeconds > dayInSeconds {
+		return dayInSeconds
+	}
+	return defaultCacheDurationSeconds
 }
 
 var (

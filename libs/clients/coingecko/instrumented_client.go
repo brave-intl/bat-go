@@ -67,7 +67,7 @@ func (_d ClientWithPrometheus) FetchCoinMarkets(ctx context.Context, vsCurrency 
 }
 
 // FetchMarketChart implements Client
-func (_d ClientWithPrometheus) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (mp1 *MarketChartResponse, t1 time.Time, err error) {
+func (_d ClientWithPrometheus) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32, cacheDurationSeconds int) (mp1 *MarketChartResponse, t1 time.Time, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -77,7 +77,7 @@ func (_d ClientWithPrometheus) FetchMarketChart(ctx context.Context, id string, 
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchMarketChart", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.FetchMarketChart(ctx, id, vsCurrency, days)
+	return _d.base.FetchMarketChart(ctx, id, vsCurrency, days, cacheDurationSeconds)
 }
 
 // FetchSimplePrice implements Client

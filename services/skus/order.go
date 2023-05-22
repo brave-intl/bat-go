@@ -455,3 +455,17 @@ func (order Order) IsPaid() bool {
 	}
 	return false
 }
+
+// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
+// Status should either be one of pending, paid, fulfilled, or canceled.
+func (s *Service) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
+
+	// renew order is an update order with paid status
+	// and an update order expires at with the new expiry time of the order
+	err := s.Datastore.UpdateOrder(orderID, OrderStatusPaid) // this performs a record order payment
+	if err != nil {
+		return fmt.Errorf("failed to set order status to paid: %w", err)
+	}
+
+	return s.DeleteOrderCreds(ctx, orderID, true)
+}

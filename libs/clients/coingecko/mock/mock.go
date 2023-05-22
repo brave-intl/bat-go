@@ -68,9 +68,9 @@ func (mr *MockClientMockRecorder) FetchCoinMarkets(ctx, vsCurrency, limit interf
 }
 
 // FetchMarketChart mocks base method.
-func (m *MockClient) FetchMarketChart(ctx context.Context, id, vsCurrency string, days float32) (*coingecko.MarketChartResponse, time.Time, error) {
+func (m *MockClient) FetchMarketChart(ctx context.Context, id, vsCurrency string, days float32, cacheDurationSeconds int) (*coingecko.MarketChartResponse, time.Time, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchMarketChart", ctx, id, vsCurrency, days)
+	ret := m.ctrl.Call(m, "FetchMarketChart", ctx, id, vsCurrency, days, cacheDurationSeconds)
 	ret0, _ := ret[0].(*coingecko.MarketChartResponse)
 	ret1, _ := ret[1].(time.Time)
 	ret2, _ := ret[2].(error)
@@ -78,9 +78,9 @@ func (m *MockClient) FetchMarketChart(ctx context.Context, id, vsCurrency string
 }
 
 // FetchMarketChart indicates an expected call of FetchMarketChart.
-func (mr *MockClientMockRecorder) FetchMarketChart(ctx, id, vsCurrency, days interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchMarketChart(ctx, id, vsCurrency, days, cacheDurationSeconds interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMarketChart", reflect.TypeOf((*MockClient)(nil).FetchMarketChart), ctx, id, vsCurrency, days)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMarketChart", reflect.TypeOf((*MockClient)(nil).FetchMarketChart), ctx, id, vsCurrency, days, cacheDurationSeconds)
 }
 
 // FetchSimplePrice mocks base method.
