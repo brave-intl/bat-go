@@ -135,7 +135,6 @@ func (t *Transaction) BuildSigningBytes() []byte {
 
 // MarshalJSON - custom marshaling of transaction type
 func (t *Transaction) MarshalJSON() ([]byte, error) {
-	fmt.Printf("------------DATA1: %v\n", t)
 	type Alias Transaction
 	return json.Marshal(&struct {
 		Amount *decimal.Decimal `json:"amount"`
@@ -155,8 +154,6 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 	}{
 		Alias: (*Alias)(t),
 	}
-	fmt.Printf("DATA2: %s\n", data)
-	fmt.Printf("DATA3: %#v\n", aux)
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
