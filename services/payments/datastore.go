@@ -86,10 +86,11 @@ func (q *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error
 // an error
 func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
 	generatedIdempotencyKey := uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
-	if generatedIdempotencyKey == *t.ID {
-		return t.ID, nil
+	if generatedIdempotencyKey != *t.ID {
+		return nil, fmt.Errorf("ID does not match transaction fields: have %s, want %s", *t.ID, generatedIdempotencyKey)
 	}
-	return nil, fmt.Errorf("ID does not match transaction fields: have %s, want %s", *t.ID, generatedIdempotencyKey)
+
+	return t.ID, nil
 }
 
 // SetIdempotencyKey assigns a UUID v5 value to Transaction.ID
