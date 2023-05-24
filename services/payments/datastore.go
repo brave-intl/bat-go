@@ -352,7 +352,7 @@ func (s *Service) getQLDBObject(
 
 // GetTransactionByID returns the latest version of a record from QLDB if it exists, after doing all requisite validation
 func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Transaction, error) {
-	data, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+	data, err := s.datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
 		entry, err := s.getQLDBObject(ctx, txn, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get QLDB record: %w", err)
