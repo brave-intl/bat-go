@@ -116,7 +116,7 @@ func (ts TransactionState) String() string {
 
 // MarshalJSON implements JSON marshal for TransactionState
 func (ts TransactionState) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("\"%s\"", ts.String())), nil
+	return []byte(fmt.Sprintf("%q", ts.String())), nil
 }
 
 // UnmarshalJSON implements JSON unmarshal for TransactionState
@@ -127,15 +127,15 @@ func (ts *TransactionState) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	switch stringData {
-	case "\"prepared\"":
+	case `"prepared"`:
 		*ts = Prepared
-	case "\"authorized\"":
+	case `"authorized"`:
 		*ts = Authorized
-	case "\"pending\"":
+	case `"pending"`:
 		*ts = Pending
-	case "\"paid\"":
+	case `"paid"`:
 		*ts = Paid
-	case "\"failed\"":
+	case `"failed"`:
 		*ts = Failed
 	default:
 		return errors.New("cannot unmarshal unknown transition state")
