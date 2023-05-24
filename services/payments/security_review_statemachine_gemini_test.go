@@ -15,8 +15,9 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/assert"
+	should "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	must "github.com/stretchr/testify/require"
 )
 
 var (
@@ -39,15 +40,11 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 
 	err := os.Setenv("GEMINI_ENVIRONMENT", "test")
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 
 	// Mock transaction creation
 	jsonResponse, err := json.Marshal(geminiBulkPaySuccessResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -58,9 +55,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	)
 	// Mock transaction commit that will succeed
 	jsonResponse, err = json.Marshal(geminiTransactionCheckSuccessResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -73,13 +68,9 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	)
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	idempotencyKey, err := uuid.Parse("6798046b-2d05-5df4-9e18-fb3caf1b583d")
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	geminiStateMachine := GeminiMachine{}
 
 	testTransaction := Transaction{
@@ -88,9 +79,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	}
 
 	marshaledData, err := ion.MarshalBinary(testTransaction)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
@@ -131,10 +120,8 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	// the object does not yet exist.
 	mockCall := mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, nil)
 	newTransaction, err := Drive(ctx, &geminiStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Preparing: %e", err))
-	}
-	assert.Equal(t, Prepared, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Prepared, newTransaction.State)
 
 	// Should transition transaction into the Authorized state
 	testTransaction.State = Prepared
@@ -144,10 +131,8 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	mockCall.Unset()
 	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Authorizing: %e", err))
-	}
-	assert.Equal(t, Authorized, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Authorized, newTransaction.State)
 
 	// Should transition transaction into the Pending state
 	testTransaction.State = Authorized
@@ -157,10 +142,8 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	mockCall.Unset()
 	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Pending: %e", err))
-	}
-	assert.Equal(t, Pending, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Pending, newTransaction.State)
 
 	// Should transition transaction into the Paid state
 	testTransaction.State = Pending
@@ -170,10 +153,8 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	mockCall.Unset()
 	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Paying: %e", err))
-	}
-	assert.Equal(t, Paid, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Paid, newTransaction.State)
 }
 
 /*
@@ -185,15 +166,11 @@ func TestGeminiStateMachine500FailureToPendingTransitions(t *testing.T) {
 
 	mockGeminiHost := "https://mock.gemini.com"
 	err := os.Setenv("GEMINI_ENVIRONMENT", "test")
-	if err != nil {
-		panic("failed to set environment variable")
-	}
+	must.Equal(t, nil, err)
 
 	// Mock transaction creation that will fail
 	jsonResponse, err := json.Marshal(geminiBulkPayFailureResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -223,7 +200,7 @@ func TestGeminiStateMachine500FailureToPendingTransitions(t *testing.T) {
 
 	// Should transition transaction into the Paid state
 	newState, _ := Drive(ctx, &geminiStateMachine)
-	assert.Equal(t, Authorized, newState)
+	should.Equal(t, Authorized, newState)
 }
 */
 
@@ -236,9 +213,7 @@ func TestGeminiStateMachine404FailureToPaidTransitions(t *testing.T) {
 
 	mockGeminiHost := "https://mock.gemini.com"
 	err := os.Setenv("GEMINI_ENVIRONMENT", "test")
-	if err != nil {
-		panic("failed to set environment variable")
-	}
+	must.Equal(t, nil, err)
 
 	var (
 		failTransaction   = custodian.Transaction{ProviderID: "1234"}
@@ -250,9 +225,7 @@ func TestGeminiStateMachine404FailureToPaidTransitions(t *testing.T) {
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(geminiTransactionCheckFailureResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -284,6 +257,6 @@ func TestGeminiStateMachine404FailureToPaidTransitions(t *testing.T) {
 
 	// Should transition transaction into the Paid state
 	newState, _ := Drive(ctx, &geminiStateMachine)
-	assert.Equal(t, Pending, newState)
+	should.Equal(t, Pending, newState)
 }
 */

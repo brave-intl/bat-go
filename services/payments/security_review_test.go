@@ -2,7 +2,6 @@ package payments
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -16,8 +15,9 @@ import (
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/smithy-go/middleware"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
-	"github.com/stretchr/testify/assert"
+	should "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	must "github.com/stretchr/testify/require"
 )
 
 // Unit testing the package code using a Mock Driver
@@ -99,20 +99,14 @@ Should include exhaustive passing and failing tests.
 */
 func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	idempotencyKey, err := uuid.Parse("48f64a63-cb9f-5297-a605-964637448b9f")
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	testData := Transaction{
 		State: Prepared,
 	}
 	marshaledData, err := ion.MarshalBinary(testData)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
@@ -132,9 +126,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 		},
 	}
 	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	mockKMS := new(mockKMSClient)
 	mockRes := new(mockResult)
 	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
@@ -149,20 +141,16 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		if err != nil {
-			panic(err)
-		}
+		must.Equal(t, nil, err)
 		valid, err := validateTransactionHistory(ctx, &idempotencyKey, transactionHistorySet, mockKMS)
-		if err != nil {
-			panic(err)
-		}
-		assert.True(t, valid)
+		must.Equal(t, nil, err)
+		should.True(t, valid)
 	}
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
 		valid, _ := validateTransactionHistory(ctx, &idempotencyKey, transactionHistorySet, mockKMS)
-		assert.False(t, valid)
+		should.False(t, valid)
 	}
 }
 
@@ -238,16 +226,12 @@ func TestValidateRevision(t *testing.T) {
 	mockSDKClient.On("GetDigest").Return(&testDigestOutput, nil)
 	mockSDKClient.On("GetRevision").Return(&testRevisionOutput, nil)
 	valid, err := revisionValidInTree(ctx, mockSDKClient, &trueObject)
-	if err != nil {
-		fmt.Printf("Failed true: %e", err)
-	}
-	assert.True(t, valid)
+	must.Equal(t, nil, err)
+	should.True(t, valid)
 
 	valid, err = revisionValidInTree(ctx, mockSDKClient, &falseObject)
-	if err != nil {
-		fmt.Printf("Failed false: %e", err)
-	}
-	assert.False(t, valid)
+	must.Equal(t, nil, err)
+	should.False(t, valid)
 }
 
 /*
@@ -271,7 +255,7 @@ func TestGenerateAllValidTransitions(t *testing.T) {
 				foundMatch = true
 			}
 		}
-		assert.True(t, foundMatch)
+		should.True(t, foundMatch)
 	}
 	// Ensure all knownValidTransitionSequences have a matching generatedTransitionSequence
 	for _, knownValidTransitionSequence := range allValidTransitionSequences {
@@ -281,7 +265,7 @@ func TestGenerateAllValidTransitions(t *testing.T) {
 				foundMatch = true
 			}
 		}
-		assert.True(t, foundMatch)
+		should.True(t, foundMatch)
 	}
 }
 
@@ -292,9 +276,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		State: Prepared,
 	}
 	marshaledData, err := ion.MarshalBinary(testData)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
@@ -313,9 +295,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		},
 	}
 	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	ctx := context.Background()
 	mockKMS := new(mockKMSClient)
 	mockRes := new(mockResult)
@@ -344,8 +324,8 @@ func TestQLDBSignedInteractions(t *testing.T) {
 
 	// First write should succeed because Verify returns true
 	_, err = service.WriteTransaction(ctx, &testData)
-	assert.NoError(t, err)
+	should.NoError(t, err)
 	// Second write of the same object should fail because Verify returns false
 	// _, err := WriteTransaction(ctx, mockDriver, nil, mockKMS, &testData)
-	// assert.Error(t, err)
+	// should.Error(t, err)
 }

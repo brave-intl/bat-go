@@ -5,18 +5,15 @@ import (
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
+	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 )
 
 func TestIdempotencyKeyGeneration(t *testing.T) {
 	to, err := uuid.Parse("683bc9ba-497a-47a5-9587-3bd03fd722bd")
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	from, err := uuid.Parse("af68d02a-907f-4e9a-8f74-b54c7629412b")
-	if err != nil {
-		panic("failed to parse test UUIDs")
-	}
+	must.Equal(t, nil, err)
 	id := uuid.New()
 	transaction := Transaction{
 		ID:                  &id,
@@ -31,5 +28,5 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 		Signature:           "",
 		PublicKey:           "",
 	}
-	assert.Equal(t, transaction.deriveIdempotencyKey(), "inWrgd0F_tFjI_thCMPDmgxGeUM=")
+	should.Equal(t, transaction.deriveIdempotencyKey(), "inWrgd0F_tFjI_thCMPDmgxGeUM=")
 }
