@@ -207,7 +207,7 @@ func (e *qldbPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) 
 }
 
 // ValueHolder converts a qldbPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder
-func (b qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
+func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
 	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)
 	return &qldbTypes.ValueHolder{
 		IonText: &stringValue,
