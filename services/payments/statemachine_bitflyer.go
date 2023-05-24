@@ -55,7 +55,7 @@ func (bm *BitflyerMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUI
 // returning the state of the record in QLDB. If the record already exists, in a state other than Prepared, an
 // error is returned.
 func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
-	/*if !shouldDryRun(bm.transaction) {
+	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
 	nextState := Prepared
@@ -73,7 +73,7 @@ func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
 
 // Authorize implements TxStateMachine for the Bitflyer machine
 func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) {
-	/*if !shouldDryRun(bm.transaction) {
+	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
 	nextState := Authorized
@@ -91,7 +91,7 @@ func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) 
 
 // Pay implements TxStateMachine for the Bitflyer machine
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
-	/*if !shouldDryRun(bm.transaction) {
+	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
 	var nextState TransactionState
@@ -118,7 +118,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 
 // Fail implements TxStateMachine for the Bitflyer machine
 func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
-	/*if !shouldDryRun(bm.transaction) {
+	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
 	nextState := Failed

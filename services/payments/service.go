@@ -502,7 +502,7 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 	return driver, nil
 }
 
-func (t *Transaction) shouldDryRun bool {
+func (t *Transaction) shouldDryRun() bool {
 	if t.DryRun == nil {
 		return false
 	}
