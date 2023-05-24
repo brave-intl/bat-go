@@ -513,20 +513,23 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 	return driver, nil
 }
 
-func shouldDryRun(txn *Transaction) bool {
-	if txn.DryRun != nil {
-		switch txn.State {
-		case Prepared:
-			return *txn.DryRun == "prepare"
-		case Authorized:
-			return *txn.DryRun == "submit"
-		case Pending:
-			return *txn.DryRun == "submit"
-		case Paid:
-			return *txn.DryRun == "submit"
-		case Failed:
-			return *txn.DryRun == "submit"
-		}
+func (t *Transaction) shouldDryRun bool {
+	if t.DryRun == nil {
+		return false
 	}
-	return false
+
+	switch t.State {
+	case Prepared:
+		return *t.DryRun == "prepare"
+	case Authorized:
+		return *t.DryRun == "submit"
+	case Pending:
+		return *t.DryRun == "submit"
+	case Paid:
+		return *t.DryRun == "submit"
+	case Failed:
+		return *t.DryRun == "submit"
+	default:
+		return false
+	}
 }
