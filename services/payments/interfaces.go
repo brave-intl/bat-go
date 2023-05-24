@@ -2,6 +2,7 @@ package payments
 
 import (
 	"context"
+
 	"github.com/google/uuid"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -9,17 +10,20 @@ import (
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 )
 
+// IdempotentObject is anything that can generate an idempotency key
 type IdempotentObject interface {
 	getIdempotencyKey() string
 }
 
+// TxStateMachine is anything that be progressed through states by the
+// Drive function
 type TxStateMachine interface {
 	setTransaction(*Transaction)
 	setService(*Service)
 	GetState() TransactionState
 	GetService() *Service
 	GetTransactionID() *uuid.UUID
-	GenerateTransactionID(ctx context.Context) (*uuid.UUID, error)
+	GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error)
 	Prepare(context.Context) (*Transaction, error)
 	Authorize(context.Context) (*Transaction, error)
 	Pay(context.Context) (*Transaction, error)
@@ -44,12 +48,6 @@ type wrappedQldbTxnAPI interface {
 	Abort() error
 	BufferResult(qldbdriver.Result) (qldbdriver.BufferedResult, error)
 	ID() string
-}
-
-// wrappedQldbResult defines the Result characteristics for QLDB methods that we'll be using
-type wrappedQldbResult interface {
-	Next(wrappedQldbTxnAPI) bool
-	GetCurrentData() []byte
 }
 
 // wrappedKMSClient defines the characteristics for KMS methods that we'll be using

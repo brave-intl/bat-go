@@ -84,11 +84,7 @@ func (q *QLDBPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error
 
 // GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
 // an error
-func (t *Transaction) GenerateIdempotencyKey(ctx context.Context) (*uuid.UUID, error) {
-	namespace, ok := ctx.Value("namespaceUUID").(uuid.UUID)
-	if !ok {
-		return nil, errors.New("context namespaceUUID is not of type uuid.UUID")
-	}
+func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
 	generatedIdempotencyKey := uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
 	if generatedIdempotencyKey == *t.ID {
 		return t.ID, nil
@@ -97,11 +93,7 @@ func (t *Transaction) GenerateIdempotencyKey(ctx context.Context) (*uuid.UUID, e
 }
 
 // SetIdempotencyKey assigns a UUID v5 value to Transaction.ID
-func (t *Transaction) SetIdempotencyKey(ctx context.Context) error {
-	namespace, ok := ctx.Value("namespaceUUID").(uuid.UUID)
-	if !ok {
-		return errors.New("context namespaceUUID is not of type uuid.UUID")
-	}
+func (t *Transaction) SetIdempotencyKey(ctx context.Context, namespace uuid.UUID) error {
 	generatedIdempotencyKey := uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
 	t.ID = &generatedIdempotencyKey
 	return nil
@@ -113,9 +105,9 @@ var (
 )
 
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
-func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSClient, keyId string) (string, string, error) {
+func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSClient, keyID string) (string, string, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
-		KeyId: &keyId,
+		KeyId: &keyID,
 	})
 
 	if err != nil {
@@ -123,7 +115,7 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSC
 	}
 
 	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
-		KeyId:            &keyId,
+		KeyId:            &keyID,
 		Message:          t.BuildSigningBytes(),
 		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 	})
@@ -286,7 +278,7 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 		// for all the transactions load up a check to see if this transaction has already existed
 		// or not, then perform the insertion of the records.
 		auth := map[string]string{
-			"keyId":      keyID,
+			"keyID":      keyID,
 			"documentId": transaction.DocumentID,
 		}
 		_, err := txn.Execute("INSERT INTO authorizations ?", auth)
@@ -356,8 +348,8 @@ func (s *Service) getQLDBObject(
 	return result, nil
 }
 
-// GetTransactionById returns the latest version of a record from QLDB if it exists, after doing all requisite validation
-func (s *Service) GetTransactionById(ctx context.Context, id *uuid.UUID) (*Transaction, error) {
+// GetTransactionByID returns the latest version of a record from QLDB if it exists, after doing all requisite validation
+func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Transaction, error) {
 	data, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		entry, err := s.getQLDBObject(ctx, txn, id)
 		if err != nil {
@@ -414,16 +406,15 @@ func (s *Service) WriteTransaction(ctx context.Context, transaction *Transaction
 		if err != nil {
 			return nil, fmt.Errorf("failed to query QLDB: %w", err)
 		}
-		_, transaction.Signature, err = transaction.SignTransaction(ctx, s.kmsSigningClient, s.kmsSigningKeyId)
+		_, transaction.Signature, err = transaction.SignTransaction(ctx, s.kmsSigningClient, s.kmsSigningKeyID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign transaction: %w", err)
 		}
 
 		if record == nil {
 			return txn.Execute("INSERT INTO transactions ?", transaction)
-		} else {
-			return txn.Execute("UPDATE transactions SET state = ? WHERE id = ?", transaction.State, transaction.ID)
 		}
+		return txn.Execute("UPDATE transactions SET state = ? WHERE id = ?", transaction.State, transaction.ID)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("QLDB write execution failed: %w", err)

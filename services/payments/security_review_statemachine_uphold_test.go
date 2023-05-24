@@ -5,11 +5,12 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/mock"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -81,12 +82,15 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	)
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
+	if err != nil {
+		panic(err)
+	}
 	idempotencyKey, err := uuid.Parse("6798046b-2d05-5df4-9e18-fb3caf1b583d")
 	if err != nil {
 		panic(err)
 	}
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "namespaceUUID", namespaceUUID)
+	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 	upholdStateMachine := UpholdMachine{}
 
 	testTransaction := Transaction{

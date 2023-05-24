@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -46,8 +47,8 @@ func (um *UpholdMachine) GetTransactionID() *uuid.UUID {
 }
 
 // GenerateTransactionID returns an ID generated from the values of the transaction
-func (um *UpholdMachine) GenerateTransactionID(ctx context.Context) (*uuid.UUID, error) {
-	return um.transaction.GenerateIdempotencyKey(ctx)
+func (um *UpholdMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
+	return um.transaction.GenerateIdempotencyKey(namespace)
 }
 
 // Prepare implements TxStateMachine for uphold machine

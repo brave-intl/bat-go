@@ -34,25 +34,8 @@ type mockResult struct {
 	mock.Mock
 }
 
-type mockTransaction struct {
-	mock.Mock
-}
-
 type mockKMSClient struct {
 	mock.Mock
-}
-
-func (m *mockTransaction) Execute(statement string, parameters ...interface{}) (wrappedQldbResult, error) {
-	args := m.Called(statement, parameters)
-	return args.Get(0).(wrappedQldbResult), args.Error(1)
-}
-
-func (m *mockTransaction) BufferResult(res *qldbdriver.Result) (*qldbdriver.BufferedResult, error) {
-	panic("not used")
-}
-
-func (m *mockTransaction) Abort() error {
-	panic("not used")
 }
 
 func (m *mockDriver) Execute(ctx context.Context, fn func(txn qldbdriver.Transaction) (interface{}, error)) (interface{}, error) {
@@ -95,17 +78,17 @@ func (m *mockSDKClient) GetRevision(
 	return args.Get(0).(*qldb.GetRevisionOutput), args.Error(1)
 }
 
-func (m mockKMSClient) Sign(ctx context.Context, params *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error) {
+func (m *mockKMSClient) Sign(ctx context.Context, params *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error) {
 	args := m.Called(ctx, params, optFns)
 	return args.Get(0).(*kms.SignOutput), args.Error(1)
 }
 
-func (m mockKMSClient) Verify(ctx context.Context, params *kms.VerifyInput, optFns ...func(*kms.Options)) (*kms.VerifyOutput, error) {
+func (m *mockKMSClient) Verify(ctx context.Context, params *kms.VerifyInput, optFns ...func(*kms.Options)) (*kms.VerifyOutput, error) {
 	args := m.Called(ctx, params, optFns)
 	return args.Get(0).(*kms.VerifyOutput), args.Error(1)
 }
 
-func (m mockKMSClient) GetPublicKey(ctx context.Context, params *kms.GetPublicKeyInput, optFns ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
+func (m *mockKMSClient) GetPublicKey(ctx context.Context, params *kms.GetPublicKeyInput, optFns ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
 	args := m.Called(ctx, params, optFns)
 	return args.Get(0).(*kms.GetPublicKeyOutput), args.Error(1)
 }
@@ -116,6 +99,9 @@ Should include exhaustive passing and failing tests.
 */
 func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
+	if err != nil {
+		panic(err)
+	}
 	idempotencyKey, err := uuid.Parse("48f64a63-cb9f-5297-a605-964637448b9f")
 	if err != nil {
 		panic(err)
@@ -159,7 +145,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	mockKMS.On("GetPublicKey", mock.Anything, mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)
 
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "namespaceUUID", namespaceUUID)
+	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
@@ -352,7 +338,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	service := Service{
 		datastore:        mockDriver,
 		baseCtx:          context.Background(),
-		kmsSigningKeyId:  "123",
+		kmsSigningKeyID:  "123",
 		kmsSigningClient: mockKMS,
 	}
 

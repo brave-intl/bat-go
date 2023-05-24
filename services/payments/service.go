@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -23,7 +25,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/vault/shamir"
 	"golang.org/x/exp/slices"
-	"strings"
 
 	"encoding/base64"
 	"encoding/json"
@@ -44,11 +45,13 @@ type Service struct {
 	secretMgr        appsrv.SecretManager
 	keyShares        [][]byte
 	kmsDecryptKeyArn string
-	kmsSigningKeyId  string
+	kmsSigningKeyID  string
 	kmsSigningClient wrappedKMSClient
 	sdkClient        wrappedQldbSdkClient
 	pubKey           []byte
 }
+
+type serviceNamespaceContextKey struct{}
 
 // configureKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
 func (s *Service) configureKMSKey(ctx context.Context) error {
@@ -102,13 +105,13 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR1>", pcr1)
 	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR2>", pcr2)
 
-	kClient := kms.NewFromConfig(cfg)
+	kmsClient := kms.NewFromConfig(cfg)
 
 	input := &kms.CreateKeyInput{
 		Policy: aws.String(keyPolicy),
 	}
 
-	result, err := kClient.CreateKey(ctx, input)
+	result, err := kmsClient.CreateKey(ctx, input)
 	if err != nil {
 		return fmt.Errorf("failed to make key: %w", err)
 	}
@@ -122,8 +125,8 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	var logger = logging.Logger(ctx, "payments.NewService")
 
 	service := &Service{
-		baseCtx:   ctx,
-		secretMgr: &awsClient{},
+		baseCtx: ctx,
+		//secretMgr: &awsClient{},
 	}
 
 	if err := service.configureKMSKey(ctx); err != nil {
@@ -225,6 +228,7 @@ func validateTransactionHistory(
 	)
 	for i, transaction := range transactionHistory {
 		var transactionData Transaction
+		namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
 		err = ion.Unmarshal(transaction.Data.Data, &transactionData)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
@@ -233,7 +237,7 @@ func validateTransactionHistory(
 		// Before starting State validation, check that keys and signatures for the record are valid.
 
 		// GenerateIdempotencyKey will verify that the ID is internally consistent within the Transaction.
-		dataIdempotencyKey, err := transactionData.GenerateIdempotencyKey(ctx)
+		dataIdempotencyKey, err := transactionData.GenerateIdempotencyKey(namespace)
 		if err != nil {
 			return false, fmt.Errorf("ID invalid: %w", err)
 		}
@@ -269,7 +273,7 @@ func validateTransactionHistory(
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal previous transition history record: %w", err)
 		}
-		previousIdempotencyKey, err := previousTransitionData.GenerateIdempotencyKey(ctx)
+		previousIdempotencyKey, err := previousTransitionData.GenerateIdempotencyKey(namespace)
 		if err != nil {
 			return false, fmt.Errorf("ID invalid: %w", err)
 		}

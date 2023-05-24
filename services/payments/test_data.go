@@ -182,7 +182,7 @@ var geminiBulkPaySuccessResponse = []map[string]string{
 	},
 }
 
-var geminiBulkPayFailureResponse = []map[string]string{
+/*var geminiBulkPayFailureResponse = []map[string]string{
 	{
 		"result":      "error",
 		"tx_ref":      "",
@@ -192,7 +192,7 @@ var geminiBulkPayFailureResponse = []map[string]string{
 		"Status":      "",
 		"reason":      "",
 	},
-}
+}*/
 
 var geminiTransactionCheckSuccessResponse = map[string]string{
 	"result":      "ok",
@@ -204,7 +204,7 @@ var geminiTransactionCheckSuccessResponse = map[string]string{
 	"reason":      "",
 }
 
-var geminiTransactionCheckFailureResponse = map[string]string{
+/*var geminiTransactionCheckFailureResponse = map[string]string{
 	"result":      "error",
 	"tx_ref":      "",
 	"amount":      "",
@@ -212,7 +212,7 @@ var geminiTransactionCheckFailureResponse = map[string]string{
 	"destination": "",
 	"Status":      "",
 	"reason":      "",
-}
+}*/
 
 var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
 	"dry_run": "false",
@@ -226,7 +226,7 @@ var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
 	},
 }
 
-var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
+/*var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
 	"dry_run": "false",
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
@@ -236,7 +236,7 @@ var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
 		"transfer_id":     "",
 	},
 	},
-}
+}*/
 
 var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 	"dry_run": "false",
@@ -250,7 +250,7 @@ var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 	},
 }
 
-var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
+/*var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
 	"dry_run": "false",
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
@@ -260,4 +260,4 @@ var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
 		"transfer_id":     "",
 	},
 	},
-}
+}*/

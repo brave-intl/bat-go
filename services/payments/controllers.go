@@ -22,7 +22,7 @@ type getConfResponse struct {
 }
 
 // GetConfigurationHandler - handler to get important payments configuration information, attested by nitro
-func GetConfigurationHandler(service *Service) handlers.AppHandler {
+func GetConfigurationHandler( /*service *Service*/ ) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 		logger := logging.Logger(ctx, "GetConfigurationHandler")

@@ -10,6 +10,9 @@ import (
 
 func TestIdempotencyKeyGeneration(t *testing.T) {
 	to, err := uuid.Parse("683bc9ba-497a-47a5-9587-3bd03fd722bd")
+	if err != nil {
+		panic(err)
+	}
 	from, err := uuid.Parse("af68d02a-907f-4e9a-8f74-b54c7629412b")
 	if err != nil {
 		panic("failed to parse test UUIDs")

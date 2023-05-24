@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/google/uuid"
 	"golang.org/x/exp/slices"
 )
 
@@ -33,6 +35,7 @@ var Transitions = map[TransactionState][]TransactionState{
 	Failed:     {},
 }
 
+// StateMachineFromTransaction returns a state machine when provided a transaction
 func StateMachineFromTransaction(transaction *Transaction, service *Service) (TxStateMachine, error) {
 	var machine TxStateMachine
 	switch transaction.Custodian {
@@ -52,8 +55,9 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 ) (*Transaction, error) {
+	namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
 	// Make sure the transaction we have has an ID that matches its contents before we check if it exists
-	generatedID, err := machine.GenerateTransactionID(ctx)
+	generatedID, err := machine.GenerateTransactionID(namespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.GetTransactionID(), err)
 	}
@@ -61,7 +65,7 @@ func Drive[T TxStateMachine](
 		return nil, errors.New("provided idempotencyKey does not match transaction")
 	}
 	// Check if the transaction exists so that we know whether to create it or progress it
-	transaction, err := machine.GetService().GetTransactionById(ctx, generatedID)
+	transaction, err := machine.GetService().GetTransactionByID(ctx, generatedID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transaction from QLDB: %w", err)
 	}

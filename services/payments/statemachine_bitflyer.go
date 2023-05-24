@@ -47,17 +47,17 @@ func (bm *BitflyerMachine) GetTransactionID() *uuid.UUID {
 }
 
 // GenerateTransactionID returns an ID generated from the values of the transaction
-func (bm *BitflyerMachine) GenerateTransactionID(ctx context.Context) (*uuid.UUID, error) {
-	return bm.transaction.GenerateIdempotencyKey(ctx)
+func (bm *BitflyerMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
+	return bm.transaction.GenerateIdempotencyKey(namespace)
 }
 
 // Prepare implements TxStateMachine for the Bitflyer machine. It will attempt to initialize a record in QLDB
 // returning the state of the record in QLDB. If the record already exists, in a state other than Prepared, an
 // error is returned.
 func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
-	if !shouldDryRun(bm.transaction) {
+	/*if !shouldDryRun(bm.transaction) {
 		// Do bitflyer stuff
-	}
+	}*/
 	nextState := Prepared
 	if !nextStateValid(bm.transaction, nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
@@ -73,9 +73,9 @@ func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
 
 // Authorize implements TxStateMachine for the Bitflyer machine
 func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) {
-	if !shouldDryRun(bm.transaction) {
+	/*if !shouldDryRun(bm.transaction) {
 		// Do bitflyer stuff
-	}
+	}*/
 	nextState := Authorized
 	if !nextStateValid(bm.transaction, nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
@@ -91,9 +91,9 @@ func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) 
 
 // Pay implements TxStateMachine for the Bitflyer machine
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
-	if !shouldDryRun(bm.transaction) {
+	/*if !shouldDryRun(bm.transaction) {
 		// Do bitflyer stuff
-	}
+	}*/
 	var nextState TransactionState
 	if bm.transaction.State == Pending {
 		nextState = Paid
@@ -118,9 +118,9 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 
 // Fail implements TxStateMachine for the Bitflyer machine
 func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
-	if !shouldDryRun(bm.transaction) {
+	/*if !shouldDryRun(bm.transaction) {
 		// Do bitflyer stuff
-	}
+	}*/
 	nextState := Failed
 	if !nextStateValid(bm.transaction, nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
