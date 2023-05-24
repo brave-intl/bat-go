@@ -84,9 +84,9 @@ func (e *qldbPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) 
 	return marshaled, nil
 }
 
-func (q *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
+func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
 	var txn Transaction
-	err := ion.Unmarshal(q.Data.Data, &txn)
+	err := ion.Unmarshal(e.Data.Data, &txn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w", err)
 	}
