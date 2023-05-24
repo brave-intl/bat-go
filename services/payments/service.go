@@ -272,7 +272,7 @@ func validateTransactionHistory(
 		}
 		previousTransitionState := previousTransitionData.State
 		// New transaction state should be present in the list of valid next states for the "previous" (current) state.
-		if !slices.Contains(Transitions[previousTransitionState], transactionState) {
+		if !slices.Contains(previousTransitionState.GetValidTransitions(), transactionState) {
 			return false, errors.New("invalid state transition")
 		}
 	}

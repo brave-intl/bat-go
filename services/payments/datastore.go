@@ -114,7 +114,7 @@ func (t *Transaction) nextStateValid(nextState TransactionState) bool {
 		return true
 	}
 	// New transaction state should be present in the list of valid next states for the current state.
-	if !slices.Contains(Transitions[t.State], nextState) {
+	if !slices.Contains(t.State.GetValidTransitions(), nextState) {
 		return false
 	}
 	return true

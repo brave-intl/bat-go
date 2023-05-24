@@ -156,7 +156,7 @@ func recurseTransitionResolution(
 		result      [][]TransactionState
 		updatedTree = append(currentTree, state)
 	)
-	possibleStates := Transitions[state]
+	possibleStates := state.GetValidTransitions()
 	if len(possibleStates) == 0 {
 		tempTree := make([]TransactionState, len(updatedTree))
 		copy(tempTree, updatedTree)
