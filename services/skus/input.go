@@ -9,6 +9,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/square/go-jose"
@@ -23,22 +24,22 @@ type VerifyCredentialRequestV1 struct {
 	Presentation string  `json:"presentation" valid:"base64"`
 }
 
-//GetSku - implement credential interface
+// GetSku - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetSku(ctx context.Context) string {
 	return vcr.SKU
 }
 
-//GetType - implement credential interface
+// GetType - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetType(ctx context.Context) string {
 	return vcr.Type
 }
 
-//GetMerchantID - implement credential interface
+// GetMerchantID - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetMerchantID(ctx context.Context) string {
 	return vcr.MerchantID
 }
 
-//GetPresentation - implement credential interface
+// GetPresentation - implement credential interface
 func (vcr *VerifyCredentialRequestV1) GetPresentation(ctx context.Context) string {
 	return vcr.Presentation
 }
@@ -51,12 +52,12 @@ type VerifyCredentialRequestV2 struct {
 	CredentialOpaque *VerifyCredentialOpaque `json:"-" valid:"-"`
 }
 
-//GetSku - implement credential interface
+// GetSku - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetSku(ctx context.Context) string {
 	return vcr.SKU
 }
 
-//GetType - implement credential interface
+// GetType - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetType(ctx context.Context) string {
 	if vcr.CredentialOpaque == nil {
 		return ""
@@ -64,12 +65,12 @@ func (vcr *VerifyCredentialRequestV2) GetType(ctx context.Context) string {
 	return vcr.CredentialOpaque.Type
 }
 
-//GetMerchantID - implement credential interface
+// GetMerchantID - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetMerchantID(ctx context.Context) string {
 	return vcr.MerchantID
 }
 
-//GetPresentation - implement credential interface
+// GetPresentation - implement credential interface
 func (vcr *VerifyCredentialRequestV2) GetPresentation(ctx context.Context) string {
 	if vcr.CredentialOpaque == nil {
 		return ""
@@ -317,7 +318,13 @@ func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
 	logger := logging.Logger(ctx, "IOSNotification.Decode")
 	logger.Debug().Msg("starting IOSNotification.Decode")
 
-	// parse the jws into payloadJWS
+	// json unmarshal the notification
+	if err := json.Unmarshal(data, iosn); err != nil {
+		logger.Error().Msg("failed to json unmarshal body")
+		return errorutils.Wrap(err, "error unmarshalling body")
+	}
+
+	// parse the jws into payloadJWS from the signed payload
 	payload, err := jose.ParseSigned(iosn.SignedPayload)
 	if err != nil {
 		return fmt.Errorf("failed to parse ios notification: %w", err)
