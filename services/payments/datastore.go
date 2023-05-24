@@ -392,10 +392,7 @@ func getTransactionHistory(txn wrappedQldbTxnAPI, id *uuid.UUID) ([]qldbPaymentT
 		}
 		collectedData = append(collectedData, data)
 	}
-	if len(collectedData) > 0 {
-		return collectedData, nil
-	}
-	return nil, nil
+	return collectedData, nil
 }
 
 // WriteTransaction persists an object in a transaction after verifying that its change
