@@ -59,7 +59,7 @@ func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
 		// Do bitflyer stuff
 	}*/
 	nextState := Prepared
-	if !nextStateValid(bm.transaction, nextState) {
+	if !bm.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 	}
 	bm.transaction.State = nextState
@@ -77,7 +77,7 @@ func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) 
 		// Do bitflyer stuff
 	}*/
 	nextState := Authorized
-	if !nextStateValid(bm.transaction, nextState) {
+	if !bm.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 	}
 	bm.transaction.State = nextState
@@ -97,13 +97,13 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 	var nextState TransactionState
 	if bm.transaction.State == Pending {
 		nextState = Paid
-		if !nextStateValid(bm.transaction, nextState) {
+		if !bm.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 		}
 		bm.transaction.State = nextState
 	} else {
 		nextState = Pending
-		if !nextStateValid(bm.transaction, nextState) {
+		if !bm.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 		}
 		bm.transaction.State = nextState
@@ -122,7 +122,7 @@ func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
 		// Do bitflyer stuff
 	}*/
 	nextState := Failed
-	if !nextStateValid(bm.transaction, nextState) {
+	if !bm.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 	}
 	bm.transaction.State = nextState

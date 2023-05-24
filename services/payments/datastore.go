@@ -13,6 +13,7 @@ import (
 	"github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/shopspring/decimal"
+	"golang.org/x/exp/slices"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -106,6 +107,17 @@ func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, e
 	}
 
 	return t.ID, nil
+}
+
+func (t *Transaction) nextStateValid(nextState TransactionState) bool {
+	if t.State == nextState {
+		return true
+	}
+	// New transaction state should be present in the list of valid next states for the current state.
+	if !slices.Contains(Transitions[t.State], nextState) {
+		return false
+	}
+	return true
 }
 
 // SetIdempotencyKey assigns a UUID v5 value to Transaction.ID

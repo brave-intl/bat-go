@@ -54,7 +54,7 @@ func (gm *GeminiMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID,
 // Prepare implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	nextState := Prepared
-	if !nextStateValid(gm.transaction, nextState) {
+	if !gm.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 	}
 	gm.transaction.State = nextState
@@ -69,7 +69,7 @@ func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
 // Authorize implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Authorize(ctx context.Context) (*Transaction, error) {
 	nextState := Authorized
-	if !nextStateValid(gm.transaction, nextState) {
+	if !gm.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 	}
 	gm.transaction.State = nextState
@@ -86,13 +86,13 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 	var nextState TransactionState
 	if gm.transaction.State == Pending {
 		nextState = Paid
-		if !nextStateValid(gm.transaction, nextState) {
+		if !gm.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 		}
 		gm.transaction.State = nextState
 	} else {
 		nextState = Pending
-		if !nextStateValid(gm.transaction, nextState) {
+		if !gm.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 		}
 		gm.transaction.State = nextState
@@ -108,7 +108,7 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 // Fail implements TxStateMachine for the Gemini machine
 func (gm *GeminiMachine) Fail(ctx context.Context) (*Transaction, error) {
 	nextState := Failed
-	if !nextStateValid(gm.transaction, nextState) {
+	if !gm.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 	}
 	gm.transaction.State = nextState

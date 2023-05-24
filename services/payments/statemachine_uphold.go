@@ -54,7 +54,7 @@ func (um *UpholdMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID,
 // Prepare implements TxStateMachine for uphold machine
 func (um *UpholdMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	nextState := Prepared
-	if !nextStateValid(um.transaction, nextState) {
+	if !um.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 	}
 	um.transaction.State = nextState
@@ -69,7 +69,7 @@ func (um *UpholdMachine) Prepare(ctx context.Context) (*Transaction, error) {
 // Authorize implements TxStateMachine for uphold machine
 func (um *UpholdMachine) Authorize(ctx context.Context) (*Transaction, error) {
 	nextState := Authorized
-	if !nextStateValid(um.transaction, nextState) {
+	if !um.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 	}
 	um.transaction.State = nextState
@@ -86,13 +86,13 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 	var nextState TransactionState
 	if um.transaction.State == Pending {
 		nextState = Paid
-		if !nextStateValid(um.transaction, nextState) {
+		if !um.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 		}
 		um.transaction.State = nextState
 	} else {
 		nextState = Pending
-		if !nextStateValid(um.transaction, nextState) {
+		if !um.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 		}
 		um.transaction.State = nextState
@@ -108,7 +108,7 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 // Fail implements TxStateMachine for uphold machine
 func (um *UpholdMachine) Fail(ctx context.Context) (*Transaction, error) {
 	nextState := Failed
-	if !nextStateValid(um.transaction, nextState) {
+	if !um.transaction.nextStateValid(nextState) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 	}
 	um.transaction.State = nextState

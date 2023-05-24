@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"golang.org/x/exp/slices"
 )
 
 // TransactionState is an integer representing transaction status
@@ -96,17 +95,6 @@ func Drive[T TxStateMachine](
 // GetValidTransitions returns valid transitions
 func (ts TransactionState) GetValidTransitions() []TransactionState {
 	return Transitions[ts]
-}
-
-func nextStateValid(txn *Transaction, nextState TransactionState) bool {
-	if txn.State == nextState {
-		return true
-	}
-	// New transaction state should be present in the list of valid next states for the current state.
-	if !slices.Contains(Transitions[txn.State], nextState) {
-		return false
-	}
-	return true
 }
 
 // String implements ToString for TransactionState
