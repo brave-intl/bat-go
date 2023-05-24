@@ -195,17 +195,6 @@ func (s *Service) DecryptBootstrap(ctx context.Context, ciphertext []byte) (map[
 	return output, nil
 }
 
-// BuildSigningBytes returns the bytes that should be signed over when creating a signature
-// for a qldbPaymentTransitionHistoryEntry.
-func (e *qldbPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
-	marshaled, err := ion.MarshalBinary(e.Data.Data)
-	if err != nil {
-		return nil, fmt.Errorf("Ion marshal failed: %w", err)
-	}
-
-	return marshaled, nil
-}
-
 // ValueHolder converts a qldbPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder
 func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
 	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)

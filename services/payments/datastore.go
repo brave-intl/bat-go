@@ -73,6 +73,17 @@ type qldbPaymentTransitionHistoryEntry struct {
 	Metadata     qldbPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
 
+// BuildSigningBytes returns the bytes that should be signed over when creating a signature
+// for a qldbPaymentTransitionHistoryEntry.
+func (e *qldbPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
+	marshaled, err := ion.MarshalBinary(e.Data.Data)
+	if err != nil {
+		return nil, fmt.Errorf("Ion marshal failed: %w", err)
+	}
+
+	return marshaled, nil
+}
+
 func (q *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
 	var txn Transaction
 	err := ion.Unmarshal(q.Data.Data, &txn)
