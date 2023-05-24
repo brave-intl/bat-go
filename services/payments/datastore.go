@@ -38,46 +38,46 @@ type Transaction struct {
 	DryRun              *string          `json:"dryRun" ion:"-"` // determines dry-run
 }
 
-// qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for QLDBPaymentTransitionHistoryEntry
+// qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for qldbPaymentTransitionHistoryEntry
 type qldbPaymentTransitionHistoryEntryBlockAddress struct {
-	StrandID   string `ion:"strandID"`
+	StrandID   string `ion:"strandId"`
 	SequenceNo int64  `ion:"sequenceNo"`
 }
 
-// QLDBPaymentTransitionHistoryEntryHash defines hash for QLDBPaymentTransitionHistoryEntry
-type QLDBPaymentTransitionHistoryEntryHash string
+// qldbPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry
+type qldbPaymentTransitionHistoryEntryHash string
 
-// QLDBPaymentTransitionHistoryEntrySignature defines signature for QLDBPaymentTransitionHistoryEntry
-type QLDBPaymentTransitionHistoryEntrySignature []byte
+// qldbPaymentTransitionHistoryEntrySignature defines signature for qldbPaymentTransitionHistoryEntry
+type qldbPaymentTransitionHistoryEntrySignature []byte
 
-// QLDBPaymentTransitionHistoryEntryData defines data for QLDBPaymentTransitionHistoryEntry
-type QLDBPaymentTransitionHistoryEntryData struct {
+// qldbPaymentTransitionHistoryEntryData defines data for qldbPaymentTransitionHistoryEntry
+type qldbPaymentTransitionHistoryEntryData struct {
 	Signature      []byte     `ion:"signature"`
 	Data           []byte     `ion:"data"`
 	IdempotencyKey *uuid.UUID `ion:"idempotencyKey"`
 }
 
-// QLDBPaymentTransitionHistoryEntryMetadata defines metadata for QLDBPaymentTransitionHistoryEntry
-type QLDBPaymentTransitionHistoryEntryMetadata struct {
+// qldbPaymentTransitionHistoryEntryMetadata defines metadata for qldbPaymentTransitionHistoryEntry
+type qldbPaymentTransitionHistoryEntryMetadata struct {
 	ID      string    `ion:"id"`
-	Version int64     `ion:"version"`
-	TxTime  time.Time `ion:"txTime"`
 	TxID    string    `ion:"txId"`
+	TxTime  time.Time `ion:"txTime"`
+	Version int64     `ion:"version"`
 }
 
-// QLDBPaymentTransitionHistoryEntry defines top level entry for a QLDB transaction
-type QLDBPaymentTransitionHistoryEntry struct {
+// qldbPaymentTransitionHistoryEntry defines top level entry for a QLDB transaction
+type qldbPaymentTransitionHistoryEntry struct {
 	BlockAddress qldbPaymentTransitionHistoryEntryBlockAddress `ion:"blockAddress"`
-	Hash         QLDBPaymentTransitionHistoryEntryHash         `ion:"hash"`
-	Data         QLDBPaymentTransitionHistoryEntryData         `ion:"data"`
-	Metadata     QLDBPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
+	Hash         qldbPaymentTransitionHistoryEntryHash         `ion:"hash"`
+	Data         qldbPaymentTransitionHistoryEntryData         `ion:"data"`
+	Metadata     qldbPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
 
-func (q *QLDBPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
+func (q *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
 	var txn Transaction
 	err := ion.Unmarshal(q.Data.Data, &txn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal record data for conversion from QLDBPaymentTransitionHistoryEntry to Transaction: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w", err)
 	}
 	return &txn, nil
 }
@@ -329,7 +329,7 @@ func (s *Service) getQLDBObject(
 	ctx context.Context,
 	qldbTransactionDriver wrappedQldbTxnAPI,
 	txnID *uuid.UUID,
-) (*QLDBPaymentTransitionHistoryEntry, error) {
+) (*qldbPaymentTransitionHistoryEntry, error) {
 	valid, result, err := transactionHistoryIsValid(ctx, qldbTransactionDriver, s.kmsSigningClient, txnID)
 	if err != nil || !valid {
 		return nil, fmt.Errorf("failed to validate transition history: %w", err)
@@ -363,7 +363,7 @@ func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Trans
 	if data == nil {
 		return nil, nil
 	}
-	assertedData, ok := data.(*QLDBPaymentTransitionHistoryEntry)
+	assertedData, ok := data.(*qldbPaymentTransitionHistoryEntry)
 	if !ok {
 		return nil, fmt.Errorf("database response was the wrong type: %#v", data)
 	}
@@ -376,14 +376,14 @@ func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Trans
 
 // getTransactionHistory returns a slice of entries representing the entire state history
 // for a given id.
-func getTransactionHistory(txn wrappedQldbTxnAPI, id *uuid.UUID) ([]QLDBPaymentTransitionHistoryEntry, error) {
+func getTransactionHistory(txn wrappedQldbTxnAPI, id *uuid.UUID) ([]qldbPaymentTransitionHistoryEntry, error) {
 	result, err := txn.Execute("SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?", id)
 	if err != nil {
 		return nil, fmt.Errorf("QLDB transaction failed: %w", err)
 	}
-	var collectedData []QLDBPaymentTransitionHistoryEntry
+	var collectedData []qldbPaymentTransitionHistoryEntry
 	for result.Next(txn) {
-		var data QLDBPaymentTransitionHistoryEntry
+		var data qldbPaymentTransitionHistoryEntry
 		err := ion.Unmarshal(result.GetCurrentData(), &data)
 		if err != nil {
 			return nil, fmt.Errorf("ion unmarshal failed: %w", err)

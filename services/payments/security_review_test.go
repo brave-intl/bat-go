@@ -113,18 +113,18 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: QLDBPaymentTransitionHistoryEntryData{
+		Data: qldbPaymentTransitionHistoryEntryData{
 			Data:           marshaledData,
 			Signature:      []byte{},
 			IdempotencyKey: &idempotencyKey,
 		},
-		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
@@ -184,34 +184,34 @@ func TestValidateRevision(t *testing.T) {
 
 	var (
 		mockSDKClient = new(mockSDKClient)
-		trueObject    = QLDBPaymentTransitionHistoryEntry{
+		trueObject    = qldbPaymentTransitionHistoryEntry{
 			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 				StrandID:   "strand1",
 				SequenceNo: 10,
 			},
 			Hash: "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY=",
-			Data: QLDBPaymentTransitionHistoryEntryData{
+			Data: qldbPaymentTransitionHistoryEntryData{
 				Signature: []byte{},
 				Data:      []byte{},
 			},
-			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid1",
 				Version: 10,
 				TxTime:  time.Now(),
 				TxID:    "",
 			},
 		}
-		falseObject = QLDBPaymentTransitionHistoryEntry{
+		falseObject = qldbPaymentTransitionHistoryEntry{
 			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 				StrandID:   "strand2",
 				SequenceNo: 10,
 			},
 			Hash: "dGVzdGVzdGVzdAo=",
-			Data: QLDBPaymentTransitionHistoryEntryData{
+			Data: qldbPaymentTransitionHistoryEntryData{
 				Signature: []byte{},
 				Data:      []byte{},
 			},
-			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid2",
 				Version: 10,
 				TxTime:  time.Now(),
@@ -295,17 +295,17 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: QLDBPaymentTransitionHistoryEntryData{
+		Data: qldbPaymentTransitionHistoryEntryData{
 			Data:      marshaledData,
 			Signature: []byte{},
 		},
-		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),

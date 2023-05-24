@@ -15,64 +15,64 @@ var (
 	status4, _       = ion.MarshalBinary(Transaction{State: Failed, ID: &generatedUUID, Amount: amount})
 )
 
-var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{
+var transactionHistorySetTrue = [][]qldbPaymentTransitionHistoryEntry{
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
 	},
 }
 
-var transactionHistorySetFalse = [][]QLDBPaymentTransitionHistoryEntry{
+var transactionHistorySetFalse = [][]qldbPaymentTransitionHistoryEntry{
 	// Transitions must always start at 0
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
 	},
 }
 

@@ -196,8 +196,8 @@ func (s *Service) DecryptBootstrap(ctx context.Context, ciphertext []byte) (map[
 }
 
 // BuildSigningBytes returns the bytes that should be signed over when creating a signature
-// for a QLDBPaymentTransitionHistoryEntry.
-func (e *QLDBPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
+// for a qldbPaymentTransitionHistoryEntry.
+func (e *qldbPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
 	marshaled, err := ion.MarshalBinary(e.Data.Data)
 	if err != nil {
 		return nil, fmt.Errorf("Ion marshal failed: %w", err)
@@ -206,7 +206,7 @@ func (e *QLDBPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) 
 	return marshaled, nil
 }
 
-// ValueHolder converts a QLDBPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder
+// ValueHolder converts a qldbPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder
 func (b qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
 	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)
 	return &qldbTypes.ValueHolder{
@@ -219,7 +219,7 @@ func (b qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.
 func validateTransactionHistory(
 	ctx context.Context,
 	idempotencyKey *uuid.UUID,
-	transactionHistory []QLDBPaymentTransitionHistoryEntry,
+	transactionHistory []qldbPaymentTransitionHistoryEntry,
 	kmsClient wrappedKMSClient,
 ) (bool, error) {
 	var (
@@ -295,7 +295,7 @@ func validateTransactionHistory(
 func revisionValidInTree(
 	ctx context.Context,
 	client wrappedQldbSdkClient,
-	transaction *QLDBPaymentTransitionHistoryEntry,
+	transaction *qldbPaymentTransitionHistoryEntry,
 ) (bool, error) {
 	ledgerName := "LEDGER_NAME"
 	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &ledgerName})
@@ -371,7 +371,7 @@ func transactionHistoryIsValid(
 	txn wrappedQldbTxnAPI,
 	kmsClient wrappedKMSClient,
 	id *uuid.UUID,
-) (bool, *QLDBPaymentTransitionHistoryEntry, error) {
+) (bool, *qldbPaymentTransitionHistoryEntry, error) {
 	// Fetch all historical states for this record
 	result, err := getTransactionHistory(txn, id)
 	if err != nil {

@@ -91,18 +91,18 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: QLDBPaymentTransitionHistoryEntryData{
+		Data: qldbPaymentTransitionHistoryEntryData{
 			Data:           marshaledData,
 			Signature:      []byte{},
 			IdempotencyKey: &idempotencyKey,
 		},
-		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
