@@ -19,7 +19,6 @@ func init() {
 	cmd.ServeCmd.AddCommand(ratiosCmd)
 
 	// setup the flags
-
 	ratiosCmd.PersistentFlags().String("coingecko-token", "",
 		"the coingecko service token for this service")
 	cmdutils.Must(viper.BindPFlag("coingecko-token", ratiosCmd.PersistentFlags().Lookup("coingecko-token")))
@@ -44,6 +43,14 @@ func init() {
 	ratiosCmd.PersistentFlags().Int("rate-limit-per-min", 50, "rate limit per minute value")
 	cmdutils.Must(viper.BindPFlag("rate-limit-per-min", ratiosCmd.PersistentFlags().Lookup("rate-limit-per-min")))
 	cmdutils.Must(viper.BindEnv("rate-limit-per-min", "RATE_LIMIT_PER_MIN"))
+
+	ratiosCmd.PersistentFlags().String("stripe-onramp-secret-key", "", "the stripe service token for this service")
+	cmdutils.Must(viper.BindPFlag("stripe-onramp-secret-key", ratiosCmd.PersistentFlags().Lookup("stripe-onramp-secret-key")))
+	cmdutils.Must(viper.BindEnv("stripe-onramp-secret-key", "STRIPE_ONRAMP_SECRET_KEY"))
+
+	ratiosCmd.PersistentFlags().String("stripe-onramp-server", "https://api.stripe.com/", "the stripe service address")
+	cmdutils.Must(viper.BindPFlag("stripe-onramp-server", ratiosCmd.PersistentFlags().Lookup("stripe-onramp-server")))
+	cmdutils.Must(viper.BindEnv("stripe-onramp-server", "STRIPE_ONRAMP_SERVER"))
 }
 
 var (

@@ -11,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/go-chi/chi"
 )
 
@@ -312,5 +313,106 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 		maxAge := coingecko.CoinMarketsCacheTTLSeconds*time.Second - time.Since(data.LastUpdated)
 		w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", int(maxAge.Seconds())))
 		return handlers.RenderContent(ctx, data, w, http.StatusOK)
+	})
+}
+
+// StripeOnrampSessionRequest
+type StripeOnrampSessionRequest struct {
+	WalletAddress                string   `json:"wallet_address"`
+	SourceCurrency               string   `json:"source_currency"`
+	SourceExchangeAmount         string   `json:"source_exchange_amount"`
+	DestinationNetwork           string   `json:"destination_network"`
+	DestinationCurrency          string   `json:"destination_currency"`
+	SupportedDestinationNetworks []string `json:"supported_destination_networks"`
+}
+
+// CreateStripeOnrampSessionResponse is an HTTP response that includes the Stripe onramp redirect URL
+type CreateStripeOnrampSessionResponse struct {
+	URL string `json:"url"`
+}
+
+func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		logger := logging.Logger(ctx, "ratios.CreateStripeOnrampSessionsHandler")
+
+		// Parse the payload
+		var req StripeOnrampSessionRequest
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		// Validate the request payload
+		supportedDestinationNetworks := []string{"solana", "ethereum", "bitcoin", "polygon"}
+		supportedDestinationCurrencies := []string{"eth", "matic", "sol", "usdc", "btc"}
+
+		// Check if requested DestinationNetwork is in the supported list
+		isValidNetwork := false
+		for _, network := range supportedDestinationNetworks {
+			if req.DestinationNetwork == network {
+				isValidNetwork = true
+				break
+			}
+		}
+		if !isValidNetwork {
+			return handlers.WrapError(
+				fmt.Errorf("Invalid destination network: %s", req.DestinationNetwork),
+				"Invalid destination network",
+				http.StatusBadRequest,
+			)
+		}
+
+		// Check if all SupportedDestinationNetworks in the request are in the supported list
+		for _, requestedNetwork := range req.SupportedDestinationNetworks {
+			isValidNetwork = false
+			for _, network := range supportedDestinationNetworks {
+				if requestedNetwork == network {
+					isValidNetwork = true
+					break
+				}
+			}
+			if !isValidNetwork {
+				return handlers.WrapError(
+					fmt.Errorf("Unsupported network in SupportedDestinationNetworks: %s", requestedNetwork),
+					"Unsupported network in SupportedDestinationNetworks",
+					http.StatusBadRequest,
+				)
+			}
+		}
+
+		// Check if requested DestinationCurrency is in the supported list
+		isValidCurrency := false
+		for _, currency := range supportedDestinationCurrencies {
+			if req.DestinationCurrency == currency {
+				isValidCurrency = true
+				break
+			}
+		}
+		if !isValidCurrency {
+			return handlers.WrapError(
+				fmt.Errorf("Invalid destination currency: %s", req.DestinationCurrency),
+				"Invalid destination currency",
+				http.StatusBadRequest,
+			)
+		}
+
+		// Create a session and retrieve a URL
+		urlString, err := service.CreateStripeOnrampSessionsHandler(
+			ctx,
+			req.WalletAddress,
+			req.SourceCurrency,
+			req.SourceExchangeAmount,
+			req.DestinationNetwork,
+			req.DestinationCurrency,
+			req.SupportedDestinationNetworks,
+		)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create on ramp session")
+			return handlers.WrapError(err, "Failed to create on ramp session", http.StatusInternalServerError)
+		}
+
+		response := CreateStripeOnrampSessionResponse{URL: urlString}
+		return handlers.RenderContent(ctx, response, w, http.StatusOK)
 	})
 }
