@@ -411,7 +411,7 @@ func (s *Service) WriteTransaction(ctx context.Context, transaction *Transaction
 		if err != nil {
 			return nil, fmt.Errorf("failed to query QLDB: %w", err)
 		}
-		_, transaction.Signature, err = transaction.SignTransaction(ctx, s.kmsSigningClient, s.kmsSigningKeyID)
+		transaction.PublicKey, transaction.Signature, err = transaction.SignTransaction(ctx, s.kmsSigningClient, s.kmsSigningKeyID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign transaction: %w", err)
 		}
