@@ -9,20 +9,20 @@ import (
 )
 
 // TransactionState is an integer representing transaction status
-type TransactionState int64
+type TransactionState string
 
 // TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 const (
 	// Prepared represents a record that has been prepared for authorization
-	Prepared TransactionState = iota
+	Prepared TransactionState = "prepared"
 	// Authorized represents a record that has been authorized
-	Authorized
+	Authorized TransactionState = "authorized"
 	// Pending represents a record that is being or has been submitted to a processor
-	Pending
+	Pending TransactionState = "pending"
 	// Paid represents a record that has entered a finalized success state with a processor
-	Paid
+	Paid TransactionState = "paid"
 	// Failed represents a record that has failed processing permanently
-	Failed
+	Failed TransactionState = "failed"
 )
 
 // Transitions represents the valid forward-transitions for each given state
@@ -97,55 +97,9 @@ func (ts TransactionState) GetValidTransitions() []TransactionState {
 	return Transitions[ts]
 }
 
-// String implements ToString for TransactionState
-func (ts TransactionState) String() string {
-	switch ts {
-	case Prepared:
-		return "prepared"
-	case Authorized:
-		return "authorized"
-	case Pending:
-		return "pending"
-	case Paid:
-		return "paid"
-	case Failed:
-		return "failed"
-	}
-	return ""
-}
-
-// MarshalJSON implements JSON marshal for TransactionState
-func (ts TransactionState) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%q", ts.String())), nil
-}
-
-// UnmarshalJSON implements JSON unmarshal for TransactionState
-func (ts *TransactionState) UnmarshalJSON(data []byte) error {
-	stringData := string(data)
-	// Ignore null
-	if stringData == "null" || stringData == `""` {
-		return nil
-	}
-	switch stringData {
-	case `"prepared"`:
-		*ts = Prepared
-	case `"authorized"`:
-		*ts = Authorized
-	case `"pending"`:
-		*ts = Pending
-	case `"paid"`:
-		*ts = Paid
-	case `"failed"`:
-		*ts = Failed
-	default:
-		return errors.New("cannot unmarshal unknown transition state")
-	}
-	return nil
-}
-
 // GetAllValidTransitionSequences returns all valid transition sequences
 func GetAllValidTransitionSequences() [][]TransactionState {
-	return recurseTransitionResolution(0, []TransactionState{})
+	return recurseTransitionResolution("prepared", []TransactionState{})
 }
 
 func recurseTransitionResolution(

@@ -157,7 +157,7 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSC
 
 // BuildSigningBytes - the string format that payments will sign over per tx
 func (t *Transaction) BuildSigningBytes() []byte {
-	return []byte(fmt.Sprintf("%d|%s|%s|%s|%s|%s|%d",
+	return []byte(fmt.Sprintf("%d|%s|%s|%s|%s|%s|%s",
 		1, t.To, t.Amount.String(), t.ID, t.Custodian, t.DocumentID, t.State))
 }
 

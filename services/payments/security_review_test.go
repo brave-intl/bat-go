@@ -242,10 +242,10 @@ impact the set of valid transitions.
 func TestGenerateAllValidTransitions(t *testing.T) {
 	allValidTransitionSequences := GetAllValidTransitionSequences()
 	knownValidTransitionSequences := [][]TransactionState{
-		{0, 1, 2, 3},
-		{0, 1, 2, 4},
-		{0, 1, 4},
-		{0, 4},
+		{Prepared, Authorized, Pending, Paid},
+		{Prepared, Authorized, Pending, Failed},
+		{Prepared, Authorized, Failed},
+		{Prepared, Failed},
 	}
 	// Ensure all generatedTransitionSequence have a matching knownValidTransitionSequences
 	for _, generatedTransitionSequence := range allValidTransitionSequences {

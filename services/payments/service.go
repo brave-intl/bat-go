@@ -252,7 +252,7 @@ func validateTransactionHistory(
 		transactionState := transactionData.State
 		// Transitions must always start at 0
 		if i == 0 {
-			if transactionState != 0 {
+			if transactionState != Prepared {
 				return false, errors.New("initial state is not valid")
 			}
 			continue
