@@ -87,7 +87,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.InsertTransaction(ctx, req)
+		resp, err := service.PrepareTransaction(ctx, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}

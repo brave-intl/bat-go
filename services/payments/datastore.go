@@ -292,8 +292,8 @@ func (s *Service) progressTransacton(ctx context.Context, transaction *Transacti
 	return *transaction, nil
 }
 
-// InsertTransaction - perform a qldb insertion on the transaction
-func (s *Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
+// PrepareTransaction - perform a qldb insertion on the transaction
+func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
 	return s.progressTransacton(ctx, transaction)
 }
 
