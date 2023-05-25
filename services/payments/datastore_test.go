@@ -28,5 +28,5 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 		Signature:           "",
 		PublicKey:           "",
 	}
-	should.Equal(t, transaction.deriveIdempotencyKey(), "inWrgd0F_tFjI_thCMPDmgxGeUM=")
+	should.Equal(t, transaction.generateIdempotencyKey(uuid.New()), "inWrgd0F_tFjI_thCMPDmgxGeUM=")
 }

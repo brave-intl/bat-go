@@ -2,8 +2,6 @@ package payments
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -83,14 +81,18 @@ func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error
 	return &txn, nil
 }
 
-func generateIdempotencyKey(namespace uuid.UUID, t *Transaction) uuid.UUID {
+func (t *Transaction) generateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
 	return uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
+}
+
+func (t *Transaction) getIdempotencyKey() *uuid.UUID {
+	return t.ID
 }
 
 // GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
 // an error
 func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
-	generatedIdempotencyKey := generateIdempotencyKey(namespace, t)
+	generatedIdempotencyKey := t.generateIdempotencyKey(namespace)
 	if generatedIdempotencyKey != *t.ID {
 		return nil, fmt.Errorf("ID does not match transaction fields: have %s, want %s", *t.ID, generatedIdempotencyKey)
 	}
@@ -111,7 +113,7 @@ func (t *Transaction) nextStateValid(nextState TransactionState) bool {
 
 // SetIdempotencyKey assigns a UUID v5 value to Transaction.ID
 func (t *Transaction) SetIdempotencyKey(ctx context.Context, namespace uuid.UUID) error {
-	generatedIdempotencyKey := generateIdempotencyKey(namespace, t)
+	generatedIdempotencyKey := t.generateIdempotencyKey(namespace)
 	t.ID = &generatedIdempotencyKey
 	return nil
 }
@@ -175,13 +177,6 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 	}
 	t.Amount = toIonDecimal(aux.Amount)
 	return nil
-}
-
-// Return an idempotencyKey derived from a subset of values on the Transaction
-func (t *Transaction) deriveIdempotencyKey() string {
-	hasher := sha1.New()
-	hasher.Write([]byte(fmt.Sprintf("%s%s%s%s%s", t.Amount, t.Custodian, t.From, t.To, t.PayoutID)))
-	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 }
 
 func toIonDecimal(v *decimal.Decimal) *ion.Decimal {

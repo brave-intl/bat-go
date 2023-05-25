@@ -12,7 +12,8 @@ import (
 
 // idempotentObject is anything that can generate an idempotency key
 type idempotentObject interface {
-	getIdempotencyKey() string
+	getIdempotencyKey() *uuid.UUID
+	generateIdempotencyKey(uuid.UUID) uuid.UUID
 }
 
 // TxStateMachine is anything that be progressed through states by the
