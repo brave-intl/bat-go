@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"strings"
 
+	"encoding/base64"
+	"encoding/json"
+
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -24,10 +27,6 @@ import (
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/google/uuid"
 	"github.com/hashicorp/vault/shamir"
-	"golang.org/x/exp/slices"
-
-	"encoding/base64"
-	"encoding/json"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
@@ -270,9 +269,8 @@ func validateTransactionHistory(
 		if *dataIdempotencyKey != *previousIdempotencyKey {
 			return false, fmt.Errorf("idempotencyKeys in transition history do not match: %s, %s", idempotencyKey.String(), previousIdempotencyKey.String())
 		}
-		previousTransitionState := previousTransitionData.State
 		// New transaction state should be present in the list of valid next states for the "previous" (current) state.
-		if !slices.Contains(previousTransitionState.GetValidTransitions(), transactionState) {
+		if !previousTransitionData.nextStateValid(transactionState) {
 			return false, errors.New("invalid state transition")
 		}
 	}
