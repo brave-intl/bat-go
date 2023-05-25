@@ -3,6 +3,7 @@ package requestutils
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -44,6 +45,9 @@ func Read(ctx context.Context, body io.Reader) ([]byte, error) {
 // ReadJSON reads a request body according to an interface and limits the size to 10MB
 func ReadJSON(ctx context.Context, body io.Reader, intr interface{}) error {
 	logger := logging.Logger(ctx, "requestutils.ReadJSON")
+	if body == nil {
+		return errorutils.New(errors.New("body is nil"), "Error in request body", nil)
+	}
 	jsonString, err := Read(ctx, body)
 	if err != nil {
 		return err
