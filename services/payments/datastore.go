@@ -74,17 +74,6 @@ type qldbPaymentTransitionHistoryEntry struct {
 	Metadata     qldbPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
 
-// BuildSigningBytes returns the bytes that should be signed over when creating a signature
-// for a qldbPaymentTransitionHistoryEntry.
-func (e *qldbPaymentTransitionHistoryEntry) BuildSigningBytes() ([]byte, error) {
-	marshaled, err := ion.MarshalBinary(e.Data.Data)
-	if err != nil {
-		return nil, fmt.Errorf("Ion marshal failed: %w", err)
-	}
-
-	return marshaled, nil
-}
-
 func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
 	var txn Transaction
 	err := ion.Unmarshal(e.Data.Data, &txn)
@@ -142,9 +131,14 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSC
 		return "", "", fmt.Errorf("Failed to get public key: %w", err)
 	}
 
+	marshaled, err := ion.MarshalBinary(t)
+	if err != nil {
+		return "", "", fmt.Errorf("Ion marshal failed: %w", err)
+	}
+
 	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
 		KeyId:            &keyID,
-		Message:          t.BuildSigningBytes(),
+		Message:          marshaled,
 		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 	})
 
@@ -153,12 +147,6 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSC
 	}
 
 	return hex.EncodeToString(pubkeyOutput.PublicKey), hex.EncodeToString(signingOutput.Signature), nil
-}
-
-// BuildSigningBytes - the string format that payments will sign over per tx
-func (t *Transaction) BuildSigningBytes() []byte {
-	return []byte(fmt.Sprintf("%d|%s|%s|%s|%s|%s|%s",
-		1, t.To, t.Amount.String(), t.ID, t.Custodian, t.DocumentID, t.State))
 }
 
 // MarshalJSON - custom marshaling of transaction type
