@@ -10,8 +10,8 @@ import (
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 )
 
-// IdempotentObject is anything that can generate an idempotency key
-type IdempotentObject interface {
+// idempotentObject is anything that can generate an idempotency key
+type idempotentObject interface {
 	getIdempotencyKey() string
 }
 
