@@ -384,20 +384,23 @@ func (iosn *IOSNotification) GetRenewalInfo(ctx context.Context) (*appstore.JWSR
 		return nil, err
 	}
 
+	// extract the payload from
+	payload, err := iosn.payloadJWS.Verify(pk)
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to verify the notification jws")
+		return nil, fmt.Errorf("failed to verify the notification JWS: %w", err)
+	}
+	logger.Debug().Msgf("raw payload: %s", string(payload))
+
 	// first get the subscription notification payload decoded
 	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
 	var snv2dp = new(appstore.SubscriptionNotificationV2DecodedPayload)
-	if err := json.Unmarshal(iosn.payload, snv2dp); err != nil {
+	if err := json.Unmarshal(payload, snv2dp); err != nil {
 		logger.Warn().Err(err).Msg("failed to unmarshal notification")
 		return nil, fmt.Errorf("failed to unmarshal subscription notification v2 decoded: %w", err)
 	}
-	// second base64 decode snv2dp.Data.SignedRenewalInfo and parse the resulting jws and verify the signature
-	signedRenewalInfoJWS, err := base64.StdEncoding.DecodeString(string(snv2dp.Data.SignedRenewalInfo))
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to b64 decode signed info")
-		return nil, fmt.Errorf("failed to decode signed renewal info: %w", err)
-	}
-	signedRenewalInfo, err := jose.ParseSigned(string(signedRenewalInfoJWS))
+
+	signedRenewalInfo, err := jose.ParseSigned(string(snv2dp.Data.SignedRenewalInfo))
 	if err != nil {
 		logger.Warn().Err(err).Msg("failed to parse jws")
 		return nil, fmt.Errorf("failed to parse the Signed Renewal Info JWS: %w", err)
@@ -448,6 +451,14 @@ func (iosn *IOSNotification) GetTransactionInfo(ctx context.Context) (*appstore.
 		return nil, err
 	}
 
+	// extract the payload from
+	payload, err := iosn.payloadJWS.Verify(pk)
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to verify the notification jws")
+		return nil, fmt.Errorf("failed to verify the notification JWS: %w", err)
+	}
+	logger.Debug().Msgf("raw payload: %s", string(payload))
+
 	// first get the subscription notification payload decoded
 	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
 	var snv2dp = new(appstore.SubscriptionNotificationV2DecodedPayload)
@@ -455,13 +466,9 @@ func (iosn *IOSNotification) GetTransactionInfo(ctx context.Context) (*appstore.
 		logger.Warn().Err(err).Msg("failed to unmarshal notification")
 		return nil, fmt.Errorf("failed to unmarshal subscription notification v2 decoded: %w", err)
 	}
-	// second base64 decode snv2dp.Data.SignedTransactionInfo and parse the resulting jws and verify the signature
-	signedTransactionInfoJWS, err := base64.StdEncoding.DecodeString(string(snv2dp.Data.SignedTransactionInfo))
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to b64 decode transaction blob")
-		return nil, fmt.Errorf("failed to decode signed transaction info: %w", err)
-	}
-	signedTransactionInfo, err := jose.ParseSigned(string(signedTransactionInfoJWS))
+
+	// verify the signed transaction jws
+	signedTransactionInfo, err := jose.ParseSigned(string(snv2dp.Data.SignedTransactionInfo))
 	if err != nil {
 		logger.Warn().Err(err).Msg("failed to parse transaction jws")
 		return nil, fmt.Errorf("failed to parse the Signed Transaction Info JWS: %w", err)
