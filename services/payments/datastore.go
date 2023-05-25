@@ -337,8 +337,9 @@ func (s *Service) getQLDBObject(
 	ctx context.Context,
 	qldbTransactionDriver wrappedQldbTxnAPI,
 	txnID *uuid.UUID,
+	namespace uuid.UUID,
 ) (*qldbPaymentTransitionHistoryEntry, error) {
-	valid, result, err := transactionHistoryIsValid(ctx, qldbTransactionDriver, s.kmsSigningClient, txnID)
+	valid, result, err := transactionHistoryIsValid(ctx, qldbTransactionDriver, s.kmsSigningClient, txnID, namespace)
 	if err != nil || !valid {
 		return nil, fmt.Errorf("failed to validate transition history: %w", err)
 	}
@@ -358,8 +359,12 @@ func (s *Service) getQLDBObject(
 
 // GetTransactionByID returns the latest version of a record from QLDB if it exists, after doing all requisite validation
 func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Transaction, error) {
+	namespace, ok := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
+	if !ok {
+		return nil, fmt.Errorf("Failed to get UUID namespace from context")
+	}
 	data, err := s.datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
-		entry, err := s.getQLDBObject(ctx, txn, id)
+		entry, err := s.getQLDBObject(ctx, txn, id, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get QLDB record: %w", err)
 		}
@@ -404,10 +409,14 @@ func getTransactionHistory(txn wrappedQldbTxnAPI, id *uuid.UUID) ([]qldbPaymentT
 // WriteTransaction persists an object in a transaction after verifying that its change
 // represents a valid state transition.
 func (s *Service) WriteTransaction(ctx context.Context, transaction *Transaction) (*Transaction, error) {
+	namespace, ok := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
+	if !ok {
+		return nil, fmt.Errorf("Failed to get UUID namespace from context")
+	}
 	_, err := s.datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
 		// Determine if the transaction already exists or if it needs to be initialized. This call will do all necessary
 		// record and history validation if they exist for this record
-		record, err := s.getQLDBObject(ctx, txn, transaction.ID)
+		record, err := s.getQLDBObject(ctx, txn, transaction.ID, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to query QLDB: %w", err)
 		}

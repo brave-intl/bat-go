@@ -207,6 +207,7 @@ func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes
 func validateTransactionHistory(
 	ctx context.Context,
 	idempotencyKey *uuid.UUID,
+	namespace uuid.UUID,
 	transactionHistory []qldbPaymentTransitionHistoryEntry,
 	kmsClient wrappedKMSClient,
 ) (bool, error) {
@@ -216,7 +217,6 @@ func validateTransactionHistory(
 	)
 	for i, transaction := range transactionHistory {
 		var transactionData Transaction
-		namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
 		err = ion.Unmarshal(transaction.Data.Data, &transactionData)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
@@ -358,6 +358,7 @@ func transactionHistoryIsValid(
 	txn wrappedQldbTxnAPI,
 	kmsClient wrappedKMSClient,
 	id *uuid.UUID,
+	namespace uuid.UUID,
 ) (bool, *qldbPaymentTransitionHistoryEntry, error) {
 	// Fetch all historical states for this record
 	result, err := getTransactionHistory(txn, id)
@@ -368,7 +369,7 @@ func transactionHistoryIsValid(
 		return false, nil, errors.New("record not found")
 	}
 	// Ensure that all state changes in record history were valid
-	validTransitions, err := validateTransactionHistory(ctx, id, result, kmsClient)
+	validTransitions, err := validateTransactionHistory(ctx, id, namespace, result, kmsClient)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to validate history: %w", err)
 	}

@@ -142,14 +142,14 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
 		must.Equal(t, nil, err)
-		valid, err := validateTransactionHistory(ctx, &idempotencyKey, transactionHistorySet, mockKMS)
+		valid, err := validateTransactionHistory(ctx, &idempotencyKey, namespaceUUID, transactionHistorySet, mockKMS)
 		must.Equal(t, nil, err)
 		should.True(t, valid)
 	}
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		valid, _ := validateTransactionHistory(ctx, &idempotencyKey, transactionHistorySet, mockKMS)
+		valid, _ := validateTransactionHistory(ctx, &idempotencyKey, namespaceUUID, transactionHistorySet, mockKMS)
 		should.False(t, valid)
 	}
 }
@@ -297,12 +297,16 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
 	must.Equal(t, nil, err)
 	ctx := context.Background()
+	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
+	must.Equal(t, nil, err)
+	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
+
 	mockKMS := new(mockKMSClient)
 	mockRes := new(mockResult)
 	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
 	mockDriver := new(mockDriver)
-	mockDriver.On("Execute", context.Background(), mock.Anything).Return(&mockTransitionHistory, nil)
-	mockKMS.On("Sign", context.Background(), mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
+	mockDriver.On("Execute", ctx, mock.Anything).Return(&mockTransitionHistory, nil)
+	mockKMS.On("Sign", ctx, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	mockKMS.On("GetPublicKey", context.Background(), mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)

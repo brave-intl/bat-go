@@ -145,7 +145,7 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
 	logger.Info().Msg("submit endpoint setup")
 
-	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler( /*s*/ )).ServeHTTP)
+	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
 	logger.Info().Msg("get config endpoint setup")
 	return ctx, r
 }
