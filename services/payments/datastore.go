@@ -81,14 +81,6 @@ func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error
 	return &txn, nil
 }
 
-func (t *Transaction) generateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
-	return uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
-}
-
-func (t *Transaction) getIdempotencyKey() *uuid.UUID {
-	return t.ID
-}
-
 // GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
 // an error
 func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
@@ -100,19 +92,8 @@ func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, e
 	return t.ID, nil
 }
 
-func (t *Transaction) nextStateValid(nextState TransactionState) bool {
-	if t.State == nextState {
-		return true
-	}
-	// New transaction state should be present in the list of valid next states for the current state.
-	if !slices.Contains(t.State.GetValidTransitions(), nextState) {
-		return false
-	}
-	return true
-}
-
 // SetIdempotencyKey assigns a UUID v5 value to Transaction.ID
-func (t *Transaction) SetIdempotencyKey(ctx context.Context, namespace uuid.UUID) error {
+func (t *Transaction) SetIdempotencyKey(namespace uuid.UUID) error {
 	generatedIdempotencyKey := t.generateIdempotencyKey(namespace)
 	t.ID = &generatedIdempotencyKey
 	return nil
@@ -177,6 +158,25 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 	}
 	t.Amount = toIonDecimal(aux.Amount)
 	return nil
+}
+
+func (t *Transaction) generateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
+	return uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
+}
+
+func (t *Transaction) getIdempotencyKey() *uuid.UUID {
+	return t.ID
+}
+
+func (t *Transaction) nextStateValid(nextState TransactionState) bool {
+	if t.State == nextState {
+		return true
+	}
+	// New transaction state should be present in the list of valid next states for the current state.
+	if !slices.Contains(t.State.GetValidTransitions(), nextState) {
+		return false
+	}
+	return true
 }
 
 func toIonDecimal(v *decimal.Decimal) *ion.Decimal {
