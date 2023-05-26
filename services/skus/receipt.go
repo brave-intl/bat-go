@@ -127,7 +127,7 @@ func validateIOSReceipt(ctx context.Context, receipt interface{}) (string, error
 				logger.Error().Msg("failed to verify receipt, no in app info")
 				return "", fmt.Errorf("failed to verify receipt, no in app info in response")
 			}
-			return resp.Receipt.InApp[0].TransactionID, nil
+			return resp.Receipt.InApp[0].OriginalTransactionID, nil
 		}
 	}
 	logger.Error().Msg("client is not configured")
