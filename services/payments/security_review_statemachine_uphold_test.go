@@ -78,7 +78,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
 	must.Equal(t, nil, err)
-	idempotencyKey, err := uuid.Parse("6798046b-2d05-5df4-9e18-fb3caf1b583d")
+	idempotencyKey, err := uuid.Parse("f209929e-0ba9-5f56-a336-5b981bdaaaaf")
 	must.Equal(t, nil, err)
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)

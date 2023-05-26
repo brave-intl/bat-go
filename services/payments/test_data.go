@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	generatedUUID, _ = uuid.Parse("48f64a63-cb9f-5297-a605-964637448b9f")
+	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	amount           = ion.MustParseDecimal("1.1")
 	status0, _       = ion.MarshalBinary(Transaction{State: Prepared, ID: &generatedUUID, Amount: amount})
 	status1, _       = ion.MarshalBinary(Transaction{State: Authorized, ID: &generatedUUID, Amount: amount})

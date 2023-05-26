@@ -22,19 +22,19 @@ import (
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	ID                  *uuid.UUID       `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
-	Amount              *ion.Decimal     `json:"amount" ion:"amount" valid:"required"`
-	To                  *uuid.UUID       `json:"to,omitempty" ion:"to" valid:"required"`
-	From                *uuid.UUID       `json:"from,omitempty" ion:"from" valid:"required"`
-	Custodian           string           `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State               TransactionState `json:"state" ion:"state"`
-	DocumentID          string           `json:"documentId,omitempty" ion:"id"`
-	AttestationDocument string           `json:"attestation,omitempty" ion:"-"`
+	ID                  *uuid.UUID       `json:"idempotencyKey,omitempty" valid:"required"`
+	Amount              *ion.Decimal     `json:"amount" valid:"required"`
+	To                  string           `json:"to,omitempty" valid:"required"`
+	From                string           `json:"from,omitempty" valid:"required"`
+	Custodian           string           `json:"custodian,omitempty" valid:"in(uphold|gemini|bitflyer)"`
+	State               TransactionState `json:"state" valid:"required"`
+	DocumentID          string           `json:"documentId,omitempty"`
+	AttestationDocument string           `json:"attestation,omitempty"`
 	PayoutID            string           `json:"payoutId" valid:"required"`
-	Signature           string           `json:"-" ion:"signature"` // KMS signature only enclave can sign
-	PublicKey           string           `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
-	Currency            string           `json:"-" ion:"currency"`
-	DryRun              *string          `json:"dryRun" ion:"-"` // determines dry-run
+	Signature           string           `json:"Signature" valid:"required"` // KMS signature only enclave can sign
+	PublicKey           string           `json:"publicKey" valid:"required"` // KMS signature only enclave can sign
+	Currency            string           `json:"currency"`
+	DryRun              *string          `json:"dryRun"` // determines dry-run
 }
 
 // qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for qldbPaymentTransitionHistoryEntry

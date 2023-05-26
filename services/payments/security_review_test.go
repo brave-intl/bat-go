@@ -100,7 +100,7 @@ Should include exhaustive passing and failing tests.
 func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
 	must.Equal(t, nil, err)
-	idempotencyKey, err := uuid.Parse("48f64a63-cb9f-5297-a605-964637448b9f")
+	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	must.Equal(t, nil, err)
 	testData := Transaction{
 		State: Prepared,
