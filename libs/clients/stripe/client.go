@@ -42,12 +42,12 @@ func NewWithContext(ctx context.Context) (Client, error) {
 	}
 
 	// get the server access token from context
-	accessToken, err := appctx.GetStringFromContext(ctx, appctx.StripeOnrampSecretKeyCTXKey)
+	secretKey, err := appctx.GetStringFromContext(ctx, appctx.StripeOnrampSecretKeyCTXKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get StripeSecretKey from context: %w", err)
 	}
 
-	client, err := clients.NewWithHTTPClient(serverURL, accessToken, &http.Client{
+	client, err := clients.NewWithHTTPClient(serverURL, secretKey, &http.Client{
 		Timeout: time.Second * 30,
 	})
 	if err != nil {
