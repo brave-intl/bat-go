@@ -41,7 +41,7 @@ func NewWithContext(ctx context.Context) (Client, error) {
 		return nil, fmt.Errorf("failed to get StripeServer from context: %w", err)
 	}
 
-	// get the server access token from context
+	// get the server secretKey from context
 	secretKey, err := appctx.GetStringFromContext(ctx, appctx.StripeOnrampSecretKeyCTXKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get StripeSecretKey from context: %w", err)

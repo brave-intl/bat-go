@@ -30,7 +30,6 @@ func TestStripeTestSuite(t *testing.T) {
 
 var (
 	stripeService string = "https://api.stripe.com/"
-	stripeKey     string = "abcdefgh"
 )
 
 func (suite *StripeTestSuite) SetupTest() {
