@@ -345,7 +345,7 @@ func (s *Service) getQLDBObject(
 	}
 	// If no record was found, return nothing
 	if result == nil {
-		return nil, nil
+		return nil, &QLDBReocrdNotFoundError{}
 	}
 	merkleValid, err := revisionValidInTree(ctx, s.sdkClient, result)
 	if err != nil {
@@ -372,9 +372,6 @@ func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Trans
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to query QLDB: %w", err)
-	}
-	if data == nil {
-		return nil, nil
 	}
 	assertedData, ok := data.(*qldbPaymentTransitionHistoryEntry)
 	if !ok {
@@ -416,8 +413,9 @@ func (s *Service) WriteTransaction(ctx context.Context, transaction *Transaction
 	_, err := s.datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
 		// Determine if the transaction already exists or if it needs to be initialized. This call will do all necessary
 		// record and history validation if they exist for this record
-		record, err := s.getQLDBObject(ctx, txn, transaction.ID, namespace)
-		if err != nil {
+		_, err := s.getQLDBObject(ctx, txn, transaction.ID, namespace)
+		var notFound *QLDBReocrdNotFoundError
+		if err != nil && !errors.As(err, &notFound) {
 			return nil, fmt.Errorf("failed to query QLDB: %w", err)
 		}
 		transaction.PublicKey, transaction.Signature, err = transaction.SignTransaction(ctx, s.kmsSigningClient, s.kmsSigningKeyID)
@@ -425,7 +423,7 @@ func (s *Service) WriteTransaction(ctx context.Context, transaction *Transaction
 			return nil, fmt.Errorf("failed to sign transaction: %w", err)
 		}
 
-		if record == nil {
+		if errors.As(err, &notFound) {
 			return txn.Execute("INSERT INTO transactions ?", transaction)
 		}
 		return txn.Execute("UPDATE transactions SET state = ? WHERE id = ?", transaction.State, transaction.ID)

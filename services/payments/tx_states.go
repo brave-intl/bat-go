@@ -66,11 +66,12 @@ func Drive[T TxStateMachine](
 	// Check if the transaction exists so that we know whether to create it or progress it
 	transaction, err := machine.GetService().GetTransactionByID(ctx, generatedID)
 	if err != nil {
+		// If the transaction doesn't exist in the database, prepare it
+		var notFound *QLDBReocrdNotFoundError
+		if errors.As(err, &notFound) {
+			return machine.Prepare(ctx)
+		}
 		return nil, fmt.Errorf("failed to get transaction from QLDB: %w", err)
-	}
-	// If the transaction doesn't exist in the database, prepare it
-	if transaction == nil {
-		return machine.Prepare(ctx)
 	}
 	// Set the machine's transaction to the values retrieved from the database. This helps avoid cases where the State
 	// in the transaction provided by the client is out of date with the database

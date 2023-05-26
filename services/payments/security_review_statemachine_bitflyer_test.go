@@ -120,7 +120,8 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.
-	mockCall := mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, nil)
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err := Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
 	should.Equal(t, Prepared, newTransaction.State)
@@ -130,8 +131,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	marshaledData, _ = ion.MarshalBinary(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	mockCall.Unset()
-	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
 	should.Equal(t, Authorized, newTransaction.State)
@@ -141,8 +140,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	marshaledData, _ = ion.MarshalBinary(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	mockCall.Unset()
-	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
 	should.Equal(t, Pending, newTransaction.State)
@@ -152,8 +149,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	marshaledData, _ = ion.MarshalBinary(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	mockCall.Unset()
-	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
 	should.Equal(t, Paid, newTransaction.State)
