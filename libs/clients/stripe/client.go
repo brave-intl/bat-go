@@ -68,7 +68,7 @@ type onrampSessionParams struct {
 	SourceExchangeAmount         string   `url:"transaction_details[source_exchange_amount],omitempty"`
 	DestinationNetwork           string   `url:"transaction_details[destination_network],omitempty"`
 	DestinationCurrency          string   `url:"transaction_details[destination_currency],omitempty"`
-	SupportedDestinationNetworks []string `url:"transaction_details[supported_destination_networks],omitempty"`
+	SupportedDestinationNetworks []string `url:"-"`
 }
 
 // GenerateQueryString - implement the QueryStringBody interface
@@ -81,6 +81,14 @@ func (p *onrampSessionParams) GenerateQueryString() (url.Values, error) {
 		key := fmt.Sprintf("transaction_details[wallet_addresses][%s]", p.DestinationNetwork)
 		values.Add(key, p.WalletAddress)
 	}
+
+	if len(p.SupportedDestinationNetworks) > 0 {
+		for i, network := range p.SupportedDestinationNetworks {
+			key := fmt.Sprintf("transaction_details[supported_destination_networks][%d]", i)
+			values.Add(key, network)
+		}
+	}
+
 	return values, nil
 }
 

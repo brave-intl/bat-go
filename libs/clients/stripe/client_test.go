@@ -78,6 +78,7 @@ func (suite *StripeTestSuite) TestCreateOnrampSession() {
 	destinationCurrency = "eth"
 	destinationNetwork = "ethereum"
 	sourceExchangeAmount = "1"
+	supportedDestinationNetworks = []string{"ethereum", "polygon"}
 	resp, err = suite.client.CreateOnrampSession(
 		suite.ctx,
 		"redirect",
