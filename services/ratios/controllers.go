@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
@@ -341,6 +343,37 @@ func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		// Parse SourceExchangeAmount to float64, if it's not empty
+		var sourceExchangeAmount float64
+		if req.SourceExchangeAmount != "" {
+			var err error
+			sourceExchangeAmount, err = strconv.ParseFloat(req.SourceExchangeAmount, 64)
+			if err != nil {
+				return handlers.WrapError(
+					fmt.Errorf("SourceExchangeAmount must be a number"),
+					"SourceExchangeAmount must be a number",
+					http.StatusBadRequest,
+				)
+			}
+
+			if sourceExchangeAmount < 1 {
+				return handlers.WrapError(
+					fmt.Errorf("SourceExchangeAmount must be at least 1"),
+					"SourceExchangeAmount must be at least 1",
+					http.StatusBadRequest,
+				)
+			}
+
+			parts := strings.Split(req.SourceExchangeAmount, ".")
+			if len(parts) == 2 && len(parts[1]) > 2 {
+				return handlers.WrapError(
+					fmt.Errorf("SourceExchangeAmount must not include fractions of pennies"),
+					"SourceExchangeAmount must not include fractions of pennies",
+					http.StatusBadRequest,
+				)
+			}
 		}
 
 		// Validate the request payload

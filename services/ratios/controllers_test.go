@@ -474,6 +474,50 @@ func (suite *ControllersTestSuite) TestCreateStripeOnrampSessionsHandler() {
 		suite.Require().Equal(http.StatusBadRequest, rr.Code)
 	}
 
+	// SourceExchangeAmount less than 1 results in 400
+	{
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "usd",
+			SourceExchangeAmount:         "0.5",
+			DestinationNetwork:           "ethereum",
+			DestinationCurrency:          "eth",
+			SupportedDestinationNetworks: []string{"ethereum", "bitcoin", "solana", "polygon"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
+	// SourceExchangeAmount includes fractions of pennies results in 400
+	{
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "usd",
+			SourceExchangeAmount:         "1000.001",
+			DestinationNetwork:           "ethereum",
+			DestinationCurrency:          "eth",
+			SupportedDestinationNetworks: []string{"ethereum", "bitcoin", "solana", "polygon"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
 	// Invalid DestinationNetwork results in 400
 	{
 		payload := &ratios.StripeOnrampSessionRequest{
