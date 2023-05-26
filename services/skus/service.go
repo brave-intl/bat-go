@@ -1458,7 +1458,7 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 	// check if we are past the expiration date on transaction or the order was revoked
 
 	if time.Now().After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
-		time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond))) {
+		(txInfo.RevocationDate > 0 && time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)))) {
 		// past our tx expires/renewal time
 		if err = s.CancelOrder(o.ID); err != nil {
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
