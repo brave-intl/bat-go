@@ -4,24 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/exp/slices"
+
+	"github.com/google/uuid"
 )
 
 // TransactionState is an integer representing transaction status
-type TransactionState int64
+type TransactionState string
 
 // TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 const (
 	// Prepared represents a record that has been prepared for authorization
-	Prepared TransactionState = iota
+	Prepared TransactionState = "prepared"
 	// Authorized represents a record that has been authorized
-	Authorized
+	Authorized TransactionState = "authorized"
 	// Pending represents a record that is being or has been submitted to a processor
-	Pending
+	Pending TransactionState = "pending"
 	// Paid represents a record that has entered a finalized success state with a processor
-	Paid
+	Paid TransactionState = "paid"
 	// Failed represents a record that has failed processing permanently
-	Failed
+	Failed TransactionState = "failed"
 )
 
 // Transitions represents the valid forward-transitions for each given state
@@ -33,6 +34,7 @@ var Transitions = map[TransactionState][]TransactionState{
 	Failed:     {},
 }
 
+// StateMachineFromTransaction returns a state machine when provided a transaction
 func StateMachineFromTransaction(transaction *Transaction, service *Service) (TxStateMachine, error) {
 	var machine TxStateMachine
 	switch transaction.Custodian {
@@ -52,8 +54,9 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 ) (*Transaction, error) {
+	namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
 	// Make sure the transaction we have has an ID that matches its contents before we check if it exists
-	generatedID, err := machine.GenerateTransactionID(ctx)
+	generatedID, err := machine.GenerateTransactionID(namespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.GetTransactionID(), err)
 	}
@@ -61,13 +64,14 @@ func Drive[T TxStateMachine](
 		return nil, errors.New("provided idempotencyKey does not match transaction")
 	}
 	// Check if the transaction exists so that we know whether to create it or progress it
-	transaction, err := machine.GetService().GetTransactionById(ctx, generatedID)
+	transaction, err := machine.GetService().GetTransactionByID(ctx, generatedID)
 	if err != nil {
+		// If the transaction doesn't exist in the database, prepare it
+		var notFound *QLDBReocrdNotFoundError
+		if errors.As(err, &notFound) {
+			return machine.Prepare(ctx)
+		}
 		return nil, fmt.Errorf("failed to get transaction from QLDB: %w", err)
-	}
-	// If the transaction doesn't exist in the database, prepare it
-	if transaction == nil {
-		return machine.Prepare(ctx)
 	}
 	// Set the machine's transaction to the values retrieved from the database. This helps avoid cases where the State
 	// in the transaction provided by the client is out of date with the database
@@ -94,66 +98,9 @@ func (ts TransactionState) GetValidTransitions() []TransactionState {
 	return Transitions[ts]
 }
 
-func nextStateValid(txn *Transaction, nextState TransactionState) bool {
-	if txn.State == nextState {
-		return true
-	}
-	// New transaction state should be present in the list of valid next states for the current state.
-	if !slices.Contains(Transitions[txn.State], nextState) {
-		return false
-	}
-	return true
-}
-
-// String implements ToString for TransactionState
-func (ts TransactionState) String() string {
-	switch ts {
-	case Prepared:
-		return "prepared"
-	case Authorized:
-		return "authorized"
-	case Pending:
-		return "pending"
-	case Paid:
-		return "paid"
-	case Failed:
-		return "failed"
-	}
-	return ""
-}
-
-// MarshalJSON implements JSON marshal for TransactionState
-func (ts TransactionState) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("\"%s\"", ts.String())), nil
-}
-
-// UnmarshalJSON implements JSON unmarshal for TransactionState
-func (ts *TransactionState) UnmarshalJSON(data []byte) error {
-	stringData := string(data)
-	// Ignore null
-	if stringData == "null" || stringData == `""` {
-		return nil
-	}
-	switch stringData {
-	case "\"prepared\"":
-		*ts = Prepared
-	case "\"authorized\"":
-		*ts = Authorized
-	case "\"pending\"":
-		*ts = Pending
-	case "\"paid\"":
-		*ts = Paid
-	case "\"failed\"":
-		*ts = Failed
-	default:
-		return errors.New("cannot unmarshal unknown transition state")
-	}
-	return nil
-}
-
 // GetAllValidTransitionSequences returns all valid transition sequences
 func GetAllValidTransitionSequences() [][]TransactionState {
-	return recurseTransitionResolution(0, []TransactionState{})
+	return recurseTransitionResolution("prepared", []TransactionState{})
 }
 
 func recurseTransitionResolution(
@@ -164,7 +111,7 @@ func recurseTransitionResolution(
 		result      [][]TransactionState
 		updatedTree = append(currentTree, state)
 	)
-	possibleStates := Transitions[state]
+	possibleStates := state.GetValidTransitions()
 	if len(possibleStates) == 0 {
 		tempTree := make([]TransactionState, len(updatedTree))
 		copy(tempTree, updatedTree)

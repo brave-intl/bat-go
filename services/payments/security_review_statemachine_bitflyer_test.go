@@ -14,7 +14,8 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/assert"
+	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 )
 
 var (
@@ -43,15 +44,11 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 
 	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
-	if err != nil {
-		panic("failed to set environment variable")
-	}
+	must.Equal(t, nil, err)
 
 	// Mock transaction creation that will succeed
 	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitSuccessResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -62,9 +59,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	)
 	// Mock transaction commit that will succeed
 	jsonResponse, err = json.Marshal(bitflyerTransactionCheckStatusSuccessResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -75,10 +70,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	)
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
-	idempotencyKey, err := uuid.Parse("6798046b-2d05-5df4-9e18-fb3caf1b583d")
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
+	idempotencyKey, err := uuid.Parse("f209929e-0ba9-5f56-a336-5b981bdaaaaf")
+	must.Equal(t, nil, err)
 	bitflyerStateMachine := BitflyerMachine{}
 
 	testTransaction := Transaction{
@@ -87,21 +81,19 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	}
 
 	marshaledData, err := ion.MarshalBinary(testTransaction)
-	if err != nil {
-		panic(err)
-	}
-	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+	must.Equal(t, nil, err)
+	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: QLDBPaymentTransitionHistoryEntryData{
+		Data: qldbPaymentTransitionHistoryEntryData{
 			Data:           marshaledData,
 			Signature:      []byte{},
 			IdempotencyKey: &idempotencyKey,
 		},
-		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
@@ -123,56 +115,43 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	bitflyerStateMachine.setTransaction(&testTransaction)
 
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "namespaceUUID", namespaceUUID)
+	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 
 	// Should create a transaction in QLDB. Current state argument is empty because
 	// the object does not yet exist.
-	mockCall := mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, nil)
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err := Drive(ctx, &bitflyerStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Preparing: %e", err))
-	}
-	assert.Equal(t, Prepared, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Prepared, newTransaction.State)
 
 	// Should transition transaction into the Authorized state
 	testTransaction.State = Prepared
 	marshaledData, _ = ion.MarshalBinary(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	mockCall.Unset()
-	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Authorizing: %e", err))
-	}
-	assert.Equal(t, Authorized, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Authorized, newTransaction.State)
 
 	// Should transition transaction into the Pending state
 	testTransaction.State = Authorized
 	marshaledData, _ = ion.MarshalBinary(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	mockCall.Unset()
-	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Pending: %e", err))
-	}
-	assert.Equal(t, Pending, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Pending, newTransaction.State)
 
 	// Should transition transaction into the Paid state
 	testTransaction.State = Pending
 	marshaledData, _ = ion.MarshalBinary(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	mockCall.Unset()
-	mockCall = mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
-	if err != nil {
-		panic(fmt.Sprintf("Paying: %e", err))
-	}
-	assert.Equal(t, Paid, newTransaction.State)
+	must.Equal(t, nil, err)
+	should.Equal(t, Paid, newTransaction.State)
 }
 
 /*
@@ -183,15 +162,11 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 
 	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
-	if err != nil {
-		panic("failed to set environment variable")
-	}
+	must.Equal(t, nil, err)
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitFailureResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -220,7 +195,7 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	// currentVersion := 500
 
 	newState, _ := Drive(ctx, &bitflyerStateMachine)
-	assert.Equal(t, Authorized, newState)
+	should.Equal(t, Authorized, newState)
 }
 */
 
@@ -232,15 +207,11 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 
 	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
-	if err != nil {
-		panic("failed to set environment variable")
-	}
+	must.Equal(t, nil, err)
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(bitflyerTransactionCheckStatusFailureResponse)
-	if err != nil {
-		panic(err)
-	}
+	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
 		fmt.Sprintf(
@@ -269,6 +240,6 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	// currentVersion := 404
 
 	newState, _ := Drive(ctx, &bitflyerStateMachine)
-	assert.Equal(t, Pending, newState)
+	should.Equal(t, Pending, newState)
 }
 */

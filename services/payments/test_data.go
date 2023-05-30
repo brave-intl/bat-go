@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	generatedUUID, _ = uuid.Parse("48f64a63-cb9f-5297-a605-964637448b9f")
+	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	amount           = ion.MustParseDecimal("1.1")
 	status0, _       = ion.MarshalBinary(Transaction{State: Prepared, ID: &generatedUUID, Amount: amount})
 	status1, _       = ion.MarshalBinary(Transaction{State: Authorized, ID: &generatedUUID, Amount: amount})
@@ -15,64 +15,64 @@ var (
 	status4, _       = ion.MarshalBinary(Transaction{State: Failed, ID: &generatedUUID, Amount: amount})
 )
 
-var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{
+var transactionHistorySetTrue = [][]qldbPaymentTransitionHistoryEntry{
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
 	},
 }
 
-var transactionHistorySetFalse = [][]QLDBPaymentTransitionHistoryEntry{
+var transactionHistorySetFalse = [][]qldbPaymentTransitionHistoryEntry{
 	// Transitions must always start at 0
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status1, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status4, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status3, IdempotencyKey: &generatedUUID}},
 	},
 	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status0, IdempotencyKey: &generatedUUID}},
+		{Data: qldbPaymentTransitionHistoryEntryData{Data: status2, IdempotencyKey: &generatedUUID}},
 	},
 }
 
@@ -182,7 +182,7 @@ var geminiBulkPaySuccessResponse = []map[string]string{
 	},
 }
 
-var geminiBulkPayFailureResponse = []map[string]string{
+/*var geminiBulkPayFailureResponse = []map[string]string{
 	{
 		"result":      "error",
 		"tx_ref":      "",
@@ -192,7 +192,7 @@ var geminiBulkPayFailureResponse = []map[string]string{
 		"Status":      "",
 		"reason":      "",
 	},
-}
+}*/
 
 var geminiTransactionCheckSuccessResponse = map[string]string{
 	"result":      "ok",
@@ -204,7 +204,7 @@ var geminiTransactionCheckSuccessResponse = map[string]string{
 	"reason":      "",
 }
 
-var geminiTransactionCheckFailureResponse = map[string]string{
+/*var geminiTransactionCheckFailureResponse = map[string]string{
 	"result":      "error",
 	"tx_ref":      "",
 	"amount":      "",
@@ -212,7 +212,7 @@ var geminiTransactionCheckFailureResponse = map[string]string{
 	"destination": "",
 	"Status":      "",
 	"reason":      "",
-}
+}*/
 
 var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
 	"dry_run": "false",
@@ -226,7 +226,7 @@ var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
 	},
 }
 
-var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
+/*var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
 	"dry_run": "false",
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
@@ -236,7 +236,7 @@ var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
 		"transfer_id":     "",
 	},
 	},
-}
+}*/
 
 var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 	"dry_run": "false",
@@ -250,7 +250,7 @@ var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 	},
 }
 
-var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
+/*var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
 	"dry_run": "false",
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
@@ -260,4 +260,4 @@ var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
 		"transfer_id":     "",
 	},
 	},
-}
+}*/
