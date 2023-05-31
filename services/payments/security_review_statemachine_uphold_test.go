@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -88,7 +87,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 		State: Prepared,
 		ID:    &idempotencyKey,
 	}
-	marshaledData, err := ion.MarshalBinary(testTransaction)
+	marshaledData, err := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
@@ -133,7 +132,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Authorized state
 	testTransaction.State = Prepared
-	marshaledData, _ = ion.MarshalBinary(testTransaction)
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	upholdStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &upholdStateMachine)
@@ -142,7 +141,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Pending state
 	testTransaction.State = Authorized
-	marshaledData, _ = ion.MarshalBinary(testTransaction)
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	upholdStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &upholdStateMachine)
@@ -151,7 +150,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Paid state
 	testTransaction.State = Pending
-	marshaledData, _ = ion.MarshalBinary(testTransaction)
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	upholdStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &upholdStateMachine)

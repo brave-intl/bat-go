@@ -1,6 +1,8 @@
 package payments
 
 import (
+	"encoding/json"
+
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/google/uuid"
 )
@@ -8,11 +10,11 @@ import (
 var (
 	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	amount           = ion.MustParseDecimal("1.1")
-	status0, _       = ion.MarshalBinary(Transaction{State: Prepared, ID: &generatedUUID, Amount: amount})
-	status1, _       = ion.MarshalBinary(Transaction{State: Authorized, ID: &generatedUUID, Amount: amount})
-	status2, _       = ion.MarshalBinary(Transaction{State: Pending, ID: &generatedUUID, Amount: amount})
-	status3, _       = ion.MarshalBinary(Transaction{State: Paid, ID: &generatedUUID, Amount: amount})
-	status4, _       = ion.MarshalBinary(Transaction{State: Failed, ID: &generatedUUID, Amount: amount})
+	status0, _       = json.Marshal(Transaction{State: Prepared, ID: &generatedUUID, Amount: amount})
+	status1, _       = json.Marshal(Transaction{State: Authorized, ID: &generatedUUID, Amount: amount})
+	status2, _       = json.Marshal(Transaction{State: Pending, ID: &generatedUUID, Amount: amount})
+	status3, _       = json.Marshal(Transaction{State: Paid, ID: &generatedUUID, Amount: amount})
+	status4, _       = json.Marshal(Transaction{State: Failed, ID: &generatedUUID, Amount: amount})
 )
 
 var transactionHistorySetTrue = [][]qldbPaymentTransitionHistoryEntry{

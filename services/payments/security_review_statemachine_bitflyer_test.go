@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -80,7 +79,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		ID:    &idempotencyKey,
 	}
 
-	marshaledData, err := ion.MarshalBinary(testTransaction)
+	marshaledData, err := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
@@ -128,7 +127,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Authorized state
 	testTransaction.State = Prepared
-	marshaledData, _ = ion.MarshalBinary(testTransaction)
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
@@ -137,7 +136,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Pending state
 	testTransaction.State = Authorized
-	marshaledData, _ = ion.MarshalBinary(testTransaction)
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
@@ -146,7 +145,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Paid state
 	testTransaction.State = Pending
-	marshaledData, _ = ion.MarshalBinary(testTransaction)
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)

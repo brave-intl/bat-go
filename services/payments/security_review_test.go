@@ -2,6 +2,7 @@ package payments
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -10,7 +11,6 @@ import (
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/google/uuid"
 
-	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/smithy-go/middleware"
@@ -105,7 +105,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	testData := Transaction{
 		State: Prepared,
 	}
-	marshaledData, err := ion.MarshalBinary(testData)
+	marshaledData, err := json.Marshal(testData)
 	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
@@ -125,7 +125,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
+	binaryTransitionHistory, err := json.Marshal(mockTransitionHistory)
 	must.Equal(t, nil, err)
 	mockKMS := new(mockKMSClient)
 	mockRes := new(mockResult)
@@ -275,7 +275,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	testData := Transaction{
 		State: Prepared,
 	}
-	marshaledData, err := ion.MarshalBinary(testData)
+	marshaledData, err := json.Marshal(testData)
 	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
@@ -294,7 +294,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-	binaryTransitionHistory, err := ion.MarshalBinary(mockTransitionHistory)
+	binaryTransitionHistory, err := json.Marshal(mockTransitionHistory)
 	must.Equal(t, nil, err)
 	ctx := context.Background()
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")

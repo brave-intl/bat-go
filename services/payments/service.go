@@ -217,7 +217,7 @@ func validateTransactionHistory(
 	)
 	for i, transaction := range transactionHistory {
 		var transactionData Transaction
-		err = ion.Unmarshal(transaction.Data.Data, &transactionData)
+		err = json.Unmarshal(transaction.Data.Data, &transactionData)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
 		}
@@ -257,7 +257,7 @@ func validateTransactionHistory(
 			continue
 		}
 		var previousTransitionData Transaction
-		err = ion.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
+		err = json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal previous transition history record: %w", err)
 		}

@@ -31,7 +31,7 @@ type Transaction struct {
 	DocumentID          string           `json:"documentId,omitempty"`
 	AttestationDocument string           `json:"attestation,omitempty"`
 	PayoutID            string           `json:"payoutId" valid:"required"`
-	Signature           string           `json:"Signature" valid:"required"` // KMS signature only enclave can sign
+	Signature           string           `json:"signature" valid:"required"` // KMS signature only enclave can sign
 	PublicKey           string           `json:"publicKey" valid:"required"` // KMS signature only enclave can sign
 	Currency            string           `json:"currency"`
 	DryRun              *string          `json:"dryRun"` // determines dry-run
@@ -74,7 +74,7 @@ type qldbPaymentTransitionHistoryEntry struct {
 
 func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
 	var txn Transaction
-	err := ion.Unmarshal(e.Data.Data, &txn)
+	err := json.Unmarshal(e.Data.Data, &txn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w", err)
 	}
@@ -318,7 +318,7 @@ func (s *Service) GetTransactionFromDocID(ctx context.Context, docID string) (*T
 		if result.Next(txn) {
 			ionBinary := result.GetCurrentData()
 			// unmarshal enriched version
-			err := ion.Unmarshal(ionBinary, resp)
+			err := json.Unmarshal(ionBinary, resp)
 			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal tx: %s due to: %w", docID, err)
 			}
