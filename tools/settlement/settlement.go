@@ -355,6 +355,10 @@ func ConfirmPreparedTransaction(
 			logger.Error().Err(err).Msg("invalid destination, skipping")
 			settlement.Status = "failed"
 			return nil
+		} else if errorutils.IsErrNotFound(err) {
+			logger.Error().Err(err).Msg("transaction not found, skipping")
+			settlement.Status = "failed"
+			return nil
 		} else if errorutils.IsErrAlreadyExists(err) {
 			// NOTE we've observed the uphold API LB timing out while the request is eventually processed
 			upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)

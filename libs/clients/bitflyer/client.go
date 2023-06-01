@@ -568,7 +568,7 @@ func handleBitflyerError(ctx context.Context, e error, resp *http.Response) erro
 	}
 
 	// if this is not a bitflyer error just return err passed in
-	if resp.StatusCode > 299 {
+	if resp.StatusCode <= 299 {
 		return e
 	}
 
@@ -576,13 +576,15 @@ func handleBitflyerError(ctx context.Context, e error, resp *http.Response) erro
 	if err != nil {
 		return fmt.Errorf("failed to read body of bitflyer response to handle err: %w", err)
 	}
-	var bfError = new(clients.BitflyerError)
+
+	var bfError *clients.BitflyerError
 	if len(b) != 0 {
-		err = json.Unmarshal(b, bfError)
+		err = json.Unmarshal(b, &bfError)
 		if err != nil {
 			return err
 		}
 	}
+
 	if len(bfError.Label) == 0 {
 		return e
 	}

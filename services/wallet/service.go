@@ -575,6 +575,8 @@ func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian s
 // CreateRewardsWallet creates a brave rewards wallet and informs the reputation service.
 // If either the local transaction or call to the reputation service fails then the wallet is not created.
 func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey string, geoCountry string) (*walletutils.Info, error) {
+	log := logging.Logger(ctx, "wallets.CreateRewardsWallet")
+
 	valid, err := service.geoValidator.Validate(ctx, geoCountry)
 	if err != nil {
 		return nil, fmt.Errorf("error validating geo country: %w", err)
@@ -603,6 +605,10 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		var pgErr *pq.Error
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == "23505" { // unique constraint violation
+				if info != nil {
+					log.Error().Err(err).Interface("info", info).
+						Msg("error InsertWalletTx")
+				}
 				return nil, errRewardsWalletAlreadyExists
 			}
 		}
