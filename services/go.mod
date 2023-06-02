@@ -13,7 +13,6 @@ require (
 	github.com/amazon-ion/ion-go v1.2.0
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/awa/go-iap v1.3.22
-	github.com/aws/aws-sdk-go v1.44.206
 	github.com/aws/aws-sdk-go-v2 v1.18.0
 	github.com/aws/aws-sdk-go-v2/config v1.17.10
 	github.com/aws/aws-sdk-go-v2/credentials v1.12.23
@@ -24,7 +23,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.19.7
 	github.com/aws/aws-sdk-go-v2/service/sts v1.17.1
 	github.com/aws/smithy-go v1.13.5
-	github.com/awslabs/amazon-qldb-driver-go v1.1.1
 	github.com/awslabs/amazon-qldb-driver-go/v3 v3.0.1
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
@@ -42,6 +40,7 @@ require (
 	github.com/lib/pq v1.10.7
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mdlayher/vsock v1.2.0
+	github.com/opencontainers/go-digest v1.0.0
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/zerolog v1.28.0
 	github.com/satori/go.uuid v1.2.0
@@ -95,7 +94,6 @@ require (
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.15.15 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

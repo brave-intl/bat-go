@@ -301,10 +301,7 @@ func revisionValidInTree(
 	if err != nil {
 		return false, fmt.Errorf("Failed to get revision: %w", err)
 	}
-	var (
-		hashes           [][32]byte
-		concatenatedHash [32]byte
-	)
+	var hashes [][32]byte
 
 	// This Ion unmarshal gives us the hashes as bytes. The documentation implies that
 	// these are base64 encoded strings, but testing indicates that is not the case.
@@ -313,12 +310,16 @@ func revisionValidInTree(
 	if err != nil {
 		return false, fmt.Errorf("Failed to unmarshal revision proof: %w", err)
 	}
+	return verifyHashSequence(digest, transaction.Hash, hashes)
+}
 
+func verifyHashSequence(digest *qldb.GetDigestOutput, initialHash qldbPaymentTransitionHistoryEntryHash, hashes [][32]byte) (bool, error) {
+	var concatenatedHash [32]byte
 	for i, providedHash := range hashes {
 		// During the first integration concatenatedHash hasn't been populated.
 		// Populate it with the hash from the provided transaction.
 		if i == 0 {
-			decodedHash, err := base64.StdEncoding.DecodeString(string(transaction.Hash))
+			decodedHash, err := base64.StdEncoding.DecodeString(string(initialHash))
 			if err != nil {
 				return false, err
 			}
@@ -349,7 +350,6 @@ func revisionValidInTree(
 	if string(concatenatedHash[:]) == string(decodedDigest) {
 		return true, nil
 	}
-
 	return false, nil
 }
 
