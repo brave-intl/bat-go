@@ -212,14 +212,10 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 		Str("qldbLedgerName", qldbLedgerName).
 		Msg("qldb details")
 
-	cfg, err := appaws.NewAWSConfig(ctx, egressProxyAddr, region)
+	awsCfg, err := appaws.NewAWSConfig(ctx, egressProxyAddr, region)
 	if err != nil {
 		logger.Error().Err(err).Str("region", region).Msg("aws config failed")
 		return nil, fmt.Errorf("failed to create aws config: %w", err)
-	}
-	awsCfg, ok := cfg.(aws.Config)
-	if !ok {
-		return nil, fmt.Errorf("invalid aws configuration: %w", err)
 	}
 
 	// assume correct role for qldb access

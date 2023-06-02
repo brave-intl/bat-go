@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
@@ -18,7 +19,7 @@ import (
 // NewAWSConfig creates a new AWS SDK config that communicates via an HTTP
 // proxy listening on a vsock address, it automatically retrieves any EC2
 // role credentials of the instance hosting the enclave
-func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (config.Config, error) {
+func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Config, error) {
 	logger := logging.Logger(ctx, "aws.NewAWSConfig")
 
 	logger.Info().
@@ -47,7 +48,7 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (config.
 		config.WithRegion("us-west-2"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("unable to load SDK config, %v", err)
+		return aws.Config{}, fmt.Errorf("unable to load SDK config, %v", err)
 	}
 
 	provider := ec2rolecreds.New(func(options *ec2rolecreds.Options) {

@@ -6,6 +6,7 @@ cid="4"
 set -eux
 
 nitro-cli run-enclave \
+    --debug-mode \
     --enclave-cid "${cid}" \
     --cpu-count 2 \
     --memory 512 \

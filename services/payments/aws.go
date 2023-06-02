@@ -11,7 +11,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -73,13 +72,9 @@ func (ac *awsClient) RetrieveSecrets(ctx context.Context, uri string) ([]byte, e
 		Str("region", region).
 		Msg("secrets location details")
 
-	cfg, err := appaws.NewAWSConfig(ctx, egressProxyAddr, region)
+	awsCfg, err := appaws.NewAWSConfig(ctx, egressProxyAddr, region)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get aws configuration: %w", err)
-	}
-	awsCfg, ok := cfg.(aws.Config)
-	if !ok {
-		return nil, fmt.Errorf("invalid aws configuration: %w", err)
 	}
 
 	algo := "AES256"

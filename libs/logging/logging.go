@@ -42,7 +42,7 @@ func SetupLoggerWithLevel(ctx context.Context, level zerolog.Level) (context.Con
 
 // SetupLogger - helper to setup a logger and associate with context
 func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	writer, ok := ctx.Value(appctx.LogWriterKey).(io.Writer)
+	writer, ok := ctx.Value(appctx.LogWriterCTXKey).(io.Writer)
 
 	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {

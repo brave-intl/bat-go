@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
@@ -22,6 +21,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
+	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
@@ -30,6 +30,7 @@ type Service struct {
 	// concurrent safe
 	datastore  *qldbdriver.QLDBDriver
 	custodians map[string]provider.Custodian
+	awsCfg     aws.Config
 
 	baseCtx          context.Context
 	secretMgr        appsrv.SecretManager
@@ -53,10 +54,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	logger.Debug().Msgf("document: %+v", document)
 
 	// get the aws configuration loaded
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load aws configuration: %w", err)
-	}
+	cfg := s.awsCfg
 
 	// TODO: get the pcr values for the condition from the document ^^
 	imageSha384 := ""
@@ -108,41 +106,62 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 func NewService(ctx context.Context) (context.Context, *Service, error) {
 	var logger = logging.Logger(ctx, "payments.NewService")
 
+	egressAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
+	if !ok {
+		logger.Error().Msg("no egress addr for payments service")
+		return nil, nil, errors.New("no egress addr for payments service")
+	}
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok {
+		region = "us-west-2"
+	}
+
+	cfg, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
+	if err != nil {
+		logger.Error().Msg("no egress addr for payments service")
+		return nil, nil, errors.New("no egress addr for payments service")
+	}
+
 	service := &Service{
 		baseCtx:   ctx,
 		secretMgr: &awsClient{},
+		awsCfg:    cfg,
 	}
 
 	if err := service.configureKMSKey(ctx); err != nil {
-		logger.Fatal().Msg("could not create kms secret decryption key")
+		// FIXME: handle create error better
+		logger.Error().Err(err).Msg("could not create kms secret decryption key")
 	}
 
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Msg("could not configure datastore")
 	}
 
-	// setup our custodian integrations
-	upholdCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Uphold})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create uphold custodian")
-		return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
-	}
-	geminiCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Gemini})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create gemini custodian")
-		return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
-	}
-	bitflyerCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Bitflyer})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create bitflyer custodian")
-		return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
-	}
+	/*
+			FIXME
+		// setup our custodian integrations
+		upholdCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Uphold})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create uphold custodian")
+			return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
+		}
+		geminiCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Gemini})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create gemini custodian")
+			return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
+		}
+		bitflyerCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Bitflyer})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create bitflyer custodian")
+			return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
+		}
 
-	service.custodians = map[string]provider.Custodian{
-		provider.Uphold:   upholdCustodian,
-		provider.Gemini:   geminiCustodian,
-		provider.Bitflyer: bitflyerCustodian,
-	}
+		service.custodians = map[string]provider.Custodian{
+			provider.Uphold:   upholdCustodian,
+			provider.Gemini:   geminiCustodian,
+			provider.Bitflyer: bitflyerCustodian,
+		}
+	*/
 
 	return ctx, service, nil
 }
