@@ -313,7 +313,11 @@ func revisionValidInTree(
 	return verifyHashSequence(digest, transaction.Hash, hashes)
 }
 
-func verifyHashSequence(digest *qldb.GetDigestOutput, initialHash qldbPaymentTransitionHistoryEntryHash, hashes [][32]byte) (bool, error) {
+func verifyHashSequence(
+	digest *qldb.GetDigestOutput,
+	initialHash qldbPaymentTransitionHistoryEntryHash,
+	hashes [][32]byte,
+) (bool, error) {
 	var concatenatedHash [32]byte
 	for i, providedHash := range hashes {
 		// During the first integration concatenatedHash hasn't been populated.

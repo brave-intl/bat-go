@@ -2,6 +2,8 @@ package payments
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -232,6 +234,80 @@ func TestValidateRevision(t *testing.T) {
 	should.True(t, valid)
 
 	valid, err = revisionValidInTree(ctx, mockSDKClient, &falseObject)
+	must.Equal(t, nil, err)
+	should.False(t, valid)
+}
+
+// TestSortHashes tests that the sortHashes function returns different hashes in the
+// correct order.
+func TestSortHashes(t *testing.T) {
+	hash1 := sha256.Sum256([]byte{1})
+	hash2 := sha256.Sum256([]byte{2})
+	hash3 := sha256.Sum256([]byte{3})
+	hash4 := sha256.Sum256([]byte{4})
+	concatenated21 := append(hash2[:], hash1[:]...)
+	hash12 := sha256.Sum256(concatenated21)
+	concatenated34 := append(hash4[:], hash3[:]...)
+	hash34 := sha256.Sum256(concatenated34)
+
+	// Ensure result order is as expected for these hashes
+	hash2ShouldBeFirst, _ := sortHashes(hash1[:], hash2[:])
+	should.Equal(t, [][]byte{hash2[:], hash1[:]}, hash2ShouldBeFirst)
+	should.NotEqual(t, [][]byte{hash1[:], hash2[:]}, hash2ShouldBeFirst)
+
+	hash4ShouldBeFirst, _ := sortHashes(hash3[:], hash4[:])
+	should.Equal(t, [][]byte{hash4[:], hash3[:]}, hash4ShouldBeFirst)
+	should.NotEqual(t, [][]byte{hash3[:], hash4[:]}, hash4ShouldBeFirst)
+
+	hash34ShouldBeFirst, _ := sortHashes(hash34[:], hash12[:])
+	should.Equal(t, [][]byte{hash34[:], hash12[:]}, hash34ShouldBeFirst)
+	should.NotEqual(t, [][]byte{hash12[:], hash34[:]}, hash34ShouldBeFirst)
+
+	// Same tests with different argument order to ensure it doesn't change results
+	argSwapHash2ShouldBeFirst, _ := sortHashes(hash2[:], hash1[:])
+	should.Equal(t, [][]byte{hash2[:], hash1[:]}, argSwapHash2ShouldBeFirst)
+	should.NotEqual(t, [][]byte{hash1[:], hash2[:]}, argSwapHash2ShouldBeFirst)
+
+	argSwapHash4ShouldBeFirst, _ := sortHashes(hash4[:], hash3[:])
+	should.Equal(t, [][]byte{hash4[:], hash3[:]}, argSwapHash4ShouldBeFirst)
+	should.NotEqual(t, [][]byte{hash3[:], hash4[:]}, argSwapHash4ShouldBeFirst)
+
+	argSwapHash34ShouldBeFirst, _ := sortHashes(hash12[:], hash34[:])
+	should.Equal(t, [][]byte{hash34[:], hash12[:]}, argSwapHash34ShouldBeFirst)
+	should.NotEqual(t, [][]byte{hash12[:], hash34[:]}, argSwapHash34ShouldBeFirst)
+}
+
+func TestVerifyHashSequence(t *testing.T) {
+	hash1 := sha256.Sum256([]byte{1})
+	hash2 := sha256.Sum256([]byte{2})
+	hash3 := sha256.Sum256([]byte{3})
+	hash4 := sha256.Sum256([]byte{4})
+	concatenated21 := append(hash2[:], hash1[:]...)
+	hash12 := sha256.Sum256(concatenated21)
+	concatenated34 := append(hash4[:], hash3[:]...)
+	hash34 := sha256.Sum256(concatenated34)
+	concatenatedDigest := append(hash34[:], hash12[:]...)
+	testDigest := sha256.Sum256(concatenatedDigest)
+	base64Digest := []byte(base64.StdEncoding.EncodeToString(testDigest[:]))
+	tipAddress := "1234"
+	testProofIonText := [][32]byte{hash1, hash34}
+
+	var (
+		trueInitialHash  qldbPaymentTransitionHistoryEntryHash = "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="
+		falseInitialHash qldbPaymentTransitionHistoryEntryHash = "dGVzdGVzdGVzdAo="
+	)
+
+	testDigestOutput := qldb.GetDigestOutput{
+		Digest:           base64Digest,
+		DigestTipAddress: &qldbTypes.ValueHolder{IonText: &tipAddress},
+		ResultMetadata:   middleware.Metadata{},
+	}
+
+	valid, err := verifyHashSequence(&testDigestOutput, trueInitialHash, testProofIonText)
+	must.Equal(t, nil, err)
+	should.True(t, valid)
+
+	valid, err = verifyHashSequence(&testDigestOutput, falseInitialHash, testProofIonText)
 	must.Equal(t, nil, err)
 	should.False(t, valid)
 }
