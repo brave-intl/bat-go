@@ -1,8 +1,6 @@
 package payments
 
 import (
-	"encoding/json"
-
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/google/uuid"
 )
@@ -10,11 +8,16 @@ import (
 var (
 	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	amount           = ion.MustParseDecimal("1.1")
-	status0, _       = json.Marshal(Transaction{State: Prepared, ID: &generatedUUID, Amount: amount})
-	status1, _       = json.Marshal(Transaction{State: Authorized, ID: &generatedUUID, Amount: amount})
-	status2, _       = json.Marshal(Transaction{State: Pending, ID: &generatedUUID, Amount: amount})
-	status3, _       = json.Marshal(Transaction{State: Paid, ID: &generatedUUID, Amount: amount})
-	status4, _       = json.Marshal(Transaction{State: Failed, ID: &generatedUUID, Amount: amount})
+	txn0             = Transaction{State: Prepared, ID: &generatedUUID, Amount: amount}
+	txn1             = Transaction{State: Authorized, ID: &generatedUUID, Amount: amount}
+	txn2             = Transaction{State: Pending, ID: &generatedUUID, Amount: amount}
+	txn3             = Transaction{State: Paid, ID: &generatedUUID, Amount: amount}
+	txn4             = Transaction{State: Failed, ID: &generatedUUID, Amount: amount}
+	status0, _       = txn0.MarshalJSON()
+	status1, _       = txn1.MarshalJSON()
+	status2, _       = txn2.MarshalJSON()
+	status3, _       = txn3.MarshalJSON()
+	status4, _       = txn4.MarshalJSON()
 )
 
 var transactionHistorySetTrue = [][]qldbPaymentTransitionHistoryEntry{

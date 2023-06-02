@@ -154,9 +154,16 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 		Alias: (*Alias)(t),
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal transaction: %w", err)
 	}
-	t.Amount = toIonDecimal(aux.Amount)
+	if aux.Amount == nil {
+		return fmt.Errorf("missing required transaction value: Amount")
+	}
+	parsedAmount, err := ion.ParseDecimal(aux.Amount.String())
+	if err != nil {
+		return fmt.Errorf("failed to parse transaction Amount into ion decimal: %w", err)
+	}
+	t.Amount = parsedAmount
 	return nil
 }
 
@@ -177,11 +184,6 @@ func (t *Transaction) nextStateValid(nextState TransactionState) bool {
 		return false
 	}
 	return true
-}
-
-func toIonDecimal(v *decimal.Decimal) *ion.Decimal {
-	// @TODO: Do we want to panic here?
-	return ion.MustParseDecimal(v.String())
 }
 
 func fromIonDecimal(v *ion.Decimal) *decimal.Decimal {

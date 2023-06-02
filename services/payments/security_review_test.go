@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/google/uuid"
@@ -102,10 +103,12 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	must.Equal(t, nil, err)
 	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	must.Equal(t, nil, err)
-	testData := Transaction{
-		State: Prepared,
+	testTransaction := Transaction{
+		State:  Prepared,
+		ID:     &idempotencyKey,
+		Amount: ion.MustParseDecimal("1.1"),
 	}
-	marshaledData, err := json.Marshal(testData)
+	marshaledData, err := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
@@ -141,7 +144,6 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		must.Equal(t, nil, err)
 		valid, err := validateTransactionHistory(ctx, &idempotencyKey, namespaceUUID, transactionHistorySet, mockKMS)
 		must.Equal(t, nil, err)
 		should.True(t, valid)
@@ -272,10 +274,14 @@ func TestGenerateAllValidTransitions(t *testing.T) {
 // TestQLDBSignedInteractions mocks QLDB to test signing and verifying of records that are
 // persisted into QLDB
 func TestQLDBSignedInteractions(t *testing.T) {
-	testData := Transaction{
-		State: Prepared,
+	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
+	must.Equal(t, nil, err)
+	testTransaction := Transaction{
+		State:  Prepared,
+		ID:     &idempotencyKey,
+		Amount: ion.MustParseDecimal("1.1"),
 	}
-	marshaledData, err := json.Marshal(testData)
+	marshaledData, err := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
@@ -327,7 +333,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	}
 
 	// First write should succeed because Verify returns true
-	_, err = service.WriteTransaction(ctx, &testData)
+	_, err = service.WriteTransaction(ctx, &testTransaction)
 	should.NoError(t, err)
 	// Second write of the same object should fail because Verify returns false
 	// _, err := WriteTransaction(ctx, mockDriver, nil, mockKMS, &testData)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/google/uuid"
 
@@ -68,16 +69,17 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
 	must.Equal(t, nil, err)
-	idempotencyKey, err := uuid.Parse("f209929e-0ba9-5f56-a336-5b981bdaaaaf")
+	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	must.Equal(t, nil, err)
 	geminiStateMachine := GeminiMachine{}
 
 	testTransaction := Transaction{
-		State: Prepared,
-		ID:    &idempotencyKey,
+		State:  Prepared,
+		ID:     &idempotencyKey,
+		Amount: ion.MustParseDecimal("1.1"),
 	}
 
-	marshaledData, err := json.Marshal(testTransaction)
+	marshaledData, _ := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
 	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
 		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
@@ -125,7 +127,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Authorized state
 	testTransaction.State = Prepared
-	marshaledData, _ = json.Marshal(testTransaction)
+	marshaledData, _ = testTransaction.MarshalJSON()
 	mockTransitionHistory.Data.Data = marshaledData
 	geminiStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
@@ -134,7 +136,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Pending state
 	testTransaction.State = Authorized
-	marshaledData, _ = json.Marshal(testTransaction)
+	marshaledData, _ = testTransaction.MarshalJSON()
 	mockTransitionHistory.Data.Data = marshaledData
 	geminiStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
@@ -143,7 +145,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Paid state
 	testTransaction.State = Pending
-	marshaledData, _ = json.Marshal(testTransaction)
+	marshaledData, _ = testTransaction.MarshalJSON()
 	mockTransitionHistory.Data.Data = marshaledData
 	geminiStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
