@@ -212,8 +212,6 @@ const (
 	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
 	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
 	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
-	// LogWriterKey - the context key for getting the zerolog writer
-	LogWriterKey CTXKey = "log_writer_key"
 	// PaymentsKMSWrapperCTXKey - the context key for getting the kms wrapper key
 	PaymentsKMSWrapperCTXKey CTXKey = "payments_kms_wrapper"
 	// AWSRegionCTXKey - reverse proxy address for egress traffic

@@ -13,24 +13,19 @@ import (
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
-	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
-	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/google/uuid"
 	"github.com/hashicorp/vault/shamir"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
+	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
@@ -39,6 +34,7 @@ type Service struct {
 	// concurrent safe
 	datastore  wrappedQldbDriverAPI
 	custodians map[string]provider.Custodian
+	awsCfg     aws.Config
 
 	baseCtx          context.Context
 	secretMgr        appsrv.SecretManager
@@ -68,10 +64,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	logger.Debug().Msgf("document: %+v", document)
 
 	// get the aws configuration loaded
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to load aws configuration: %w", err)
-	}
+	cfg := s.awsCfg
 
 	// TODO: get the pcr values for the condition from the document ^^
 	imageSha384 := ""
@@ -123,41 +116,61 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 func NewService(ctx context.Context) (context.Context, *Service, error) {
 	var logger = logging.Logger(ctx, "payments.NewService")
 
+	egressAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
+	if !ok {
+		logger.Error().Msg("no egress addr for payments service")
+		return nil, nil, errors.New("no egress addr for payments service")
+	}
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok {
+		region = "us-west-2"
+	}
+
+	_, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
+	if err != nil {
+		logger.Error().Msg("no egress addr for payments service")
+		return nil, nil, errors.New("no egress addr for payments service")
+	}
+
 	service := &Service{
 		baseCtx: ctx,
 		//secretMgr: &awsClient{},
 	}
 
 	if err := service.configureKMSKey(ctx); err != nil {
-		logger.Fatal().Msg("could not create kms secret decryption key")
+		// FIXME: handle create error better
+		logger.Error().Err(err).Msg("could not create kms secret decryption key")
 	}
 
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Msg("could not configure datastore")
 	}
 
-	// set up our custodian integrations
-	upholdCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Uphold})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create uphold custodian")
-		return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
-	}
-	geminiCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Gemini})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create gemini custodian")
-		return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
-	}
-	bitflyerCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Bitflyer})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create bitflyer custodian")
-		return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
-	}
+	/*
+			FIXME
+		// setup our custodian integrations
+		upholdCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Uphold})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create uphold custodian")
+			return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
+		}
+		geminiCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Gemini})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create gemini custodian")
+			return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
+		}
+		bitflyerCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Bitflyer})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create bitflyer custodian")
+			return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
+		}
 
-	service.custodians = map[string]provider.Custodian{
-		provider.Uphold:   upholdCustodian,
-		provider.Gemini:   geminiCustodian,
-		provider.Bitflyer: bitflyerCustodian,
-	}
+		service.custodians = map[string]provider.Custodian{
+			provider.Uphold:   upholdCustodian,
+			provider.Gemini:   geminiCustodian,
+			provider.Bitflyer: bitflyerCustodian,
+		}
+	*/
 
 	return ctx, service, nil
 }
@@ -415,94 +428,6 @@ func isQLDBReady(ctx context.Context) bool {
 		Str("qldbArn", qldbArn).
 		Msg("service is not configured to access qldb")
 	return false
-}
-
-// newQLDBDatastore - create a new qldbDatastore
-func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
-	logger := logging.Logger(ctx, "payments.newQLDBDatastore")
-
-	if !isQLDBReady(ctx) {
-		return nil, ErrNotConfiguredYet
-	}
-
-	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("failed to get egress proxy for qldb")
-	}
-
-	// decrypt the aws region
-	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	if !ok {
-		err := errors.New("empty aws region")
-		logger.Error().Err(err).Str("region", region).Msg("aws region")
-		return nil, err
-	}
-
-	// qldb role arn
-	qldbRoleArn, ok := ctx.Value(appctx.PaymentsQLDBRoleArnCTXKey).(string)
-	if !ok {
-		err := errors.New("empty qldb role arn")
-		logger.Error().Err(err).Str("qldbRoleArn", qldbRoleArn).Msg("qldb role arn empty")
-		return nil, err
-	}
-
-	// qldb ledger name
-	qldbLedgerName, ok := ctx.Value(appctx.PaymentsQLDBLedgerNameCTXKey).(string)
-	if !ok {
-		err := errors.New("empty qldb ledger name")
-		logger.Error().Err(err).Str("qldbLedgerName", qldbLedgerName).Msg("qldb ledger name empty")
-		return nil, err
-	}
-
-	logger.Info().
-		Str("egress", egressProxyAddr).
-		Str("region", region).
-		Str("qldbRoleArn", qldbRoleArn).
-		Str("qldbLedgerName", qldbLedgerName).
-		Msg("qldb details")
-
-	cfg, err := appaws.NewAWSConfig(ctx, egressProxyAddr, region)
-	if err != nil {
-		logger.Error().Err(err).Str("region", region).Msg("aws config failed")
-		return nil, fmt.Errorf("failed to create aws config: %w", err)
-	}
-	awsCfg, ok := cfg.(aws.Config)
-	if !ok {
-		return nil, fmt.Errorf("invalid aws configuration: %w", err)
-	}
-
-	// assume correct role for qldb access
-	creds := stscreds.NewAssumeRoleProvider(sts.NewFromConfig(awsCfg), qldbRoleArn)
-	awsCfg.Credentials = aws.NewCredentialsCache(creds)
-
-	client := qldbsession.NewFromConfig(awsCfg)
-	// create our qldb driver
-	driver, err := qldbdriver.New(
-		qldbLedgerName, // the ledger to attach to
-		client,         // the qldb session
-		func(options *qldbdriver.DriverOptions) {
-			// debug mode?
-			debug, err := appctx.GetBoolFromContext(ctx, appctx.DebugLoggingCTXKey)
-			if err == nil && debug {
-				options.LoggerVerbosity = qldbdriver.LogDebug
-			} else {
-				// default to info
-				options.LoggerVerbosity = qldbdriver.LogInfo
-			}
-		})
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup the qldb driver: %w", err)
-	}
-	// set up a retry policy
-	// Configuring an exponential backoff strategy with base of 20 milliseconds
-	retryPolicy2 := qldbdriver.RetryPolicy{
-		MaxRetryLimit: 2,
-		Backoff:       qldbdriver.ExponentialBackoffStrategy{SleepBase: 20, SleepCap: 4000}}
-
-	// Overrides the retry policy set by the driver instance
-	driver.SetRetryPolicy(retryPolicy2)
-
-	return driver, nil
 }
 
 func (t *Transaction) shouldDryRun() bool {

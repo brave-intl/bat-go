@@ -32,6 +32,8 @@ func init() {
 	NitroServeCmd.PersistentFlags().String("egress-address", "", "vsock address for open proxy to bind on")
 	// log-address - sets the vosck address for the log server to listen on
 	NitroServeCmd.PersistentFlags().String("log-address", "", "vsock address for log server to bind on")
+	// enclave decrypt key template secret
+	NitroServeCmd.PersistentFlags().String("enclave-decrypt-key-template-secret", "", "the template secret which has the decrypt key policy")
 
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
 	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
@@ -44,8 +46,8 @@ func init() {
 	rootcmd.Must(viper.BindEnv("log-address", "LOG_ADDRESS"))
 
 	// enclave decrypt key template used to create decryption key in enclave
-	rootcmd.Must(viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret")))
-	rootcmd.Must(viper.BindEnv("enclave-decrypt-key-template-secret", "ENCLAVE_DECRYPT_KEY_TEMPLATE_SECRET"))
+	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
+	viper.BindEnv("enclave-decrypt-key-template-secret", "ENCLAVE_DECRYPT_KEY_TEMPLATE_SECRET")
 
 	NitroServeCmd.AddCommand(OutsideNitroServeCmd)
 	NitroServeCmd.AddCommand(InsideNitroServeCmd)
@@ -78,11 +80,13 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 
 	logaddr := viper.GetString("log-address")
 	writer := nitro.NewVsockWriter(logaddr)
+
 	ctx = context.WithValue(ctx, appctx.LogWriterCTXKey, writer)
 	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
 	ctx = context.WithValue(ctx, appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey, viper.GetString("enclave-decrypt-key-template-secret"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
+	logger.Info().Msg("starting payments service")
 	// setup the service now
 	ctx, s, err := payments.NewService(ctx)
 	if err != nil {
@@ -96,7 +100,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// setup listener
 	addr := viper.GetString("address")
 	port, err := strconv.ParseUint(strings.Split(addr, ":")[1], 10, 32)
-	if err != nil || port != 0 {
+	if err != nil || port == 0 {
 		// panic if there is an error, or if the port is too large to fit in uint32
 		logger.Panic().Err(err).Msg("invalid --address")
 	}
