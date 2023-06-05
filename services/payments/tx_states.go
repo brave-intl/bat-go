@@ -103,6 +103,8 @@ func GetAllValidTransitionSequences() [][]TransactionState {
 	return recurseTransitionResolution("prepared", []TransactionState{})
 }
 
+// recurseTransitionResolution returns the list of valid transition paths that are
+// possible for a given state.
 func recurseTransitionResolution(
 	state TransactionState,
 	currentTree []TransactionState,

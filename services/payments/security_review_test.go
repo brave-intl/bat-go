@@ -317,8 +317,8 @@ Generate all valid transition sequences and ensure that this test contains the e
 valid transition sequences. The purpose of this test is to alert us if outside changes
 impact the set of valid transitions.
 */
-func TestGenerateAllValidTransitions(t *testing.T) {
-	allValidTransitionSequences := GetAllValidTransitionSequences()
+func TestRecurseTransitionResolution(t *testing.T) {
+	allValidTransitionSequences := recurseTransitionResolution("prepared", []TransactionState{})
 	knownValidTransitionSequences := [][]TransactionState{
 		{Prepared, Authorized, Pending, Paid},
 		{Prepared, Authorized, Pending, Failed},
