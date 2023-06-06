@@ -9,6 +9,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/google/uuid"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -69,6 +70,14 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		// if dryrun and prepare we will fail here
 		if req.DryRun != nil {
 			if *req.DryRun != prepareFailure {
+				// populate document id on transaction
+				req.DocumentID = uuid.New().String()
+				attestation, err := nitro.Attest([]byte(uuid.New().String()), []byte(req.DocumentID), []byte{})
+				if err != nil {
+					logger.Warn().Str("request", fmt.Sprintf("%+v", req)).Err(err).Msg("failed attestation")
+					return handlers.WrapError(errors.New("dry run failed to attest"), "Error in request body", http.StatusInternalServerError)
+				}
+				req.AttestationDocument = string(attestation)
 				// return a success
 				return handlers.RenderContent(r.Context(), req, w, http.StatusOK)
 			}
