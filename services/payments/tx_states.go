@@ -54,28 +54,6 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 ) (*Transaction, error) {
-	namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
-	// Make sure the transaction we have has an ID that matches its contents before we check if it exists
-	generatedID, err := machine.GenerateTransactionID(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.GetTransactionID(), err)
-	}
-	if generatedID != machine.GetTransactionID() {
-		return nil, errors.New("provided idempotencyKey does not match transaction")
-	}
-	// Check if the transaction exists so that we know whether to create it or progress it
-	transaction, err := machine.GetService().GetTransactionByID(ctx, generatedID)
-	if err != nil {
-		// If the transaction doesn't exist in the database, prepare it
-		var notFound *QLDBReocrdNotFoundError
-		if errors.As(err, &notFound) {
-			return machine.Prepare(ctx)
-		}
-		return nil, fmt.Errorf("failed to get transaction from QLDB: %w", err)
-	}
-	// Set the machine's transaction to the values retrieved from the database. This helps avoid cases where the State
-	// in the transaction provided by the client is out of date with the database
-	machine.setTransaction(transaction)
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.GetState() {
 	case Prepared:
@@ -91,6 +69,33 @@ func Drive[T TxStateMachine](
 	default:
 		return nil, errors.New("invalid transition state")
 	}
+}
+
+// populateInitialTransaction creates the transaction in the database and calls the Prepare
+// method on it. When creating the initial object in the database for a transaction we must
+// verify that the transaction does not already exist. Once a transaction exists, we alawys
+// refer to it by DocumentID and progress it with Drive.
+func populateInitialTransaction[T TxStateMachine](ctx context.Context, machine T) (*Transaction, error) {
+	namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
+	// Make sure the transaction we have has an ID that matches its contents before we check if it exists
+	generatedID, err := machine.GenerateTransactionID(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.GetTransactionID(), err)
+	}
+	if generatedID != machine.GetTransactionID() {
+		return nil, errors.New("provided idempotencyKey does not match transaction")
+	}
+	// Check if the transaction exists so that we know whether to create it
+	transaction, err := machine.GetService().GetTransactionByID(ctx, generatedID)
+	if err != nil {
+		// If the transaction doesn't exist in the database, prepare it
+		var notFound *QLDBReocrdNotFoundError
+		if errors.As(err, &notFound) {
+			return machine.Prepare(ctx)
+		}
+		return nil, fmt.Errorf("failed to get transaction from QLDB: %w", err)
+	}
+	return nil, fmt.Errorf("transaction %s already exists in QLDB and cannot be prepared", transaction.ID)
 }
 
 // GetValidTransitions returns valid transitions

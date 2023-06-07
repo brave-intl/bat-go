@@ -38,9 +38,15 @@ type Transaction struct {
 	AttestationDocument string           `json:"attestation,omitempty"`
 	PayoutID            string           `json:"payoutId" valid:"required"`
 	Signature           string           `json:"signature" valid:"required"` // KMS signature only enclave can sign
+	Authorizations      []Authorization  `json:"authorizations"`
 	PublicKey           string           `json:"publicKey" valid:"required"` // KMS signature only enclave can sign
 	Currency            string           `json:"currency"`
 	DryRun              *string          `json:"dryRun"` // determines dry-run
+}
+
+type Authorization struct {
+	KeyID      string `json:"keyId" valid:"required"`
+	DocumentID string `json:"documentId" valid:"required"`
 }
 
 // qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for qldbPaymentTransitionHistoryEntry
@@ -270,7 +276,7 @@ func (s *Service) setupLedger(ctx context.Context) error {
 func (s *Service) progressTransacton(ctx context.Context, transaction *Transaction) (Transaction, error) {
 	stateMachine, err := StateMachineFromTransaction(transaction, s)
 	if err != nil {
-		return Transaction{}, fmt.Errorf("failed to insert transaction: %w", err)
+		return Transaction{}, fmt.Errorf("failed to create stateMachine: %w", err)
 	}
 
 	// Only drive the Transaction into the targetState
@@ -285,7 +291,15 @@ func (s *Service) progressTransacton(ctx context.Context, transaction *Transacti
 
 // PrepareTransaction - perform a qldb insertion on the transaction
 func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
-	return s.progressTransacton(ctx, transaction)
+	stateMachine, err := StateMachineFromTransaction(transaction, s)
+	if err != nil {
+		return Transaction{}, fmt.Errorf("failed to create state machine: %w", err)
+	}
+	txn, err := populateInitialTransaction(ctx, stateMachine)
+	if err != nil {
+		return Transaction{}, fmt.Errorf("failed to prepare transaction: %w", err)
+	}
+	return *txn, nil
 }
 
 // newQLDBDatastore - create a new qldbDatastore
@@ -457,28 +471,40 @@ func (s Service) UpdateTransactionsState(ctx context.Context, state string, tran
 	return nil
 }
 
-// AuthorizeTransaction - Add an Authorization for the Transaction
+// AuthorizeTransaction - Add an Authorization for the Transaction and attempt to Drive
+// the Transaction forward.
 func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transaction Transaction) error {
-	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		// for all the transactions load up a check to see if this transaction has already existed
-		// or not, then perform the insertion of the records.
-		auth := map[string]string{
-			"keyID":      keyID,
-			"documentId": transaction.DocumentID,
+	// TODO CHECK SIGNATURE BEFORE ALLOWING PROGRESS
+	fetchedTxn, err := s.GetTransactionFromDocID(ctx, transaction.DocumentID)
+	if err != nil {
+		return fmt.Errorf("failed to get transaction %s by document ID %s: %w", transaction.ID, transaction.DocumentID, err)
+	}
+	auth := Authorization{
+		KeyID:      keyID,
+		DocumentID: transaction.DocumentID,
+	}
+	keyHasNotYetSigned := true
+	for _, authorization := range fetchedTxn.Authorizations {
+		if authorization.KeyID == auth.KeyID {
+			keyHasNotYetSigned = false
 		}
-		_, err := txn.Execute("INSERT INTO authorizations ?", auth)
+	}
+	if keyHasNotYetSigned {
+		fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
+		writtenTxn, err := s.WriteTransaction(ctx, fetchedTxn)
 		if err != nil {
-			return nil, fmt.Errorf("failed to insert tx authorization: %+v due to: %w", auth, err)
+			return fmt.Errorf("failed to update transaction: %w", err)
 		}
-		return nil, nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to update transactions: %w", err)
+		if len(writtenTxn.Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
+			transaction, err = s.progressTransacton(ctx, &transaction)
+			if err != nil {
+				return fmt.Errorf("failed to progress transaction: %w", err)
+			}
+		}
+	} else {
+		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)
 	}
-	transaction, err = s.progressTransacton(ctx, &transaction)
-	if err != nil {
-		return fmt.Errorf("failed to progress transaction: %w", err)
-	}
+
 	return nil
 }
 
