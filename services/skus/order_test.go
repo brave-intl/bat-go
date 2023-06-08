@@ -9,13 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brave-intl/bat-go/libs/test"
-
 	"github.com/asaskevich/govalidator"
+	"github.com/stretchr/testify/suite"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/test"
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
-	"github.com/stretchr/testify/suite"
 )
 
 type OrderTestSuite struct {
@@ -29,7 +30,7 @@ func TestOrderTestSuite(t *testing.T) {
 
 func (suite *OrderTestSuite) SetupSuite() {
 	govalidator.SetFieldsRequiredByDefault(true)
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -59,7 +60,7 @@ func (suite *OrderTestSuite) TearDownTest() {
 func (suite *OrderTestSuite) CleanDB() {
 	tables := []string{"api_keys"}
 
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
