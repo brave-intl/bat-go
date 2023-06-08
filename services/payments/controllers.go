@@ -77,7 +77,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 					logger.Warn().Str("request", fmt.Sprintf("%+v", req)).Err(err).Msg("failed attestation")
 					return handlers.WrapError(errors.New("dry run failed to attest"), "Error in request body", http.StatusInternalServerError)
 				}
-				req.AttestationDocument = string(attestation)
+				req.AttestationDocument = base64.StdEncoding.EncodeToString(attestation)
 				// return a success
 				return handlers.RenderContent(r.Context(), req, w, http.StatusOK)
 			}

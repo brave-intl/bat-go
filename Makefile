@@ -98,6 +98,12 @@ docker-reproducible:
 		--no-push --tarPath /workspace/bat-go-repro.tar \
 		--destination bat-go-repro:latest --context dir:///workspace/ && cat bat-go-repro.tar | docker load
 
+docker-payments:
+	docker rmi -f bat-go/payments:latest
+	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) --target payments -t bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) .
+	docker tag bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) bat-go/payments:latest
+
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d
