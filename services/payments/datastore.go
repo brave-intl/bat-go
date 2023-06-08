@@ -31,7 +31,7 @@ type Transaction struct {
 	Custodian           string       `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
 	State               string       `json:"state,omitempty" ion:"state"`
 	DocumentID          string       `json:"documentId,omitempty" ion:"id"`
-	AttestationDocument string       `json:"attestation,omitempty" ion:"-"`
+	AttestationDocument string       `json:"attestationDocument,omitempty" ion:"-"`
 	Signature           string       `json:"-" ion:"signature"` // KMS signature only enclave can sign
 	PublicKey           string       `json:"-" ion:"publicKey"` // KMS signature only enclave can sign
 	DryRun              *string      `json:"dryRun" ion:"-"`    // determines dry-run
