@@ -9,6 +9,8 @@ if [ "${2}" != "" ]; then
 fi
 
 and_run="${3}"
+run_cpu_count="${4}"
+run_memory="${5}"
 
 set -eux
 
@@ -33,6 +35,6 @@ fi
 nitro-cli build-enclave --docker-uri ${docker_image_tag} --output-file nitro-image.eif
 
 if [ "${and_run}" == "run" ]; then 
-  /enclave/run.sh "${service}"
+  /enclave/run.sh "${service}" ${run_cpu_count} ${run_memory}
 fi
 
