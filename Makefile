@@ -39,6 +39,7 @@ mock:
 	cd libs && mockgen -source=./clients/gemini/client.go -destination=clients/gemini/mock/mock.go -package=mock_gemini
 	cd libs && mockgen -source=./clients/bitflyer/client.go -destination=clients/bitflyer/mock/mock.go -package=mock_bitflyer
 	cd libs && mockgen -source=./clients/coingecko/client.go -destination=clients/coingecko/mock/mock.go -package=mock_coingecko
+	cd libs && mockgen -source=./clients/stripe/client.go -destination=clients/stripe/mock/mock.go -package=mock_stripe
 	cd libs && mockgen -source=./backoff/retrypolicy/retrypolicy.go -destination=backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
 	cd libs && mockgen -source=./aws/s3.go -destination=aws/mock/mock.go -package=mockaws
 	cd libs && mockgen -source=./kafka/dialer.go -destination=kafka/mock/dialer.go -package=mockdialer
@@ -72,6 +73,8 @@ instrumented:
 	sed -i'bak' 's/bitflyer.//g' libs/clients/bitflyer/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/coingecko -i Client -t ../.prom-gowrap.tmpl -o ./clients/coingecko/instrumented_client.go
 	sed -i'bak' 's/coingecko.//g' libs/clients/coingecko/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/stripe -i Client -t ../.prom-gowrap.tmpl -o ./clients/stripe/instrumented_client.go
+	sed -i'bak' 's/stripe.//g' libs/clients/stripe/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' libs/clients/cbr/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' libs/clients/ratios/instrumented_client.go
@@ -79,6 +82,7 @@ instrumented:
 	sed -i'bak' 's/client_duration_seconds/gemini_client_duration_seconds/g' libs/clients/gemini/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/bitflyer_client_duration_seconds/g' libs/clients/bitflyer/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/coingecko_client_duration_seconds/g' libs/clients/coingecko/instrumented_client.go
+	sed -i'bak' 's/client_duration_seconds/stripe_client_duration_seconds/g' libs/clients/stripe/instrumented_client.go
 
 %-docker: docker
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \

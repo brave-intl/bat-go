@@ -189,6 +189,12 @@ const (
 	// ParametersTransitionCTXKey - the context key for getting the vbat deadline
 	ParametersTransitionCTXKey CTXKey = "parameters_transition"
 
+	// StripeAccessTokenCTXKey - the context key for the Stripe secret key
+	StripeOnrampSecretKeyCTXKey CTXKey = "stripe_onramp_secret_key"
+
+	// StripeServerCTXKey - the context key for the Stripe  server
+	StripeOnrampServerCTXKey CTXKey = "stripe_onramp_server"
+
 	// Nitro
 	// LogWriterCTXKey - the context key for getting the log writer
 	LogWriterCTXKey CTXKey = "log_writer"
