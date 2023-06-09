@@ -240,6 +240,14 @@ func validateTransactionHistory(
 		unmarshaledTransactionSet = append(unmarshaledTransactionSet, transaction)
 	}
 	for i, transaction := range unmarshaledTransactionSet {
+		// Transitions must always start at 0
+		if i == 0 {
+			if transaction.State != Prepared {
+				return false, errors.New("initial state is not valid")
+			}
+			continue
+		}
+
 		// Before starting State validation, check that keys and signatures for the record are valid.
 		// GenerateIdempotencyKey will verify that the ID is internally consistent within the Transaction.
 		dataIdempotencyKey, err := transaction.GenerateIdempotencyKey(namespace)
@@ -265,14 +273,6 @@ func validateTransactionHistory(
 		}
 
 		// Now that the data itself is verified, proceed to check transition States.
-		transactionState := transaction.State
-		// Transitions must always start at 0
-		if i == 0 {
-			if transactionState != Prepared {
-				return false, errors.New("initial state is not valid")
-			}
-			continue
-		}
 		previousTransitionData := unmarshaledTransactionSet[i-1]
 		previousIdempotencyKey, err := previousTransitionData.GenerateIdempotencyKey(namespace)
 		if err != nil {
@@ -283,7 +283,7 @@ func validateTransactionHistory(
 			return false, fmt.Errorf("idempotencyKeys in transition history do not match: %s, %s", idempotencyKey.String(), previousIdempotencyKey.String())
 		}
 		// New transaction state should be present in the list of valid next states for the "previous" (current) state.
-		if !previousTransitionData.nextStateValid(transactionState) {
+		if !previousTransitionData.nextStateValid(transaction.State) {
 			return false, errors.New("invalid state transition")
 		}
 	}
