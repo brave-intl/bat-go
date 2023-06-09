@@ -34,6 +34,33 @@ var Transitions = map[TransactionState][]TransactionState{
 	Failed:     {},
 }
 
+type baseStateMachine struct {
+	transaction *Transaction
+	service     *Service
+}
+
+func (s *baseStateMachine) setTransaction(transaction *Transaction) {
+	s.transaction = transaction
+}
+func (s *baseStateMachine) setService(service *Service) {
+	s.service = service
+}
+func (s *baseStateMachine) GetState() TransactionState {
+	return s.transaction.State
+}
+func (s *baseStateMachine) GetTransaction() *Transaction {
+	return s.transaction
+}
+func (s *baseStateMachine) GetTransactionID() *uuid.UUID {
+	return s.transaction.ID
+}
+func (s *baseStateMachine) GetService() *Service {
+	return s.service
+}
+func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
+	return s.transaction.GenerateIdempotencyKey(namespace)
+}
+
 // StateMachineFromTransaction returns a state machine when provided a transaction
 func StateMachineFromTransaction(transaction *Transaction, service *Service) (TxStateMachine, error) {
 	var machine TxStateMachine
@@ -57,7 +84,10 @@ func Drive[T TxStateMachine](
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.GetState() {
 	case Prepared:
-		return machine.Authorize(ctx)
+		if len(machine.GetTransaction().Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
+			return machine.Authorize(ctx)
+		}
+		return nil, &InsufficientAuthorizationsError{}
 	case Authorized:
 		return machine.Pay(ctx)
 	case Pending:

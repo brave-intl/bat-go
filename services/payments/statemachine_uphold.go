@@ -3,14 +3,11 @@ package payments
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
 )
 
 // UpholdMachine is an implementation of TxStateMachine for uphold's use-case
 type UpholdMachine struct {
-	transaction *Transaction
-	service     *Service
+	baseStateMachine
 }
 
 // NewUpholdMachine returns an UpholdMachine with values specified
@@ -19,36 +16,6 @@ func NewUpholdMachine(transaction *Transaction, service *Service) *UpholdMachine
 	machine.setService(service)
 	machine.setTransaction(transaction)
 	return &machine
-}
-
-// setTransaction assigns the transaction field in the UpholdMachine to the specified Transaction
-func (um *UpholdMachine) setTransaction(transaction *Transaction) {
-	um.transaction = transaction
-}
-
-// setConnection assigns the connection field in the UpholdMachine to the specified wrappedQldbDriverAPI
-func (um *UpholdMachine) setService(service *Service) {
-	um.service = service
-}
-
-// GetState returns the state of the machine's associated transaction
-func (um *UpholdMachine) GetState() TransactionState {
-	return um.transaction.State
-}
-
-// GetService returns the service associated with the machine
-func (um *UpholdMachine) GetService() *Service {
-	return um.service
-}
-
-// GetTransactionID returns the ID that is on the associated transaction
-func (um *UpholdMachine) GetTransactionID() *uuid.UUID {
-	return um.transaction.ID
-}
-
-// GenerateTransactionID returns an ID generated from the values of the transaction
-func (um *UpholdMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
-	return um.transaction.GenerateIdempotencyKey(namespace)
 }
 
 // Prepare implements TxStateMachine for uphold machine

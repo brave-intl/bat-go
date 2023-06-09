@@ -3,14 +3,11 @@ package payments
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
 )
 
 // GeminiMachine is an implementation of TxStateMachine for Gemini's use-case
 type GeminiMachine struct {
-	transaction *Transaction
-	service     *Service
+	baseStateMachine
 }
 
 // NewGeminiMachine returns an GeminiMachine with values specified
@@ -19,36 +16,6 @@ func NewGeminiMachine(transaction *Transaction, service *Service) *GeminiMachine
 	machine.setService(service)
 	machine.setTransaction(transaction)
 	return &machine
-}
-
-// setTransaction assigns the transaction field in the GeminiMachine to the specified Transaction
-func (gm *GeminiMachine) setTransaction(transaction *Transaction) {
-	gm.transaction = transaction
-}
-
-// setConnection assigns the connection field in the GeminiMachine to the specified wrappedQldbDriverAPI
-func (gm *GeminiMachine) setService(service *Service) {
-	gm.service = service
-}
-
-// GetState returns the state of the machine's associated transaction
-func (gm *GeminiMachine) GetState() TransactionState {
-	return gm.transaction.State
-}
-
-// GetService returns the service associated with the machine
-func (gm *GeminiMachine) GetService() *Service {
-	return gm.service
-}
-
-// GetTransactionID returns the ID that is on the associated transaction
-func (gm *GeminiMachine) GetTransactionID() *uuid.UUID {
-	return gm.transaction.ID
-}
-
-// GenerateTransactionID returns an ID generated from the values of the transaction
-func (gm *GeminiMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
-	return gm.transaction.GenerateIdempotencyKey(namespace)
 }
 
 // Prepare implements TxStateMachine for the Gemini machine

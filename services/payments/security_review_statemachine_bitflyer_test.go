@@ -71,14 +71,16 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
 	must.Equal(t, nil, err)
-	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
+	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Equal(t, nil, err)
 	bitflyerStateMachine := BitflyerMachine{}
 
 	testTransaction := Transaction{
-		State:  Prepared,
-		ID:     &idempotencyKey,
-		Amount: ion.MustParseDecimal("1.1"),
+		State:          Prepared,
+		ID:             &idempotencyKey,
+		Amount:         ion.MustParseDecimal("1.1"),
+		Authorizations: []Authorization{{}, {}, {}},
+		Custodian:      "bitflyer",
 	}
 
 	marshaledData, _ := testTransaction.MarshalJSON()
@@ -123,7 +125,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	// the object does not yet exist.
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	newTransaction, err := Drive(ctx, &bitflyerStateMachine)
+	newTransaction, err := service.PrepareTransaction(ctx, &testTransaction)
 	must.Equal(t, nil, err)
 	should.Equal(t, Prepared, newTransaction.State)
 

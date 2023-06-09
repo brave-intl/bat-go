@@ -290,16 +290,16 @@ func (s *Service) progressTransacton(ctx context.Context, transaction *Transacti
 }
 
 // PrepareTransaction - perform a qldb insertion on the transaction
-func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
+func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transaction) (*Transaction, error) {
 	stateMachine, err := StateMachineFromTransaction(transaction, s)
 	if err != nil {
-		return Transaction{}, fmt.Errorf("failed to create state machine: %w", err)
+		return nil, fmt.Errorf("failed to create state machine: %w", err)
 	}
 	txn, err := populateInitialTransaction(ctx, stateMachine)
 	if err != nil {
-		return Transaction{}, fmt.Errorf("failed to prepare transaction: %w", err)
+		return nil, fmt.Errorf("failed to prepare transaction: %w", err)
 	}
-	return *txn, nil
+	return txn, nil
 }
 
 // newQLDBDatastore - create a new qldbDatastore
@@ -472,9 +472,9 @@ func (s Service) UpdateTransactionsState(ctx context.Context, state string, tran
 }
 
 // AuthorizeTransaction - Add an Authorization for the Transaction and attempt to Drive
-// the Transaction forward.
+// the Transaction forward. NOTE: This function assumes that the http signature has been
+// verified before running. This is achieved in the SubmitHandler middleware.
 func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transaction Transaction) error {
-	// TODO CHECK SIGNATURE BEFORE ALLOWING PROGRESS
 	fetchedTxn, err := s.GetTransactionFromDocID(ctx, transaction.DocumentID)
 	if err != nil {
 		return fmt.Errorf("failed to get transaction %s by document ID %s: %w", transaction.ID, transaction.DocumentID, err)
@@ -495,11 +495,14 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 		if err != nil {
 			return fmt.Errorf("failed to update transaction: %w", err)
 		}
-		if len(writtenTxn.Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
-			transaction, err = s.progressTransacton(ctx, &transaction)
-			if err != nil {
-				return fmt.Errorf("failed to progress transaction: %w", err)
+		transaction, err = s.progressTransacton(ctx, writtenTxn)
+		if err != nil {
+			// Insufficient authorizations is an expected state. Treat it as such.
+			var insufficientAuthorizations *InsufficientAuthorizationsError
+			if errors.As(err, &insufficientAuthorizations) {
+				return nil
 			}
+			return fmt.Errorf("failed to progress transaction: %w", err)
 		}
 	} else {
 		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)

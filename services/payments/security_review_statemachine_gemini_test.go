@@ -69,14 +69,16 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
 	must.Equal(t, nil, err)
-	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
+	idempotencyKey, err := uuid.Parse("5d8a3ebc-e622-5b8e-9090-9b4ea09e74c8")
 	must.Equal(t, nil, err)
 	geminiStateMachine := GeminiMachine{}
 
 	testTransaction := Transaction{
-		State:  Prepared,
-		ID:     &idempotencyKey,
-		Amount: ion.MustParseDecimal("1.1"),
+		State:          Prepared,
+		ID:             &idempotencyKey,
+		Amount:         ion.MustParseDecimal("1.1"),
+		Authorizations: []Authorization{{}, {}, {}},
+		Custodian:      "gemini",
 	}
 
 	marshaledData, _ := testTransaction.MarshalJSON()
@@ -121,7 +123,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	// the object does not yet exist.
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	newTransaction, err := Drive(ctx, &geminiStateMachine)
+	newTransaction, err := service.PrepareTransaction(ctx, &testTransaction)
 	must.Equal(t, nil, err)
 	should.Equal(t, Prepared, newTransaction.State)
 

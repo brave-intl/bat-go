@@ -3,14 +3,11 @@ package payments
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
 )
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case
 type BitflyerMachine struct {
-	transaction *Transaction
-	service     *Service
+	baseStateMachine
 }
 
 // NewBitflyerMachine returns an BitflyerMachine with values specified
@@ -19,36 +16,6 @@ func NewBitflyerMachine(transaction *Transaction, service *Service) *BitflyerMac
 	machine.setService(service)
 	machine.setTransaction(transaction)
 	return &machine
-}
-
-// setTransaction assigns the transaction field in the BitflyerMachine to the specified Transaction
-func (bm *BitflyerMachine) setTransaction(transaction *Transaction) {
-	bm.transaction = transaction
-}
-
-// setConnection assigns the connection field in the BitflyerMachine to the specified wrappedQldbDriverAPI
-func (bm *BitflyerMachine) setService(service *Service) {
-	bm.service = service
-}
-
-// GetState returns the state of the machine's associated transaction
-func (bm *BitflyerMachine) GetState() TransactionState {
-	return bm.transaction.State
-}
-
-// GetService returns the service associated with the machine
-func (bm *BitflyerMachine) GetService() *Service {
-	return bm.service
-}
-
-// GetTransactionID returns the ID that is on the associated transaction
-func (bm *BitflyerMachine) GetTransactionID() *uuid.UUID {
-	return bm.transaction.ID
-}
-
-// GenerateTransactionID returns an ID generated from the values of the transaction
-func (bm *BitflyerMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
-	return bm.transaction.GenerateIdempotencyKey(namespace)
 }
 
 // Prepare implements TxStateMachine for the Bitflyer machine. It will attempt to initialize a record in QLDB

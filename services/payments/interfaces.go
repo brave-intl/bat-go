@@ -22,6 +22,7 @@ type TxStateMachine interface {
 	setTransaction(*Transaction)
 	setService(*Service)
 	GetState() TransactionState
+	GetTransaction() *Transaction
 	GetService() *Service
 	GetTransactionID() *uuid.UUID
 	GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error)
