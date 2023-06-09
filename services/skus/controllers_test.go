@@ -47,6 +47,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 var (
@@ -88,7 +90,8 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast for cbr http requests
 	govalidator.SetFieldsRequiredByDefault(true)
 
-	storage, _ := NewPostgres("", false, "")
+	storage, _ := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+
 	suite.storage = storage
 
 	AnonCardC := macaroon.Caveats{
@@ -215,7 +218,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 }
 
 func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	suite.mockCtrl = gomock.NewController(suite.T())
@@ -500,7 +503,7 @@ func (suite *ControllersTestSuite) TestGetMissingOrder() {
 }
 
 func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -1309,7 +1312,7 @@ func (suite *ControllersTestSuite) TestDeleteKey() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeys() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
@@ -1339,7 +1342,7 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeysFiltered() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
