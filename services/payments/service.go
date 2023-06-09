@@ -225,20 +225,24 @@ func validateTransactionHistory(
 	kmsClient wrappedKMSClient,
 ) (bool, error) {
 	var (
-		reason error
-		err    error
+		reason                    error
+		err                       error
+		unmarshaledTransactionSet []Transaction
 	)
-	for i, transaction := range transactionHistory {
-		var transactionData Transaction
-		err = json.Unmarshal(transaction.Data.Data, &transactionData)
+	// Unmarshal the transactions in advance so that we don't have to do it multiple
+	// times per transaction in the next loop.
+	for _, marshaledTransaction := range transactionHistory {
+		var transaction Transaction
+		err = json.Unmarshal(marshaledTransaction.Data.Data, &transaction)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
 		}
-
+		unmarshaledTransactionSet = append(unmarshaledTransactionSet, transaction)
+	}
+	for i, transaction := range unmarshaledTransactionSet {
 		// Before starting State validation, check that keys and signatures for the record are valid.
-
 		// GenerateIdempotencyKey will verify that the ID is internally consistent within the Transaction.
-		dataIdempotencyKey, err := transactionData.GenerateIdempotencyKey(namespace)
+		dataIdempotencyKey, err := transaction.GenerateIdempotencyKey(namespace)
 		if err != nil {
 			return false, fmt.Errorf("ID invalid: %w", err)
 		}
@@ -248,20 +252,20 @@ func validateTransactionHistory(
 			return false, fmt.Errorf("top level ID does not match Transaction ID: %s, %s", dataIdempotencyKey, idempotencyKey)
 		}
 		// Each transaction's signature must be verified
-		txID := transaction.Data.IdempotencyKey.String()
+		txID := transaction.ID.String()
 		verifyOutput, err := kmsClient.Verify(ctx, &kms.VerifyInput{
 			KeyId:   &txID,
-			Message: transaction.Data.Data,
+			Message: transactionHistory[i].Data.Data,
 		})
 		if err != nil {
 			return false, fmt.Errorf("failed to verify signature: %w", err)
 		}
 		if !verifyOutput.SignatureValid {
-			return false, fmt.Errorf("signature for record %s invalid with metadata: %v", transaction.Data.IdempotencyKey.String(), verifyOutput.ResultMetadata)
+			return false, fmt.Errorf("signature for record %s invalid with metadata: %v", transaction.ID.String(), verifyOutput.ResultMetadata)
 		}
 
 		// Now that the data itself is verified, proceed to check transition States.
-		transactionState := transactionData.State
+		transactionState := transaction.State
 		// Transitions must always start at 0
 		if i == 0 {
 			if transactionState != Prepared {
@@ -269,11 +273,7 @@ func validateTransactionHistory(
 			}
 			continue
 		}
-		var previousTransitionData Transaction
-		err = json.Unmarshal(transactionHistory[i-1].Data.Data, &previousTransitionData)
-		if err != nil {
-			return false, fmt.Errorf("failed to unmarshal previous transition history record: %w", err)
-		}
+		previousTransitionData := unmarshaledTransactionSet[i-1]
 		previousIdempotencyKey, err := previousTransitionData.GenerateIdempotencyKey(namespace)
 		if err != nil {
 			return false, fmt.Errorf("ID invalid: %w", err)
