@@ -5,12 +5,12 @@ import (
 	"fmt"
 )
 
-// GeminiMachine is an implementation of TxStateMachine for Gemini's use-case
+// GeminiMachine is an implementation of TxStateMachine for Gemini's use-case.
 type GeminiMachine struct {
 	baseStateMachine
 }
 
-// NewGeminiMachine returns an GeminiMachine with values specified
+// NewGeminiMachine returns an GeminiMachine with values specified.
 func NewGeminiMachine(transaction *Transaction, service *Service) *GeminiMachine {
 	machine := GeminiMachine{}
 	machine.setService(service)
@@ -18,7 +18,7 @@ func NewGeminiMachine(transaction *Transaction, service *Service) *GeminiMachine
 	return &machine
 }
 
-// Prepare implements TxStateMachine for the Gemini machine
+// Prepare implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	nextState := Prepared
 	if !gm.transaction.nextStateValid(nextState) {
@@ -33,7 +33,7 @@ func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Authorize implements TxStateMachine for the Gemini machine
+// Authorize implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Authorize(ctx context.Context) (*Transaction, error) {
 	nextState := Authorized
 	if !gm.transaction.nextStateValid(nextState) {
@@ -48,7 +48,7 @@ func (gm *GeminiMachine) Authorize(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Pay implements TxStateMachine for the Gemini machine
+// Pay implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 	var nextState TransactionState
 	if gm.transaction.State == Pending {
@@ -72,7 +72,7 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Fail implements TxStateMachine for the Gemini machine
+// Fail implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Fail(ctx context.Context) (*Transaction, error) {
 	nextState := Failed
 	if !gm.transaction.nextStateValid(nextState) {

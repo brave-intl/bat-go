@@ -10,14 +10,14 @@ import (
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 )
 
-// idempotentObject is anything that can generate an idempotency key
+// idempotentObject is anything that can generate an idempotency key.
 type idempotentObject interface {
 	getIdempotencyKey() *uuid.UUID
 	generateIdempotencyKey(uuid.UUID) uuid.UUID
 }
 
 // TxStateMachine is anything that be progressed through states by the
-// Drive function
+// Drive function.
 type TxStateMachine interface {
 	setTransaction(*Transaction)
 	setService(*Service)
@@ -32,7 +32,7 @@ type TxStateMachine interface {
 	Fail(context.Context) (*Transaction, error)
 }
 
-// wrappedQldbDriverAPI defines the API for QLDB methods that we'll be using
+// wrappedQldbDriverAPI defines the API for QLDB methods that we'll be using.
 type wrappedQldbDriverAPI interface {
 	Execute(ctx context.Context, fn func(txn qldbdriver.Transaction) (interface{}, error)) (interface{}, error)
 	Shutdown(ctx context.Context)
@@ -44,7 +44,7 @@ type wrappedQldbSdkClient interface {
 	GetRevision(ctx context.Context, params *qldb.GetRevisionInput, optFns ...func(*qldb.Options)) (*qldb.GetRevisionOutput, error)
 }
 
-// wrappedQldbTxnAPI defines the API for QLDB methods that we'll be using
+// wrappedQldbTxnAPI defines the API for QLDB methods that we'll be using.
 type wrappedQldbTxnAPI interface {
 	Execute(statement string, parameters ...interface{}) (qldbdriver.Result, error)
 	Abort() error
@@ -52,7 +52,7 @@ type wrappedQldbTxnAPI interface {
 	ID() string
 }
 
-// wrappedKMSClient defines the characteristics for KMS methods that we'll be using
+// wrappedKMSClient defines the characteristics for KMS methods that we'll be using.
 type wrappedKMSClient interface {
 	Sign(ctx context.Context, params *kms.SignInput, optFns ...func(*kms.Options)) (*kms.SignOutput, error)
 	Verify(ctx context.Context, params *kms.VerifyInput, optFns ...func(*kms.Options)) (*kms.VerifyOutput, error)

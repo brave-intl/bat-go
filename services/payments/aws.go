@@ -39,7 +39,7 @@ func (ac *awsClient) IsReady(ctx context.Context) bool {
 	return false
 }
 
-// RetrieveSecrets - implements secret discovery for payments service
+// RetrieveSecrets implements secret discovery for payments service.
 func (ac *awsClient) RetrieveSecrets(ctx context.Context /*uri string*/) ([]byte, error) {
 	logger := logging.Logger(ctx, "awsClient.RetrieveSecrets")
 

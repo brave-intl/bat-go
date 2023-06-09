@@ -11,7 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/middleware"
 )
 
-// ConfigurationMiddleware applies the current state of the service's configuration on the ctx
+// ConfigurationMiddleware applies the current state of the service's configuration on the ctx.
 func (s *Service) ConfigurationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// wrap the request context in the baseCtx from the service
@@ -20,7 +20,7 @@ func (s *Service) ConfigurationMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// AuthorizerSignedMiddleware requires that requests are signed by valid payment authorizers
+// AuthorizerSignedMiddleware requires that requests are signed by valid payment authorizers.
 func (s *Service) AuthorizerSignedMiddleware() func(http.Handler) http.Handler {
 	authorizerVerifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{

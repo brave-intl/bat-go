@@ -26,7 +26,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Transaction - the main type explaining a transaction, type used for qldb via ion
+// Transaction - the main type explaining a transaction, type used for qldb via ion.
 type Transaction struct {
 	ID                  *uuid.UUID       `json:"idempotencyKey,omitempty" valid:"required"`
 	Amount              *ion.Decimal     `json:"amount" valid:"required"`
@@ -49,19 +49,19 @@ type Authorization struct {
 	DocumentID string `json:"documentId" valid:"required"`
 }
 
-// qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for qldbPaymentTransitionHistoryEntry
+// qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntryBlockAddress struct {
 	StrandID   string `ion:"strandId"`
 	SequenceNo int64  `ion:"sequenceNo"`
 }
 
-// qldbPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry
+// qldbPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntryHash string
 
-// qldbPaymentTransitionHistoryEntrySignature defines signature for qldbPaymentTransitionHistoryEntry
+// qldbPaymentTransitionHistoryEntrySignature defines signature for qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntrySignature []byte
 
-// qldbPaymentTransitionHistoryEntryData defines data for qldbPaymentTransitionHistoryEntry
+// qldbPaymentTransitionHistoryEntryData defines data for qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntryData struct {
 	Signature      []byte     `ion:"signature"`
 	Data           []byte     `ion:"data"`
@@ -76,7 +76,7 @@ type qldbPaymentTransitionHistoryEntryMetadata struct {
 	Version int64     `ion:"version"`
 }
 
-// qldbPaymentTransitionHistoryEntry defines top level entry for a QLDB transaction
+// qldbPaymentTransitionHistoryEntry defines top level entry for a QLDB transaction.
 type qldbPaymentTransitionHistoryEntry struct {
 	BlockAddress qldbPaymentTransitionHistoryEntryBlockAddress `ion:"blockAddress"`
 	Hash         qldbPaymentTransitionHistoryEntryHash         `ion:"hash"`
@@ -94,7 +94,7 @@ func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error
 }
 
 // GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
-// an error
+// an error.
 func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
 	generatedIdempotencyKey := t.generateIdempotencyKey(namespace)
 	if generatedIdempotencyKey != *t.ID {
@@ -104,7 +104,7 @@ func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, e
 	return t.ID, nil
 }
 
-// SetIdempotencyKey assigns a UUID v5 value to Transaction.ID
+// SetIdempotencyKey assigns a UUID v5 value to Transaction.ID.
 func (t *Transaction) SetIdempotencyKey(namespace uuid.UUID) error {
 	generatedIdempotencyKey := t.generateIdempotencyKey(namespace)
 	t.ID = &generatedIdempotencyKey
@@ -116,7 +116,7 @@ var (
 	submitFailure  = "submit"
 )
 
-// SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string
+// SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string.
 func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSClient, keyID string) (string, string, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyID,
@@ -144,7 +144,7 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSC
 	return hex.EncodeToString(pubkeyOutput.PublicKey), hex.EncodeToString(signingOutput.Signature), nil
 }
 
-// MarshalJSON - custom marshaling of transaction type
+// MarshalJSON - custom marshaling of transaction type.
 func (t *Transaction) MarshalJSON() ([]byte, error) {
 	type Alias Transaction
 	return json.Marshal(&struct {
@@ -156,7 +156,7 @@ func (t *Transaction) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON - custom unmarshal of transaction type
+// UnmarshalJSON - custom unmarshal of transaction type.
 func (t *Transaction) UnmarshalJSON(data []byte) error {
 	type Alias Transaction
 	aux := &struct {
@@ -204,7 +204,7 @@ func fromIonDecimal(v *ion.Decimal) *decimal.Decimal {
 	return &resp
 }
 
-// ErrNotConfiguredYet - service not fully configured
+// ErrNotConfiguredYet - service not fully configured.
 var ErrNotConfiguredYet = errors.New("not yet configured")
 
 func (s *Service) configureDatastore(ctx context.Context) error {
@@ -289,7 +289,7 @@ func (s *Service) progressTransacton(ctx context.Context, transaction *Transacti
 	return *transaction, nil
 }
 
-// PrepareTransaction - perform a qldb insertion on the transaction
+// PrepareTransaction - perform a qldb insertion on the transaction.
 func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transaction) (*Transaction, error) {
 	stateMachine, err := StateMachineFromTransaction(transaction, s)
 	if err != nil {
@@ -302,7 +302,7 @@ func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transacti
 	return txn, nil
 }
 
-// newQLDBDatastore - create a new qldbDatastore
+// newQLDBDatastore - create a new qldbDatastore.
 func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 	logger := logging.Logger(ctx, "payments.newQLDBDatastore")
 
@@ -393,7 +393,7 @@ const (
 	StateSubmitted = "submitted"
 )
 
-// InsertTransaction - perform a qldb insertion on the transactions
+// InsertTransaction - perform a qldb insertion on the transactions.
 func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
 	enrichedTransaction, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		// for all of the transactions load up a check to see if this transaction has already existed
@@ -443,7 +443,7 @@ func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction
 	return enrichedTransaction.(Transaction), nil
 }
 
-// UpdateTransactionsState - Change transaction state
+// UpdateTransactionsState - Change transaction state.
 func (s Service) UpdateTransactionsState(ctx context.Context, state string, transactions ...Transaction) error {
 	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		// for all of the transactions load up a check to see if this transaction has already existed
@@ -511,7 +511,7 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 	return nil
 }
 
-// GetTransactionFromDocID - get the transaction data from the document ID in qldb
+// GetTransactionFromDocID - get the transaction data from the document ID in qldb.
 func (s *Service) GetTransactionFromDocID(ctx context.Context, docID string) (*Transaction, error) {
 	transaction, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		resp := new(Transaction)
@@ -538,7 +538,7 @@ func (s *Service) GetTransactionFromDocID(ctx context.Context, docID string) (*T
 	return transaction.(*Transaction), nil
 }
 
-// getQLDBObject returns the latest version of an entry for a given ID after doing all requisite validation
+// getQLDBObject returns the latest version of an entry for a given ID after doing all requisite validation.
 func (s *Service) getQLDBObject(
 	ctx context.Context,
 	qldbTransactionDriver wrappedQldbTxnAPI,
@@ -563,7 +563,7 @@ func (s *Service) getQLDBObject(
 	return result, nil
 }
 
-// GetTransactionByID returns the latest version of a record from QLDB if it exists, after doing all requisite validation
+// GetTransactionByID returns the latest version of a record from QLDB if it exists, after doing all requisite validation.
 func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Transaction, error) {
 	namespace, ok := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
 	if !ok {

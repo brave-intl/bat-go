@@ -8,24 +8,24 @@ import (
 	"github.com/google/uuid"
 )
 
-// TransactionState is an integer representing transaction status
+// TransactionState is an integer representing transaction status.
 type TransactionState string
 
 // TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 const (
-	// Prepared represents a record that has been prepared for authorization
+	// Prepared represents a record that has been prepared for authorization.
 	Prepared TransactionState = "prepared"
-	// Authorized represents a record that has been authorized
+	// Authorized represents a record that has been authorized.
 	Authorized TransactionState = "authorized"
-	// Pending represents a record that is being or has been submitted to a processor
+	// Pending represents a record that is being or has been submitted to a processor.
 	Pending TransactionState = "pending"
-	// Paid represents a record that has entered a finalized success state with a processor
+	// Paid represents a record that has entered a finalized success state with a processor.
 	Paid TransactionState = "paid"
-	// Failed represents a record that has failed processing permanently
+	// Failed represents a record that has failed processing permanently.
 	Failed TransactionState = "failed"
 )
 
-// Transitions represents the valid forward-transitions for each given state
+// Transitions represents the valid forward-transitions for each given state.
 var Transitions = map[TransactionState][]TransactionState{
 	Prepared:   {Authorized, Failed},
 	Authorized: {Pending, Failed},
@@ -45,23 +45,34 @@ func (s *baseStateMachine) setTransaction(transaction *Transaction) {
 func (s *baseStateMachine) setService(service *Service) {
 	s.service = service
 }
+
+// GetState returns transaction state for a state machine, implementing TxStateMachine.
 func (s *baseStateMachine) GetState() TransactionState {
 	return s.transaction.State
 }
+
+// GetTransaction returns a full transaction for a state machine, implementing TxStateMachine.
 func (s *baseStateMachine) GetTransaction() *Transaction {
 	return s.transaction
 }
+
+// GetTransactionID returns a transaction id for a state machine, implementing TxStateMachine.
 func (s *baseStateMachine) GetTransactionID() *uuid.UUID {
 	return s.transaction.ID
 }
+
+// GetService returns a service for a state machine, implementing TxStateMachine.
 func (s *baseStateMachine) GetService() *Service {
 	return s.service
 }
+
+// GenerateTransactionID returns the generated transaction id for a state machine's transaction,
+// implementing TxStateMachine.
 func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
 	return s.transaction.GenerateIdempotencyKey(namespace)
 }
 
-// StateMachineFromTransaction returns a state machine when provided a transaction
+// StateMachineFromTransaction returns a state machine when provided a transaction.
 func StateMachineFromTransaction(transaction *Transaction, service *Service) (TxStateMachine, error) {
 	var machine TxStateMachine
 	switch transaction.Custodian {
@@ -128,12 +139,12 @@ func populateInitialTransaction[T TxStateMachine](ctx context.Context, machine T
 	return nil, fmt.Errorf("transaction %s already exists in QLDB and cannot be prepared", transaction.ID)
 }
 
-// GetValidTransitions returns valid transitions
+// GetValidTransitions returns valid transitions.
 func (ts TransactionState) GetValidTransitions() []TransactionState {
 	return Transitions[ts]
 }
 
-// GetAllValidTransitionSequences returns all valid transition sequences
+// GetAllValidTransitionSequences returns all valid transition sequences.
 func GetAllValidTransitionSequences() [][]TransactionState {
 	return recurseTransitionResolution("prepared", []TransactionState{})
 }

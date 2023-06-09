@@ -5,12 +5,12 @@ import (
 	"fmt"
 )
 
-// BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case
+// BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case.
 type BitflyerMachine struct {
 	baseStateMachine
 }
 
-// NewBitflyerMachine returns an BitflyerMachine with values specified
+// NewBitflyerMachine returns an BitflyerMachine with values specified.
 func NewBitflyerMachine(transaction *Transaction, service *Service) *BitflyerMachine {
 	machine := BitflyerMachine{}
 	machine.setService(service)
@@ -38,7 +38,7 @@ func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Authorize implements TxStateMachine for the Bitflyer machine
+// Authorize implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
@@ -56,7 +56,7 @@ func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) 
 	return entry, nil
 }
 
-// Pay implements TxStateMachine for the Bitflyer machine
+// Pay implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
@@ -83,7 +83,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Fail implements TxStateMachine for the Bitflyer machine
+// Fail implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff

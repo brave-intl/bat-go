@@ -29,7 +29,7 @@ import (
 	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
-// Service - struct definition of payments service
+// Service struct definition of payments service.
 type Service struct {
 	// concurrent safe
 	datastore  wrappedQldbDriverAPI
@@ -112,7 +112,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	return nil
 }
 
-// NewService creates a service using the passed datastore and clients configured from the environment
+// NewService creates a service using the passed datastore and clients configured from the environment.
 func NewService(ctx context.Context) (context.Context, *Service, error) {
 	var logger = logging.Logger(ctx, "payments.NewService")
 
@@ -175,7 +175,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	return ctx, service, nil
 }
 
-// DecryptBootstrap - use service keyShares to reconstruct the decryption key
+// DecryptBootstrap - use service keyShares to reconstruct the decryption key.
 func (s *Service) DecryptBootstrap(ctx context.Context, ciphertext []byte) (map[appctx.CTXKey]interface{}, error) {
 	// combine the service configured key shares
 	key, err := shamir.Combine(s.keyShares)
@@ -207,7 +207,7 @@ func (s *Service) DecryptBootstrap(ctx context.Context, ciphertext []byte) (map[
 	return output, nil
 }
 
-// ValueHolder converts a qldbPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder
+// ValueHolder converts a qldbPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder.
 func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
 	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)
 	return &qldbTypes.ValueHolder{
@@ -216,7 +216,7 @@ func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes
 }
 
 // validateTransactionHistory returns whether a slice of entries representing the entire state history for a given id
-// include exclusively valid transitions. It also verifies IdempotencyKeys among states and the Merkle tree position of each state
+// include exclusively valid transitions. It also verifies IdempotencyKeys among states and the Merkle tree position of each state.
 func validateTransactionHistory(
 	ctx context.Context,
 	idempotencyKey *uuid.UUID,
@@ -291,7 +291,7 @@ func validateTransactionHistory(
 }
 
 // revisionValidInTree verifies a document revision in QLDB using a digest and the Merkle
-// hashes to re-derive the digest
+// hashes to re-derive the digest.
 func revisionValidInTree(
 	ctx context.Context,
 	client wrappedQldbSdkClient,

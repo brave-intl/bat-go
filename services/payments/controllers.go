@@ -24,7 +24,7 @@ type getConfResponse struct {
 	PublicKey           string
 }
 
-// GetConfigurationHandler - handler to get important payments configuration information, attested by nitro
+// GetConfigurationHandler gets important payments configuration information, attested by nitro.
 func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
@@ -53,7 +53,7 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	})
 }
 
-// PrepareHandler - handler to get current relative exchange rates
+// PrepareHandler gets current relative exchange rates.
 func PrepareHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
@@ -137,7 +137,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 	}
 }
 
-// SubmitHandler - handler to perform submission of transactions to custodian
+// SubmitHandler performs submission of transactions to custodian.
 func SubmitHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request

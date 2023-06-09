@@ -5,12 +5,12 @@ import (
 	"fmt"
 )
 
-// UpholdMachine is an implementation of TxStateMachine for uphold's use-case
+// UpholdMachine is an implementation of TxStateMachine for uphold's use-case.
 type UpholdMachine struct {
 	baseStateMachine
 }
 
-// NewUpholdMachine returns an UpholdMachine with values specified
+// NewUpholdMachine returns an UpholdMachine with values specified.
 func NewUpholdMachine(transaction *Transaction, service *Service) *UpholdMachine {
 	machine := UpholdMachine{}
 	machine.setService(service)
@@ -18,7 +18,7 @@ func NewUpholdMachine(transaction *Transaction, service *Service) *UpholdMachine
 	return &machine
 }
 
-// Prepare implements TxStateMachine for uphold machine
+// Prepare implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	nextState := Prepared
 	if !um.transaction.nextStateValid(nextState) {
@@ -33,7 +33,7 @@ func (um *UpholdMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Authorize implements TxStateMachine for uphold machine
+// Authorize implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Authorize(ctx context.Context) (*Transaction, error) {
 	nextState := Authorized
 	if !um.transaction.nextStateValid(nextState) {
@@ -48,7 +48,7 @@ func (um *UpholdMachine) Authorize(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Pay implements TxStateMachine for uphold machine
+// Pay implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 	var nextState TransactionState
 	if um.transaction.State == Pending {
@@ -72,7 +72,7 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 	return entry, nil
 }
 
-// Fail implements TxStateMachine for uphold machine
+// Fail implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Fail(ctx context.Context) (*Transaction, error) {
 	nextState := Failed
 	if !um.transaction.nextStateValid(nextState) {
