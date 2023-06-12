@@ -364,7 +364,7 @@ func verifyHashSequence(
 		return false, fmt.Errorf("Failed to base64 decode digest: %w", err)
 	}
 
-	if string(concatenatedHash[:]) == string(decodedDigest) {
+	if bytes.Compare(concatenatedHash[:], decodedDigest) == 0 {
 		return true, nil
 	}
 	return false, nil
