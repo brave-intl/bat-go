@@ -43,6 +43,9 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.RatiosRedisAddrCTXKey, viper.Get("redis-addr"))
 	ctx = context.WithValue(ctx, appctx.RateLimitPerMinuteCTXKey, viper.GetInt("rate-limit-per-min"))
 
+	ctx = context.WithValue(ctx, appctx.StripeOnrampSecretKeyCTXKey, viper.Get("stripe-onramp-secret-key"))
+	ctx = context.WithValue(ctx, appctx.StripeOnrampServerCTXKey, viper.Get("stripe-onramp-server"))
+
 	// setup the service now
 	ctx, s, err := ratios.InitService(ctx)
 	if err != nil {
@@ -60,6 +63,10 @@ func RestRun(command *cobra.Command, args []string) {
 	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
 	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
 	r.Get("/v2/market/provider/coingecko", middleware.InstrumentHandler("GetCoinMarketsHandler", ratios.GetCoinMarketsHandler(s)).ServeHTTP)
+	r.Post("/v2/stripe/onramp_sessions", middleware.InstrumentHandler(
+		"StripeOnrampSessionsHandler",
+		ratios.CreateStripeOnrampSessionsHandler(s)).ServeHTTP,
+	)
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {

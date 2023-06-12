@@ -2,27 +2,21 @@ package skus
 
 import (
 	"context"
-	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/logging"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
-	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v72"
-	"github.com/stripe/stripe-go/v72/checkout/session"
-	"github.com/stripe/stripe-go/v72/customer"
 	"gopkg.in/macaroon.v2"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
@@ -33,9 +27,10 @@ const (
 	AndroidPaymentMethod = "android"
 )
 
-//StripePaymentMethod - the label for stripe payment method
 const (
-	StripePaymentMethod               = "stripe"
+	// TODO(pavelb): Gradually replace it everywhere.
+	StripePaymentMethod = model.StripePaymentMethod
+
 	StripeInvoiceUpdated              = "invoice.updated"
 	StripeInvoicePaid                 = "invoice.paid"
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
@@ -46,86 +41,15 @@ var (
 	ErrInvalidSKU = errors.New("Invalid SKU Token provided in request")
 )
 
-// Methods type is a string slice holding payments
-type Methods []string
+// TODO(pavelb): Gradually replace it everywhere.
 
-// Equal - check equality
-func (pm *Methods) Equal(b *Methods) bool {
-	s1 := []string(*pm)
-	s2 := []string(*b)
-	sort.Strings(s1)
-	sort.Strings(s2)
-	return reflect.DeepEqual(s1, s2)
-}
+type Methods = model.Methods
 
-// Scan the src sql type into the passed JSONStringArray
-func (pm *Methods) Scan(src interface{}) error {
-	var x []sql.NullString
-	var v = pq.Array(&x)
+type Order = model.Order
 
-	if err := v.Scan(src); err != nil {
-		return err
-	}
-	for i := 0; i < len(x); i++ {
-		if x[i].Valid {
-			*pm = append(*pm, x[i].String)
-		}
-	}
+type OrderItem = model.OrderItem
 
-	return nil
-}
-
-// Value the driver.Value representation
-func (pm *Methods) Value() (driver.Value, error) {
-	return pq.Array(pm), nil
-}
-
-// Order includes information about a particular order
-type Order struct {
-	ID                    uuid.UUID            `json:"id" db:"id"`
-	CreatedAt             time.Time            `json:"createdAt" db:"created_at"`
-	Currency              string               `json:"currency" db:"currency"`
-	UpdatedAt             time.Time            `json:"updatedAt" db:"updated_at"`
-	TotalPrice            decimal.Decimal      `json:"totalPrice" db:"total_price"`
-	MerchantID            string               `json:"merchantId" db:"merchant_id"`
-	Location              datastore.NullString `json:"location" db:"location"`
-	Status                string               `json:"status" db:"status"`
-	Items                 []OrderItem          `json:"items"`
-	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
-	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
-	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
-	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
-	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
-	TrialDays             *int64               `json:"-" db:"trial_days"`
-}
-
-func (order *Order) getTrialDays() int64 {
-	if order.TrialDays == nil {
-		return 0
-	}
-	return *order.TrialDays
-}
-
-// OrderItem includes information about a particular order item
-type OrderItem struct {
-	ID                        uuid.UUID            `json:"id" db:"id"`
-	OrderID                   uuid.UUID            `json:"orderId" db:"order_id"`
-	SKU                       string               `json:"sku" db:"sku"`
-	CreatedAt                 *time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt                 *time.Time           `json:"updatedAt" db:"updated_at"`
-	Currency                  string               `json:"currency" db:"currency"`
-	Quantity                  int                  `json:"quantity" db:"quantity"`
-	Price                     decimal.Decimal      `json:"price" db:"price"`
-	Subtotal                  decimal.Decimal      `json:"subtotal" db:"subtotal"`
-	Location                  datastore.NullString `json:"location" db:"location"`
-	Description               datastore.NullString `json:"description" db:"description"`
-	CredentialType            string               `json:"credentialType" db:"credential_type"`
-	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
-	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
-	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
-	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
-	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
-}
+type CreateCheckoutSessionResponse = model.CreateCheckoutSessionResponse
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
@@ -268,18 +192,6 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	return &orderItem, allowedPaymentMethods, issuerConfig, nil
 }
 
-// IsStripePayable returns true if every item is payable by Stripe
-func (order Order) IsStripePayable() bool {
-	// TODO: if not we need to look into subscription trials:
-	/// -> https://stripe.com/docs/billing/subscriptions/trials
-	return strings.Contains(strings.Join(order.AllowedPaymentMethods, ","), StripePaymentMethod)
-}
-
-// CreateCheckoutSessionResponse - the structure of a checkout session response
-type CreateCheckoutSessionResponse struct {
-	SessionID string `json:"checkoutSessionId"`
-}
-
 func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
 	// has an existing checkout session
 	var email string
@@ -296,97 +208,6 @@ func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
 	}
 	// if there is no record of an email, stripe will ask for it and make a new customer
 	return email
-}
-
-// CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
-func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string, freeTrialDays int64) (CreateCheckoutSessionResponse, error) {
-
-	var custID string
-
-	if email != "" {
-		// find the existing customer by email
-		// so we can use the customer id instead of a customer email
-		i := customer.List(&stripe.CustomerListParams{
-			Email: stripe.String(email),
-		})
-
-		for i.Next() {
-			custID = i.Customer().ID
-		}
-	}
-
-	var sd = &stripe.CheckoutSessionSubscriptionDataParams{}
-
-	// if a free trial is set, apply it
-	if freeTrialDays > 0 {
-		sd.TrialPeriodDays = &freeTrialDays
-	}
-
-	params := &stripe.CheckoutSessionParams{
-		PaymentMethodTypes: stripe.StringSlice([]string{
-			"card",
-		}),
-		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL:        stripe.String(successURI),
-		CancelURL:         stripe.String(cancelURI),
-		ClientReferenceID: stripe.String(order.ID.String()),
-		SubscriptionData:  sd,
-		LineItems:         order.CreateStripeLineItems(),
-	}
-
-	if custID != "" {
-		// try to use existing customer we found by email
-		params.Customer = stripe.String(custID)
-	} else if email != "" {
-		// if we dont have an existing customer, this CustomerEmail param will create a new one
-		params.CustomerEmail = stripe.String(email)
-	}
-	// else we have no record of this email for this checkout session
-	// the user will be asked for the email, we cannot send an empty customer email as a param
-
-	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
-	params.AddExtra("allow_promotion_codes", "true")
-	session, err := session.New(params)
-	if err != nil {
-		return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to create stripe session: %w", err)
-	}
-
-	data := CreateCheckoutSessionResponse{
-		SessionID: session.ID,
-	}
-	return data, nil
-}
-
-// CreateStripeLineItems - create line items for a checkout session with stripe
-func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemParams {
-	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
-	for index, item := range order.Items {
-		// get the item id from the metadata
-		priceID, ok := item.Metadata["stripe_item_id"].(string)
-		if !ok {
-			continue
-		}
-		// since we are creating stripe line item, we can assume
-		// that the stripe product is embedded in macaroon as metadata
-		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
-			Price:    stripe.String(priceID),
-			Quantity: stripe.Int64(int64(item.Quantity)),
-		}
-	}
-	return lineItems
-}
-
-// IsPaid returns true if the order is paid
-func (order Order) IsPaid() bool {
-	// if the order status is paid it is paid.
-	// if the order is cancelled, check to make sure that expires at is after now
-	if order.Status == OrderStatusPaid {
-		return true
-	} else if order.Status == OrderStatusCanceled && order.ExpiresAt != nil {
-		expires := *order.ExpiresAt
-		return expires.After(time.Now())
-	}
-	return false
 }
 
 // RenewOrder updates the orders status to paid and paid at time, inserts record of this order

@@ -29,6 +29,7 @@ import (
 	"github.com/brave-intl/bat-go/services/grant"
 	"github.com/brave-intl/bat-go/services/promotion"
 	"github.com/brave-intl/bat-go/services/skus"
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
@@ -380,7 +381,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// temporarily house batloss events in promotion to avoid widespread conflicts later
 	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
 
-	skusPG, err := skus.NewPostgres("", true, "skus_db")
+	skuOrderRepo := repository.NewOrder()
+	skuOrderItemRepo := repository.NewOrderItem()
+	skuOrderPayHistRepo := repository.NewOrderPayHistory()
+
+	skusPG, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "skus_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -414,11 +419,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgres("", true, "merch_skus_db")
+		skusDB, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "merch_skus_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
+
 		skusService, err := skus.InitService(ctx, skusDB, walletService)
 		if err != nil {
 			sentry.CaptureException(err)
