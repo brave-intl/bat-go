@@ -13,6 +13,7 @@ import (
 var validVerifiers = map[string]bool{
 	"2b2ddfcfba5045fac57efaf9c6a21e61a0bd7eee3c75e4ad1ee159c7e83cee43": true,
 	"7f5fd7dab95cf7e4925651e18fb71b4e64b23734736f6834f3d633a44fd371d8": true,
+	"b1db87ca0754dd9ade0246e4029d955be4e0a50f7a97026938d104162e1e0204": true,
 }
 
 // ErrInvalidVerifier - error stating the keyID is not a valid verifier
