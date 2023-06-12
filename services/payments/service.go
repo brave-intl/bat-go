@@ -387,11 +387,11 @@ func transactionHistoryIsValid(
 		return false, nil, errors.New("record not found")
 	}
 	// Ensure that all state changes in record history were valid
-	validTransitions, err := validateTransactionHistory(ctx, id, namespace, result, kmsClient)
+	stateTransitionsAreValid, err := validateTransactionHistory(ctx, id, namespace, result, kmsClient)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to validate history: %w", err)
 	}
-	if validTransitions {
+	if stateTransitionsAreValid {
 		// We only want the latest state of this record once its
 		// history is verified and we have confirmed that the new state is valid
 		return true, &result[0], nil
