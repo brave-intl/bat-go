@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
