@@ -409,10 +409,8 @@ func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction
 
 			// get the enriched version of the transaction for the response
 			enriched := new(Transaction)
-			ionBinary := result.GetCurrentData()
-
 			// unmarshal enriched version
-			err := ion.Unmarshal(ionBinary, enriched)
+			err := ion.Unmarshal(result.GetCurrentData(), enriched)
 			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal enriched tx: %s due to: %w", transaction.ID, err)
 			}
@@ -509,9 +507,8 @@ func (s *Service) GetTransactionFromDocID(ctx context.Context, docID string) (*T
 		}
 		// Check if there are any results
 		if result.Next(txn) {
-			ionBinary := result.GetCurrentData()
 			// unmarshal enriched version
-			err := json.Unmarshal(ionBinary, resp)
+			err := ion.Unmarshal(result.GetCurrentData(), resp)
 			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal tx: %s due to: %w", docID, err)
 			}
