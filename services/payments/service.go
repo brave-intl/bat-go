@@ -384,7 +384,7 @@ func transactionHistoryIsValid(
 		return false, nil, fmt.Errorf("failed to get transaction history: %w", err)
 	}
 	if len(result) < 1 {
-		return false, nil, errors.New("record not found")
+		return false, nil, &QLDBTransitionHistoryNotFoundError{}
 	}
 	// Ensure that all state changes in record history were valid
 	stateTransitionsAreValid, err := validateTransactionHistory(ctx, id, namespace, result, kmsClient)
