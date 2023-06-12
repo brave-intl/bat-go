@@ -273,22 +273,6 @@ func (s *Service) setupLedger(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) progressTransacton(ctx context.Context, transaction *Transaction) (Transaction, error) {
-	stateMachine, err := StateMachineFromTransaction(transaction, s)
-	if err != nil {
-		return Transaction{}, fmt.Errorf("failed to create stateMachine: %w", err)
-	}
-
-	// Only drive the Transaction into the targetState
-	transaction, err = Drive(ctx, stateMachine)
-	if err != nil {
-		return Transaction{}, fmt.Errorf("failed to drive state machine: %w", err)
-	}
-
-	// Enriched includes DocumentID along with the transaction.
-	return *transaction, nil
-}
-
 // PrepareTransaction - perform a qldb insertion on the transaction.
 func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transaction) (*Transaction, error) {
 	stateMachine, err := StateMachineFromTransaction(transaction, s)
@@ -495,7 +479,11 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 		if err != nil {
 			return fmt.Errorf("failed to update transaction: %w", err)
 		}
-		transaction, err = s.progressTransacton(ctx, writtenTxn)
+		stateMachine, err := StateMachineFromTransaction(writtenTxn, s)
+		if err != nil {
+			return fmt.Errorf("failed to create stateMachine: %w", err)
+		}
+		_, err = Drive(ctx, stateMachine)
 		if err != nil {
 			// Insufficient authorizations is an expected state. Treat it as such.
 			var insufficientAuthorizations *InsufficientAuthorizationsError
