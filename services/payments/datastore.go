@@ -473,27 +473,26 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 			keyHasNotYetSigned = false
 		}
 	}
-	if keyHasNotYetSigned {
-		fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
-		writtenTxn, err := s.WriteTransaction(ctx, fetchedTxn)
-		if err != nil {
-			return fmt.Errorf("failed to update transaction: %w", err)
-		}
-		stateMachine, err := StateMachineFromTransaction(writtenTxn, s)
-		if err != nil {
-			return fmt.Errorf("failed to create stateMachine: %w", err)
-		}
-		_, err = Drive(ctx, stateMachine)
-		if err != nil {
-			// Insufficient authorizations is an expected state. Treat it as such.
-			var insufficientAuthorizations *InsufficientAuthorizationsError
-			if errors.As(err, &insufficientAuthorizations) {
-				return nil
-			}
-			return fmt.Errorf("failed to progress transaction: %w", err)
-		}
-	} else {
+	if !keyHasNotYetSigned {
 		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)
+	}
+	fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
+	writtenTxn, err := s.WriteTransaction(ctx, fetchedTxn)
+	if err != nil {
+		return fmt.Errorf("failed to update transaction: %w", err)
+	}
+	stateMachine, err := StateMachineFromTransaction(writtenTxn, s)
+	if err != nil {
+		return fmt.Errorf("failed to create stateMachine: %w", err)
+	}
+	_, err = Drive(ctx, stateMachine)
+	if err != nil {
+		// Insufficient authorizations is an expected state. Treat it as such.
+		var insufficientAuthorizations *InsufficientAuthorizationsError
+		if errors.As(err, &insufficientAuthorizations) {
+			return nil
+		}
+		return fmt.Errorf("failed to progress transaction: %w", err)
 	}
 
 	return nil
