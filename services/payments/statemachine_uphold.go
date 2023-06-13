@@ -10,14 +10,6 @@ type UpholdMachine struct {
 	baseStateMachine
 }
 
-// NewUpholdMachine returns an UpholdMachine with values specified.
-func NewUpholdMachine(transaction *Transaction, service *Service) *UpholdMachine {
-	machine := UpholdMachine{}
-	machine.setService(service)
-	machine.setTransaction(transaction)
-	return &machine
-}
-
 // Prepare implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	nextState := Prepared
@@ -25,7 +17,7 @@ func (um *UpholdMachine) Prepare(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 	}
 	um.transaction.State = nextState
-	entry, err := um.service.WriteTransaction(ctx, um.transaction)
+	entry, err := um.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -40,7 +32,7 @@ func (um *UpholdMachine) Authorize(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 	}
 	um.transaction.State = nextState
-	entry, err := um.service.WriteTransaction(ctx, um.transaction)
+	entry, err := um.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -64,7 +56,7 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 		}
 		um.transaction.State = nextState
 	}
-	entry, err := um.service.WriteTransaction(ctx, um.transaction)
+	entry, err := um.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -79,7 +71,7 @@ func (um *UpholdMachine) Fail(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 	}
 	um.transaction.State = nextState
-	entry, err := um.service.WriteTransaction(ctx, um.transaction)
+	entry, err := um.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}

@@ -122,7 +122,13 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 		kmsSigningClient: mockKMS,
 		baseCtx:          context.Background(),
 	}
-	upholdStateMachine.setService(&service)
+	upholdStateMachine.setPersistenceConfigValues(
+		service.datastore,
+		service.sdkClient,
+		service.kmsSigningClient,
+		service.kmsSigningKeyID,
+		&testTransaction,
+	)
 	upholdStateMachine.setTransaction(&testTransaction)
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 

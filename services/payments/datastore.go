@@ -475,7 +475,14 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)
 	}
 	fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
-	writtenTxn, err := s.WriteTransaction(ctx, fetchedTxn)
+	writtenTxn, err := WriteTransaction(
+		ctx,
+		s.datastore,
+		s.sdkClient,
+		s.kmsSigningClient,
+		s.kmsSigningKeyID,
+		fetchedTxn,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to update transaction: %w", err)
 	}
@@ -523,13 +530,15 @@ func (s *Service) GetTransactionFromDocID(ctx context.Context, docID string) (*T
 }
 
 // getQLDBObject returns the latest version of an entry for a given ID after doing all requisite validation.
-func (s *Service) getQLDBObject(
+func getQLDBObject(
 	ctx context.Context,
 	qldbTransactionDriver wrappedQldbTxnAPI,
+	sdkClient wrappedQldbSDKClient,
+	kmsSigningClient wrappedKMSClient,
 	txnID *uuid.UUID,
 	namespace uuid.UUID,
 ) (*qldbPaymentTransitionHistoryEntry, error) {
-	valid, result, err := transactionHistoryIsValid(ctx, qldbTransactionDriver, s.kmsSigningClient, txnID, namespace)
+	valid, result, err := transactionHistoryIsValid(ctx, qldbTransactionDriver, kmsSigningClient, txnID, namespace)
 	if err != nil || !valid {
 		return nil, fmt.Errorf("failed to validate transition history: %w", err)
 	}
@@ -537,7 +546,7 @@ func (s *Service) getQLDBObject(
 	if result == nil {
 		return nil, &QLDBReocrdNotFoundError{}
 	}
-	merkleValid, err := revisionValidInTree(ctx, s.sdkClient, result)
+	merkleValid, err := revisionValidInTree(ctx, sdkClient, result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
 	}
@@ -548,13 +557,19 @@ func (s *Service) getQLDBObject(
 }
 
 // GetTransactionByID returns the latest version of a record from QLDB if it exists, after doing all requisite validation.
-func (s *Service) GetTransactionByID(ctx context.Context, id *uuid.UUID) (*Transaction, error) {
+func GetTransactionByID(
+	ctx context.Context,
+	datastore wrappedQldbDriverAPI,
+	sdkClient wrappedQldbSDKClient,
+	kmsSigningClient wrappedKMSClient,
+	id *uuid.UUID,
+) (*Transaction, error) {
 	namespace, ok := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
 	if !ok {
 		return nil, fmt.Errorf("Failed to get UUID namespace from context")
 	}
-	data, err := s.datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
-		entry, err := s.getQLDBObject(ctx, txn, id, namespace)
+	data, err := datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
+		entry, err := getQLDBObject(ctx, txn, sdkClient, kmsSigningClient, id, namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get QLDB record: %w", err)
 		}
@@ -595,20 +610,27 @@ func getTransactionHistory(txn wrappedQldbTxnAPI, id *uuid.UUID) ([]qldbPaymentT
 
 // WriteTransaction persists an object in a transaction after verifying that its change
 // represents a valid state transition.
-func (s *Service) WriteTransaction(ctx context.Context, transaction *Transaction) (*Transaction, error) {
+func WriteTransaction(
+	ctx context.Context,
+	datastore wrappedQldbDriverAPI,
+	sdkClient wrappedQldbSDKClient,
+	kmsSigningClient wrappedKMSClient,
+	kmsSigningKeyID string,
+	transaction *Transaction,
+) (*Transaction, error) {
 	namespace, ok := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
 	if !ok {
 		return nil, fmt.Errorf("Failed to get UUID namespace from context")
 	}
-	_, err := s.datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
+	_, err := datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
 		// Determine if the transaction already exists or if it needs to be initialized. This call will do all necessary
 		// record and history validation if they exist for this record
-		_, err := s.getQLDBObject(ctx, txn, transaction.ID, namespace)
+		_, err := getQLDBObject(ctx, txn, sdkClient, kmsSigningClient, transaction.ID, namespace)
 		var notFound *QLDBReocrdNotFoundError
 		if err != nil && !errors.As(err, &notFound) {
 			return nil, fmt.Errorf("failed to query QLDB: %w", err)
 		}
-		transaction.PublicKey, transaction.Signature, err = transaction.SignTransaction(ctx, s.kmsSigningClient, s.kmsSigningKeyID)
+		transaction.PublicKey, transaction.Signature, err = transaction.SignTransaction(ctx, kmsSigningClient, kmsSigningKeyID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign transaction: %w", err)
 		}

@@ -43,7 +43,7 @@ type Service struct {
 	kmsDecryptKeyArn string
 	kmsSigningKeyID  string
 	kmsSigningClient wrappedKMSClient
-	sdkClient        wrappedQldbSdkClient
+	sdkClient        wrappedQldbSDKClient
 	pubKey           []byte
 }
 
@@ -295,7 +295,7 @@ func validateTransactionHistory(
 // hashes to re-derive the digest.
 func revisionValidInTree(
 	ctx context.Context,
-	client wrappedQldbSdkClient,
+	client wrappedQldbSDKClient,
 	transaction *qldbPaymentTransitionHistoryEntry,
 ) (bool, error) {
 	ledgerName := "LEDGER_NAME"

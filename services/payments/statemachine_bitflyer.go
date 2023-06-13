@@ -10,14 +10,6 @@ type BitflyerMachine struct {
 	baseStateMachine
 }
 
-// NewBitflyerMachine returns an BitflyerMachine with values specified.
-func NewBitflyerMachine(transaction *Transaction, service *Service) *BitflyerMachine {
-	machine := BitflyerMachine{}
-	machine.setService(service)
-	machine.setTransaction(transaction)
-	return &machine
-}
-
 // Prepare implements TxStateMachine for the Bitflyer machine. It will attempt to initialize a record in QLDB
 // returning the state of the record in QLDB. If the record already exists, in a state other than Prepared, an
 // error is returned.
@@ -30,7 +22,7 @@ func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 	}
 	bm.transaction.State = nextState
-	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
+	entry, err := bm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -48,7 +40,7 @@ func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) 
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 	}
 	bm.transaction.State = nextState
-	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
+	entry, err := bm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -75,7 +67,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 		}
 		bm.transaction.State = nextState
 	}
-	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
+	entry, err := bm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -93,7 +85,7 @@ func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
 	}
 	bm.transaction.State = nextState
-	entry, err := bm.service.WriteTransaction(ctx, bm.transaction)
+	entry, err := bm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}

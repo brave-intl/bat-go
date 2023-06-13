@@ -114,8 +114,13 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		kmsSigningClient: mockKMS,
 		baseCtx:          context.Background(),
 	}
-	bitflyerStateMachine.setService(&service)
-	bitflyerStateMachine.setTransaction(&testTransaction)
+	bitflyerStateMachine.setPersistenceConfigValues(
+		service.datastore,
+		service.sdkClient,
+		service.kmsSigningClient,
+		service.kmsSigningKeyID,
+		&testTransaction,
+	)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)

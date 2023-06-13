@@ -35,35 +35,70 @@ var Transitions = map[TransactionState][]TransactionState{
 }
 
 type baseStateMachine struct {
-	transaction *Transaction
-	service     *Service
+	transaction      *Transaction
+	datastore        wrappedQldbDriverAPI
+	sdkClient        wrappedQldbSDKClient
+	kmsSigningClient wrappedKMSClient
+	kmsSigningKeyID  string
+}
+
+func (s *baseStateMachine) setPersistenceConfigValues(
+	datastore wrappedQldbDriverAPI,
+	sdkClient wrappedQldbSDKClient,
+	kmsSigningClient wrappedKMSClient,
+	kmsSigningKeyID string,
+	transaction *Transaction,
+) {
+	s.datastore = datastore
+	s.sdkClient = sdkClient
+	s.kmsSigningClient = kmsSigningClient
+	s.kmsSigningKeyID = kmsSigningKeyID
+	s.transaction = transaction
+}
+
+func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*Transaction, error) {
+	return WriteTransaction(
+		ctx,
+		s.datastore,
+		s.sdkClient,
+		s.kmsSigningClient,
+		s.kmsSigningKeyID,
+		s.transaction,
+	)
 }
 
 func (s *baseStateMachine) setTransaction(transaction *Transaction) {
 	s.transaction = transaction
 }
-func (s *baseStateMachine) setService(service *Service) {
-	s.service = service
-}
 
 // GetState returns transaction state for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) GetState() TransactionState {
+func (s *baseStateMachine) getState() TransactionState {
 	return s.transaction.State
 }
 
 // GetTransaction returns a full transaction for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) GetTransaction() *Transaction {
+func (s *baseStateMachine) getTransaction() *Transaction {
 	return s.transaction
 }
 
 // GetTransactionID returns a transaction id for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) GetTransactionID() *uuid.UUID {
+func (s *baseStateMachine) getTransactionID() *uuid.UUID {
 	return s.transaction.ID
 }
 
-// GetService returns a service for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) GetService() *Service {
-	return s.service
+// getDatastore returns a transaction id for a state machine, implementing TxStateMachine.
+func (s *baseStateMachine) getDatastore() wrappedQldbDriverAPI {
+	return s.datastore
+}
+
+// getSDKClient returns a transaction id for a state machine, implementing TxStateMachine.
+func (s *baseStateMachine) getSDKClient() wrappedQldbSDKClient {
+	return s.sdkClient
+}
+
+// getKMSSigningClient returns a transaction id for a state machine, implementing TxStateMachine.
+func (s *baseStateMachine) getKMSSigningClient() wrappedKMSClient {
+	return s.kmsSigningClient
 }
 
 // GenerateTransactionID returns the generated transaction id for a state machine's transaction,
@@ -77,12 +112,19 @@ func StateMachineFromTransaction(transaction *Transaction, service *Service) (Tx
 	var machine TxStateMachine
 	switch transaction.Custodian {
 	case "uphold":
-		machine = NewUpholdMachine(transaction, service)
+		machine = &UpholdMachine{}
 	case "bitflyer":
-		machine = NewBitflyerMachine(transaction, service)
+		machine = &BitflyerMachine{}
 	case "gemini":
-		machine = NewGeminiMachine(transaction, service)
+		machine = &GeminiMachine{}
 	}
+	machine.setPersistenceConfigValues(
+		service.datastore,
+		service.sdkClient,
+		service.kmsSigningClient,
+		service.kmsSigningKeyID,
+		transaction,
+	)
 	return machine, nil
 }
 
@@ -93,9 +135,9 @@ func Drive[T TxStateMachine](
 	machine T,
 ) (*Transaction, error) {
 	// If the transaction does exist in the database, attempt to drive the state machine forward
-	switch machine.GetState() {
+	switch machine.getState() {
 	case Prepared:
-		if len(machine.GetTransaction().Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
+		if len(machine.getTransaction().Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
 			return machine.Authorize(ctx)
 		}
 		return nil, &InsufficientAuthorizationsError{}
@@ -121,13 +163,19 @@ func populateInitialTransaction[T TxStateMachine](ctx context.Context, machine T
 	// Make sure the transaction we have has an ID that matches its contents before we check if it exists
 	generatedID, err := machine.GenerateTransactionID(namespace)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.GetTransactionID(), err)
+		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.getTransactionID(), err)
 	}
-	if generatedID != machine.GetTransactionID() {
+	if generatedID != machine.getTransactionID() {
 		return nil, errors.New("provided idempotencyKey does not match transaction")
 	}
 	// Check if the transaction exists so that we know whether to create it
-	transaction, err := machine.GetService().GetTransactionByID(ctx, generatedID)
+	transaction, err := GetTransactionByID(
+		ctx,
+		machine.getDatastore(),
+		machine.getSDKClient(),
+		machine.getKMSSigningClient(),
+		machine.getTransactionID(),
+	)
 	if err != nil {
 		// If the transaction doesn't exist in the database, prepare it
 		var notFound *QLDBReocrdNotFoundError

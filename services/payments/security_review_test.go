@@ -59,9 +59,9 @@ func (m *mockResult) Next(txn wrappedQldbTxnAPI) bool {
 	return args.Get(0).(bool)
 }
 
-func (m *mockSDKClient) New() *wrappedQldbSdkClient {
+func (m *mockSDKClient) New() *wrappedQldbSDKClient {
 	args := m.Called()
-	return args.Get(0).(*wrappedQldbSdkClient)
+	return args.Get(0).(*wrappedQldbSDKClient)
 }
 func (m *mockSDKClient) GetDigest(
 	ctx context.Context,
@@ -409,7 +409,14 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	}
 
 	// First write should succeed because Verify returns true
-	_, err = service.WriteTransaction(ctx, &testTransaction)
+	_, err = WriteTransaction(
+		ctx,
+		service.datastore,
+		service.sdkClient,
+		service.kmsSigningClient,
+		service.kmsSigningKeyID,
+		&testTransaction,
+	)
 	should.NoError(t, err)
 	// Second write of the same object should fail because Verify returns false
 	// _, err := WriteTransaction(ctx, mockDriver, nil, mockKMS, &testData)

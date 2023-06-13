@@ -10,14 +10,6 @@ type GeminiMachine struct {
 	baseStateMachine
 }
 
-// NewGeminiMachine returns an GeminiMachine with values specified.
-func NewGeminiMachine(transaction *Transaction, service *Service) *GeminiMachine {
-	machine := GeminiMachine{}
-	machine.setService(service)
-	machine.setTransaction(transaction)
-	return &machine
-}
-
 // Prepare implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	nextState := Prepared
@@ -25,7 +17,7 @@ func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 	}
 	gm.transaction.State = nextState
-	entry, err := gm.service.WriteTransaction(ctx, gm.transaction)
+	entry, err := gm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -40,7 +32,7 @@ func (gm *GeminiMachine) Authorize(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 	}
 	gm.transaction.State = nextState
-	entry, err := gm.service.WriteTransaction(ctx, gm.transaction)
+	entry, err := gm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -64,7 +56,7 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 		}
 		gm.transaction.State = nextState
 	}
-	entry, err := gm.service.WriteTransaction(ctx, gm.transaction)
+	entry, err := gm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
@@ -79,7 +71,7 @@ func (gm *GeminiMachine) Fail(ctx context.Context) (*Transaction, error) {
 		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 	}
 	gm.transaction.State = nextState
-	entry, err := gm.service.WriteTransaction(ctx, gm.transaction)
+	entry, err := gm.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}

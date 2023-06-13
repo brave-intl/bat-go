@@ -19,12 +19,14 @@ type idempotentObject interface {
 // TxStateMachine is anything that be progressed through states by the
 // Drive function.
 type TxStateMachine interface {
+	setPersistenceConfigValues(wrappedQldbDriverAPI, wrappedQldbSDKClient, wrappedKMSClient, string, *Transaction)
 	setTransaction(*Transaction)
-	setService(*Service)
-	GetState() TransactionState
-	GetTransaction() *Transaction
-	GetService() *Service
-	GetTransactionID() *uuid.UUID
+	getState() TransactionState
+	getTransaction() *Transaction
+	getTransactionID() *uuid.UUID
+	getDatastore() wrappedQldbDriverAPI
+	getSDKClient() wrappedQldbSDKClient
+	getKMSSigningClient() wrappedKMSClient
 	GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error)
 	Prepare(context.Context) (*Transaction, error)
 	Authorize(context.Context) (*Transaction, error)
@@ -38,8 +40,8 @@ type wrappedQldbDriverAPI interface {
 	Shutdown(ctx context.Context)
 }
 
-type wrappedQldbSdkClient interface {
-	New() *wrappedQldbSdkClient
+type wrappedQldbSDKClient interface {
+	New() *wrappedQldbSDKClient
 	GetDigest(ctx context.Context, params *qldb.GetDigestInput, optFns ...func(*qldb.Options)) (*qldb.GetDigestOutput, error)
 	GetRevision(ctx context.Context, params *qldb.GetRevisionInput, optFns ...func(*qldb.Options)) (*qldb.GetRevisionOutput, error)
 }

@@ -112,7 +112,13 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 		kmsSigningClient: mockKMS,
 		baseCtx:          context.Background(),
 	}
-	geminiStateMachine.setService(&service)
+	geminiStateMachine.setPersistenceConfigValues(
+		service.datastore,
+		service.sdkClient,
+		service.kmsSigningClient,
+		service.kmsSigningKeyID,
+		&testTransaction,
+	)
 	geminiStateMachine.setTransaction(&testTransaction)
 
 	ctx := context.Background()
