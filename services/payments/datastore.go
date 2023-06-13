@@ -44,6 +44,8 @@ type Transaction struct {
 	DryRun              *string          `json:"dryRun"` // determines dry-run
 }
 
+// Authorization represents a single authorization from a payment authorizer indicating that
+// the payout represented by a document ID should be processed
 type Authorization struct {
 	KeyID      string `json:"keyId" valid:"required"`
 	DocumentID string `json:"documentId" valid:"required"`
