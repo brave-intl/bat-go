@@ -7,6 +7,13 @@ func (e *QLDBReocrdNotFoundError) Error() string {
 	return "QLDB record not found"
 }
 
+// InvalidTransitionState indicates that a record does not exist in QLDB.
+type InvalidTransitionState struct{}
+
+func (e *InvalidTransitionState) Error() string {
+	return "invalid transition state"
+}
+
 // QLDBTransitionHistoryNotFoundError indicates that an transition history does not exist.
 type QLDBTransitionHistoryNotFoundError struct{}
 

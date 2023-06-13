@@ -244,7 +244,7 @@ func validateTransactionHistory(
 		// Transitions must always start at 0
 		if i == 0 {
 			if transaction.State != Prepared {
-				return false, errors.New("initial state is not valid")
+				return false, &InvalidTransitionState{}
 			}
 			continue
 		}
@@ -285,7 +285,7 @@ func validateTransactionHistory(
 		}
 		// New transaction state should be present in the list of valid next states for the "previous" (current) state.
 		if !previousTransitionData.nextStateValid(transaction.State) {
-			return false, errors.New("invalid state transition")
+			return false, &InvalidTransitionState{}
 		}
 	}
 	return true, reason
