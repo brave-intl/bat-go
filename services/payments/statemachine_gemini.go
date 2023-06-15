@@ -42,23 +42,35 @@ func (gm *GeminiMachine) Authorize(ctx context.Context) (*Transaction, error) {
 
 // Pay implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
-	var nextState TransactionState
+	var (
+		nextState TransactionState
+		entry     *Transaction
+		err       error
+	)
 	if gm.transaction.State == Pending {
 		nextState = Paid
 		if !gm.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 		}
 		gm.transaction.State = nextState
+		entry, err = gm.wrappedWrite(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write transaction: %w", err)
+		}
 	} else {
 		nextState = Pending
 		if !gm.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", gm.transaction.State, nextState, gm.transaction.ID)
 		}
 		gm.transaction.State = nextState
-	}
-	entry, err := gm.wrappedWrite(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write transaction: %w", err)
+		entry, err = gm.wrappedWrite(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write transaction: %w", err)
+		}
+		entry, err = Drive(ctx, gm)
+		if err != nil {
+			return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+		}
 	}
 	gm.transaction = entry
 	return entry, nil

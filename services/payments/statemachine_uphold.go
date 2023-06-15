@@ -42,23 +42,35 @@ func (um *UpholdMachine) Authorize(ctx context.Context) (*Transaction, error) {
 
 // Pay implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
-	var nextState TransactionState
+	var (
+		nextState TransactionState
+		entry     *Transaction
+		err       error
+	)
 	if um.transaction.State == Pending {
 		nextState = Paid
 		if !um.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 		}
 		um.transaction.State = nextState
+		entry, err = um.wrappedWrite(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write transaction: %w", err)
+		}
 	} else {
 		nextState = Pending
 		if !um.transaction.nextStateValid(nextState) {
 			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", um.transaction.State, nextState, um.transaction.ID)
 		}
 		um.transaction.State = nextState
-	}
-	entry, err := um.wrappedWrite(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write transaction: %w", err)
+		entry, err = um.wrappedWrite(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write transaction: %w", err)
+		}
+		entry, err = Drive(ctx, um)
+		if err != nil {
+			return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+		}
 	}
 	um.transaction = entry
 	return entry, nil
