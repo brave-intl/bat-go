@@ -2,20 +2,12 @@ package payments
 
 import (
 	"crypto/ed25519"
-	"encoding/asn1"
+	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
 )
-
-type ed25519PrivKey struct {
-	Version          int
-	ObjectIdentifier struct {
-		ObjectIdentifier asn1.ObjectIdentifier
-	}
-	PrivateKey []byte
-}
 
 // GetOperatorPrivateKey - get the private key from the file specified
 func GetOperatorPrivateKey(filename string) (ed25519.PrivateKey, error) {
@@ -29,13 +21,16 @@ func GetOperatorPrivateKey(filename string) (ed25519.PrivateKey, error) {
 		return nil, fmt.Errorf("failed to read key file: %w", err)
 	}
 
-	var block *pem.Block
-	block, _ = pem.Decode(privateKeyPEM)
-
-	var asn1PrivKey ed25519PrivKey
-	if _, err := asn1.Unmarshal(block.Bytes, &asn1PrivKey); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal pem key file: %w", err)
+	p, _ := pem.Decode(privateKeyPEM)
+	key, err := x509.ParsePKCS8PrivateKey(p.Bytes)
+	if err != nil {
+		return nil, err
 	}
 
-	return ed25519.NewKeyFromSeed(asn1PrivKey.PrivateKey[2:]), nil
+	edKey, ok := key.(ed25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("key is not ed25519 key")
+	}
+
+	return edKey, nil
 }

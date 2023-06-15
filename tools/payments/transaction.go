@@ -26,11 +26,7 @@ type Tx struct {
 	Amount    decimal.Decimal `json:"amount"`
 	ID        string          `json:"idempotencyKey"`
 	Custodian Custodian       `json:"custodian"`
-}
-
-type isTransaction interface {
-	GetCustodian() Custodian
-	GetAmount() decimal.Decimal
+	DryRun    *string         `json:"dryRun" ion:"-"`
 }
 
 // GetCustodian returns the custodian of the transaction
@@ -54,7 +50,7 @@ func (t *Tx) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements custom json unmarshaling (convert altcurrency) for Tx
-func (t *PrepareTx) UnmarshalJSON(data []byte) error {
+func (pt *PrepareTx) UnmarshalJSON(data []byte) error {
 	type TxAlias Tx
 	aux := &struct {
 		*TxAlias
@@ -64,20 +60,20 @@ func (t *PrepareTx) UnmarshalJSON(data []byte) error {
 		BatchID   string          `json:"transactionId"`
 		Custodian string          `json:"walletProvider"`
 	}{
-		TxAlias: (*TxAlias)(t),
+		TxAlias: (*TxAlias)(pt),
 	}
 
 	if err := json.Unmarshal(data, aux); err != nil {
 		return err
 	}
 
-	t.Amount = altcurrency.BAT.FromProbi(aux.Amount)
-	t.To = aux.To
-	t.Custodian = Custodian(aux.Custodian)
+	pt.Amount = altcurrency.BAT.FromProbi(aux.Amount)
+	pt.To = aux.To
+	pt.Custodian = Custodian(aux.Custodian)
 
-	// uuidv5 with settlement namespace to get the idemptotency key for this publisher/transactionId
+	// uuidV5 with settlement namespace to get the idempotent key for this publisher/transactionId
 	// transactionId is the settlement batch identifier, and publisher is the identifier of the recipient
-	t.ID = uuid.NewSHA1(
+	pt.ID = uuid.NewSHA1(
 		idempotencyNamespace, []byte(aux.BatchID+aux.Publisher)).String()
 
 	return nil
@@ -107,6 +103,7 @@ func (at *AttestedTx) UnmarshalJSON(data []byte) error {
 	at.ID = aux.ID
 	at.Version = aux.Version
 	at.State = aux.State
+	at.DocumentID = aux.DocumentID
 	at.AttestationDocument = aux.AttestationDocument
 
 	return nil

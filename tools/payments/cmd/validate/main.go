@@ -60,7 +60,7 @@ func main() {
 
 	// parse the attested report
 	attestedReport := payments.AttestedReport{}
-	if err := payments.ReadReport(&attestedReport, attestedReportFile); err != nil {
+	if err := payments.ReadAttestedReport(&attestedReport, attestedReportFile); err != nil {
 		log.Fatalf("failed to read attested report: %v\n", err)
 	}
 
@@ -78,9 +78,9 @@ func main() {
 
 	if *verbose {
 		log.Printf("attested report stats: %d transactions; %s total bat\n",
-			len(attestedReport), payments.SumBAT(attestedReport...))
+			len(attestedReport), attestedReport.SumBAT())
 		log.Printf("prepared report stats: %d transactions; %s total bat\n",
-			len(preparedReport), payments.SumBAT(preparedReport...))
+			len(preparedReport), preparedReport.SumBAT())
 	}
 
 	// check that the report is actually nitro attested

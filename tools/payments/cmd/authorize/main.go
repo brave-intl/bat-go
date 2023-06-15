@@ -34,6 +34,7 @@ import (
 	"os"
 
 	"github.com/brave-intl/bat-go/tools/payments"
+	uuid "github.com/satori/go.uuid"
 )
 
 func main() {
@@ -72,45 +73,61 @@ func main() {
 	if *verbose {
 		// print out the configuration
 		log.Printf("Operator Key File Location: %s\n", *key)
-		log.Printf("Redis: %s, %s\n", redisAddrs, redisUser)
+		log.Printf("Redis: %s, %s\n", *redisAddrs, *redisUser)
 	}
 
 	// setup the settlement redis client
-	client, err := payments.NewSettlementClient(ctx, *env, map[string]string{
+	client, err := payments.NewSettlementClient(*env, map[string]string{
 		"addrs": *redisAddrs, "pass": *redisPass, "username": *redisUser, // client specific configurations
 	})
 	if err != nil {
 		log.Fatalf("failed to create settlement client: %v\n", err)
 	}
 
-	for _, fname := range files {
-		f, err := os.Open(fname)
-		if err != nil {
-			log.Fatalf("failed to open report file: %v\n", err)
-		}
-		defer f.Close()
+	wc := &payments.WorkerConfig{
+		PayoutID:      uuid.NewV4().String(),
+		ConsumerGroup: payments.SubmitStream + "-cg",
+		Stream:        payments.SubmitStream,
+		Count:         0,
+	}
 
-		report := payments.AttestedReport{}
-		if err := payments.ReadReport(&report, f); err != nil {
-			log.Fatalf("failed to read report from stdin: %v\n", err)
-		}
+	for _, name := range files {
+		func() {
+			f, err := os.Open(name)
+			if err != nil {
+				log.Fatalf("failed to open report file: %v\n", err)
+			}
+			defer f.Close()
 
-		if *verbose {
-			log.Printf("report stats: %d transactions; %s total bat\n",
-				len(report), payments.SumBAT(report...))
-		}
+			var report payments.AttestedReport
+			if err := payments.ReadAttestedReport(&report, f); err != nil {
+				log.Fatalf("failed to read report from stdin: %v\n", err)
+			}
 
-		priv, err := payments.GetOperatorPrivateKey(*key)
-		if err != nil {
-			log.Fatalf("failed to parse operator key file: %v\n", err)
-		}
+			wc.Count += len(report)
 
-		if err := report.Submit(ctx, priv, client); err != nil {
-			log.Fatalf("failed to submit report: %v\n", err)
-		}
+			if *verbose {
+				log.Printf("report stats: %d transactions; %s total bat\n", len(report), report.SumBAT())
+			}
+
+			priv, err := payments.GetOperatorPrivateKey(*key)
+			if err != nil {
+				log.Fatalf("failed to parse operator key file: %v\n", err)
+			}
+
+			if err := report.Submit(ctx, priv, client); err != nil {
+				log.Fatalf("failed to submit report: %v\n", err)
+			}
+		}()
+	}
+
+	err = client.ConfigureWorker(ctx, payments.SubmitConfigStream, wc)
+	if err != nil {
+		log.Fatalf("failed to write to submit config stream: %v\n", err)
 	}
 
 	if *verbose {
+		log.Printf("submit transactions loaded for %+v\n", wc)
 		log.Println("completed report submission")
 	}
 }
