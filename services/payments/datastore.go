@@ -501,6 +501,13 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 		}
 		return fmt.Errorf("failed to progress transaction: %w", err)
 	}
+	// If the above call to Drive succeeds without giving insufficientAuthorizations,
+	// it's time to kick off payment. @TODO: Needs to be async, but for dry-run we
+	// can leave it synchronous.
+	_, err = Drive(ctx, stateMachine)
+	if err != nil {
+		return fmt.Errorf("failed to progress transaction: %w", err)
+	}
 
 	return nil
 }
