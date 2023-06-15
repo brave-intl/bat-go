@@ -122,11 +122,7 @@ func NewWithProxy(name string, serverURL string, authToken string, proxyURL stri
 	}, nil
 }
 
-func (c *SimpleHTTPClient) request(
-	method string,
-	resolvedURL string,
-	buf io.Reader,
-) (*http.Request, error) {
+func (c *SimpleHTTPClient) request(method string, resolvedURL string, buf io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, resolvedURL, buf)
 	if err != nil {
 		switch err.(type) {
@@ -142,7 +138,7 @@ func (c *SimpleHTTPClient) request(
 	return req, nil
 }
 
-// newRequest creaates a request, JSON encoding the body passed
+// newRequest creates a request, JSON encoding the body passed
 func (c *SimpleHTTPClient) newRequest(
 	ctx context.Context,
 	method,
@@ -286,18 +282,23 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 		return resp, nil
 	}
 
-	logger.Warn().
+	logger.Warn().Err(err).
 		Int("response_status", status).
-		Err(err).
 		Str("body", string(bodyBytes)). // add errored body into the messaging
 		Msg("failed http client call")
-	logger.Debug().Str("host", req.URL.Host).Str("path", req.URL.Path).Str("body", string(bodyBytes)).Msg("failed http client call")
+
+	logger.Debug().
+		Str("host", req.URL.Host).
+		Str("path", req.URL.Path).
+		Str("body", string(bodyBytes)).
+		Msg("failed http client call")
+
 	return resp, errors.Wrap(err, ErrProtocolError)
 }
 
 // RespErrData - error data for http response
 type RespErrData struct {
-	ResponseHeaders interface{}
+	ResponseHeaders http.Header
 	Body            interface{}
 }
 

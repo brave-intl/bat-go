@@ -3,18 +3,19 @@ package clients
 import (
 	"context"
 	"fmt"
-	"github.com/brave-intl/bat-go/libs/errors"
-	testutils "github.com/brave-intl/bat-go/libs/test"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/brave-intl/bat-go/libs/errors"
+	testutils "github.com/brave-intl/bat-go/libs/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDo_ErrorWithResponse(t *testing.T) {
 	errorMsg := testutils.RandomString()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusInternalServerError)
 		_, err := w.Write([]byte(errorMsg))
 		assert.NoError(t, err)
 	}))
@@ -38,7 +39,7 @@ func TestDo_ErrorWithResponse(t *testing.T) {
 	assert.NotNil(t, actual.Cause(), ErrUnableToDecode)
 
 	httpState := actual.Data().(HTTPState)
-	assert.Equal(t, httpState.Status, http.StatusOK)
+	assert.Equal(t, http.StatusInternalServerError, httpState.Status)
 	assert.Equal(t, ts.URL, httpState.Path)
 	assert.Contains(t, fmt.Sprintf("+%v", httpState.Body), errorMsg)
 }

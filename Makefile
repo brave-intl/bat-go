@@ -33,6 +33,7 @@ mock:
 	cd services && mockgen -source=./wallet/service.go -destination=wallet/mockservice.go -package=wallet
 	cd services && mockgen -source=./skus/datastore.go -destination=skus/mockdatastore.go -package=skus
 	cd services && mockgen -source=./skus/credentials.go -destination=skus/mockcredentials.go -package=skus
+	cd services && mockgen -source=./settlement/event/consumer.go -destination=settlement/event/mock/consumer.go -package=mockevent
 	cd libs && mockgen -source=./clients/ratios/client.go -destination=clients/ratios/mock/mock.go -package=mock_ratios
 	cd libs && mockgen -source=./clients/cbr/client.go -destination=clients/cbr/mock/mock.go -package=mock_cbr
 	cd libs && mockgen -source=./clients/reputation/client.go -destination=clients/reputation/mock/mock.go -package=mock_reputation
@@ -52,6 +53,7 @@ instrumented:
 	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/skus -i Datastore -t ../.prom-gowrap.tmpl -o ./skus/instrumented_datastore.go
 	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i Datastore -t ../.prom-gowrap.tmpl -o ./wallet/instrumented_datastore.go
 	cd services && gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o ./wallet/instrumented_read_only_datastore.go
+
 	# fix everything called datastore...
 	cd services && sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' grant/instrumented_datastore.go
 	cd services && sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
@@ -60,6 +62,7 @@ instrumented:
 	cd services && sed -i'bak' 's/datastore_duration_seconds/skus_datastore_duration_seconds/g' ./skus/instrumented_datastore.go
 	cd services && sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
 	cd services && sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
+
 	# http clients
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/cbr -i Client -t ../.prom-gowrap.tmpl -o ./clients/cbr/instrumented_client.go
 	sed -i'bak' 's/cbr.//g' libs/clients/cbr/instrumented_client.go
@@ -75,6 +78,8 @@ instrumented:
 	sed -i'bak' 's/coingecko.//g' libs/clients/coingecko/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/stripe -i Client -t ../.prom-gowrap.tmpl -o ./clients/stripe/instrumented_client.go
 	sed -i'bak' 's/stripe.//g' libs/clients/stripe/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/payment -i Client -t ../.prom-gowrap.tmpl -o ./clients/payment/instrumented_client.go
+	sed -i'bak' 's/payment.//g' libs/clients/payment/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' libs/clients/cbr/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' libs/clients/ratios/instrumented_client.go
@@ -82,6 +87,7 @@ instrumented:
 	sed -i'bak' 's/client_duration_seconds/gemini_client_duration_seconds/g' libs/clients/gemini/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/bitflyer_client_duration_seconds/g' libs/clients/bitflyer/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/coingecko_client_duration_seconds/g' libs/clients/coingecko/instrumented_client.go
+	sed -i'bak' 's/client_duration_seconds/payment_client_duration_seconds/g' libs/clients/payment/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/stripe_client_duration_seconds/g' libs/clients/stripe/instrumented_client.go
 
 %-docker: docker
@@ -186,6 +192,7 @@ format:
 
 format-lint:
 	make format && make lint
+
 lint:
 	docker run --rm -v "$$(pwd):/app" --workdir /app/libs golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" --workdir /app/services golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...

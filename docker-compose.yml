@@ -76,9 +76,13 @@ services:
       - "ALLOWED_ORIGINS=http://localhost:8080"
       - SKUS_WHITELIST
       - "DYNAMODB_ENDPOINT=http://dynamodb:8000"
+      - "AWS_ENDPOINT=http://localstack:4566"
       - AWS_ACCESS_KEY_ID=dummy
       - AWS_SECRET_ACCESS_KEY=dummy
       - AWS_REGION=us-west-2
+      - "REDIS_URL=redis-master"
+      - "REDIS_USERNAME=redis"
+      - "REDIS_PASSWORD=redis"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -88,6 +92,8 @@ services:
       - kafka
       - postgres
       - challenge-bypass
+      - localstack
+      - redis-master
     networks:
       - grant
 
@@ -108,6 +114,7 @@ services:
     environment:
       - OUTPUT_DIR="/out"
       - "DYNAMODB_ENDPOINT=http://dynamodb:8000"
+      - "AWS_ENDPOINT=http://localstack:4566"
       - AWS_ACCESS_KEY_ID=dummy
       - AWS_SECRET_ACCESS_KEY=dummy
       - AWS_REGION=us-west-2
@@ -156,6 +163,9 @@ services:
       - BITFLYER_CLIENT_SECRET
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
+      - "REDIS_URL=redis-master"
+      - "REDIS_USERNAME=redis"
+      - "REDIS_PASSWORD=redis"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -164,12 +174,14 @@ services:
       - kafka
       - postgres
       - challenge-bypass
+      - localstack
+      - redis-master
     networks:
       - grant
 
   redis:
     container_name: grant-redis
-    image: redis
+    image: redis:latest
     ports:
       - "6379:6379"
     networks:
@@ -275,3 +287,116 @@ services:
       - grant
     ports:
       - "8000:8000"
+
+  localstack:
+    container_name: localstack
+    image: localstack/localstack:latest
+    environment:
+      - SERVICES=s3
+      - DEFAULT_REGION=us-east-1
+      - START_WEB=0
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--silent",
+          "--show-error",
+          "--fail",
+          "http://localhost:4566/health",
+        ]
+    networks:
+      - grant
+
+  redis-master:
+    container_name: redis-master
+    image: bitnami/redis-cluster:6.2.6
+    environment:
+      - REDIS_CLUSTER_CREATOR=yes
+      - REDIS_CLUSTER_REPLICAS=0
+      - REDIS_CLUSTER_SLEEP_BEFORE_DNS_LOOKUP=1
+      - REDIS_ACLFILE=/etc/redis/users.acl
+      - ALLOW_EMPTY_PASSWORD=yes
+      - 'REDIS_NODES=redis-master redis-slave-3 redis-slave-1 redis-slave-2'
+      - REDIS_PORT=0
+      - REDIS_TLS_ENABLED=yes
+      - REDIS_TLS_PORT=6379
+      - REDIS_TLS_AUTH_CLIENTS=no
+      - REDIS_TLS_CERT_FILE=/etc/redis/redis.crt
+      - REDIS_TLS_KEY_FILE=/etc/redis/redis.key
+      - REDIS_TLS_CA_FILE=/etc/redis/ca.crt
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./test/redis/tls:/etc/redis
+    depends_on:
+      - redis-slave-1
+      - redis-slave-2
+      - redis-slave-3
+    networks:
+      - grant
+
+  redis-slave-1:
+    container_name: redis-slave-1
+    image: bitnami/redis-cluster:6.2.6
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_ACLFILE=/etc/redis/users.acl
+      - 'REDIS_NODES=redis-master redis-slave-3 redis-slave-1 redis-slave-2'
+      - REDIS_PORT=0
+      - REDIS_TLS_ENABLED=yes
+      - REDIS_TLS_PORT=6379
+      - REDIS_TLS_AUTH_CLIENTS=no
+      - REDIS_TLS_CERT_FILE=/etc/redis/redis.crt
+      - REDIS_TLS_KEY_FILE=/etc/redis/redis.key
+      - REDIS_TLS_CA_FILE=/etc/redis/ca.crt
+    ports:
+      - "6381:6379"
+    volumes:
+      - ./test/redis/tls:/etc/redis
+    networks:
+      - grant
+
+  redis-slave-2:
+    container_name: redis-slave-2
+    image: bitnami/redis-cluster:6.2.6
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_ACLFILE=/etc/redis/users.acl
+      - 'REDIS_NODES=redis-master redis-slave-3 redis-slave-1 redis-slave-2'
+      - REDIS_PORT=0
+      - REDIS_TLS_ENABLED=yes
+      - REDIS_TLS_PORT=6379
+      - REDIS_TLS_AUTH_CLIENTS=no
+      - REDIS_TLS_CERT_FILE=/etc/redis/redis.crt
+      - REDIS_TLS_KEY_FILE=/etc/redis/redis.key
+      - REDIS_TLS_CA_FILE=/etc/redis/ca.crt
+    ports:
+      - "6382:6379"
+    volumes:
+      - ./test/redis/tls:/etc/redis
+    networks:
+      - grant
+
+  redis-slave-3:
+    container_name: redis-slave-3
+    image: bitnami/redis-cluster:6.2.6
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_ACLFILE=/etc/redis/users.acl
+      - 'REDIS_NODES=redis-master redis-slave-3 redis-slave-1 redis-slave-2'
+      - REDIS_PORT=0
+      - REDIS_TLS_ENABLED=yes
+      - REDIS_TLS_PORT=6379
+      - REDIS_TLS_AUTH_CLIENTS=no
+      - REDIS_TLS_CERT_FILE=/etc/redis/redis.crt
+      - REDIS_TLS_KEY_FILE=/etc/redis/redis.key
+      - REDIS_TLS_CA_FILE=/etc/redis/ca.crt
+    ports:
+      - "6383:6379"
+    volumes:
+      - ./test/redis/tls:/etc/redis
+    networks:
+      - grant

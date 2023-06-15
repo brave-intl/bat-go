@@ -54,3 +54,106 @@ func (mr *MockS3GetObjectAPIMockRecorder) GetObject(ctx, params interface{}, opt
 	varargs := append([]interface{}{ctx, params}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObject", reflect.TypeOf((*MockS3GetObjectAPI)(nil).GetObject), varargs...)
 }
+
+// MockS3UploadAPI is a mock of S3UploadAPI interface.
+type MockS3UploadAPI struct {
+	ctrl     *gomock.Controller
+	recorder *MockS3UploadAPIMockRecorder
+}
+
+// MockS3UploadAPIMockRecorder is the mock recorder for MockS3UploadAPI.
+type MockS3UploadAPIMockRecorder struct {
+	mock *MockS3UploadAPI
+}
+
+// NewMockS3UploadAPI creates a new mock instance.
+func NewMockS3UploadAPI(ctrl *gomock.Controller) *MockS3UploadAPI {
+	mock := &MockS3UploadAPI{ctrl: ctrl}
+	mock.recorder = &MockS3UploadAPIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockS3UploadAPI) EXPECT() *MockS3UploadAPIMockRecorder {
+	return m.recorder
+}
+
+// AbortMultipartUpload mocks base method.
+func (m *MockS3UploadAPI) AbortMultipartUpload(ctx context.Context, params *s3.AbortMultipartUploadInput, optFns ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AbortMultipartUpload", varargs...)
+	ret0, _ := ret[0].(*s3.AbortMultipartUploadOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AbortMultipartUpload indicates an expected call of AbortMultipartUpload.
+func (mr *MockS3UploadAPIMockRecorder) AbortMultipartUpload(ctx, params interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AbortMultipartUpload", reflect.TypeOf((*MockS3UploadAPI)(nil).AbortMultipartUpload), varargs...)
+}
+
+// CompleteMultipartUpload mocks base method.
+func (m *MockS3UploadAPI) CompleteMultipartUpload(ctx context.Context, params *s3.CompleteMultipartUploadInput, optFns ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CompleteMultipartUpload", varargs...)
+	ret0, _ := ret[0].(*s3.CompleteMultipartUploadOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteMultipartUpload indicates an expected call of CompleteMultipartUpload.
+func (mr *MockS3UploadAPIMockRecorder) CompleteMultipartUpload(ctx, params interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteMultipartUpload", reflect.TypeOf((*MockS3UploadAPI)(nil).CompleteMultipartUpload), varargs...)
+}
+
+// CreateMultipartUpload mocks base method.
+func (m *MockS3UploadAPI) CreateMultipartUpload(ctx context.Context, params *s3.CreateMultipartUploadInput, optFns ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateMultipartUpload", varargs...)
+	ret0, _ := ret[0].(*s3.CreateMultipartUploadOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMultipartUpload indicates an expected call of CreateMultipartUpload.
+func (mr *MockS3UploadAPIMockRecorder) CreateMultipartUpload(ctx, params interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMultipartUpload", reflect.TypeOf((*MockS3UploadAPI)(nil).CreateMultipartUpload), varargs...)
+}
+
+// UploadPart mocks base method.
+func (m *MockS3UploadAPI) UploadPart(ctx context.Context, params *s3.UploadPartInput, optFns ...func(*s3.Options)) (*s3.UploadPartOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UploadPart", varargs...)
+	ret0, _ := ret[0].(*s3.UploadPartOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UploadPart indicates an expected call of UploadPart.
+func (mr *MockS3UploadAPIMockRecorder) UploadPart(ctx, params interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadPart", reflect.TypeOf((*MockS3UploadAPI)(nil).UploadPart), varargs...)
+}

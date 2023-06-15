@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/custodian"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/logging"
+
 	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shengdoushi/base58"

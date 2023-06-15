@@ -99,7 +99,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(4.1),
 				Available:    decimal.NewFromFloat(4.1),
@@ -108,7 +108,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(2.2),
 				Available:    decimal.NewFromFloat(2.2),
@@ -279,7 +279,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(4.1),
 				Available:    decimal.NewFromFloat(4.1),
@@ -288,7 +288,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(2.2),
 				Available:    decimal.NewFromFloat(2.2),
@@ -370,7 +370,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(3.2),
 				Available:    decimal.NewFromFloat(3.2),

@@ -34,6 +34,7 @@ grantTokens.json
 bat-go
 config.yaml
 share-0.gpg
-
+go.work
+go.work.sum
 fetch-quote.json
 main/main

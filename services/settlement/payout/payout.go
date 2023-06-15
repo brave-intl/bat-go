@@ -1,0 +1,119 @@
+package payout
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/brave-intl/bat-go/services/settlement/event"
+	"github.com/go-redis/redis/v8"
+)
+
+//TODO rename functions and cleanup
+
+const (
+	// defaultStreamValue where no last processed message key exists for a given config stream we set the value
+	// to a default id of `0` i.e. the first message in the stream.
+	defaultStreamValue = "0"
+
+	// lastProcessedMessageKeySuffix is the suffix used to create the last processed message id.
+	// This should be combined with name of the config stream.
+	lastProcessedMessageKeySuffix = "-last-processed-message-id"
+
+	// PreparedTransactionsPrefix is the prefix used for the redis sorted set that stores the prepared transactions.
+	PreparedTransactionsPrefix = "prepared-transactions-"
+
+	// RedisUploadLockKey is the redis key used by consumers to gain a lock before uploading a finalised prepare
+	// settlement report to S3.
+	RedisUploadLockKey = "settlement-report-upload-lock-key"
+)
+
+type (
+	// Config defines the configuration values for a payout stream.
+	Config struct {
+		PayoutID      string `json:"payoutId"`
+		Stream        string `json:"stream"`
+		ConsumerGroup string `json:"consumerGroup"`
+		Count         int    `json:"count"`
+		xRedisID      string
+	}
+)
+
+func (c Config) RedisUploadLockKey() string {
+	return RedisUploadLockKey + c.PayoutID
+}
+
+// RedisConfigStreamClient implements the API to interact with the Redis payout configuration stream.
+type RedisConfigStreamClient struct {
+	rc                      *event.RedisClient
+	configStream            string
+	lastProcessedMessageKey string
+}
+
+func NewRedisConfigStreamClient(redisClient *event.RedisClient, configStream string) *RedisConfigStreamClient {
+	l := fmt.Sprintf("%s%s", configStream, lastProcessedMessageKeySuffix)
+	return &RedisConfigStreamClient{
+		rc:                      redisClient,
+		configStream:            configStream,
+		lastProcessedMessageKey: l,
+	}
+}
+
+//TODO fix error in this func
+
+// ReadPayoutConfig reads the most recent payout config from the provided config stream.
+func (r *RedisConfigStreamClient) ReadPayoutConfig(ctx context.Context) (*Config, error) {
+	// Get the last processed redis message messageID from the key.
+	// If no key exists then set the key to the default.
+	messageID, err := r.rc.Get(ctx, r.lastProcessedMessageKey).Result()
+	if err != nil {
+		switch {
+		// If the key does not exist set the value to default using `SETNX` to avoid a race condition.
+		// This should only happen on the first attempt to retrieve the key or if the key has been deleted.
+		case errors.Is(err, redis.Nil):
+			if _, err := r.rc.SetNX(ctx, r.lastProcessedMessageKey, defaultStreamValue, 0).Result(); err != nil {
+				return nil, fmt.Errorf("error calling setnx: %w", err)
+			}
+			messageID = defaultStreamValue
+		default:
+			return nil, err
+		}
+	}
+
+	messages, err := r.rc.Read(ctx, &redis.XReadArgs{
+		Streams: []string{r.configStream, messageID},
+		Count:   1,
+		Block:   0,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(messages) != 1 {
+		return nil, nil
+	}
+
+	var config Config
+	err = json.Unmarshal([]byte(messages[0].Body), &config)
+	if err != nil {
+		return nil, err
+	}
+
+	XRedisID, ok := messages[0].Headers[event.XRedisIDKey]
+	if !ok {
+		return nil, fmt.Errorf("error no getting xRedisIDKey: %w",
+			errors.New("no x redis key not found for message"))
+	}
+	config.xRedisID = XRedisID
+
+	return &config, nil
+}
+
+func (r *RedisConfigStreamClient) SetLastPayout(ctx context.Context, config Config) error {
+	_, err := r.rc.Set(ctx, r.lastProcessedMessageKey, config.xRedisID, 0).Result()
+	if err != nil {
+		return fmt.Errorf("error redis setting config last processed id: %w", err)
+	}
+	return nil
+}

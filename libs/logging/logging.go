@@ -210,7 +210,8 @@ func Logger(ctx context.Context, prefix string) *zerolog.Logger {
 	return &sl
 }
 
-// FromContext - retrieves logger from context or gets a new logger if not present
+// FromContext retrieves a logger from context or gets a new logger if not present.
+// If a logger is not found in context then it logs a warning that a new logger is being returned
 func FromContext(ctx context.Context) *zerolog.Logger {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {

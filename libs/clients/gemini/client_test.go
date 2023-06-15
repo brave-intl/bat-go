@@ -124,6 +124,16 @@ func findAccountByClass(accounts *[]Account, typ string) Account {
 	return Account{}
 }
 
+func (suite *GeminiTestSuite) TestGenerateGeminiTXRef() {
+	settlementTx := settlement.Transaction{
+		SettlementID: "a2c325e7-7706-47cf-a83c-aafa2c178860", //claim_drain.transaction_id,
+		Type:         "drain",
+		Destination:  "61b9dcb5-20b9-4ce0-bb25-b257df35d8a7", //claim_drain.deposit_destination
+		Channel:      "wallet",
+	}
+	suite.Require().Equal("FzYAApTQV3LcAEeG9NriQxYaTuUixg19KmUsDQ5J5wrF", GenerateTxRef(&settlementTx))
+}
+
 func (suite *GeminiTestSuite) preparePrivateRequest(payload interface{}) string {
 	payloadSerialized, err := json.Marshal(payload)
 	suite.Require().NoError(err, "payload must be able to be serialized")

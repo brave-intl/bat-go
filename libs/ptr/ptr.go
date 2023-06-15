@@ -33,3 +33,8 @@ func StringOr(s *string, or string) string {
 func FromTime(t time.Time) *time.Time {
 	return &t
 }
+
+// FromDuration - get the address of the time
+func FromDuration(d time.Duration) *time.Duration {
+	return &d
+}

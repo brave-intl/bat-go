@@ -28,6 +28,13 @@ import (
 	_ "github.com/brave-intl/bat-go/services/ratios/cmd"
 	// pull in grants module. setup code is in init
 	_ "github.com/brave-intl/bat-go/services/grant/cmd"
+
+	// pull in the settlements automation cmd
+	_ "github.com/brave-intl/bat-go/services/settlement/cmd/settlement"
+	// pull in the settlements prepare cmd
+	_ "github.com/brave-intl/bat-go/services/settlement/prepare/cmd/prepare"
+	// pull in the settlements submit cmd
+	_ "github.com/brave-intl/bat-go/services/settlement/submit/cmd/submit"
 )
 
 var (

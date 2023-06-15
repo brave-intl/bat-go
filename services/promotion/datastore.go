@@ -173,7 +173,7 @@ type Datastore interface {
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
 	// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting
 	RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error)
-	// UpdateDrainJobErred - manually update drain job for retry
+	// UpdateDrainJobAsRetriable UpdateDrainJobErred - manually update drain job for retry
 	UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid.UUID) error
 }
 
@@ -1874,6 +1874,7 @@ where
 }
 
 // UpdateOrder updates the orders status.
+//
 //	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
