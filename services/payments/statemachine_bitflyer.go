@@ -17,16 +17,10 @@ func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
-	nextState := Prepared
-	if !bm.transaction.nextStateValid(nextState) {
-		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
-	}
-	bm.transaction.State = nextState
-	entry, err := bm.wrappedWrite(ctx)
+	entry, err := bm.writeNextState(ctx, Prepared)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write transaction: %w", err)
+		return nil, fmt.Errorf("failed to write next state: %w", err)
 	}
-	bm.transaction = entry
 	return entry, nil
 }
 
@@ -35,55 +29,37 @@ func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) 
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
-	nextState := Authorized
-	if !bm.transaction.nextStateValid(nextState) {
-		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
-	}
-	bm.transaction.State = nextState
-	entry, err := bm.wrappedWrite(ctx)
+	entry, err := bm.writeNextState(ctx, Authorized)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write transaction: %w", err)
+		return nil, fmt.Errorf("failed to write next state: %w", err)
 	}
-	bm.transaction = entry
 	return entry, nil
 }
 
 // Pay implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
-	/*if !bm.transaction.shouldDryRun() {
+	if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
-	}*/
+	}
 	var (
-		nextState TransactionState
-		entry     *Transaction
-		err       error
+		entry *Transaction
+		err   error
 	)
 	if bm.transaction.State == Pending {
-		nextState = Paid
-		if !bm.transaction.nextStateValid(nextState) {
-			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
-		}
-		bm.transaction.State = nextState
-		entry, err = bm.wrappedWrite(ctx)
+		entry, err = bm.writeNextState(ctx, Paid)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write transaction: %w", err)
+			return nil, fmt.Errorf("failed to write next state: %w", err)
 		}
 	} else {
-		nextState = Pending
-		if !bm.transaction.nextStateValid(nextState) {
-			return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
-		}
-		bm.transaction.State = nextState
-		entry, err = bm.wrappedWrite(ctx)
+		entry, err = bm.writeNextState(ctx, Pending)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write transaction: %w", err)
+			return nil, fmt.Errorf("failed to write next state: %w", err)
 		}
 		entry, err = Drive(ctx, bm)
 		if err != nil {
 			return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
 		}
 	}
-	bm.transaction = entry
 	return entry, nil
 }
 
@@ -92,15 +68,9 @@ func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
-	nextState := Failed
-	if !bm.transaction.nextStateValid(nextState) {
-		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", bm.transaction.State, nextState, bm.transaction.ID)
-	}
-	bm.transaction.State = nextState
-	entry, err := bm.wrappedWrite(ctx)
+	entry, err := bm.writeNextState(ctx, Failed)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write transaction: %w", err)
+		return nil, fmt.Errorf("failed to write next state: %w", err)
 	}
-	bm.transaction = entry
 	return entry, nil
 }

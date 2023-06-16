@@ -67,6 +67,19 @@ func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*Transaction, erro
 	)
 }
 
+func (s *baseStateMachine) writeNextState(ctx context.Context, nextState TransactionState) (*Transaction, error) {
+	if !s.transaction.nextStateValid(nextState) {
+		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", s.transaction.State, nextState, s.transaction.ID)
+	}
+	s.transaction.State = nextState
+	entry, err := s.wrappedWrite(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write transaction: %w", err)
+	}
+	s.transaction = entry
+	return entry, nil
+}
+
 func (s *baseStateMachine) setTransaction(transaction *Transaction) {
 	s.transaction = transaction
 }
