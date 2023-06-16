@@ -10,16 +10,6 @@ type UpholdMachine struct {
 	baseStateMachine
 }
 
-// Prepare implements TxStateMachine for uphold machine.
-func (um *UpholdMachine) Prepare(ctx context.Context) (*Transaction, error) {
-	return um.writeNextState(ctx, Prepared)
-}
-
-// Authorize implements TxStateMachine for uphold machine.
-func (um *UpholdMachine) Authorize(ctx context.Context) (*Transaction, error) {
-	return um.writeNextState(ctx, Authorized)
-}
-
 // Pay implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 	var (

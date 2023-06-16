@@ -10,16 +10,6 @@ type GeminiMachine struct {
 	baseStateMachine
 }
 
-// Prepare implements TxStateMachine for the Gemini machine.
-func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
-	return gm.writeNextState(ctx, Prepared)
-}
-
-// Authorize implements TxStateMachine for the Gemini machine.
-func (gm *GeminiMachine) Authorize(ctx context.Context) (*Transaction, error) {
-	return gm.writeNextState(ctx, Authorized)
-}
-
 // Pay implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 	var (

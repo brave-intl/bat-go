@@ -10,20 +10,6 @@ type BitflyerMachine struct {
 	baseStateMachine
 }
 
-// Prepare implements TxStateMachine for the Bitflyer machine. Bitflyer requires no special
-// preparation, so all we do here is progress the state to Prepared.
-func (bm *BitflyerMachine) Prepare(ctx context.Context) (*Transaction, error) {
-	return bm.writeNextState(ctx, Prepared)
-}
-
-// Authorize implements TxStateMachine for the Bitflyer machine.
-func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) {
-	/*if !bm.transaction.shouldDryRun() {
-		// Do bitflyer stuff
-	}*/
-	return bm.writeNextState(ctx, Authorized)
-}
-
 // Pay implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 	/*if !bm.transaction.shouldDryRun() {
