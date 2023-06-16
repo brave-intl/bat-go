@@ -49,7 +49,6 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 			return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
 		}
 	}
-	um.transaction = entry
 	return entry, nil
 }
 

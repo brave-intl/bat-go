@@ -38,9 +38,9 @@ func (bm *BitflyerMachine) Authorize(ctx context.Context) (*Transaction, error) 
 
 // Pay implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
-	if !bm.transaction.shouldDryRun() {
+	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
-	}
+	}*/
 	var (
 		entry *Transaction
 		err   error
