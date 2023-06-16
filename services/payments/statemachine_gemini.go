@@ -12,20 +12,12 @@ type GeminiMachine struct {
 
 // Prepare implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Prepare(ctx context.Context) (*Transaction, error) {
-	entry, err := gm.writeNextState(ctx, Prepared)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write next state: %w", err)
-	}
-	return entry, nil
+	return gm.writeNextState(ctx, Prepared)
 }
 
 // Authorize implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Authorize(ctx context.Context) (*Transaction, error) {
-	entry, err := gm.writeNextState(ctx, Authorized)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write next state: %w", err)
-	}
-	return entry, nil
+	return gm.writeNextState(ctx, Authorized)
 }
 
 // Pay implements TxStateMachine for the Gemini machine.
@@ -35,10 +27,7 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 		err   error
 	)
 	if gm.transaction.State == Pending {
-		entry, err = gm.writeNextState(ctx, Paid)
-		if err != nil {
-			return nil, fmt.Errorf("failed to write next state: %w", err)
-		}
+		return gm.writeNextState(ctx, Paid)
 	} else {
 		entry, err = gm.writeNextState(ctx, Pending)
 		if err != nil {
@@ -54,9 +43,5 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 
 // Fail implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Fail(ctx context.Context) (*Transaction, error) {
-	entry, err := gm.writeNextState(ctx, Failed)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write next state: %w", err)
-	}
-	return entry, nil
+	return gm.writeNextState(ctx, Failed)
 }
