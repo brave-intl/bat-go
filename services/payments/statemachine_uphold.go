@@ -6,6 +6,7 @@ import (
 )
 
 // UpholdMachine is an implementation of TxStateMachine for uphold's use-case.
+// Including the baseStateMachine provides a default implementation of TxStateMachine,
 type UpholdMachine struct {
 	baseStateMachine
 }

@@ -6,6 +6,7 @@ import (
 )
 
 // GeminiMachine is an implementation of TxStateMachine for Gemini's use-case.
+// Including the baseStateMachine provides a default implementation of TxStateMachine,
 type GeminiMachine struct {
 	baseStateMachine
 }

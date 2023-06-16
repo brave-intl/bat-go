@@ -6,6 +6,7 @@ import (
 )
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case.
+// Including the baseStateMachine provides a default implementation of TxStateMachine,
 type BitflyerMachine struct {
 	baseStateMachine
 }
