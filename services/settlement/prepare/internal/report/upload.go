@@ -11,27 +11,34 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	awsutils "github.com/brave-intl/bat-go/libs/aws"
+	"github.com/brave-intl/bat-go/libs/clients/payment"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
 )
 
-type RedisUploader struct {
-	redis          *event.RedisClient
-	s3UploadAPI    awsutils.S3UploadAPI
-	s3UploadConfig awsutils.S3UploadConfig
+type PreparedTransactionAPI interface {
+	GetNumberOfPreparedTransactions(ctx context.Context, payoutID string) (int64, error)
+	GetPreparedTransactionsByRange(ctx context.Context, payoutID string, start, stop int64) ([]payment.AttestedTransaction, error)
 }
 
-func NewRedisUploader(redis *event.RedisClient, s3UploadAPI awsutils.S3UploadAPI, s3Config awsutils.S3UploadConfig) *RedisUploader {
-	return &RedisUploader{
-		redis:          redis,
-		s3UploadAPI:    s3UploadAPI,
-		s3UploadConfig: s3Config,
+type PreparedTransactionUploadClient struct {
+	preparedTransactionAPI PreparedTransactionAPI
+	s3UploadAPI            awsutils.S3UploadAPI
+	s3UploadConfig         awsutils.S3UploadConfig
+}
+
+func NewPreparedTransactionUploadClient(preparedTransactionAPI PreparedTransactionAPI, s3UploadAPI awsutils.S3UploadAPI,
+	s3Config awsutils.S3UploadConfig) *PreparedTransactionUploadClient {
+	return &PreparedTransactionUploadClient{
+		preparedTransactionAPI: preparedTransactionAPI,
+		s3UploadAPI:            s3UploadAPI,
+		s3UploadConfig:         s3Config,
 	}
 }
 
-func (r *RedisUploader) Upload(ctx context.Context, config payout.Config) error {
-	logger := logging.Logger(ctx, "RedisUploader.Upload")
+func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config payout.Config) error {
+	logger := logging.Logger(ctx, "PreparedTransactionUploadClient.Upload")
 
 	input := &s3.CreateMultipartUploadInput{
 		Bucket:            aws.String(r.s3UploadConfig.Bucket),
@@ -45,7 +52,7 @@ func (r *RedisUploader) Upload(ctx context.Context, config payout.Config) error 
 		return fmt.Errorf("error create multipart upload: %w", err)
 	}
 
-	card, err := r.redis.ZCard(ctx, payout.PreparedTransactionsPrefix+config.PayoutID).Result()
+	card, err := r.preparedTransactionAPI.GetNumberOfPreparedTransactions(ctx, config.PayoutID)
 	if err != nil {
 		return fmt.Errorf("error calling zcard: %w", err)
 	}
@@ -60,12 +67,12 @@ func (r *RedisUploader) Upload(ctx context.Context, config payout.Config) error 
 	fanOut := make([]<-chan uploadedPart, 0)
 
 	for i := int64(0); i < card; i += r.s3UploadConfig.PartSize {
-		members, err := r.redis.ZRange(ctx, payout.PreparedTransactionsPrefix+config.PayoutID, i, i+r.s3UploadConfig.PartSize).Result()
+		t, err := r.preparedTransactionAPI.GetPreparedTransactionsByRange(ctx, config.PayoutID, i, i+r.s3UploadConfig.PartSize)
 		if err != nil {
 			return fmt.Errorf("error calling zrange: %w", err)
 		}
 
-		b, err := json.Marshal(members)
+		b, err := json.Marshal(t)
 		if err != nil {
 			return fmt.Errorf("error marshalling members: %w", err)
 		}
@@ -144,8 +151,8 @@ func uploadPartAsync(ctx context.Context, s3UploadAPI awsutils.S3UploadAPI, outp
 				options.RetryMaxAttempts = 5
 			})
 
-			// We need to check the upload output from aws is not nil, for example when we get an error,
-			// before setting the fields on the uploaded part.
+			// We need to check the upload output part from AWS is not nil before setting the fields on the upload part.
+			// This happens when we get an error, we just want return the error and part number with zero value fields.
 			up := uploadedPart{
 				part: partNumber,
 				err:  err,

@@ -3,7 +3,6 @@ package factory
 import (
 	"fmt"
 
-	"github.com/brave-intl/bat-go/libs/clients/payment"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
 	uuid "github.com/satori/go.uuid"
 
@@ -17,9 +16,21 @@ const (
 	dlqSuffix     = "-dql"
 )
 
-type ConsumerFactoryFunc func(redis *event.RedisClient, prometheus payment.Client, config payout.Config) (event.Consumer, error)
+type PrepareConsumer struct {
+	redisClient   *event.RedisClient
+	streamClient  *payout.RedisConfigStreamClient
+	paymentClient handler.PaymentClient
+}
 
-func (c ConsumerFactoryFunc) CreateConsumer(redis *event.RedisClient, paymentClient payment.Client, config payout.Config) (event.Consumer, error) {
+func NewPrepareConsumer(redisClient *event.RedisClient, streamClient *payout.RedisConfigStreamClient, paymentClient handler.PaymentClient) *PrepareConsumer {
+	return &PrepareConsumer{
+		redisClient:   redisClient,
+		streamClient:  streamClient,
+		paymentClient: paymentClient,
+	}
+}
+
+func (p PrepareConsumer) CreateConsumer(config payout.Config) (event.Consumer, error) {
 	bc, err := event.NewBatchConsumerConfig(
 		event.WithStreamName(config.Stream),
 		event.WithConsumerID(preparePrefix+uuid.NewV4().String()),
@@ -28,9 +39,9 @@ func (c ConsumerFactoryFunc) CreateConsumer(redis *event.RedisClient, paymentCli
 		return nil, fmt.Errorf("prepare consumer: error creating new batch consumer config: %w", err)
 	}
 
-	prepare := handler.NewHandler(redis, paymentClient, config, backoff.Retry)
-	dlq := event.NewDLQErrorHandler(redis, *bc, config.Stream+dlqSuffix)
-	consumer := event.NewBatchConsumer(redis, *bc, prepare, dlq)
+	prepare := handler.NewHandler(p.streamClient, p.paymentClient, config, backoff.Retry)
+	dlq := event.NewDLQErrorHandler(p.redisClient, *bc, config.Stream+dlqSuffix)
+	consumer := event.NewBatchConsumer(p.redisClient, *bc, prepare, dlq)
 
 	return consumer, nil
 }

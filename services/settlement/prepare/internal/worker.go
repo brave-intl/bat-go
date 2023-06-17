@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/sns"
-
 	"github.com/brave-intl/bat-go/libs/ptr"
 
 	awsutils "github.com/brave-intl/bat-go/libs/aws"
@@ -47,7 +46,7 @@ const (
 )
 
 type ConsumerFactory interface {
-	CreateConsumer(redis *event.RedisClient, paymentClient payment.Client, config payout.Config) (event.Consumer, error)
+	CreateConsumer(config payout.Config) (event.Consumer, error)
 }
 
 type ConfigStreamAPI interface {
@@ -55,17 +54,17 @@ type ConfigStreamAPI interface {
 	SetLastPayout(ctx context.Context, config payout.Config) error
 }
 
-type SettlementReportUploader interface {
+type PreparedTransactionUploader interface {
 	Upload(ctx context.Context, config payout.Config) (err error)
 }
 
 type PrepareWorker struct {
-	redis           *event.RedisClient
-	paymentClient   payment.Client
-	consumerFactory ConsumerFactory
-	configClient    ConfigStreamAPI
-	reportUploader  SettlementReportUploader
-	publisher       snslibs.PublishAPI
+	redis                       *event.RedisClient
+	paymentClient               payment.Client
+	consumerFactory             ConsumerFactory
+	configClient                ConfigStreamAPI
+	preparedTransactionUploader PreparedTransactionUploader
+	publisher                   snslibs.PublishAPI
 }
 
 func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
@@ -96,6 +95,8 @@ func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
 	}
 
 	logger := logging.Logger(ctx, "PrepareWorker")
+
+	c := payout.NewRedisConfigStreamClient(redis, prepareConfigStream)
 
 	cfg, err := awsutils.BaseAWSConfig(ctx, logger)
 	if err != nil {
@@ -131,19 +132,21 @@ func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
 		PartSize:    partSize,
 	}
 
-	uploader := report.NewRedisUploader(redis, s3Client, s3UploadConfig)
+	uploader := report.NewPreparedTransactionUploadClient(c, s3Client, s3UploadConfig)
 
 	publisher := snslibs.New(cfg)
 
-	csc := payout.NewRedisConfigStreamClient(redis, prepareConfigStream)
+	p := payment.New(paymentURL)
+
+	f := factory.NewPrepareConsumer(redis, c, p)
 
 	return &PrepareWorker{
-		redis:           redis,
-		paymentClient:   payment.New(paymentURL),
-		consumerFactory: new(factory.ConsumerFactoryFunc),
-		configClient:    csc,
-		reportUploader:  uploader,
-		publisher:       publisher,
+		redis:                       redis,
+		paymentClient:               p,
+		consumerFactory:             f,
+		configClient:                c,
+		preparedTransactionUploader: uploader,
+		publisher:                   publisher,
 	}, nil
 }
 
@@ -170,7 +173,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 			logger.Info().Interface("prepare_config", config).
 				Msg("processing prepare")
 
-			c, err := p.consumerFactory.CreateConsumer(p.redis, p.paymentClient, config)
+			c, err := p.consumerFactory.CreateConsumer(config)
 			if err != nil {
 				logger.Error().Err(err).Msg("error creating consumer")
 				continue
@@ -189,7 +192,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 			}
 
 			workerID := uuid.NewV4()
-			lock, err := p.redis.AcquireLock(ctx, config.RedisUploadLockKey(), workerID, lockTimeout)
+			lock, err := p.redis.AcquireLock(ctx, config.PayoutID, workerID, lockTimeout)
 			if err != nil {
 				logger.Error().Err(err).Msg("error setting lock")
 				continue
@@ -202,7 +205,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			err = p.reportUploader.Upload(ctx, config)
+			err = p.preparedTransactionUploader.Upload(ctx, config)
 			if err != nil {
 				logger.Error().Err(err).Msg("error uploading settlement report")
 				continue
@@ -232,7 +235,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 			//TODO end
 
 			//TODO remove magic numbers
-			num, err := p.redis.ReleaseLock(ctx, config.RedisUploadLockKey(), workerID)
+			num, err := p.redis.ReleaseLock(ctx, config.PayoutID, workerID)
 			if err != nil {
 				logger.Error().Err(err).Msg("error removing lock")
 				continue
@@ -264,3 +267,57 @@ func Runner(ctx context.Context, consumer event.Consumer) error {
 
 	return <-resultC
 }
+
+//func NewWorker(options ...Option) (*PrepareWorker, error) {
+//	w := new(PrepareWorker)
+//	for _, option := range options {
+//		if err := option(w); err != nil {
+//			return nil, err
+//		}
+//	}
+//	return w, nil
+//}
+//
+//func T() {
+//	w, _ := NewWorker(
+//		WithRedisClient(),
+//		WithPaymentClient(),
+//		WithRedisUploader(),
+//		WithNotificationPublisher()
+//		)
+//}
+//
+//type Option func(worker *PrepareWorker) error
+//
+//func WithRedisClient(address, username, password string) Option {
+//	return func(w *PrepareWorker) error {
+//		a := []string{fmt.Sprintf("%s:6379", address)}
+//		r, err := event.NewRedisClient(a, username, password)
+//		if err != nil {
+//			return fmt.Errorf("new prepare worker: error creating redis client: %w", err)
+//		}
+//		w.redis = r
+//		return nil
+//	}
+//}
+//
+//func WithPaymentClient(url string) Option {
+//	return func(w *PrepareWorker) error {
+//		w.paymentClient = payment.New(url)
+//		return nil
+//	}
+//}
+//
+//func WithRedisUploader(url string) Option {
+//	return func(w *PrepareWorker) error {
+//		w.paymentClient = payment.New(url)
+//		return nil
+//	}
+//}
+//
+//func WithNotificationPublisher() Option {
+//	return func(w *PrepareWorker) error {
+//		w.paymentClient = payment.New(url)
+//		return nil
+//	}
+//}

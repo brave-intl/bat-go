@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/brave-intl/bat-go/libs/clients/payment"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/go-redis/redis/v8"
 )
@@ -22,11 +24,7 @@ const (
 	lastProcessedMessageKeySuffix = "-last-processed-message-id"
 
 	// PreparedTransactionsPrefix is the prefix used for the redis sorted set that stores the prepared transactions.
-	PreparedTransactionsPrefix = "prepared-transactions-"
-
-	// RedisUploadLockKey is the redis key used by consumers to gain a lock before uploading a finalised prepare
-	// settlement report to S3.
-	RedisUploadLockKey = "settlement-report-upload-lock-key"
+	preparedTransactionsPrefix = "prepared-transactions-"
 )
 
 type (
@@ -39,10 +37,6 @@ type (
 		xRedisID      string
 	}
 )
-
-func (c Config) RedisUploadLockKey() string {
-	return RedisUploadLockKey + c.PayoutID
-}
 
 // RedisConfigStreamClient implements the API to interact with the Redis payout configuration stream.
 type RedisConfigStreamClient struct {
@@ -116,4 +110,43 @@ func (r *RedisConfigStreamClient) SetLastPayout(ctx context.Context, config Conf
 		return fmt.Errorf("error redis setting config last processed id: %w", err)
 	}
 	return nil
+}
+
+func (r *RedisConfigStreamClient) AddPreparedTransaction(ctx context.Context, payoutID string, preparedTransaction any) error {
+	_, err := r.rc.ZAddNX(ctx, preparedTransactionsPrefix+payoutID, &redis.Z{
+		Score:  float64(time.Now().Unix()),
+		Member: preparedTransaction,
+	}).Result()
+	if err != nil {
+		return fmt.Errorf("error adding prepared transaction: %w", err)
+	}
+	return nil
+}
+
+// GetNumberOfPreparedTransactions returns the number of prepared transactions for the given payout.
+func (r *RedisConfigStreamClient) GetNumberOfPreparedTransactions(ctx context.Context, payoutID string) (int64, error) {
+	c, err := r.rc.ZCard(ctx, preparedTransactionsPrefix+payoutID).Result()
+	if err != nil {
+		return 0, fmt.Errorf("error: %w", err)
+	}
+	return c, nil
+}
+
+func (r *RedisConfigStreamClient) GetPreparedTransactionsByRange(ctx context.Context, payoutID string, start, stop int64) ([]payment.AttestedTransaction, error) {
+	m, err := r.rc.ZRange(ctx, preparedTransactionsPrefix+payoutID, start, stop).Result()
+	if err != nil {
+		return nil, fmt.Errorf("error: %w", err)
+	}
+
+	var txn payment.AttestedTransaction
+	var txns []payment.AttestedTransaction
+	for _, s := range m {
+		err = json.Unmarshal([]byte(s), &txn)
+		if err != nil {
+
+		}
+		txns = append(txns, txn)
+	}
+
+	return txns, nil
 }

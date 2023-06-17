@@ -159,7 +159,7 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 		if len(members) == config.Count {
 			break
 		}
-		members, err = redisClient.ZRangeWithScores(ctx, payout.PreparedTransactionsPrefix+
+		members, err = redisClient.ZRangeWithScores(ctx, "prepared-transactions-"+
 			config.PayoutID, 0, -1).Result()
 		suite.Require().NoError(err)
 	}
@@ -180,17 +180,9 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	suite.Require().NoError(err)
 	defer out.Body.Close()
 
-	var arr []string
-	err = json.NewDecoder(out.Body).Decode(&arr)
-	suite.Require().NoError(err)
-
-	var a payment.AttestedTransaction
 	var attestedTransactions []payment.AttestedTransaction
-	for _, s := range arr {
-		err = json.Unmarshal([]byte(s), &a)
-		suite.Require().NoError(err)
-		attestedTransactions = append(attestedTransactions, a)
-	}
+	err = json.NewDecoder(out.Body).Decode(&attestedTransactions)
+	suite.Require().NoError(err)
 
 	suite.Require().Len(attestedTransactions, len(transactions))
 	suite.Assert().ElementsMatch(attestedTransactions, transactions)

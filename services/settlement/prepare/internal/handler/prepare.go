@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
@@ -12,7 +11,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/payment"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
-	"github.com/go-redis/redis/v8"
 )
 
 var (
@@ -20,24 +18,28 @@ var (
 	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden}
 )
 
+type PreparedTransactionAPI interface {
+	AddPreparedTransaction(ctx context.Context, payoutID string, preparedTransaction any) error
+}
+
 // PaymentClient defines the methods used to call the payment service.
 type PaymentClient interface {
 	Prepare(ctx context.Context, transaction payment.Transaction) (*payment.AttestedTransaction, error)
 }
 
 type prepare struct {
-	redis         *event.RedisClient
-	paymentClient PaymentClient
-	config        payout.Config
-	retry         backoff.RetryFunc
+	preparedTransactionAPI PreparedTransactionAPI
+	paymentClient          PaymentClient
+	config                 payout.Config
+	retry                  backoff.RetryFunc
 }
 
-func NewHandler(redis *event.RedisClient, paymentClient PaymentClient, config payout.Config, retry backoff.RetryFunc) event.Handler {
+func NewHandler(preparedTransactionAPI PreparedTransactionAPI, paymentClient PaymentClient, config payout.Config, retry backoff.RetryFunc) event.Handler {
 	return &prepare{
-		redis:         redis,
-		paymentClient: paymentClient,
-		config:        config,
-		retry:         retry,
+		preparedTransactionAPI: preparedTransactionAPI,
+		paymentClient:          paymentClient,
+		config:                 config,
+		retry:                  retry,
 	}
 }
 
@@ -53,11 +55,7 @@ func (p *prepare) Handle(ctx context.Context, message event.Message) error {
 		return fmt.Errorf("prepare handler: error calling payment service: %w", err)
 	}
 
-	//TODO Is time.now().Unix safe enough or do we need a counter. Must always be greater than previous message
-	_, err = p.redis.ZAddNX(ctx, payout.PreparedTransactionsPrefix+p.config.PayoutID, &redis.Z{
-		Score:  float64(time.Now().Unix()),
-		Member: response,
-	}).Result()
+	err = p.preparedTransactionAPI.AddPreparedTransaction(ctx, p.config.PayoutID, response)
 	if err != nil {
 		return fmt.Errorf("prepare handler: error calling zaddnx: %w", err)
 	}
