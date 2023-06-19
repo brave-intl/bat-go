@@ -47,14 +47,14 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
 	}
 
-	out, err := r.s3UploadAPI.CreateMultipartUpload(ctx, input)
+	multipartUpload, err := r.s3UploadAPI.CreateMultipartUpload(ctx, input)
 	if err != nil {
 		return fmt.Errorf("error create multipart upload: %w", err)
 	}
 
 	totalTransactions, err := r.preparedTransactionAPI.GetNumberOfPreparedTransactions(ctx, config.PayoutID)
 	if err != nil {
-		return fmt.Errorf("error calling zcard: %w", err)
+		return fmt.Errorf("error getting number of prepared transactions: %w", err)
 	}
 
 	if totalTransactions != int64(config.Count) {
@@ -70,16 +70,18 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 	for i := int64(0); i < totalTransactions; i += r.s3UploadConfig.PartSize {
 		t, err := r.preparedTransactionAPI.GetPreparedTransactionsByRange(ctx, config.PayoutID, i, i+r.s3UploadConfig.PartSize)
 		if err != nil {
-			return fmt.Errorf("error calling zrange: %w", err)
+			return fmt.Errorf("error getting prepared transactions by range: %w", err)
 		}
 
 		b, err := json.Marshal(t)
 		if err != nil {
-			return fmt.Errorf("error marshalling members: %w", err)
+			return fmt.Errorf("error marshalling prepared transactions: %w", err)
 		}
 
 		partNum++
-		fanOut = append(fanOut, uploadPartAsync(ctx, r.s3UploadAPI, *out, partNum, b))
+		c := make(chan uploadedPart)
+		uploadPartAsync(ctx, c, r.s3UploadAPI, *multipartUpload, partNum, b)
+		fanOut = append(fanOut, c)
 	}
 
 	completedParts := make([]types.CompletedPart, 0)
@@ -108,15 +110,15 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 	logger.Info().Interface("parts", completedParts).Msg("uploading parts")
 
 	_, err = r.s3UploadAPI.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:   out.Bucket,
-		Key:      out.Key,
-		UploadId: out.UploadId,
+		Bucket:   multipartUpload.Bucket,
+		Key:      multipartUpload.Key,
+		UploadId: multipartUpload.UploadId,
 		MultipartUpload: &types.CompletedMultipartUpload{
 			Parts: completedParts,
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("error complete multipart upload: %w", err)
+		return fmt.Errorf("error calling complete multipart upload: %w", err)
 	}
 
 	return nil
@@ -129,8 +131,8 @@ type uploadedPart struct {
 	err            error
 }
 
-func uploadPartAsync(ctx context.Context, s3UploadAPI awsutils.S3UploadAPI, output s3.CreateMultipartUploadOutput, partNumber int32, body []byte) <-chan uploadedPart {
-	resultC := make(chan uploadedPart)
+func uploadPartAsync(ctx context.Context, resultC chan<- uploadedPart, s3UploadAPI awsutils.S3UploadAPI,
+	output s3.CreateMultipartUploadOutput, partNumber int32, body []byte) {
 	go func() {
 		defer close(resultC)
 
@@ -166,5 +168,4 @@ func uploadPartAsync(ctx context.Context, s3UploadAPI awsutils.S3UploadAPI, outp
 			resultC <- up
 		}
 	}()
-	return resultC
 }
