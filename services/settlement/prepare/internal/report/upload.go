@@ -52,21 +52,22 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 		return fmt.Errorf("error create multipart upload: %w", err)
 	}
 
-	card, err := r.preparedTransactionAPI.GetNumberOfPreparedTransactions(ctx, config.PayoutID)
+	totalTransactions, err := r.preparedTransactionAPI.GetNumberOfPreparedTransactions(ctx, config.PayoutID)
 	if err != nil {
 		return fmt.Errorf("error calling zcard: %w", err)
 	}
 
-	if card != int64(config.Count) {
-		return fmt.Errorf("error unexpected number of transactions: expected %d got %d", config.Count, card)
+	if totalTransactions != int64(config.Count) {
+		return fmt.Errorf("error unexpected number of transactions: expected %d got %d", config.Count, totalTransactions)
 	}
 
-	logger.Info().Int64("total_transactions", card).Msg("starting upload")
+	logger.Info().Int64("total_transactions", totalTransactions).Msg("starting upload")
 
 	partNum := int32(0)
 	fanOut := make([]<-chan uploadedPart, 0)
 
-	for i := int64(0); i < card; i += r.s3UploadConfig.PartSize {
+	// Step through the transactions by part size and upload each part.
+	for i := int64(0); i < totalTransactions; i += r.s3UploadConfig.PartSize {
 		t, err := r.preparedTransactionAPI.GetPreparedTransactionsByRange(ctx, config.PayoutID, i, i+r.s3UploadConfig.PartSize)
 		if err != nil {
 			return fmt.Errorf("error calling zrange: %w", err)
