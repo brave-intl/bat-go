@@ -66,7 +66,7 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 	partNum := int32(0)
 	fanOut := make([]<-chan uploadedPart, 0)
 
-	// Step through the transactions by part size and upload each part.
+	// Step through the total transactions by part size and upload each part async.
 	for i := int64(0); i < totalTransactions; i += r.s3UploadConfig.PartSize {
 		t, err := r.preparedTransactionAPI.GetPreparedTransactionsByRange(ctx, config.PayoutID, i, i+r.s3UploadConfig.PartSize)
 		if err != nil {
