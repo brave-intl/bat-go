@@ -100,7 +100,7 @@ func main() {
 			defer f.Close()
 
 			var report payments.AttestedReport
-			if err := payments.ReadAttestedReport(&report, f); err != nil {
+			if err := payments.ReadReport(&report, f); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 

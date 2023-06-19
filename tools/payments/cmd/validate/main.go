@@ -60,7 +60,7 @@ func main() {
 
 	// parse the attested report
 	attestedReport := payments.AttestedReport{}
-	if err := payments.ReadAttestedReport(&attestedReport, attestedReportFile); err != nil {
+	if err := payments.ReadReport(&attestedReport, attestedReportFile); err != nil {
 		log.Fatalf("failed to read attested report: %v\n", err)
 	}
 

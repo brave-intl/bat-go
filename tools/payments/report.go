@@ -50,27 +50,6 @@ func ReadReport(report any, reader io.Reader) error {
 	return nil
 }
 
-// ReadAttestedReport returns an attested report from the given reader.
-// TODO this maybe removed subject to outcome of workers upload
-func ReadAttestedReport(report *AttestedReport, reader io.Reader) error {
-	var arr []string
-	err := json.NewDecoder(reader).Decode(&arr)
-	if err != nil {
-		return fmt.Errorf("error decoding report: %w", err)
-	}
-
-	for _, s := range arr {
-		var a *AttestedTx
-		err = json.Unmarshal([]byte(s), &a)
-		if err != nil {
-			return fmt.Errorf("failed to parse report: %w", err)
-		}
-		*report = append(*report, a)
-	}
-
-	return nil
-}
-
 // rootAWSNitroCert is the root certificate for the nitro enclaves in aws,
 // retrieved from https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
 var rootAWSNitroCert = `-----BEGIN CERTIFICATE-----
