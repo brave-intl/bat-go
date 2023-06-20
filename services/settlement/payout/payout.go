@@ -26,7 +26,7 @@ const (
 )
 
 var (
-	ErrNoRedisMessageID = errors.New("no x redis key not found for message")
+	errRedisMessageKeyNotFound = errors.New("redis message key not found")
 )
 
 type (
@@ -93,7 +93,7 @@ func (r *RedisConfigStreamClient) ReadPayoutConfig(ctx context.Context) (*Config
 
 	XRedisID, ok := messages[0].Headers[event.XRedisIDKey]
 	if !ok {
-		return nil, fmt.Errorf("error redis message header not found: %w", ErrNoRedisMessageID)
+		return nil, fmt.Errorf("error redis message header not found: %w", errRedisMessageKeyNotFound)
 	}
 	config.xRedisID = XRedisID
 
