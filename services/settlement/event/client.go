@@ -86,15 +86,14 @@ func (r *RedisClient) Read(ctx context.Context, streams []string, count int64, b
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("error calling xread: %w", err)
 	}
-	//TODO return error for no messages
-	var messages []*Message
 
+	var messages []*Message
 	for _, xStream := range xStreams {
 		var xMessage redis.XMessage
 		for _, xMessage = range xStream.Messages {
 			data, ok := xMessage.Values[dataKey]
 			if !ok {
-				continue
+				return nil, fmt.Errorf("error data key not found")
 			}
 			switch s := data.(type) {
 			case string:
