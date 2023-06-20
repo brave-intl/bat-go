@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -191,6 +192,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 				continue
 			}
 
+			// Acquire a lock for this worker.
 			workerID := uuid.NewV4()
 			lock, err := p.redis.AcquireLock(ctx, config.PayoutID, workerID, lockTimeout)
 			if err != nil {
@@ -213,7 +215,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 
 			logger.Info().Msg("sending prepared notification")
 
-			//TODO sns topic setup and move
+			//TODO sns topic setup and move to publisher
 			if isNotificationEnabled() {
 				topic, ok := ctx.Value(appctx.SettlementSNSNotificationTopicARNCTXKey).(string)
 				if !ok {
@@ -232,18 +234,16 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 					continue
 				}
 			}
-			//TODO end
 
-			//TODO remove magic numbers
-			num, err := p.redis.ReleaseLock(ctx, config.PayoutID, workerID)
+			_, err = p.redis.ReleaseLock(ctx, config.PayoutID, workerID)
 			if err != nil {
-				logger.Error().Err(err).Msg("error removing lock")
-				continue
-			}
-
-			// Another consumer has taken lock since we took it.
-			if num == 0 {
-				logger.Warn().Msg("error removing lock")
+				switch {
+				// Check if another worker has taken lock since we took it.
+				case errors.Is(err, event.ErrLockValueDoesNotMatch):
+					logger.Warn().Msg("warning another worker has taken the lock")
+				default:
+					logger.Error().Err(err).Msg("error removing lock")
+				}
 				continue
 			}
 

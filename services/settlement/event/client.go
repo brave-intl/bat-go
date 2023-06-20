@@ -29,6 +29,14 @@ const (
 	dataKey = "data"
 	// XRedisIDKey is the key used to set the redis message is header.
 	XRedisIDKey = "x-redis-id"
+	// ReleaseLockSuccess is the value returned when a lock has been released successfully.
+	ReleaseLockSuccess = 1
+)
+
+var (
+	// ErrLockValueDoesNotMatch is the error returned when the provided value does not match the value
+	// stored at the given key.
+	ErrLockValueDoesNotMatch = errors.New("lock value does not match")
 )
 
 // RedisClient defines a event client
@@ -66,6 +74,9 @@ func (r *RedisClient) Send(ctx context.Context, stream string, message *Message)
 	return nil
 }
 
+// Read reads messages from the given streams and returns the array of messages.
+// This function wraps the redis XRead command see redis documentation for details on provided arguments.
+// This function also ads the underlying redis message id to the headers with the key XRedisIDKey.
 func (r *RedisClient) Read(ctx context.Context, streams []string, count int64, block time.Duration) ([]*Message, error) {
 	xStreams, err := r.XRead(ctx, &redis.XReadArgs{
 		Streams: streams,
@@ -75,7 +86,7 @@ func (r *RedisClient) Read(ctx context.Context, streams []string, count int64, b
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("error calling xread: %w", err)
 	}
-
+	//TODO return error for no messages
 	var messages []*Message
 
 	for _, xStream := range xStreams {
@@ -101,16 +112,35 @@ func (r *RedisClient) Read(ctx context.Context, streams []string, count int64, b
 	return messages, nil
 }
 
+// AcquireLock acquires the lock for the given key and value. If a zero argument is supplied for the expiration
+// time then the lock will not expire and will be held until released.
 func (r *RedisClient) AcquireLock(ctx context.Context, key string, value uuid.UUID, expiration time.Duration) (bool, error) {
-	return r.SetNX(ctx, key, value, expiration).Result()
+	_, err := r.SetNX(ctx, key, value, expiration).Result()
+	if err != nil {
+		return false, fmt.Errorf("error acquiring lock for key %s: %w", key, err)
+	}
+	return true, nil
 }
 
-// TODO return error instead of 0
+// ReleaseLock release the lock for the given key and value and returns ReleaseLockSuccess if successful and an
+// error otherwise. Release lock performs a check before releasing the lock to avoid releasing a lock held by
+// another client. For example, a client may acquire the lock for a given key then take longer than the expiration
+// time for the acquired lock and then release a lock which had been acquired by another client in the meantime.
+// Both the key and value must match the original acquired lock otherwise a ErrLockValueDoesNotMatch is returned.
 func (r *RedisClient) ReleaseLock(ctx context.Context, key string, value uuid.UUID) (int, error) {
 	k := []string{key}
 	num, err := lua.Unlock.Run(ctx, r, k, value).Int()
 	if err != nil {
-		return 0, fmt.Errorf("redis client: error adding message to redis stream: %w", err)
+		return 0, fmt.Errorf("error releasing lock for key %s: %w", key, err)
 	}
-	return num, nil
+
+	if num == 0 {
+		return 0, ErrLockValueDoesNotMatch
+	}
+
+	if num > 1 {
+		return num, fmt.Errorf("error should have released 1 lock got %d", num)
+	}
+
+	return ReleaseLockSuccess, nil
 }
