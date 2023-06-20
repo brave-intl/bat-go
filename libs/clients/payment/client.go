@@ -36,6 +36,7 @@ type (
 		Version             string          `json:"version"`
 		State               string          `json:"state"`
 		AttestationDocument string          `json:"attestationDocument"` // base64 encoded
+		DryRun              *string         `json:"dryRun" ion:"-"`
 	}
 
 	// AuthorizationHeader headers used to authorize a submit request.
