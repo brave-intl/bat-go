@@ -16,8 +16,8 @@ type Client struct {
 }
 
 func New(cfg aws.Config) *Client {
-	c := sns.NewFromConfig(cfg)
+	snsClient := sns.NewFromConfig(cfg)
 	return &Client{
-		PublishAPI: c,
+		PublishAPI: snsClient,
 	}
 }
