@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -13,9 +14,15 @@ import (
 	awsutils "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/clients/payment"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
 )
+
+type CompletedUpload struct {
+	Location  string
+	VersionID string
+}
 
 type PreparedTransactionAPI interface {
 	GetNumberOfPreparedTransactions(ctx context.Context, payoutID string) (int64, error)
@@ -37,7 +44,7 @@ func NewPreparedTransactionUploadClient(preparedTransactionAPI PreparedTransacti
 	}
 }
 
-func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config payout.Config) error {
+func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config payout.Config) (*CompletedUpload, error) {
 	logger := logging.Logger(ctx, "PreparedTransactionUploadClient.Upload")
 
 	input := &s3.CreateMultipartUploadInput{
@@ -49,16 +56,16 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 
 	multipartUpload, err := r.s3UploadAPI.CreateMultipartUpload(ctx, input)
 	if err != nil {
-		return fmt.Errorf("error create multipart upload: %w", err)
+		return nil, fmt.Errorf("error create multipart upload: %w", err)
 	}
 
 	totalTransactions, err := r.preparedTransactionAPI.GetNumberOfPreparedTransactions(ctx, config.PayoutID)
 	if err != nil {
-		return fmt.Errorf("error getting number of prepared transactions: %w", err)
+		return nil, fmt.Errorf("error getting number of prepared transactions: %w", err)
 	}
 
 	if totalTransactions != int64(config.Count) {
-		return fmt.Errorf("error unexpected number of transactions: expected %d got %d", config.Count, totalTransactions)
+		return nil, fmt.Errorf("error unexpected number of transactions: expected %d got %d", config.Count, totalTransactions)
 	}
 
 	logger.Info().Int64("total_transactions", totalTransactions).Msg("starting upload")
@@ -70,12 +77,12 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 	for i := int64(0); i < totalTransactions; i += r.s3UploadConfig.PartSize {
 		t, err := r.preparedTransactionAPI.GetPreparedTransactionsByRange(ctx, config.PayoutID, i, i+r.s3UploadConfig.PartSize)
 		if err != nil {
-			return fmt.Errorf("error getting prepared transactions by range: %w", err)
+			return nil, fmt.Errorf("error getting prepared transactions by range: %w", err)
 		}
 
 		b, err := json.Marshal(t)
 		if err != nil {
-			return fmt.Errorf("error marshalling prepared transactions: %w", err)
+			return nil, fmt.Errorf("error marshalling prepared transactions: %w", err)
 		}
 
 		partNum++
@@ -90,10 +97,10 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 	for i := 0; i < int(partNum); i++ {
 		select {
 		case <-ctx.Done():
-			return nil
+			return nil, nil
 		case part := <-fanIn:
 			if part.err != nil {
-				return fmt.Errorf("error uploading part: %w", part.err)
+				return nil, fmt.Errorf("error uploading part: %w", part.err)
 			}
 			completedParts = append(completedParts, types.CompletedPart{
 				ETag:           part.eTag,
@@ -109,7 +116,7 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 
 	logger.Info().Interface("parts", completedParts).Msg("uploading parts")
 
-	_, err = r.s3UploadAPI.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+	completeMultipartUpload, err := r.s3UploadAPI.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:   multipartUpload.Bucket,
 		Key:      multipartUpload.Key,
 		UploadId: multipartUpload.UploadId,
@@ -118,10 +125,24 @@ func (r *PreparedTransactionUploadClient) Upload(ctx context.Context, config pay
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("error calling complete multipart upload: %w", err)
+		return nil, fmt.Errorf("error calling complete multipart upload: %w", err)
 	}
 
-	return nil
+	if completeMultipartUpload == nil {
+		return nil, errors.New("error complete multipart upload is nil")
+	}
+
+	if completeMultipartUpload.Location == nil {
+		return nil, errors.New("error complete multipart upload location is nil")
+	}
+
+	// The versionID can be nil if the bucket does not have versionID enabled.
+	cu := &CompletedUpload{
+		Location:  *completeMultipartUpload.Location,
+		VersionID: ptr.StringOr(completeMultipartUpload.VersionId, ""),
+	}
+
+	return cu, nil
 }
 
 type uploadedPart struct {

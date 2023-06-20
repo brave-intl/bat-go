@@ -74,6 +74,8 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	ctx = context.WithValue(ctx, appctx.SettlementPayoutReportBucketCTXKey, bucket)
 	ctx = context.WithValue(ctx, appctx.SettlementPayoutReportContentTypeCTXKey, "application/json")
 	ctx = context.WithValue(ctx, appctx.SettlementPayoutReportUploadPartSizeCTXKey, int64(10))
+	ctx = context.WithValue(ctx, appctx.SettlementSNSNotificationTopicARNCTXKey, testutils.RandomString())
+
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
 

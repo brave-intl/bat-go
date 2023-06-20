@@ -8,11 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/sns"
-	"github.com/brave-intl/bat-go/libs/ptr"
-
 	awsutils "github.com/brave-intl/bat-go/libs/aws"
 	snslibs "github.com/brave-intl/bat-go/libs/aws/sns"
+	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/payment"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -56,7 +54,11 @@ type ConfigStreamAPI interface {
 }
 
 type PreparedTransactionUploader interface {
-	Upload(ctx context.Context, config payout.Config) (err error)
+	Upload(ctx context.Context, config payout.Config) (*report.CompletedUpload, error)
+}
+
+type NotificationAPI interface {
+	SendNotification(ctx context.Context, payoutID, reportURI string, versionID string) error
 }
 
 type PrepareWorker struct {
@@ -65,7 +67,7 @@ type PrepareWorker struct {
 	consumerFactory             ConsumerFactory
 	configClient                ConfigStreamAPI
 	preparedTransactionUploader PreparedTransactionUploader
-	publisher                   snslibs.PublishAPI
+	notification                NotificationAPI
 }
 
 func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
@@ -137,6 +139,14 @@ func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
 
 	publisher := snslibs.New(cfg)
 
+	topic, ok := ctx.Value(appctx.SettlementSNSNotificationTopicARNCTXKey).(string)
+	if !ok {
+		topic = "TODO"
+		// return nil, fmt.Errorf("error getting sns topic")
+	}
+
+	n := report.NewNotificationClient(publisher, topic, backoff.Retry)
+
 	p := payment.New(paymentURL)
 
 	f := factory.NewPrepareConsumer(redis, c, p)
@@ -147,7 +157,7 @@ func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
 		consumerFactory:             f,
 		configClient:                c,
 		preparedTransactionUploader: uploader,
-		publisher:                   publisher,
+		notification:                n,
 	}, nil
 }
 
@@ -207,7 +217,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			err = p.preparedTransactionUploader.Upload(ctx, config)
+			completedUpload, err := p.preparedTransactionUploader.Upload(ctx, config)
 			if err != nil {
 				logger.Error().Err(err).Msg("error uploading settlement report")
 				continue
@@ -215,23 +225,10 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 
 			logger.Info().Msg("sending prepared notification")
 
-			//TODO sns topic setup and move to publisher
 			if isNotificationEnabled() {
-				topic, ok := ctx.Value(appctx.SettlementSNSNotificationTopicARNCTXKey).(string)
-				if !ok {
-					logger.Error().Err(err).Msg("error uploading settlement report")
-					continue
-				}
-
-				input := &sns.PublishInput{
-					Message:  ptr.FromString("msg"),
-					TopicArn: ptr.FromString(topic),
-				}
-
-				_, err = p.publisher.Publish(ctx, input)
+				err = p.notification.SendNotification(ctx, config.PayoutID, completedUpload.Location, completedUpload.VersionID)
 				if err != nil {
 					logger.Error().Err(err).Msg("error sending notification")
-					continue
 				}
 			}
 
@@ -247,7 +244,8 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			logger.Info().Msg("prepare complete")
+			logger.Info().Interface("uploaded_report", completedUpload).
+				Msg("prepare complete")
 		}
 	}
 }
