@@ -12,8 +12,6 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-//TODO rename functions and cleanup
-
 const (
 	// defaultStreamValue where no last processed message key exists for a given config stream we set the value
 	// to a default id of `0` i.e. the first message in the stream.
@@ -25,6 +23,10 @@ const (
 
 	// PreparedTransactionsPrefix is the prefix used for the redis sorted set that stores the prepared transactions.
 	preparedTransactionsPrefix = "prepared-transactions-"
+)
+
+var (
+	ErrNoRedisMessageID = errors.New("no x redis key not found for message")
 )
 
 type (
@@ -54,9 +56,8 @@ func NewRedisConfigStreamClient(redisClient *event.RedisClient, configStream str
 	}
 }
 
-//TODO fix error in this func
-
-// ReadPayoutConfig reads the most recent payout config from the provided config stream.
+// ReadPayoutConfig reads the most recent payout config from the provided config stream. This func will block
+// indefinitely waiting for new messages.
 func (r *RedisConfigStreamClient) ReadPayoutConfig(ctx context.Context) (*Config, error) {
 	// Get the last processed redis message messageID from the key.
 	// If no key exists then set the key to the default.
@@ -67,21 +68,17 @@ func (r *RedisConfigStreamClient) ReadPayoutConfig(ctx context.Context) (*Config
 		// This should only happen on the first attempt to retrieve the key or if the key has been deleted.
 		case errors.Is(err, redis.Nil):
 			if _, err := r.rc.SetNX(ctx, r.lastProcessedMessageKey, defaultStreamValue, 0).Result(); err != nil {
-				return nil, fmt.Errorf("error calling setnx: %w", err)
+				return nil, fmt.Errorf("read payout config: error calling setnx: %w", err)
 			}
 			messageID = defaultStreamValue
 		default:
-			return nil, err
+			return nil, fmt.Errorf("error getting last processed message: %w", err)
 		}
 	}
 
-	messages, err := r.rc.Read(ctx, &redis.XReadArgs{
-		Streams: []string{r.configStream, messageID},
-		Count:   1,
-		Block:   0,
-	})
+	messages, err := r.rc.Read(ctx, []string{r.configStream, messageID}, 1, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading payout config message: %w", err)
 	}
 
 	if len(messages) != 1 {
@@ -91,13 +88,12 @@ func (r *RedisConfigStreamClient) ReadPayoutConfig(ctx context.Context) (*Config
 	var config Config
 	err = json.Unmarshal([]byte(messages[0].Body), &config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling payout config message: %w", err)
 	}
 
 	XRedisID, ok := messages[0].Headers[event.XRedisIDKey]
 	if !ok {
-		return nil, fmt.Errorf("error no getting xRedisIDKey: %w",
-			errors.New("no x redis key not found for message"))
+		return nil, fmt.Errorf("error redis message header not found: %w", ErrNoRedisMessageID)
 	}
 	config.xRedisID = XRedisID
 
@@ -127,7 +123,7 @@ func (r *RedisConfigStreamClient) AddPreparedTransaction(ctx context.Context, pa
 func (r *RedisConfigStreamClient) GetNumberOfPreparedTransactions(ctx context.Context, payoutID string) (int64, error) {
 	c, err := r.rc.ZCard(ctx, preparedTransactionsPrefix+payoutID).Result()
 	if err != nil {
-		return 0, fmt.Errorf("error: %w", err)
+		return 0, fmt.Errorf("error getting number of prepared transactions: %w", err)
 	}
 	return c, nil
 }
@@ -135,7 +131,7 @@ func (r *RedisConfigStreamClient) GetNumberOfPreparedTransactions(ctx context.Co
 func (r *RedisConfigStreamClient) GetPreparedTransactionsByRange(ctx context.Context, payoutID string, start, stop int64) ([]payment.AttestedTransaction, error) {
 	m, err := r.rc.ZRange(ctx, preparedTransactionsPrefix+payoutID, start, stop).Result()
 	if err != nil {
-		return nil, fmt.Errorf("error: %w", err)
+		return nil, fmt.Errorf("error getting prepared transactions by range: %w", err)
 	}
 
 	var txn payment.AttestedTransaction
@@ -143,7 +139,7 @@ func (r *RedisConfigStreamClient) GetPreparedTransactionsByRange(ctx context.Con
 	for _, s := range m {
 		err = json.Unmarshal([]byte(s), &txn)
 		if err != nil {
-
+			return nil, fmt.Errorf("error unmarshalling prepared transactions: %w", err)
 		}
 		txns = append(txns, txn)
 	}

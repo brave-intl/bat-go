@@ -66,8 +66,12 @@ func (r *RedisClient) Send(ctx context.Context, stream string, message *Message)
 	return nil
 }
 
-func (r *RedisClient) Read(ctx context.Context, args *redis.XReadArgs) ([]*Message, error) {
-	xStreams, err := r.XRead(ctx, args).Result()
+func (r *RedisClient) Read(ctx context.Context, streams []string, count int64, block time.Duration) ([]*Message, error) {
+	xStreams, err := r.XRead(ctx, &redis.XReadArgs{
+		Streams: streams,
+		Count:   count,
+		Block:   block,
+	}).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("error calling xread: %w", err)
 	}
@@ -87,7 +91,6 @@ func (r *RedisClient) Read(ctx context.Context, args *redis.XReadArgs) ([]*Messa
 				if err != nil || len(message.Body) == 0 {
 					return nil, fmt.Errorf("error creating new message: %w", err)
 				}
-				//TODO remove this if not needed
 				message.SetHeader(XRedisIDKey, xMessage.ID)
 				messages = append(messages, message)
 			default:
