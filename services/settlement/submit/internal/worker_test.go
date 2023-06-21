@@ -13,14 +13,12 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/payment"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	testutils "github.com/brave-intl/bat-go/libs/test"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
 	"github.com/brave-intl/bat-go/services/settlement/settlementtest"
 	"github.com/brave-intl/bat-go/services/settlement/submit/internal"
-
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -65,11 +63,13 @@ func (suite *WorkerTestSuite) TestE2ESubmit() {
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisAddress)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, redisUsername)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, redisPassword)
-	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
+
+	submitConfig, err := internal.NewSubmitConfig(
+		internal.WithRedisAddress(redisAddress),
+		internal.WithRedisUsername(redisUsername),
+		internal.WithRedisPassword(redisPassword),
+		internal.WithPaymentClient(paymentURL))
 
 	// Dynamically created submit stream.
 	streamName := testutils.RandomString()
@@ -100,7 +100,7 @@ func (suite *WorkerTestSuite) TestE2ESubmit() {
 	}
 
 	// start submit consumer
-	worker, err := internal.NewSubmitWorker(ctx)
+	worker, err := internal.NewSubmitWorker(submitConfig)
 	suite.Require().NoError(err)
 	go worker.Run(ctx)
 

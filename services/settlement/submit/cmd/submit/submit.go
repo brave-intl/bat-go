@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	loggingutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/settlement/cmd/settlement"
 	"github.com/brave-intl/bat-go/services/settlement/submit/internal"
@@ -30,15 +29,21 @@ func init() {
 // StartSubmitWorker initializes and starts submit worker.
 func StartSubmitWorker(command *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(command.Context())
-	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, viper.Get("REDIS_ADDRESS"))
-	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, viper.Get("REDIS_USERNAME"))
-	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, viper.Get("REDIS_PASSWORD"))
-	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get("PAYMENT_SERVICE_URL"))
-
 	logger := loggingutils.Logger(ctx, "SubmitWorker")
+
+	config, err := internal.NewSubmitConfig(
+		internal.WithRedisAddress(viper.GetString("REDIS_ADDRESS")),
+		internal.WithRedisUsername(viper.GetString("REDIS_USERNAME")),
+		internal.WithRedisPassword(viper.GetString("REDIS_PASSWORD")),
+		internal.WithPaymentClient(viper.GetString("PAYMENT_SERVICE_URL")))
+	if err != nil {
+		logger.Fatal().Err(err).
+			Msg("error creating submit config")
+	}
+
 	logger.Info().Msg("starting submit worker")
 
-	s, err := internal.NewSubmitWorker(ctx)
+	s, err := internal.NewSubmitWorker(config)
 	if err != nil {
 		logger.Fatal().Err(err).
 			Msg("error creating submit worker")

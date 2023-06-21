@@ -202,26 +202,6 @@ const (
 	EgressProxyAddrCTXKey CTXKey = "egress_proxy_addr"
 	// EnclaveDecryptKeyTemplateSecretIDCTXKey - the context key for getting the key template for key creation
 	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
-
-	// SettlementRedisAddressCTXKey the redis url
-	SettlementRedisAddressCTXKey CTXKey = "redis_settlement_url"
-	// SettlementRedisUsernameCTXKey the redis settlement username
-	SettlementRedisUsernameCTXKey CTXKey = "redis_settlement_username"
-	// SettlementRedisPasswordCTXKey the redis settlement password
-	SettlementRedisPasswordCTXKey CTXKey = "redis_settlement_password"
-
-	// PaymentServiceURLCTXKey the payment service url
-	PaymentServiceURLCTXKey CTXKey = "payment_service_url"
-
-	// SettlementSNSNotificationTopicARNCTXKey the name of the topic used to send notifications.
-	SettlementSNSNotificationTopicARNCTXKey CTXKey = "TODO"
-
-	// SettlementPayoutReportBucketCTXKey the name of the bucket where the settlement report should be uploaded to
-	SettlementPayoutReportBucketCTXKey CTXKey = "settlements_txn_bucket"
-	// SettlementPayoutReportContentTypeCTXKey the standard MIME type describing the format of the settlement report data
-	SettlementPayoutReportContentTypeCTXKey CTXKey = "settlement_payout_report_content_type"
-	// SettlementPayoutReportUploadPartSizeCTXKey the part size used for uploading. This determines the number of transactions in each uploaded part
-	SettlementPayoutReportUploadPartSizeCTXKey CTXKey = "settlement_payout_report_upload_part_size"
 )
 
 var (

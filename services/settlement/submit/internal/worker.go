@@ -2,10 +2,10 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/libs/clients/payment"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	loggingutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
@@ -36,35 +36,16 @@ type SubmitWorker struct {
 }
 
 // NewSubmitWorker creates a new instance of SubmitWorker.
-func NewSubmitWorker(ctx context.Context) (*SubmitWorker, error) {
-	redisAddress, ok := ctx.Value(appctx.SettlementRedisAddressCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new submit worker: error retrieving redis address")
-	}
-
-	redisUsername, ok := ctx.Value(appctx.SettlementRedisUsernameCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new submit worker: error retrieving redis username")
-	}
-
-	redisPassword, ok := ctx.Value(appctx.SettlementRedisPasswordCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new submit worker: error retrieving redis password")
-	}
-
-	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
-	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
+func NewSubmitWorker(config *SubmitConfig) (*SubmitWorker, error) {
+	redisAddresses := []string{config.redisAddress + ":6379"}
+	redis, err := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
 	if err != nil {
 		return nil, fmt.Errorf("new submit worker: error creating redis client: %w", err)
 	}
 
-	paymentURL, ok := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new submit consumer: error retrieving payment url")
-	}
-	paymentClient := payment.New(paymentURL)
+	paymentClient := payment.New(config.paymentURL)
 
-	csc := payout.NewRedisConfigStreamClient(redis, submitConfigStream)
+	csc := payout.NewRedisConfigStreamClient(redis, config.configStream)
 
 	return &SubmitWorker{
 		redis:           redis,
@@ -116,9 +97,9 @@ func (s *SubmitWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			logger.Info().Msg("submit complete")
-
 			//TODO update the payout as complete
+
+			logger.Info().Msg("submit complete")
 		}
 	}
 }
@@ -140,5 +121,73 @@ func consume(ctx context.Context, consumer event.Consumer) error {
 		return ctx.Err()
 	case err = <-resultC:
 		return err
+	}
+}
+
+// SubmitConfig hold the configuration for a SubmitWorker.
+type SubmitConfig struct {
+	redisAddress  string
+	redisUsername string
+	redisPassword string
+	paymentURL    string
+	configStream  string
+}
+
+// NewSubmitConfig creates and instance of SubmitConfig with the given options.
+func NewSubmitConfig(options ...Option) (*SubmitConfig, error) {
+	c := &SubmitConfig{
+		configStream: submitConfigStream,
+	}
+	for _, option := range options {
+		if err := option(c); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+type Option func(worker *SubmitConfig) error
+
+// WithRedisAddress sets the redis address.
+func WithRedisAddress(address string) Option {
+	return func(c *SubmitConfig) error {
+		if address == "" {
+			return errors.New("redis address cannot be empty")
+		}
+		c.redisAddress = address
+		return nil
+	}
+}
+
+// WithRedisUsername sets the redis username.
+func WithRedisUsername(username string) Option {
+	return func(c *SubmitConfig) error {
+		if username == "" {
+			return errors.New("redis username cannot be empty")
+		}
+		c.redisUsername = username
+		return nil
+	}
+}
+
+// WithRedisPassword set the redis password.
+func WithRedisPassword(password string) Option {
+	return func(c *SubmitConfig) error {
+		if password == "" {
+			return errors.New("redis password cannot be empty")
+		}
+		c.redisPassword = password
+		return nil
+	}
+}
+
+// WithPaymentClient sets the url for the payment service.
+func WithPaymentClient(url string) Option {
+	return func(c *SubmitConfig) error {
+		if url == "" {
+			return errors.New("payment url cannot be empty")
+		}
+		c.paymentURL = url
+		return nil
 	}
 }
