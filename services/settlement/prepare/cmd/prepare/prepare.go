@@ -26,7 +26,7 @@ func init() {
 	settlement.Cmd.AddCommand(WorkerCmd)
 }
 
-// StartPrepareWorker initializes and starts prepare worker
+// StartPrepareWorker initializes and starts a new instance of prepare worker.
 func StartPrepareWorker(command *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(command.Context())
 	logger := loggingutils.Logger(ctx, "PrepareWorker")
@@ -45,13 +45,13 @@ func StartPrepareWorker(command *cobra.Command, args []string) {
 
 	logger.Info().Msg("starting prepare worker")
 
-	p, err := internal.NewPrepareWorker(ctx, config)
+	worker, err := internal.CreatePrepareWorker(ctx, config)
 	if err != nil {
 		logger.Fatal().Err(err).
 			Msg("error creating prepare worker")
 	}
 
-	go p.Run(ctx)
+	go worker.Run(ctx)
 
 	logger.Info().Msg("prepare worker started")
 

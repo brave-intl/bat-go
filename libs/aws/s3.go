@@ -39,7 +39,7 @@ type Client struct {
 }
 
 // NewClient creates a new aws client instance.
-func NewClient(cfg aws.Config, optFns ...func(*s3.Options)) (*Client, error) {
+func NewClient(cfg aws.Config, optFns ...func(*s3.Options)) *Client {
 	f := func(o *s3.Options) {
 		o.UsePathStyle = true
 	}
@@ -48,7 +48,7 @@ func NewClient(cfg aws.Config, optFns ...func(*s3.Options)) (*Client, error) {
 	return &Client{
 		S3GetObjectAPI: c,
 		S3UploadAPI:    c,
-	}, nil
+	}
 }
 
 // BaseAWSConfig return an aws.Config with region and logger.

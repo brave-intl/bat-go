@@ -36,23 +36,14 @@ type SubmitWorker struct {
 }
 
 // NewSubmitWorker creates a new instance of SubmitWorker.
-func NewSubmitWorker(config *SubmitConfig) (*SubmitWorker, error) {
-	redisAddresses := []string{config.redisAddress + ":6379"}
-	redis, err := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
-	if err != nil {
-		return nil, fmt.Errorf("new submit worker: error creating redis client: %w", err)
-	}
-
-	paymentClient := payment.New(config.paymentURL)
-
-	csc := payout.NewRedisConfigStreamClient(redis, config.configStream)
-
+func NewSubmitWorker(redisClient *event.RedisClient, paymentClient payment.Client, consumerFactory ConsumerFactory,
+	configStream ConfigStreamAPI) *SubmitWorker {
 	return &SubmitWorker{
-		redis:           redis,
+		redis:           redisClient,
 		paymentClient:   paymentClient,
-		consumerFactory: new(factory.ConsumerFactoryFunc),
-		configStream:    csc,
-	}, nil
+		consumerFactory: consumerFactory,
+		configStream:    configStream,
+	}
 }
 
 // Run starts a SubmitWorker. Messages will be consumed from the defined SubmitConfig and passed to
@@ -190,4 +181,19 @@ func WithPaymentClient(url string) Option {
 		c.paymentURL = url
 		return nil
 	}
+}
+
+// CreateSubmitWorker is a factory method to create a new instance of SubmitWorker.
+func CreateSubmitWorker(config *SubmitConfig) *SubmitWorker {
+	redisAddresses := []string{config.redisAddress + ":6379"}
+	redisClient := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
+
+	paymentClient := payment.New(config.paymentURL)
+
+	csc := payout.NewRedisConfigStreamClient(redisClient, config.configStream)
+
+	worker := NewSubmitWorker(redisClient, paymentClient,
+		new(factory.ConsumerFactoryFunc), csc)
+
+	return worker
 }

@@ -5,7 +5,6 @@ package internal_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -51,9 +50,8 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	suite.Require().NotNil(redisPassword)
 
 	// Create newHandler redis client and clear streams.
-	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
-	redisClient, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
-	suite.Require().NoError(err)
+	redisAddresses := []string{redisAddress + ":6379"}
+	redisClient := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 
 	// Stub payment service with expectedTransactions responses.
 	server := suite.stubPrepareEndpoint()
@@ -129,7 +127,7 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	}
 
 	// Start prepare worker.
-	worker, err := internal.NewPrepareWorker(ctx, prepareConfig)
+	worker, err := internal.CreatePrepareWorker(ctx, prepareConfig)
 	suite.Require().NoError(err)
 	go worker.Run(ctx)
 

@@ -75,39 +75,9 @@ type PrepareWorker struct {
 }
 
 // NewPrepareWorker created a new instance of PrepareWorker.
-func NewPrepareWorker(ctx context.Context, config *PrepareConfig) (*PrepareWorker, error) {
-	redisAddresses := []string{config.redisAddress + ":6379"} //TODO add port address to ops
-	redisClient, err := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
-	if err != nil {
-		return nil, fmt.Errorf("new prepare worker: error creating redis client: %w", err)
-	}
-
-	paymentClient := payment.New(config.paymentURL)
-
-	configStreamClient := payout.NewRedisConfigStreamClient(redisClient, config.configStream)
-
-	consumerFactory := factory.NewPrepareConsumer(redisClient, configStreamClient, paymentClient)
-
-	l := logging.Logger(ctx, "PrepareWorker")
-	cfg, err := awsutils.BaseAWSConfig(ctx, l)
-	if err != nil {
-		return nil, fmt.Errorf("new notify worker: error creating S3 client config: %w", err)
-	}
-
-	s3Client, err := awsutils.NewClient(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("new notify worker: error creating S3 client: %w", err)
-	}
-	s3UploadConfig := awsutils.S3UploadConfig{
-		Bucket:      config.reportBucket,
-		ContentType: config.reportContentType,
-		PartSize:    config.reportUploadPartSize,
-	}
-	preparedTransactionUploadClient := report.NewPreparedTransactionUploadClient(configStreamClient, s3Client, s3UploadConfig)
-
-	publisher := snslibs.New(cfg)
-	notificationClient := report.NewNotificationClient(publisher, config.notificationTopic, backoff.Retry)
-
+func NewPrepareWorker(redisClient *event.RedisClient, paymentClient payment.Client, configStreamClient ConfigStreamAPI,
+	consumerFactory ConsumerFactory, preparedTransactionUploadClient PreparedTransactionUploader,
+	notificationClient NotificationAPI) *PrepareWorker {
 	return &PrepareWorker{
 		redis:                       redisClient,
 		paymentClient:               paymentClient,
@@ -115,7 +85,7 @@ func NewPrepareWorker(ctx context.Context, config *PrepareConfig) (*PrepareWorke
 		consumerFactory:             consumerFactory,
 		preparedTransactionUploader: preparedTransactionUploadClient,
 		notifier:                    notificationClient,
-	}, nil
+	}
 }
 
 // Run starts the Prepare transaction flow. This includes reading from the payout config stream, processing the
@@ -358,4 +328,39 @@ func WithNotificationTopic(notificationTopic string) Option {
 		c.notificationTopic = notificationTopic
 		return nil
 	}
+}
+
+// CreatePrepareWorker in a factory method to create a new instance of PrepareWorker.
+func CreatePrepareWorker(ctx context.Context, config *PrepareConfig) (*PrepareWorker, error) {
+	redisAddresses := []string{config.redisAddress + ":6379"} //TODO add port address to ops
+	redisClient := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
+
+	paymentClient := payment.New(config.paymentURL)
+
+	configStreamClient := payout.NewRedisConfigStreamClient(redisClient, config.configStream)
+
+	consumerFactory := factory.NewPrepareConsumer(redisClient, configStreamClient, paymentClient)
+
+	l := logging.Logger(ctx, "PrepareWorker")
+	cfg, err := awsutils.BaseAWSConfig(ctx, l)
+	if err != nil {
+		return nil, fmt.Errorf("new notify worker: error creating S3 client config: %w", err)
+	}
+
+	s3Client := awsutils.NewClient(cfg)
+
+	s3UploadConfig := awsutils.S3UploadConfig{
+		Bucket:      config.reportBucket,
+		ContentType: config.reportContentType,
+		PartSize:    config.reportUploadPartSize,
+	}
+	preparedTransactionUploadClient := report.NewPreparedTransactionUploadClient(configStreamClient, s3Client, s3UploadConfig)
+
+	publisher := snslibs.New(cfg)
+	notificationClient := report.NewNotificationClient(publisher, config.notificationTopic, backoff.Retry)
+
+	worker := NewPrepareWorker(redisClient, paymentClient, configStreamClient,
+		consumerFactory, preparedTransactionUploadClient, notificationClient)
+
+	return worker, nil
 }

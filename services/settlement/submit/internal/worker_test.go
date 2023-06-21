@@ -5,7 +5,6 @@ package internal_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -47,9 +46,8 @@ func (suite *WorkerTestSuite) TestE2ESubmit() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
-	redisClient, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
-	suite.Require().NoError(err)
+	redisAddresses := []string{redisAddress + ":6379"}
+	redisClient := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 
 	// stub payment service with expected response.
 	// this value is set on the message, and we want to assert it is passed to the submit endpoint.
@@ -100,7 +98,7 @@ func (suite *WorkerTestSuite) TestE2ESubmit() {
 	}
 
 	// start submit consumer
-	worker, err := internal.NewSubmitWorker(submitConfig)
+	worker := internal.CreateSubmitWorker(submitConfig)
 	suite.Require().NoError(err)
 	go worker.Run(ctx)
 

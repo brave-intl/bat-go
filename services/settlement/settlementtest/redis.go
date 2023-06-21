@@ -3,7 +3,6 @@ package settlementtest
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 
@@ -29,11 +28,10 @@ func StreamsTearDown(t *testing.T) {
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	require.NotNil(t, redisPassword)
 
-	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
-	rc, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
-	require.NoError(t, err)
+	redisAddresses := []string{redisAddress + ":6379"}
+	rc := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 
-	_, err = rc.Do(context.Background(), "DEL", PrepareConfig).Result()
+	_, err := rc.Do(context.Background(), "DEL", PrepareConfig).Result()
 	require.NoError(t, err)
 
 	_, err = rc.Do(context.Background(), "DEL", SubmitConfig).Result()

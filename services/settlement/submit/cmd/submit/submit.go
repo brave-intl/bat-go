@@ -26,7 +26,7 @@ func init() {
 	settlement.Cmd.AddCommand(WorkerCmd)
 }
 
-// StartSubmitWorker initializes and starts submit worker.
+// StartSubmitWorker initializes and starts a new instance of submit worker.
 func StartSubmitWorker(command *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(command.Context())
 	logger := loggingutils.Logger(ctx, "SubmitWorker")
@@ -42,14 +42,9 @@ func StartSubmitWorker(command *cobra.Command, args []string) {
 	}
 
 	logger.Info().Msg("starting submit worker")
+	worker := internal.CreateSubmitWorker(config)
 
-	s, err := internal.NewSubmitWorker(config)
-	if err != nil {
-		logger.Fatal().Err(err).
-			Msg("error creating submit worker")
-	}
-
-	go s.Run(ctx)
+	go worker.Run(ctx)
 
 	logger.Info().Msg("submit worker started")
 
@@ -63,4 +58,6 @@ func StartSubmitWorker(command *cobra.Command, args []string) {
 	cancel()
 
 	logger.Info().Msg("shutting down submit worker")
+
+	close(shutdown)
 }

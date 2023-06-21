@@ -45,7 +45,7 @@ type RedisClient struct {
 }
 
 // NewRedisClient creates a new instance of redis client
-func NewRedisClient(addresses []string, username, password string) (*RedisClient, error) {
+func NewRedisClient(addresses []string, username, password string) *RedisClient {
 	return &RedisClient{redis.NewClusterClient(&redis.ClusterOptions{
 		Addrs:           addresses,
 		Username:        username,
@@ -62,7 +62,7 @@ func NewRedisClient(addresses []string, username, password string) (*RedisClient
 			ClientAuth:         0,
 			InsecureSkipVerify: true,
 		},
-	})}, nil
+	})}
 }
 
 // Send wraps the event.Message in dataKey field and sends to stream.
