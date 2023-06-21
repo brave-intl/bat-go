@@ -345,7 +345,7 @@ func CreatePrepareWorker(ctx context.Context, config *PrepareConfig) (*PrepareWo
 
 	baseAWSConfig, err := awsutils.BaseAWSConfig(ctx, logger)
 	if err != nil {
-		return nil, fmt.Errorf("new notify worker: error creating S3 client config: %w", err)
+		return nil, fmt.Errorf("create prepare worker: error creating aws base config: %w", err)
 	}
 
 	s3Client := awsutils.NewClient(baseAWSConfig)
