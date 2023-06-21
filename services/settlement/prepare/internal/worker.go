@@ -341,13 +341,14 @@ func CreatePrepareWorker(ctx context.Context, config *PrepareConfig) (*PrepareWo
 
 	consumerFactory := factory.NewPrepareConsumer(redisClient, configStreamClient, paymentClient)
 
-	l := logging.Logger(ctx, "PrepareWorker")
-	cfg, err := awsutils.BaseAWSConfig(ctx, l)
+	logger := logging.Logger(ctx, "PrepareWorker")
+
+	baseAWSConfig, err := awsutils.BaseAWSConfig(ctx, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new notify worker: error creating S3 client config: %w", err)
 	}
 
-	s3Client := awsutils.NewClient(cfg)
+	s3Client := awsutils.NewClient(baseAWSConfig)
 
 	s3UploadConfig := awsutils.S3UploadConfig{
 		Bucket:      config.reportBucket,
@@ -356,7 +357,7 @@ func CreatePrepareWorker(ctx context.Context, config *PrepareConfig) (*PrepareWo
 	}
 	preparedTransactionUploadClient := report.NewPreparedTransactionUploadClient(configStreamClient, s3Client, s3UploadConfig)
 
-	publisher := snslibs.New(cfg)
+	publisher := snslibs.New(baseAWSConfig)
 	notificationClient := report.NewNotificationClient(publisher, config.notificationTopic, backoff.Retry)
 
 	worker := NewPrepareWorker(redisClient, paymentClient, configStreamClient,
