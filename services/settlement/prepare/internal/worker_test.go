@@ -16,14 +16,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	awsutils "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/clients/payment"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	testutils "github.com/brave-intl/bat-go/libs/test"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
 	"github.com/brave-intl/bat-go/services/settlement/prepare/internal"
 	"github.com/brave-intl/bat-go/services/settlement/settlementtest"
-
 	"github.com/go-redis/redis/v8"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -67,14 +65,14 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	// Setup consumer context.
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisAddress)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, redisUsername)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, redisPassword)
-	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
-	ctx = context.WithValue(ctx, appctx.SettlementPayoutReportBucketCTXKey, bucket)
-	ctx = context.WithValue(ctx, appctx.SettlementPayoutReportContentTypeCTXKey, "application/json")
-	ctx = context.WithValue(ctx, appctx.SettlementPayoutReportUploadPartSizeCTXKey, int64(10))
-	ctx = context.WithValue(ctx, appctx.SettlementSNSNotificationTopicARNCTXKey, testutils.RandomString())
+
+	prepareConfig, err := internal.NewPrepareConfig(
+		internal.WithRedisAddress(redisAddress),
+		internal.WithRedisUsername(redisUsername),
+		internal.WithRedisPassword(redisPassword),
+		internal.WithPaymentClient(paymentURL),
+		internal.WithReportBucket(bucket),
+		internal.WithNotificationTopic(testutils.RandomString()))
 
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
@@ -131,7 +129,7 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	}
 
 	// Start prepare worker.
-	worker, err := internal.NewPrepareWorker(ctx)
+	worker, err := internal.NewPrepareWorker(ctx, prepareConfig)
 	suite.Require().NoError(err)
 	go worker.Run(ctx)
 

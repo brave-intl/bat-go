@@ -12,7 +12,6 @@ import (
 	snslibs "github.com/brave-intl/bat-go/libs/aws/sns"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/payment"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
@@ -38,10 +37,14 @@ const (
 	// prepareConfigStream is the name of the stream where config pertaining to the prepare phase of the payout
 	// can be retrieved.
 	prepareConfigStream = "prepare-config"
-
 	// lockTimeout defines the duration a lock will remain before expiring.
 	// Set this high for uploads as we don't want the lock to timeout before the upload is complete.
 	lockTimeout = time.Minute * 15
+	// reportContentType is the default report content type.
+	reportContentType = "application/json"
+	// reportUploadPartSizeMinimum is the default upload part size. AWS specify a part size must be greater than 5MB
+	// so this value cannot be set to a value which will result to a part size being less than 5MB.
+	reportUploadPartSizeMinimum = 10
 )
 
 type ConsumerFactory interface {
@@ -61,47 +64,32 @@ type NotificationAPI interface {
 	SendNotification(ctx context.Context, payoutID, reportURI string, versionID string) error
 }
 
+// PrepareWorker defines a prepare worker and its dependencies.
 type PrepareWorker struct {
 	redis                       *event.RedisClient
 	paymentClient               payment.Client
 	consumerFactory             ConsumerFactory
-	configClient                ConfigStreamAPI
+	configStream                ConfigStreamAPI
 	preparedTransactionUploader PreparedTransactionUploader
-	notification                NotificationAPI
+	notifier                    NotificationAPI
 }
 
-func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
-	redisAddress, ok := ctx.Value(appctx.SettlementRedisAddressCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new prepare worker: error retrieving redis address")
-	}
-
-	redisUsername, ok := ctx.Value(appctx.SettlementRedisUsernameCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new prepare worker: error retrieving redis username")
-	}
-
-	redisPassword, ok := ctx.Value(appctx.SettlementRedisPasswordCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new prepare worker: error retrieving redis password")
-	}
-
-	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
-	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
+// NewPrepareWorker created a new instance of PrepareWorker.
+func NewPrepareWorker(ctx context.Context, config *PrepareConfig) (*PrepareWorker, error) {
+	redisAddresses := []string{config.redisAddress + ":6379"} //TODO add port address to ops
+	redisClient, err := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
 	if err != nil {
 		return nil, fmt.Errorf("new prepare worker: error creating redis client: %w", err)
 	}
 
-	paymentURL, ok := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new prepare worker: error retrieving payment url")
-	}
+	paymentClient := payment.New(config.paymentURL)
 
-	logger := logging.Logger(ctx, "PrepareWorker")
+	configStreamClient := payout.NewRedisConfigStreamClient(redisClient, config.configStream)
 
-	c := payout.NewRedisConfigStreamClient(redis, prepareConfigStream)
+	consumerFactory := factory.NewPrepareConsumer(redisClient, configStreamClient, paymentClient)
 
-	cfg, err := awsutils.BaseAWSConfig(ctx, logger)
+	l := logging.Logger(ctx, "PrepareWorker")
+	cfg, err := awsutils.BaseAWSConfig(ctx, l)
 	if err != nil {
 		return nil, fmt.Errorf("new notify worker: error creating S3 client config: %w", err)
 	}
@@ -110,57 +98,30 @@ func NewPrepareWorker(ctx context.Context) (*PrepareWorker, error) {
 	if err != nil {
 		return nil, fmt.Errorf("new notify worker: error creating S3 client: %w", err)
 	}
-
-	bucket, ok := ctx.Value(appctx.SettlementPayoutReportBucketCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("new prepare worker: error retrieving bucket")
-	}
-
-	//TODO remove this to default
-	contentType, ok := ctx.Value(appctx.SettlementPayoutReportContentTypeCTXKey).(string)
-	if !ok {
-		contentType = "application/json"
-		//return nil, fmt.Errorf("new prepare worker: error retrieving content type")
-	}
-
-	partSize, ok := ctx.Value(appctx.SettlementPayoutReportUploadPartSizeCTXKey).(int64)
-	if !ok {
-		partSize = 10
-		//		return nil, fmt.Errorf("new prepare worker: error retrieving upload part size")
-	}
-
 	s3UploadConfig := awsutils.S3UploadConfig{
-		Bucket:      bucket,
-		ContentType: contentType,
-		PartSize:    partSize,
+		Bucket:      config.reportBucket,
+		ContentType: config.reportContentType,
+		PartSize:    config.reportUploadPartSize,
 	}
-
-	uploader := report.NewPreparedTransactionUploadClient(c, s3Client, s3UploadConfig)
+	preparedTransactionUploadClient := report.NewPreparedTransactionUploadClient(configStreamClient, s3Client, s3UploadConfig)
 
 	publisher := snslibs.New(cfg)
-
-	topic, ok := ctx.Value(appctx.SettlementSNSNotificationTopicARNCTXKey).(string)
-	if !ok {
-		topic = "TODO"
-		// return nil, fmt.Errorf("error getting sns topic")
-	}
-
-	n := report.NewNotificationClient(publisher, topic, backoff.Retry)
-
-	p := payment.New(paymentURL)
-
-	f := factory.NewPrepareConsumer(redis, c, p)
+	notificationClient := report.NewNotificationClient(publisher, config.notificationTopic, backoff.Retry)
 
 	return &PrepareWorker{
-		redis:                       redis,
-		paymentClient:               p,
-		consumerFactory:             f,
-		configClient:                c,
-		preparedTransactionUploader: uploader,
-		notification:                n,
+		redis:                       redisClient,
+		paymentClient:               paymentClient,
+		configStream:                configStreamClient,
+		consumerFactory:             consumerFactory,
+		preparedTransactionUploader: preparedTransactionUploadClient,
+		notifier:                    notificationClient,
 	}, nil
 }
 
+// Run starts the Prepare transaction flow. This includes reading from the payout config stream, processing the
+// transactions, uploading the report and finally sending a notification when complete. A payout will not get marked as
+// complete unless all steps have been successful. Payouts are processed sequentially as they are added to the
+// prepare payout config stream.
 func (p *PrepareWorker) Run(ctx context.Context) {
 	logger := logging.Logger(ctx, "PrepareWorker.Run")
 
@@ -169,8 +130,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-
-			pc, err := p.configClient.ReadPayoutConfig(ctx)
+			pc, err := p.configStream.ReadPayoutConfig(ctx)
 			if err != nil {
 				logger.Error().Err(err).Msg("error reading config")
 				continue
@@ -190,13 +150,13 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			err = Runner(ctx, c)
+			err = consume(ctx, c)
 			if err != nil {
 				logger.Error().Err(err).Msg("error processing payout")
 				continue
 			}
 
-			err = p.configClient.SetLastPayout(ctx, config)
+			err = p.configStream.SetLastPayout(ctx, config)
 			if err != nil {
 				logger.Error().Err(err).Msg("error setting last payout")
 				continue
@@ -226,7 +186,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 			logger.Info().Msg("sending prepared notification")
 
 			if isNotificationEnabled() {
-				err = p.notification.SendNotification(ctx, config.PayoutID, completedUpload.Location, completedUpload.VersionID)
+				err = p.notifier.SendNotification(ctx, config.PayoutID, completedUpload.Location, completedUpload.VersionID)
 				if err != nil {
 					logger.Error().Err(err).Msg("error sending notification")
 				}
@@ -237,7 +197,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 				switch {
 				// Check if another worker has taken lock since we took it.
 				case errors.Is(err, event.ErrLockValueDoesNotMatch):
-					logger.Warn().Msg("warning another worker has taken the lock")
+					logger.Warn().Msg("another worker has taken the lock")
 				default:
 					logger.Error().Err(err).Msg("error removing lock")
 				}
@@ -250,8 +210,7 @@ func (p *PrepareWorker) Run(ctx context.Context) {
 	}
 }
 
-// TODO select?
-func Runner(ctx context.Context, consumer event.Consumer) error {
+func consume(ctx context.Context, consumer event.Consumer) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel() // calling cancel stops the consumer
@@ -263,59 +222,140 @@ func Runner(ctx context.Context, consumer event.Consumer) error {
 		return fmt.Errorf("error start prepare consumer: %w", err)
 	}
 
-	return <-resultC
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err = <-resultC:
+		return err
+	}
 }
 
-//func NewWorker(options ...Option) (*PrepareWorker, error) {
-//	w := new(PrepareWorker)
-//	for _, option := range options {
-//		if err := option(w); err != nil {
-//			return nil, err
-//		}
-//	}
-//	return w, nil
-//}
-//
-//func T() {
-//	w, _ := NewWorker(
-//		WithRedisClient(),
-//		WithPaymentClient(),
-//		WithRedisUploader(),
-//		WithNotificationPublisher()
-//		)
-//}
-//
-//type Option func(worker *PrepareWorker) error
-//
-//func WithRedisClient(address, username, password string) Option {
-//	return func(w *PrepareWorker) error {
-//		a := []string{fmt.Sprintf("%s:6379", address)}
-//		r, err := event.NewRedisClient(a, username, password)
-//		if err != nil {
-//			return fmt.Errorf("new prepare worker: error creating redis client: %w", err)
-//		}
-//		w.redis = r
-//		return nil
-//	}
-//}
-//
-//func WithPaymentClient(url string) Option {
-//	return func(w *PrepareWorker) error {
-//		w.paymentClient = payment.New(url)
-//		return nil
-//	}
-//}
-//
-//func WithRedisUploader(url string) Option {
-//	return func(w *PrepareWorker) error {
-//		w.paymentClient = payment.New(url)
-//		return nil
-//	}
-//}
-//
-//func WithNotificationPublisher() Option {
-//	return func(w *PrepareWorker) error {
-//		w.paymentClient = payment.New(url)
-//		return nil
-//	}
-//}
+// PrepareConfig hold the configuration for a PrepareWorker.
+type PrepareConfig struct {
+	redisAddress         string
+	redisUsername        string
+	redisPassword        string
+	paymentURL           string
+	configStream         string
+	reportBucket         string
+	reportContentType    string
+	reportUploadPartSize int64
+	notificationTopic    string
+}
+
+// NewPrepareConfig creates and instance of PrepareConfig with the given options.
+func NewPrepareConfig(options ...Option) (*PrepareConfig, error) {
+	c := &PrepareConfig{
+		configStream:         prepareConfigStream,
+		reportContentType:    reportContentType,
+		reportUploadPartSize: reportUploadPartSizeMinimum,
+	}
+	for _, option := range options {
+		if err := option(c); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+type Option func(worker *PrepareConfig) error
+
+// WithRedisAddress sets the redis address.
+func WithRedisAddress(address string) Option {
+	return func(c *PrepareConfig) error {
+		if address == "" {
+			return errors.New("redis address cannot be empty")
+		}
+		c.redisAddress = address
+		return nil
+	}
+}
+
+// WithRedisUsername sets the redis username.
+func WithRedisUsername(username string) Option {
+	return func(c *PrepareConfig) error {
+		if username == "" {
+			return errors.New("redis username cannot be empty")
+		}
+		c.redisUsername = username
+		return nil
+	}
+}
+
+// WithRedisPassword set the redis password.
+func WithRedisPassword(password string) Option {
+	return func(c *PrepareConfig) error {
+		if password == "" {
+			return errors.New("redis password cannot be empty")
+		}
+		c.redisPassword = password
+		return nil
+	}
+}
+
+// WithPaymentClient sets the url for the payment service.
+func WithPaymentClient(url string) Option {
+	return func(c *PrepareConfig) error {
+		if url == "" {
+			return errors.New("payment url cannot be empty")
+		}
+		c.paymentURL = url
+		return nil
+	}
+}
+
+// WithConfigStream sets the name of the config stream for the worker. Defaults prepare-config stream.
+func WithConfigStream(stream string) Option {
+	return func(c *PrepareConfig) error {
+		if stream == "" {
+			return errors.New("config stream cannot be empty")
+		}
+		c.configStream = stream
+		return nil
+	}
+}
+
+// WithReportBucket set the name of the bucket for uploading the prepared transaction report.
+func WithReportBucket(reportBucket string) Option {
+	return func(c *PrepareConfig) error {
+		if reportBucket == "" {
+			return errors.New("report bucket cannot be empty")
+		}
+		c.reportBucket = reportBucket
+		return nil
+	}
+}
+
+// WithReportContentType the content type of the report. Defaults to application/json.
+func WithReportContentType(reportContentType string) Option {
+	return func(c *PrepareConfig) error {
+		if reportContentType == "" {
+			return errors.New("report content type cannot be empty")
+		}
+		c.reportContentType = reportContentType
+		return nil
+	}
+}
+
+// WithReportUploadPartSize sets the size of the report upload parts. Defaults to the minimum size.
+func WithReportUploadPartSize(reportUploadPartSize int64) Option {
+	return func(c *PrepareConfig) error {
+		if reportUploadPartSize < reportUploadPartSizeMinimum {
+			return fmt.Errorf("report upload part size cannont be less than %d", reportUploadPartSizeMinimum)
+		}
+		c.reportUploadPartSize = reportUploadPartSize
+		return nil
+	}
+}
+
+// WithNotificationTopic sets the SNS notification topic. This is used to send the prepared report
+// details to so that signers are notified.
+func WithNotificationTopic(notificationTopic string) Option {
+	return func(c *PrepareConfig) error {
+		if notificationTopic == "" {
+			return errors.New("notification topic cannot be empty")
+		}
+		c.notificationTopic = notificationTopic
+		return nil
+	}
+}

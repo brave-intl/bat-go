@@ -84,7 +84,6 @@ func (s *SubmitWorker) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-
 			sc, err := s.configStream.ReadPayoutConfig(ctx)
 			if err != nil {
 				logger.Error().Err(err).Msg("error reading config")
@@ -105,7 +104,7 @@ func (s *SubmitWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			err = Runner(ctx, c)
+			err = consume(ctx, c)
 			if err != nil {
 				logger.Error().Err(err).Msg("error processing payout")
 				continue
@@ -124,8 +123,7 @@ func (s *SubmitWorker) Run(ctx context.Context) {
 	}
 }
 
-// TODO select?
-func Runner(ctx context.Context, consumer event.Consumer) error {
+func consume(ctx context.Context, consumer event.Consumer) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel() // calling cancel stops the consumer
@@ -137,5 +135,10 @@ func Runner(ctx context.Context, consumer event.Consumer) error {
 		return fmt.Errorf("error start prepare consumer: %w", err)
 	}
 
-	return <-resultC
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err = <-resultC:
+		return err
+	}
 }
