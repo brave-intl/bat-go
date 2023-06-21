@@ -190,10 +190,10 @@ func CreateSubmitWorker(config *SubmitConfig) *SubmitWorker {
 
 	paymentClient := payment.New(config.paymentURL)
 
-	csc := payout.NewRedisConfigStreamClient(redisClient, config.configStream)
+	configStreamClient := payout.NewRedisConfigStreamClient(redisClient, config.configStream)
 
 	worker := NewSubmitWorker(redisClient, paymentClient,
-		new(factory.ConsumerFactoryFunc), csc)
+		new(factory.ConsumerFactoryFunc), configStreamClient)
 
 	return worker
 }
