@@ -16,12 +16,10 @@ const (
 	// defaultStreamValue where no last processed message key exists for a given config stream we set the value
 	// to a default id of `0` i.e. the first message in the stream.
 	defaultStreamValue = "0"
-
 	// lastProcessedMessageKeySuffix is the suffix used to create the last processed message id.
 	// This should be combined with name of the config stream.
 	lastProcessedMessageKeySuffix = "-last-processed-message-id"
-
-	// PreparedTransactionsPrefix is the prefix used for the redis sorted set that stores the prepared transactions.
+	// preparedTransactionsPrefix is the prefix used for the redis sorted set that stores the prepared transactions.
 	preparedTransactionsPrefix = "prepared-transactions-"
 )
 
@@ -47,6 +45,7 @@ type RedisConfigStreamClient struct {
 	lastProcessedMessageKey string
 }
 
+// NewRedisConfigStreamClient creates a new instance of NewRedisConfigStreamClient.
 func NewRedisConfigStreamClient(redisClient *event.RedisClient, configStream string) *RedisConfigStreamClient {
 	l := fmt.Sprintf("%s%s", configStream, lastProcessedMessageKeySuffix)
 	return &RedisConfigStreamClient{
@@ -100,10 +99,11 @@ func (r *RedisConfigStreamClient) ReadPayoutConfig(ctx context.Context) (*Config
 	return &config, nil
 }
 
+// SetLastPayout sets the last processed message for the RedisConfigStreamClient stream set at initialization.
 func (r *RedisConfigStreamClient) SetLastPayout(ctx context.Context, config Config) error {
 	_, err := r.rc.Set(ctx, r.lastProcessedMessageKey, config.xRedisID, 0).Result()
 	if err != nil {
-		return fmt.Errorf("error redis setting config last processed id: %w", err)
+		return fmt.Errorf("error setting last processed id: %w", err)
 	}
 	return nil
 }
@@ -128,6 +128,7 @@ func (r *RedisConfigStreamClient) GetNumberOfPreparedTransactions(ctx context.Co
 	return c, nil
 }
 
+// GetPreparedTransactionsByRange returns the prepared transactions for a given payout between a specified range.
 func (r *RedisConfigStreamClient) GetPreparedTransactionsByRange(ctx context.Context, payoutID string, start, stop int64) ([]payment.AttestedTransaction, error) {
 	m, err := r.rc.ZRange(ctx, preparedTransactionsPrefix+payoutID, start, stop).Result()
 	if err != nil {

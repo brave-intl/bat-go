@@ -77,7 +77,7 @@ func New(baseURL string) Client {
 		"payment_client")
 }
 
-// Prepare transactions to be processed.
+// Prepare transactions to be processed. Prepare returns a zero value AttestedTransaction when an error occurs.
 func (pc *client) Prepare(ctx context.Context, transaction Transaction) (*AttestedTransaction, error) {
 	resource := pc.httpClient.BaseURL.ResolveReference(&url.URL{
 		Path: "/v1/payments/prepare",
