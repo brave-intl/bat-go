@@ -108,6 +108,7 @@ func (r *RedisConfigStreamClient) SetLastPayout(ctx context.Context, config Conf
 	return nil
 }
 
+// AddPreparedTransaction adds prepared transactions to storage for later processing. AddPreparedTransaction is idempotent.
 func (r *RedisConfigStreamClient) AddPreparedTransaction(ctx context.Context, payoutID string, attestedTransaction payment.AttestedTransaction) error {
 	_, err := r.rc.ZAddNX(ctx, preparedTransactionsPrefix+payoutID, &redis.Z{
 		Score:  float64(time.Now().Unix()),
