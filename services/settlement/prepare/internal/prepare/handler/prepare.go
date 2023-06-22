@@ -19,12 +19,12 @@ var (
 )
 
 type PreparedTransactionAPI interface {
-	AddPreparedTransaction(ctx context.Context, payoutID string, preparedTransaction any) error
+	AddPreparedTransaction(ctx context.Context, payoutID string, attestedTransaction payment.AttestedTransaction) error
 }
 
 // PaymentClient defines the methods used to call the payment service.
 type PaymentClient interface {
-	Prepare(ctx context.Context, transaction payment.Transaction) (*payment.AttestedTransaction, error)
+	Prepare(ctx context.Context, transaction payment.Transaction) (payment.AttestedTransaction, error)
 }
 
 type prepare struct {
@@ -55,7 +55,12 @@ func (p *prepare) Handle(ctx context.Context, message event.Message) error {
 		return fmt.Errorf("prepare handler: error calling payment service: %w", err)
 	}
 
-	err = p.preparedTransactionAPI.AddPreparedTransaction(ctx, p.config.PayoutID, response)
+	attestedTransaction, ok := response.(payment.AttestedTransaction)
+	if !ok {
+		return fmt.Errorf("error type conversion: %w", err)
+	}
+
+	err = p.preparedTransactionAPI.AddPreparedTransaction(ctx, p.config.PayoutID, attestedTransaction)
 	if err != nil {
 		return fmt.Errorf("prepare handler: error calling zaddnx: %w", err)
 	}

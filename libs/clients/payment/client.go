@@ -45,11 +45,11 @@ type (
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis.
 func (m AttestedTransaction) MarshalBinary() (data []byte, err error) {
-	bytes, err := json.Marshal(m)
+	b, err := json.Marshal(m)
 	if err != nil {
 		return nil, fmt.Errorf("event message: error marshalling binary: %w", err)
 	}
-	return bytes, nil
+	return b, nil
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler required for go-redis.
@@ -62,7 +62,7 @@ func (m *AttestedTransaction) UnmarshalBinary(data []byte) error {
 }
 
 type Client interface {
-	Prepare(ctx context.Context, transaction Transaction) (*AttestedTransaction, error)
+	Prepare(ctx context.Context, transaction Transaction) (AttestedTransaction, error)
 	Submit(ctx context.Context, authorizationHeader AuthorizationHeader, transaction Transaction) (*time.Duration, error)
 }
 
@@ -78,23 +78,23 @@ func New(baseURL string) Client {
 }
 
 // Prepare transactions to be processed. Prepare returns a zero value AttestedTransaction when an error occurs.
-func (pc *client) Prepare(ctx context.Context, transaction Transaction) (*AttestedTransaction, error) {
+func (pc *client) Prepare(ctx context.Context, transaction Transaction) (AttestedTransaction, error) {
 	resource := pc.httpClient.BaseURL.ResolveReference(&url.URL{
 		Path: "/v1/payments/prepare",
 	})
 
 	request, err := http.NewRequest(http.MethodPost, resource.String(), bytes.NewBuffer(transaction))
 	if err != nil {
-		return nil, err
+		return AttestedTransaction{}, err
 	}
 
 	var aTxn AttestedTransaction
 	_, err = pc.httpClient.Do(ctx, request, &aTxn)
 	if err != nil {
-		return nil, err
+		return AttestedTransaction{}, err
 	}
 
-	return &aTxn, nil
+	return aTxn, nil
 }
 
 // Submit calls the payment service submit endpoint with the authorization headers and the transaction to be submitted.

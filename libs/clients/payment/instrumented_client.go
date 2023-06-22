@@ -39,7 +39,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // Prepare implements Client
-func (_d ClientWithPrometheus) Prepare(ctx context.Context, transaction Transaction) (ap1 *AttestedTransaction, err error) {
+func (_d ClientWithPrometheus) Prepare(ctx context.Context, transaction Transaction) (a1 AttestedTransaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

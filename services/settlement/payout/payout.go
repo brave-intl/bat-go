@@ -108,10 +108,10 @@ func (r *RedisConfigStreamClient) SetLastPayout(ctx context.Context, config Conf
 	return nil
 }
 
-func (r *RedisConfigStreamClient) AddPreparedTransaction(ctx context.Context, payoutID string, preparedTransaction any) error {
+func (r *RedisConfigStreamClient) AddPreparedTransaction(ctx context.Context, payoutID string, attestedTransaction payment.AttestedTransaction) error {
 	_, err := r.rc.ZAddNX(ctx, preparedTransactionsPrefix+payoutID, &redis.Z{
 		Score:  float64(time.Now().Unix()),
-		Member: preparedTransaction,
+		Member: attestedTransaction,
 	}).Result()
 	if err != nil {
 		return fmt.Errorf("error adding prepared transaction: %w", err)
