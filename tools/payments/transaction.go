@@ -105,6 +105,7 @@ func (at *AttestedTx) UnmarshalJSON(data []byte) error {
 	at.State = aux.State
 	at.DocumentID = aux.DocumentID
 	at.AttestationDocument = aux.AttestationDocument
+	at.DryRun = aux.DryRun
 
 	return nil
 }
