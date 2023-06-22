@@ -1434,10 +1434,30 @@ func (pg *Postgres) recordOrderPayment(ctx context.Context, dbi sqlx.ExecerConte
 	return pg.orderRepo.SetLastPaidAt(ctx, dbi, id, when)
 }
 
+// updateOrderExpiresAt updates order's expires_at based on last_paid_at and a validity period.
+//
+// Fixed: it now uses the first item's valid_for_iso instead of the order's valid_for.
+// There are currently no orders with more than one item at the storage.
 func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) error {
 	orderTimeBounds, err := pg.orderRepo.GetTimeBounds(ctx, dbi, orderID)
 	if err != nil {
 		return fmt.Errorf("unable to get order time bounds: %w", err)
+	}
+
+	items, err := pg.orderItemRepo.FindByOrderID(ctx, dbi, orderID)
+	if err != nil {
+		return err
+	}
+
+	if len(items) == 0 {
+		return model.ErrInvalidOrderNoItems
+	}
+
+	// Keep it backwards-compatible.
+	// Only use the order item's valid_for_iso if successfully parsed.
+	// Otherwise, for now keep relying on the order's valid_for.
+	if d, err := items[0].ValidForISODuration(); err == nil && d != 0 {
+		orderTimeBounds.ValidFor = &d
 	}
 
 	return pg.orderRepo.SetExpiresAt(ctx, dbi, orderID, orderTimeBounds.ExpiresAt())
