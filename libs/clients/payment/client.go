@@ -113,6 +113,8 @@ func (pc *client) Submit(ctx context.Context, authorizationHeader AuthorizationH
 	}
 	request.Header = authorizationHeader
 
+	//TODO sync up once payment has implemented to error codes to make sure we are retrying the correct responses.
+
 	response, err := pc.httpClient.Do(ctx, request, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error calling submit request: %w", err)
