@@ -8,7 +8,7 @@ import (
 
 	loggingutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/settlement/cmd/settlement"
-	"github.com/brave-intl/bat-go/services/settlement/prepare/internal"
+	"github.com/brave-intl/bat-go/services/settlement/prepare/internal/prepare"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,15 +29,15 @@ func init() {
 // StartPrepareWorker initializes and starts a new instance of prepare worker.
 func StartPrepareWorker(command *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(command.Context())
-	logger := loggingutils.Logger(ctx, "PrepareWorker")
+	logger := loggingutils.Logger(ctx, "Worker")
 
-	config, err := internal.NewPrepareConfig(
-		internal.WithRedisAddress(viper.GetString("REDIS_ADDRESS")),
-		internal.WithRedisUsername(viper.GetString("REDIS_USERNAME")),
-		internal.WithRedisPassword(viper.GetString("REDIS_PASSWORD")),
-		internal.WithPaymentClient(viper.GetString("PAYMENT_SERVICE_URL")),
-		internal.WithReportBucket(viper.GetString("SETTLEMENTS_TXN_BUCKET")),
-		internal.WithNotificationTopic("TODO"))
+	config, err := prepare.NewWorkerConfig(
+		prepare.WithRedisAddress(viper.GetString("REDIS_ADDRESS")),
+		prepare.WithRedisUsername(viper.GetString("REDIS_USERNAME")),
+		prepare.WithRedisPassword(viper.GetString("REDIS_PASSWORD")),
+		prepare.WithPaymentClient(viper.GetString("PAYMENT_SERVICE_URL")),
+		prepare.WithReportBucket(viper.GetString("SETTLEMENTS_TXN_BUCKET")),
+		prepare.WithNotificationTopic("TODO"))
 	if err != nil {
 		logger.Fatal().Err(err).
 			Msg("error creating prepare config")
@@ -45,7 +45,7 @@ func StartPrepareWorker(command *cobra.Command, args []string) {
 
 	logger.Info().Msg("starting prepare worker")
 
-	worker, err := internal.CreatePrepareWorker(ctx, config)
+	worker, err := prepare.CreateWorker(ctx, config)
 	if err != nil {
 		logger.Fatal().Err(err).
 			Msg("error creating prepare worker")

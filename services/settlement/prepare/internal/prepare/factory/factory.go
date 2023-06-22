@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/services/settlement/payout"
+	"github.com/brave-intl/bat-go/services/settlement/prepare/internal/prepare/handler"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/services/settlement/event"
-	"github.com/brave-intl/bat-go/services/settlement/prepare/internal/handler"
 )
 
 const (

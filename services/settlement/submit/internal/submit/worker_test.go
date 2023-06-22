@@ -1,6 +1,6 @@
 //go:build integration
 
-package internal_test
+package submit_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
 	"github.com/brave-intl/bat-go/services/settlement/settlementtest"
-	"github.com/brave-intl/bat-go/services/settlement/submit/internal"
+	"github.com/brave-intl/bat-go/services/settlement/submit/internal/submit"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -63,11 +63,11 @@ func (suite *WorkerTestSuite) TestE2ESubmit() {
 	ctx, _ = logging.SetupLogger(ctx)
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 
-	submitConfig, err := internal.NewSubmitConfig(
-		internal.WithRedisAddress(redisAddress),
-		internal.WithRedisUsername(redisUsername),
-		internal.WithRedisPassword(redisPassword),
-		internal.WithPaymentClient(paymentURL))
+	submitConfig, err := submit.NewWorkerConfig(
+		submit.WithRedisAddress(redisAddress),
+		submit.WithRedisUsername(redisUsername),
+		submit.WithRedisPassword(redisPassword),
+		submit.WithPaymentClient(paymentURL))
 
 	// Dynamically created submit stream.
 	streamName := testutils.RandomString()
@@ -98,7 +98,7 @@ func (suite *WorkerTestSuite) TestE2ESubmit() {
 	}
 
 	// start submit consumer
-	worker := internal.CreateSubmitWorker(submitConfig)
+	worker := submit.CreateWorker(submitConfig)
 	suite.Require().NoError(err)
 	go worker.Run(ctx)
 

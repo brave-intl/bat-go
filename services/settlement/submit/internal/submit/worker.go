@@ -1,4 +1,4 @@
-package internal
+package submit
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	loggingutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
-	"github.com/brave-intl/bat-go/services/settlement/submit/internal/factory"
+	"github.com/brave-intl/bat-go/services/settlement/submit/internal/submit/factory"
 )
 
 const (
@@ -27,18 +27,18 @@ type ConfigStreamAPI interface {
 	SetLastPayout(ctx context.Context, config payout.Config) error
 }
 
-// SubmitWorker defines a Submit worker and its dependencies.
-type SubmitWorker struct {
+// Worker defines a Submit worker and its dependencies.
+type Worker struct {
 	redis           *event.RedisClient
 	paymentClient   payment.Client
 	consumerFactory ConsumerFactory
 	configStream    ConfigStreamAPI
 }
 
-// NewSubmitWorker creates a new instance of SubmitWorker.
-func NewSubmitWorker(redisClient *event.RedisClient, paymentClient payment.Client, consumerFactory ConsumerFactory,
-	configStream ConfigStreamAPI) *SubmitWorker {
-	return &SubmitWorker{
+// NewWorker creates a new instance of submit.Worker.
+func NewWorker(redisClient *event.RedisClient, paymentClient payment.Client, consumerFactory ConsumerFactory,
+	configStream ConfigStreamAPI) *Worker {
+	return &Worker{
 		redis:           redisClient,
 		paymentClient:   paymentClient,
 		consumerFactory: consumerFactory,
@@ -46,10 +46,11 @@ func NewSubmitWorker(redisClient *event.RedisClient, paymentClient payment.Clien
 	}
 }
 
-// Run starts a SubmitWorker. Messages will be consumed from the defined SubmitConfig and passed to
-// the SubmitWorker's handler.ConfigHandler for processing.
-func (s *SubmitWorker) Run(ctx context.Context) {
-	logger := loggingutils.Logger(ctx, "SubmitWorker.Run")
+// Run starts the Submit transaction flow. This includes submitting the prepared or attested transactions and updating
+// the payout as complete once all the transactions have been successfully submitted. Payouts are processed
+// sequentially as they are added to the submit payout config stream.
+func (s *Worker) Run(ctx context.Context) {
+	logger := loggingutils.Logger(ctx, "Worker.Run")
 
 	for {
 		select {
@@ -115,8 +116,8 @@ func consume(ctx context.Context, consumer event.Consumer) error {
 	}
 }
 
-// SubmitConfig hold the configuration for a SubmitWorker.
-type SubmitConfig struct {
+// WorkerConfig hold the configuration for a Worker.
+type WorkerConfig struct {
 	redisAddress  string
 	redisUsername string
 	redisPassword string
@@ -124,9 +125,9 @@ type SubmitConfig struct {
 	configStream  string
 }
 
-// NewSubmitConfig creates and instance of SubmitConfig with the given options.
-func NewSubmitConfig(options ...Option) (*SubmitConfig, error) {
-	c := &SubmitConfig{
+// NewWorkerConfig creates and instance of WorkerConfig with the given options.
+func NewWorkerConfig(options ...Option) (*WorkerConfig, error) {
+	c := &WorkerConfig{
 		configStream: submitConfigStream,
 	}
 	for _, option := range options {
@@ -137,11 +138,11 @@ func NewSubmitConfig(options ...Option) (*SubmitConfig, error) {
 	return c, nil
 }
 
-type Option func(worker *SubmitConfig) error
+type Option func(worker *WorkerConfig) error
 
 // WithRedisAddress sets the redis address.
 func WithRedisAddress(address string) Option {
-	return func(c *SubmitConfig) error {
+	return func(c *WorkerConfig) error {
 		if address == "" {
 			return errors.New("redis address cannot be empty")
 		}
@@ -152,7 +153,7 @@ func WithRedisAddress(address string) Option {
 
 // WithRedisUsername sets the redis username.
 func WithRedisUsername(username string) Option {
-	return func(c *SubmitConfig) error {
+	return func(c *WorkerConfig) error {
 		if username == "" {
 			return errors.New("redis username cannot be empty")
 		}
@@ -163,7 +164,7 @@ func WithRedisUsername(username string) Option {
 
 // WithRedisPassword set the redis password.
 func WithRedisPassword(password string) Option {
-	return func(c *SubmitConfig) error {
+	return func(c *WorkerConfig) error {
 		if password == "" {
 			return errors.New("redis password cannot be empty")
 		}
@@ -174,7 +175,7 @@ func WithRedisPassword(password string) Option {
 
 // WithPaymentClient sets the url for the payment service.
 func WithPaymentClient(url string) Option {
-	return func(c *SubmitConfig) error {
+	return func(c *WorkerConfig) error {
 		if url == "" {
 			return errors.New("payment url cannot be empty")
 		}
@@ -183,8 +184,8 @@ func WithPaymentClient(url string) Option {
 	}
 }
 
-// CreateSubmitWorker is a factory method to create a new instance of SubmitWorker.
-func CreateSubmitWorker(config *SubmitConfig) *SubmitWorker {
+// CreateWorker is a factory method to create a new instance of submit.Worker.
+func CreateWorker(config *WorkerConfig) *Worker {
 	redisAddresses := []string{config.redisAddress + ":6379"}
 	redisClient := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
 
@@ -192,7 +193,7 @@ func CreateSubmitWorker(config *SubmitConfig) *SubmitWorker {
 
 	configStreamClient := payout.NewRedisConfigStreamClient(redisClient, config.configStream)
 
-	worker := NewSubmitWorker(redisClient, paymentClient,
+	worker := NewWorker(redisClient, paymentClient,
 		new(factory.ConsumerFactoryFunc), configStreamClient)
 
 	return worker

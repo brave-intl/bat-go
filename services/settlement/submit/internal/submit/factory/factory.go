@@ -7,7 +7,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/payment"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
-	"github.com/brave-intl/bat-go/services/settlement/submit/internal/handler"
+	"github.com/brave-intl/bat-go/services/settlement/submit/internal/submit/handler"
 	uuid "github.com/satori/go.uuid"
 )
 

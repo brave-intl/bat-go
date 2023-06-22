@@ -1,6 +1,6 @@
 //go:build integration
 
-package internal_test
+package prepare_test
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	testutils "github.com/brave-intl/bat-go/libs/test"
 	"github.com/brave-intl/bat-go/services/settlement/event"
 	"github.com/brave-intl/bat-go/services/settlement/payout"
-	"github.com/brave-intl/bat-go/services/settlement/prepare/internal"
+	"github.com/brave-intl/bat-go/services/settlement/prepare/internal/prepare"
 	"github.com/brave-intl/bat-go/services/settlement/settlementtest"
 	"github.com/go-redis/redis/v8"
 	uuid "github.com/satori/go.uuid"
@@ -64,13 +64,13 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
 
-	prepareConfig, err := internal.NewPrepareConfig(
-		internal.WithRedisAddress(redisAddress),
-		internal.WithRedisUsername(redisUsername),
-		internal.WithRedisPassword(redisPassword),
-		internal.WithPaymentClient(paymentURL),
-		internal.WithReportBucket(bucket),
-		internal.WithNotificationTopic(testutils.RandomString()))
+	prepareConfig, err := prepare.NewWorkerConfig(
+		prepare.WithRedisAddress(redisAddress),
+		prepare.WithRedisUsername(redisUsername),
+		prepare.WithRedisPassword(redisPassword),
+		prepare.WithPaymentClient(paymentURL),
+		prepare.WithReportBucket(bucket),
+		prepare.WithNotificationTopic(testutils.RandomString()))
 
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
@@ -127,7 +127,7 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	}
 
 	// Start prepare worker.
-	worker, err := internal.CreatePrepareWorker(ctx, prepareConfig)
+	worker, err := prepare.CreateWorker(ctx, prepareConfig)
 	suite.Require().NoError(err)
 	go worker.Run(ctx)
 
