@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -27,15 +28,17 @@ type PaymentClient interface {
 	Prepare(ctx context.Context, transaction payment.Transaction) (payment.AttestedTransaction, error)
 }
 
-type prepare struct {
+// Prepare implements a prepare event handler.
+type Prepare struct {
 	preparedTransactionAPI PreparedTransactionAPI
 	paymentClient          PaymentClient
 	config                 payout.Config
 	retry                  backoff.RetryFunc
 }
 
-func NewHandler(preparedTransactionAPI PreparedTransactionAPI, paymentClient PaymentClient, config payout.Config, retry backoff.RetryFunc) event.Handler {
-	return &prepare{
+// NewHandler returns a new instance of prepare handler.
+func NewHandler(preparedTransactionAPI PreparedTransactionAPI, paymentClient PaymentClient, config payout.Config, retry backoff.RetryFunc) *Prepare {
+	return &Prepare{
 		preparedTransactionAPI: preparedTransactionAPI,
 		paymentClient:          paymentClient,
 		config:                 config,
@@ -43,7 +46,9 @@ func NewHandler(preparedTransactionAPI PreparedTransactionAPI, paymentClient Pay
 	}
 }
 
-func (p *prepare) Handle(ctx context.Context, message event.Message) error {
+// Handle handles prepare event messages and calls the payment service prepare endpoint. Handle stores
+// the attested transactions for later processing.
+func (p *Prepare) Handle(ctx context.Context, message event.Message) error {
 	transaction := payment.Transaction(message.Body)
 
 	prepareOperation := func() (interface{}, error) {
@@ -57,12 +62,12 @@ func (p *prepare) Handle(ctx context.Context, message event.Message) error {
 
 	attestedTransaction, ok := response.(payment.AttestedTransaction)
 	if !ok {
-		return fmt.Errorf("error type conversion: %w", err)
+		return errors.New("prepare handler: error asserting type assertion")
 	}
 
 	err = p.preparedTransactionAPI.AddPreparedTransaction(ctx, p.config.PayoutID, attestedTransaction)
 	if err != nil {
-		return fmt.Errorf("prepare handler: error calling zaddnx: %w", err)
+		return fmt.Errorf("prepare handler: error adding prepared transaction: %w", err)
 	}
 
 	return nil

@@ -17,10 +17,11 @@ import (
 )
 
 // XSubmitRetryAfter is the response header we expect from the payment service to denote the minimum amount of time
-// we should wait before retying calling submit.
+// we should wait before retying calling submit. This specific to the submit endpoint and distinct from more
+// generalised the retry after that can be returned by some endpoints.
 const XSubmitRetryAfter = "x-submit-retry-after"
 
-var defaultSubmitRetryAfter = ptr.FromDuration(time.Duration(0))
+var defaultXRetryAfter = ptr.FromDuration(time.Duration(0))
 
 type (
 	// Transaction represent a transaction that has been serialized.
@@ -100,8 +101,7 @@ func (pc *client) Prepare(ctx context.Context, transaction Transaction) (Atteste
 // Submit calls the payment service submit endpoint with the authorization headers and the transaction to be submitted.
 // The parameters should be a serialized attested transaction and its related authorization headers.
 // If the Submit request returns a http.StatusAccepted and a XSubmitRetryAfter header value has been
-// provided in the response header then this value will be returned along with the request error.
-// If no retry after value was provided then retry after will be nil.
+// provided then this value will be returned. For a successful call both return values will be nil.
 func (pc *client) Submit(ctx context.Context, authorizationHeader AuthorizationHeader, transaction Transaction) (*time.Duration, error) {
 	resource := pc.httpClient.BaseURL.ResolveReference(&url.URL{
 		Path: "/v1/payments/submit",
@@ -118,23 +118,26 @@ func (pc *client) Submit(ctx context.Context, authorizationHeader AuthorizationH
 		return nil, err
 	}
 
-	// If the http status is a 202 extract the retry-after value.
-	// In the eventuality the status is a 202 and no value has been set use default 0.
-	var seconds *time.Duration
+	// If the http status is a 202 extract the x-submit-retry-after value.
+	// In the eventuality the status is a http.StatusAccepted but no value has been set
+	// return the default.
 	if response.StatusCode == http.StatusAccepted {
-		seconds = defaultSubmitRetryAfter
-		v, ok := response.Header[XSubmitRetryAfter]
-		if ok {
-			if len(v) != 1 {
-				return nil, fmt.Errorf("error invalid header length: %s", v)
-			}
-			u, err := strconv.ParseUint(v[0], 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			seconds = ptr.FromDuration(time.Duration(u))
+		h, ok := response.Header[XSubmitRetryAfter]
+		if !ok {
+			return defaultXRetryAfter, nil
 		}
+
+		if len(h) != 1 {
+			return nil, fmt.Errorf("error invalid header length: %s", h)
+		}
+
+		u, err := strconv.ParseUint(h[0], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing %s: %w", XSubmitRetryAfter, err)
+		}
+
+		return ptr.FromDuration(time.Duration(u)), nil
 	}
 
-	return seconds, nil
+	return nil, nil
 }

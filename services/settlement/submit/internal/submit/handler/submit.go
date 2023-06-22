@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -21,34 +22,37 @@ var (
 		http.StatusForbidden}
 )
 
-// PaymentClient defines the methods used to call the payment service.
 type PaymentClient interface {
 	Submit(ctx context.Context, authorizationHeader payment.AuthorizationHeader, transaction payment.Transaction) (*time.Duration, error)
 }
 
-type submit struct {
+// Submit implements a submit event handler.
+type Submit struct {
 	redis   *event.RedisClient
 	payment PaymentClient
 	retry   backoff.RetryFunc
 }
 
-func NewHandler(redis *event.RedisClient, payment PaymentClient, retry backoff.RetryFunc) event.Handler {
-	return &submit{
+// NewHandler returns a new instance of Submit.
+func NewHandler(redis *event.RedisClient, payment PaymentClient, retry backoff.RetryFunc) *Submit {
+	return &Submit{
 		redis:   redis,
 		payment: payment,
 		retry:   retry,
 	}
 }
 
-func (s *submit) Handle(ctx context.Context, message event.Message) error {
+// Handle submits attested transaction to the payment service submit endpoint. When a transaction can be
+// resubmitted or retried an event.RetryError is returned otherwise the underlying client error is returned.
+func (s *Submit) Handle(ctx context.Context, message event.Message) error {
 	ah := make(payment.AuthorizationHeader)
 	for k, v := range message.Headers {
 		ah[k] = []string{v}
 	}
-	transaction := payment.Transaction(message.Body)
+	t := payment.Transaction(message.Body)
 
 	submitOperation := func() (interface{}, error) {
-		return s.payment.Submit(ctx, ah, transaction)
+		return s.payment.Submit(ctx, ah, t)
 	}
 
 	r, err := s.retry(ctx, submitOperation, retryPolicy, canRetry(nonRetriableErrors))
@@ -56,15 +60,15 @@ func (s *submit) Handle(ctx context.Context, message event.Message) error {
 		return fmt.Errorf("submit handler: error calling payment service: %w", err)
 	}
 
-	seconds, ok := r.(*time.Duration)
+	d, ok := r.(*time.Duration)
 	if !ok {
-		//TODO fix error
-		return fmt.Errorf("submit handler: error type conversion retry after: %w", err)
+		return errors.New("submit handler: error asserting type assertion")
 	}
 
-	if seconds != nil {
+	// If the duration is not nil then we need to retry.
+	if d != nil {
 		return &event.RetryError{
-			RetryAfter: *seconds,
+			RetryAfter: *d,
 		}
 	}
 
