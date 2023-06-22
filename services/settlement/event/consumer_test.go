@@ -46,8 +46,7 @@ func (suite *ConsumerTestSuite) SetupSuite() {
 	suite.Require().NotNil(redisPassword)
 
 	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
-	rc, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
-	suite.Require().NoError(err)
+	rc := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 
 	suite.redis = rc
 }
