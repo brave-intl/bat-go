@@ -112,7 +112,7 @@ type orderStore interface {
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID, ndays int64) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
-	GetTimeBounds(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (model.OrderTimeBounds, error)
+	GetExpiresAtP1M(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (time.Time, error)
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	UpdateMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, data datastore.Metadata) error
 	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
@@ -1435,10 +1435,10 @@ func (pg *Postgres) recordOrderPayment(ctx context.Context, dbi sqlx.ExecerConte
 }
 
 func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) error {
-	orderTimeBounds, err := pg.orderRepo.GetTimeBounds(ctx, dbi, orderID)
+	expiresAt, err := pg.orderRepo.GetExpiresAtP1M(ctx, dbi, orderID)
 	if err != nil {
 		return fmt.Errorf("unable to get order time bounds: %w", err)
 	}
 
-	return pg.orderRepo.SetExpiresAt(ctx, dbi, orderID, orderTimeBounds.ExpiresAt())
+	return pg.orderRepo.SetExpiresAt(ctx, dbi, orderID, expiresAt)
 }

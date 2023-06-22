@@ -142,6 +142,22 @@ func (r *Order) GetTimeBounds(ctx context.Context, dbi sqlx.QueryerContext, id u
 	return result, nil
 }
 
+// GetExpiresAtP1M returns expires_at that is last_paid_at (or now()) plus 1 month.
+func (r *Order) GetExpiresAtP1M(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (time.Time, error) {
+	const q = `SELECT (SELECT COALESCE(last_paid_at, now()) AS last_paid_at) + interval '1 month' AS expires_at FROM orders WHERE id = $1`
+
+	var result time.Time
+	if err := sqlx.GetContext(ctx, dbi, &result, q, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return time.Time{}, model.ErrOrderNotFound
+		}
+
+		return time.Time{}, err
+	}
+
+	return result, nil
+}
+
 // SetExpiresAt sets expires_at.
 func (r *Order) SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
 	const q = `UPDATE orders SET updated_at = CURRENT_TIMESTAMP, expires_at = $2 WHERE id = $1`
