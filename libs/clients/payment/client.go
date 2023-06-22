@@ -86,13 +86,13 @@ func (pc *client) Prepare(ctx context.Context, transaction Transaction) (Atteste
 
 	request, err := http.NewRequest(http.MethodPost, resource.String(), bytes.NewBuffer(transaction))
 	if err != nil {
-		return AttestedTransaction{}, err
+		return AttestedTransaction{}, fmt.Errorf("error creating new prepare request: %w", err)
 	}
 
 	var aTxn AttestedTransaction
 	_, err = pc.httpClient.Do(ctx, request, &aTxn)
 	if err != nil {
-		return AttestedTransaction{}, err
+		return AttestedTransaction{}, fmt.Errorf("error calling prepare request: %w", err)
 	}
 
 	return aTxn, nil
@@ -109,13 +109,13 @@ func (pc *client) Submit(ctx context.Context, authorizationHeader AuthorizationH
 
 	request, err := http.NewRequest(http.MethodPost, resource.String(), bytes.NewBuffer(transaction))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating new submit request: %w", err)
 	}
 	request.Header = authorizationHeader
 
 	response, err := pc.httpClient.Do(ctx, request, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error calling submit request: %w", err)
 	}
 
 	// If the http status is a 202 extract the x-submit-retry-after value.
