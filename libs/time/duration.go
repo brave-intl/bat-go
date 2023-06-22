@@ -88,8 +88,6 @@ var (
 // base retuns a time.Duration from base for the ISODuration.
 //
 // TODO: refactor to not require t. It's not used.
-// TODO: consider relying only on FindStringSubmatch to avoid running regexp twice.
-// A nil result from FindStringSubmatch means no match.
 func (i *ISODuration) base(t time.Time) (time.Duration, error) {
 	if i == nil {
 		return 0, nil
@@ -97,11 +95,10 @@ func (i *ISODuration) base(t time.Time) (time.Duration, error) {
 
 	s := i.String()
 
-	if !pattern.MatchString(s) {
+	match := pattern.FindStringSubmatch(s)
+	if match == nil {
 		return 0, ErrUnsupportedFormat
 	}
-
-	match := pattern.FindStringSubmatch(s)
 
 	var prefix string
 	if strings.HasPrefix(s, "-") {
