@@ -1,56 +1,38 @@
 package payments
 
-// UpholdMachine is an implementation of TxStateMachine for uphold's use-case
+import (
+	"context"
+	"fmt"
+)
+
+// UpholdMachine is an implementation of TxStateMachine for uphold's use-case.
+// Including the baseStateMachine provides a default implementation of TxStateMachine,
 type UpholdMachine struct {
-	// client uphold.Wallet
-	// transaction custodian.Transaction
-	version int
+	baseStateMachine
 }
 
-// SetVersion assigns the version field in the GeminiMachine to the specified int
-func (um *UpholdMachine) SetVersion(version int) {
-	um.version = version
-}
-
-// Initialized implements TxStateMachine for uphold machine
-func (um *UpholdMachine) Initialized() (QLDBPaymentTransitionState, error) {
-	if um.version == 0 {
-		return Initialized, nil
+// Pay implements TxStateMachine for uphold machine.
+func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
+	var (
+		entry *Transaction
+		err   error
+	)
+	if um.transaction.State == Pending {
+		return um.writeNextState(ctx, Paid)
+	} else {
+		entry, err = um.writeNextState(ctx, Pending)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write next state: %w", err)
+		}
+		entry, err = Drive(ctx, um)
+		if err != nil {
+			return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+		}
 	}
-	return Prepared, nil
+	return entry, nil
 }
 
-// Prepared implements TxStateMachine for uphold machine
-func (um *UpholdMachine) Prepared() (QLDBPaymentTransitionState, error) {
-	// if failure, do failed branch
-	if false {
-		return Failed, nil
-	}
-	return Authorized, nil
-}
-
-// Authorized implements TxStateMachine for uphold machine
-func (um *UpholdMachine) Authorized() (QLDBPaymentTransitionState, error) {
-	if um.version == 500 {
-		return Authorized, nil
-	}
-	return Pending, nil
-}
-
-// Pending implements TxStateMachine for uphold machine
-func (um *UpholdMachine) Pending() (QLDBPaymentTransitionState, error) {
-	if um.version == 404 {
-		return Pending, nil
-	}
-	return Paid, nil
-}
-
-// Paid implements TxStateMachine for uphold machine
-func (um *UpholdMachine) Paid() (QLDBPaymentTransitionState, error) {
-	return Paid, nil
-}
-
-// Failed implements TxStateMachine for uphold machine
-func (um *UpholdMachine) Failed() (QLDBPaymentTransitionState, error) {
-	return Failed, nil
+// Fail implements TxStateMachine for uphold machine.
+func (um *UpholdMachine) Fail(ctx context.Context) (*Transaction, error) {
+	return um.writeNextState(ctx, Failed)
 }

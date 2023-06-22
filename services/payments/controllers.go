@@ -1,11 +1,13 @@
 package payments
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/middleware"
@@ -19,9 +21,10 @@ import (
 
 type getConfResponse struct {
 	AttestationDocument string `json:"attestation"`
+	PublicKey           string
 }
 
-// GetConfigurationHandler - handler to get important payments configuration information, attested by nitro
+// GetConfigurationHandler gets important payments configuration information, attested by nitro.
 func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
@@ -50,11 +53,16 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	})
 }
 
-// PrepareHandler - handler to get current relative exchange rates
+// PrepareHandler gets current relative exchange rates.
 func PrepareHandler(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
 		ctx := r.Context()
+		namespaceUUID, err := uuid.Parse(os.Getenv("namespaceUUID"))
+		if err != nil {
+			return handlers.WrapError(err, "namespaceUUID not properly formatted", http.StatusInternalServerError)
+		}
+		ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
@@ -62,7 +70,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		)
 
 		// read the transactions in the body
-		err := requestutils.ReadJSON(ctx, r.Body, &req)
+		err = requestutils.ReadJSON(ctx, r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -94,20 +102,13 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
 		}
 
-		// sign the transaction
-		req.PublicKey, req.Signature, err = req.SignTransaction(ctx)
-		if err != nil {
-			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to sign transaction")
-			return handlers.WrapError(err, "failed to sign transaction", http.StatusBadRequest)
-		}
-
-		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
-
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.InsertTransaction(ctx, req)
+		resp, err := service.PrepareTransaction(ctx, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}
+
+		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
 
 		// create a random nonce for nitro attestation
 		nonce := make([]byte, 64)
@@ -130,14 +131,15 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		resp.AttestationDocument = base64.StdEncoding.EncodeToString(attestationDocument)
+		// Should be in QLDB in prepared state
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
-	})
+	}
 }
 
-// SubmitHandler - handler to perform submission of transactions to custodian
+// SubmitHandler performs submission of transactions to custodian.
 func SubmitHandler(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
 		ctx := r.Context()
 
@@ -191,5 +193,5 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
-	})
+	}
 }

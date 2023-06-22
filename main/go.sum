@@ -185,10 +185,8 @@ github.com/aliyun/alibaba-cloud-sdk-go v1.61.1831 h1:g7YHKEArwtJd4mynWxfzWCTMkqR
 github.com/aliyun/alibaba-cloud-sdk-go v1.61.1831/go.mod h1:RcDobYh8k5VP6TNybz9m++gL3ijVI5wueVr0EM10VsU=
 github.com/amazon-ion/ion-go v1.2.0 h1:EgFy23/7gRxRYdUkJARh/7eZc8BYkFFDZZSqB3PwVqQ=
 github.com/amazon-ion/ion-go v1.2.0/go.mod h1:3ZEje8i20TiIPVZlN+KE3B2ppZ1B8d9F/KaT7Dtec+k=
-github.com/amzn/ion-go v1.1.2/go.mod h1:7wQBWQ7PhPpZCr9PL+mtuIyNmyLjuV8qt2mrfxmvkA8=
 github.com/amzn/ion-go v1.1.3 h1:gGhjtLY0GUNQXej5N2qHhoVWQBkgtoPDt1feYYFMfOc=
 github.com/amzn/ion-go v1.1.3/go.mod h1:7wQBWQ7PhPpZCr9PL+mtuIyNmyLjuV8qt2mrfxmvkA8=
-github.com/amzn/ion-hash-go v1.1.1/go.mod h1:KQdfTu6w2hbE4p+TV5JspPf7heXQmFUbYIXgCev8P7o=
 github.com/amzn/ion-hash-go v1.1.2 h1:cUEolXoS7aPwYFknwae47zppF+gJgZEWqRiRbPdPIy8=
 github.com/amzn/ion-hash-go v1.1.2/go.mod h1:6DKfguDnpHlHE8fHV7CxZiWnEudDxMDXUkSn2fu3j/4=
 github.com/antihax/optional v1.0.0/go.mod h1:uupD/76wgC+ih3iEmQUL+0Ugr19nfwCT1kdvxnR2qWY=
@@ -212,7 +210,6 @@ github.com/awa/go-iap v1.3.22/go.mod h1:DbAmBQTIePitXo8iqsPgsQNe9rLkp85SYk1XOEv3
 github.com/aws/aws-sdk-go v1.15.11/go.mod h1:mFuSZ37Z9YOHbQEwBWztmVzqXrEkub65tZoCYDt7FT0=
 github.com/aws/aws-sdk-go v1.17.7/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
 github.com/aws/aws-sdk-go v1.30.27/go.mod h1:5zCpMtNQVjRREroY7sYe8lOMRSxkhG6MZveU8YkpAk0=
-github.com/aws/aws-sdk-go v1.37.8/go.mod h1:hcU610XS61/+aQV88ixoOzUoG7v3b31pl2zKMmprdro=
 github.com/aws/aws-sdk-go v1.44.206 h1:xC7O40wdnKH4A95KdYt+smXl9hig1vu9b3mFxAxUoak=
 github.com/aws/aws-sdk-go v1.44.206/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/aws/aws-sdk-go-v2 v1.8.0/go.mod h1:xEFuWz+3TYdlPRuo+CqATbeDWIWyaT5uAPwPaWtgse0=
@@ -294,8 +291,6 @@ github.com/aws/smithy-go v1.8.0/go.mod h1:SObp3lf9smib00L/v3U2eAKG8FyQ7iLrJnQiAm
 github.com/aws/smithy-go v1.13.4/go.mod h1:Tg+OJXh4MB2R/uN61Ko2f6hTZwB/ZYGOtib8J3gBHzA=
 github.com/aws/smithy-go v1.13.5 h1:hgz0X/DX0dGqTYpGALqXJoRKRj5oQ7150i5FdTePzO8=
 github.com/aws/smithy-go v1.13.5/go.mod h1:Tg+OJXh4MB2R/uN61Ko2f6hTZwB/ZYGOtib8J3gBHzA=
-github.com/awslabs/amazon-qldb-driver-go v1.1.1 h1:2iiixNimutCSXoyyRVcv7wxmVDk7tQtSu5GECL2cw2A=
-github.com/awslabs/amazon-qldb-driver-go v1.1.1/go.mod h1:TiYZc10gpHI/6zOu3deFZzCCCNAXgqsgQn0Owf/B7fE=
 github.com/awslabs/amazon-qldb-driver-go/v3 v3.0.1 h1:kl2z0sTngGlrfGqDDwOek573S2AJ6Ys+Wrf8I0b0B6A=
 github.com/awslabs/amazon-qldb-driver-go/v3 v3.0.1/go.mod h1:VapwwZVNh07sUP9oTiH4Td+g5E6dCoR2bcnbTuwakJw=
 github.com/benbjohnson/clock v1.0.3/go.mod h1:bGMdMPoPVvcYyt1gHDf4J2KE153Yf9BuiUKYMaxlTDM=
@@ -1481,7 +1476,6 @@ github.com/stretchr/objx v0.0.0-20180129172003-8a3f7159479f/go.mod h1:HFkY916IF+
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.2.0/go.mod h1:qt09Ya8vawLte6SNmTgCsAVtYtaKzEcn8ATUoHMkEqE=
-github.com/stretchr/objx v0.3.0/go.mod h1:qt09Ya8vawLte6SNmTgCsAVtYtaKzEcn8ATUoHMkEqE=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0 h1:1zr/of2m5FGMsad5YfcqgdqdWrIhu+EBEJRhR1U7z/c=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=

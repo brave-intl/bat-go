@@ -90,7 +90,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// setup the service now
 	ctx, s, err := payments.NewService(ctx)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initalize payments service")
+		logger.Fatal().Err(err).Msg("failed to initialize payments service")
 	}
 	logger.Info().Msg("payments service setup")
 	// setup router

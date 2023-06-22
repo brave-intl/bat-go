@@ -1,56 +1,38 @@
 package payments
 
-// GeminiMachine is an implementation of TxStateMachine for Gemini's use-case
+import (
+	"context"
+	"fmt"
+)
+
+// GeminiMachine is an implementation of TxStateMachine for Gemini's use-case.
+// Including the baseStateMachine provides a default implementation of TxStateMachine,
 type GeminiMachine struct {
-	// client wallet gemini.BulkPayoutPayload
-	// transaction custodian.Transaction
-	version int
+	baseStateMachine
 }
 
-// SetVersion assigns the version field in the GeminiMachine to the specified int
-func (gm *GeminiMachine) SetVersion(version int) {
-	gm.version = version
-}
-
-// Initialized implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Initialized() (QLDBPaymentTransitionState, error) {
-	if gm.version == 0 {
-		return Initialized, nil
+// Pay implements TxStateMachine for the Gemini machine.
+func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
+	var (
+		entry *Transaction
+		err   error
+	)
+	if gm.transaction.State == Pending {
+		return gm.writeNextState(ctx, Paid)
+	} else {
+		entry, err = gm.writeNextState(ctx, Pending)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write next state: %w", err)
+		}
+		entry, err = Drive(ctx, gm)
+		if err != nil {
+			return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+		}
 	}
-	return Prepared, nil
+	return entry, nil
 }
 
-// Prepared implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Prepared() (QLDBPaymentTransitionState, error) {
-	// if failure, do failed branch
-	if false {
-		return Failed, nil
-	}
-	return Authorized, nil
-}
-
-// Authorized implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Authorized() (QLDBPaymentTransitionState, error) {
-	if gm.version == 500 {
-		return Authorized, nil
-	}
-	return Pending, nil
-}
-
-// Pending implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Pending() (QLDBPaymentTransitionState, error) {
-	if gm.version == 404 {
-		return Pending, nil
-	}
-	return Paid, nil
-}
-
-// Paid implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Paid() (QLDBPaymentTransitionState, error) {
-	return Paid, nil
-}
-
-// Failed implements TxStateMachine for the Gemini machine
-func (gm *GeminiMachine) Failed() (QLDBPaymentTransitionState, error) {
-	return Failed, nil
+// Fail implements TxStateMachine for the Gemini machine.
+func (gm *GeminiMachine) Fail(ctx context.Context) (*Transaction, error) {
+	return gm.writeNextState(ctx, Failed)
 }

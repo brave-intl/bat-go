@@ -23,7 +23,7 @@ const (
 	Bitflyer = "bitflyer"
 )
 
-// TransactionStatus - stringer repr of transaction status
+// TransactionStatus - stringer representation of transaction status
 type TransactionStatus fmt.Stringer
 
 // Transaction - interface defining what a transaction is
@@ -44,8 +44,9 @@ type transaction struct {
 	Source         *uuid.UUID              `json:"source,omitempty"`
 }
 
-// GetItempotencyKey - implement transaction
+// GetIdempotencyKey - implement transaction
 func (t *transaction) GetIdempotencyKey(context.Context) (fmt.Stringer, error) {
+
 	return t.IdempotencyKey, nil
 }
 
