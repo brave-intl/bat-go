@@ -16,13 +16,15 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test create-json-schema lint clean
+.PHONY: all buildcmd docker test create-json-schema lint clean download-mod
 all: test create-json-schema buildcmd
 
 .DEFAULT: buildcmd
 
+codeql: download-mod buildcmd
+
 buildcmd:
-	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
+	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
 
 mock:
 	cd services && mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
@@ -196,3 +198,13 @@ lint:
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/tools golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/serverless/email/webhook golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/serverless/email/unsubscribe golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+
+download-mod:
+	cd ./cmd && go mod download && cd ..
+	cd ./libs && go mod download && cd ..
+	cd ./main && go mod download && cd ..
+	cd ./services && go mod download && cd ..
+	cd ./tools && go mod download && cd ..
+	cd ./serverless/email/status && go mod download && cd ../../..
+	cd ./serverless/email/unsubscribe && go mod download && cd ../../..
+	cd ./serverless/email/webhook && go mod download && cd ../../..
