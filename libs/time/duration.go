@@ -54,6 +54,11 @@ func (i *ISODuration) From(t time.Time) (*time.Time, error) {
 	return &tt, nil
 }
 
+// Duration returns time.Duration.
+func (i *ISODuration) Duration() (time.Duration, error) {
+	return i.base(time.Time{})
+}
+
 const (
 	// HoursPerDay is the number of hours per day according to Google
 	HoursPerDay = 24.0
@@ -80,24 +85,25 @@ var (
 	invalidStrings = []string{"", "P", "PT"}
 )
 
-// base - given a base, produce a time.Duration from base for the ISODuration
+// base retuns a time.Duration from base for the ISODuration.
+//
+// TODO: refactor to not require t. It's not used.
+// TODO: consider relying only on FindStringSubmatch to avoid running regexp twice.
+// A nil result from FindStringSubmatch means no match.
 func (i *ISODuration) base(t time.Time) (time.Duration, error) {
 	if i == nil {
 		return 0, nil
 	}
+
 	s := i.String()
 
-	var (
-		match  []string
-		prefix string
-	)
-
-	if pattern.MatchString(s) {
-		match = pattern.FindStringSubmatch(s)
-	} else {
+	if !pattern.MatchString(s) {
 		return 0, ErrUnsupportedFormat
 	}
 
+	match := pattern.FindStringSubmatch(s)
+
+	var prefix string
 	if strings.HasPrefix(s, "-") {
 		prefix = "-"
 	}

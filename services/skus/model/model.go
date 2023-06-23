@@ -17,6 +17,8 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/customer"
 
+	xtime "github.com/brave-intl/bat-go/libs/time"
+
 	"github.com/brave-intl/bat-go/libs/datastore"
 )
 
@@ -26,6 +28,8 @@ const (
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
+	ErrInvalidOrderNoItems                    Error = "model: invalid order: no items"
+	ErrInvalidOrderItemValidISO               Error = "model: invalid order item valid_for_iso period"
 )
 
 const (
@@ -171,6 +175,28 @@ type OrderItem struct {
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
 	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
 	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
+}
+
+func (x *OrderItem) ValidForISODuration() (time.Duration, error) {
+	period, err := x.validForISODuration()
+	if err != nil {
+		return 0, err
+	}
+
+	return period.Duration()
+}
+
+func (x *OrderItem) validForISODuration() (xtime.ISODuration, error) {
+	if x.ValidForISO == nil {
+		return "", ErrInvalidOrderItemValidISO
+	}
+
+	result, err := xtime.ParseDuration(*x.ValidForISO)
+	if err != nil {
+		return "", err
+	}
+
+	return *result, nil
 }
 
 // Methods represents payment methods.
