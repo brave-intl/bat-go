@@ -266,7 +266,6 @@ func (b *BatchConsumer) retryAsync(ctx context.Context, ackC chan<- string) {
 					continue
 				}
 
-				// nothing pending
 				numPending := len(xPending)
 				if numPending == 0 {
 					continue
@@ -294,14 +293,14 @@ func (b *BatchConsumer) retryAsync(ctx context.Context, ackC chan<- string) {
 				}
 
 				for _, xMessage := range xMessages {
-					// a message may have been claimed by another consumer after calling xPending
+					// A message may have been claimed by another consumer after calling xPending
 					// so check if we claimed it successfully before further processing if not skip it.
 					retryCount, ok := xPendingRetryCount[xMessage.ID]
 					if !ok {
 						continue
 					}
 
-					// if max retry is enabled, and we have reached max retries for this message then send to dlq.
+					// If max retry is enabled, and we have reached max retries for this message then send to dlq.
 					if b.config.maxRetry != maxRetryDisabled && retryCount > b.config.maxRetry {
 						err := b.errorHandler.Handle(ctx, xMessage, errMaxRetriesReached)
 						if err != nil {
@@ -331,7 +330,6 @@ func (b *BatchConsumer) retryAsync(ctx context.Context, ackC chan<- string) {
 
 					switch s := d.(type) {
 					case string:
-
 						message, err := NewMessageFromString(s)
 						if err != nil || len(message.Body) == 0 {
 							err := b.errorHandler.Handle(ctx, xMessage, err)
@@ -400,11 +398,11 @@ func (b *BatchConsumer) ackAsync(ctx context.Context, ackC <-chan string) {
 
 		cache := make([]string, 0, b.config.cacheLimit)
 		ticker := time.NewTicker(b.config.cacheTimeout)
-
-		ackFn := func(cache []string) error {
-			if _, err := b.redis.XAck(ctx, b.config.streamName, b.config.consumerGroup, cache...).Result(); err != nil {
+		ackFn := func(c []string) error {
+			if _, err := b.redis.XAck(ctx, b.config.streamName, b.config.consumerGroup, c...).Result(); err != nil {
 				return err
 			}
+			// Empty the cache after we successfully ack the messages.
 			cache = cache[:0]
 			return nil
 		}
@@ -438,7 +436,6 @@ func (b *BatchConsumer) ackAsync(ctx context.Context, ackC <-chan string) {
 
 				err := ackFn(cache)
 				if err != nil {
-					// log the error and allow it to retry until we max out our retry attempts
 					logger.Error().Err(err).
 						Strs("message_ids", cache).
 						Msg("batch consumer processing")
@@ -469,13 +466,15 @@ func (b *BatchConsumer) statusAsync(ctx context.Context, resultC chan<- error) {
 			case <-ticker.C:
 				xInfoGroups, err := b.redis.XInfoGroups(ctx, b.config.streamName).Result()
 				if err != nil {
-					fmt.Println("call ", err)
+					logger.Error().Err(err).Msg("error getting xinfo groups")
+					continue
 				}
 
 				// This is a workaround for not being able to check the cg lag.
 				lastMessage, err := b.redis.XRevRangeN(ctx, b.config.streamName, "+", "-", 1).Result()
 				if err != nil {
 					logger.Error().Err(err).Msg("error calling xrevrange")
+					continue
 				}
 
 				if len(xInfoGroups) == 0 || len(lastMessage) == 0 {

@@ -91,7 +91,8 @@ func (s *Worker) Run(ctx context.Context) {
 
 			//TODO update the payout as complete
 
-			logger.Info().Msg("submit complete")
+			logger.Info().Interface("submit_config", config).
+				Msg("submit complete")
 		}
 	}
 }
