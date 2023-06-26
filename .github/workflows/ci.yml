@@ -50,9 +50,19 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Set up Go
+      id: setup-go
       uses: actions/setup-go@v4
       with:
         go-version: ${{ matrix.goversion }}
+        cache-dependency-path: "**/go.sum"
+
+    - name: Ensure Module Path
+      run: mkdir -p /opt/go/pkg/mod
+
+    - name: Copy From Module Cache
+      if: steps.setup-go.outputs.cache-hit == 'true'
+      run: |
+        rsync -au "/home/runner/go/pkg/" "/opt/go/pkg"
 
     - name: Install Docker Compose
       uses: KengoTODA/actions-setup-docker-compose@92cbaf8ac8c113c35e1cedd1182f217043fbdd00
@@ -64,9 +74,18 @@ jobs:
     - name: Start Vault
       run: |
         docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault;
-        sleep 3;
+        sleep 3
 
     - name: Run Tests
       run: |
         export VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 );
-        docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make;
+        docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -v /opt/go/pkg:/go/pkg dev make
+
+    - name: Ensure Module Directory
+      if: steps.setup-go.outputs.cache-hit != 'true'
+      run: mkdir -p /home/runner/go/pkg
+
+    - name: Copy To Module Cache
+      run: |
+        sudo rsync -au "/opt/go/pkg/" "/home/runner/go/pkg"
+        sudo chown -R runner:runner /home/runner/go/pkg

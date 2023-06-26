@@ -189,8 +189,7 @@ format:
 format-lint:
 	make format && make lint
 
-lint:
-	docker volume create batgo_lint_gomod
+lint: ensure-gomod-volume
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/main golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/cmd golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/libs golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
@@ -208,3 +207,6 @@ download-mod:
 	cd ./serverless/email/status && go mod download && cd ../../..
 	cd ./serverless/email/unsubscribe && go mod download && cd ../../..
 	cd ./serverless/email/webhook && go mod download && cd ../../..
+
+ensure-gomod-volume:
+	docker volume create batgo_lint_gomod
