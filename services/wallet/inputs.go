@@ -307,12 +307,15 @@ func HandleErrorsXyzAbc(err error) *handlers.AppError {
 	if errors.As(err, &merr) {
 		for _, e := range merr.Errs {
 			msg := e.Error()
+
 			if strings.Contains(msg, "failed decoding") {
 				issues["decoding"] = msg
+				continue
 			}
 
 			if strings.Contains(msg, "failed validation") {
 				issues["validation"] = msg
+				continue
 			}
 		}
 	}
