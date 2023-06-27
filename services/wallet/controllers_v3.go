@@ -211,70 +211,54 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 	}
 }
 
-// LinkXyzAbcDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
+// LinkXyzAbcDepositAccountV3 returns a handler which handles deposit account linking of xyzabc wallets.
 func LinkXyzAbcDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			ctx  = r.Context()
-			id   = new(inputs.ID)
-			xalr = new(XyzAbcLinkingRequest)
-		)
-		// get logger from context
+		ctx := r.Context()
+
+		// Check whether it's disabled.
+		if disable, ok := ctx.Value(appctx.DisableXyzAbcLinkingCTXKey).(bool); ok && disable {
+			const msg = "Connecting Brave Rewards to XyzAbc is temporarily unavailable. Please try again later"
+			return handlers.ValidationError(msg, nil)
+		}
+
+		id := &inputs.ID{}
 		logger := logging.Logger(ctx, "wallet.LinkXyzAbcDepositAccountV3")
 
-		// check if we have disabled gemini
-		if disableXyzAbc, ok := ctx.Value(appctx.DisableXyzAbcLinkingCTXKey).(bool); ok && disableXyzAbc {
-			return handlers.ValidationError(
-				"Connecting Brave Rewards to XyzAbc is temporarily unavailable.  Please try again later",
-				nil,
-			)
-		}
-
-		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
-			return handlers.ValidationError(
-				"error validating paymentID url parameter",
-				map[string]interface{}{
-					"paymentID": err.Error(),
-				},
-			)
+
+			const msg = "error validating paymentID url parameter"
+			return handlers.ValidationError(msg, map[string]interface{}{"paymentID": err.Error()})
 		}
 
-		// validate payment id matches what was in the http signature
+		// Check that payment id matches what was in the http signature.
 		signatureID, err := middleware.GetKeyID(ctx)
 		if err != nil {
-			return handlers.ValidationError(
-				"error validating paymentID url parameter",
-				map[string]interface{}{
-					"paymentID": err.Error(),
-				},
-			)
+			const msg = "error validating paymentID url parameter"
+			return handlers.ValidationError(msg, map[string]interface{}{"paymentID": err.Error()})
 		}
 
 		if id.String() != signatureID {
-			return handlers.ValidationError(
-				"paymentId from URL does not match paymentId in http signature",
-				map[string]interface{}{
-					"paymentID": "does not match http signature id",
-				},
-			)
+			const msg = "paymentId from URL does not match paymentId in http signature"
+			return handlers.ValidationError(msg, map[string]interface{}{
+				"paymentID": "does not match http signature id",
+			})
 		}
 
-		// read post body
+		xalr := &XyzAbcLinkingRequest{}
 		if err := inputs.DecodeAndValidateReader(ctx, xalr, r.Body); err != nil {
-			return xalr.HandleErrors(err)
+			return HandleErrorsXyzAbc(err)
 		}
 
-		err = s.LinkXyzAbcWallet(ctx, *id.UUID(), xalr.VerificationToken, xalr.DepositID)
-		if err != nil {
+		if err := s.LinkXyzAbcWallet(ctx, *id.UUID(), xalr.VerificationToken, xalr.DepositID); err != nil {
 			if errors.Is(err, errorutils.ErrInvalidCountry) {
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
 			}
+
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 
-		// render the wallet
 		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
 }
