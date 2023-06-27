@@ -13,7 +13,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi"
 	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -33,11 +38,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/cmd"
-	"github.com/go-chi/chi"
-	"github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/spf13/viper"
 )
 
 // ReputationGeoEnable - enable geo reputation check
@@ -409,67 +409,70 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 	return nil
 }
 
-// LinkXyzAbcWallet links a wallet and transfers funds to newly linked wallet
+// LinkXyzAbcWallet links a wallet and transfers funds to newly linked wallet.
 func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID, verificationToken, depositID string) error {
-	// get xyzabc linking_info signing key
-	xyzabcLinkingKeyB64, ok := ctx.Value(appctx.XyzAbcLinkingKeyCTXKey).(string)
+	// Get xyzabc linking_info signing key.
+	linkingKeyB64, ok := ctx.Value(appctx.XyzAbcLinkingKeyCTXKey).(string)
 	if !ok {
-		// no linking key on context
-		return handlers.WrapError(
-			appctx.ErrNotInContext, "xyzabc linking validation misconfigured", http.StatusInternalServerError)
+		const msg = "xyzabc linking validation misconfigured"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
 	}
 
-	// jwt key is base64 encoded
-	decodedXyzAbcJWTKey, err := base64.StdEncoding.DecodeString(xyzabcLinkingKeyB64)
+	// Decode base64 encoded jwt key.
+	decodedJWTKey, err := base64.StdEncoding.DecodeString(linkingKeyB64)
 	if err != nil {
-		return handlers.WrapError(
-			appctx.ErrNotInContext, "xyzabc linking validation misconfigured", http.StatusInternalServerError)
+		const msg = "xyzabc linking validation misconfigured"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
 	}
 
-	// parse the signed verification token from input
+	// Parse the signed verification token from input.
 	tok, err := jwt.ParseSigned(verificationToken)
 	if err != nil {
-		return handlers.WrapError(
-			appctx.ErrNotInContext, "xyzabc linking info parse failure", http.StatusBadRequest)
+		const msg = "xyzabc linking info parsing failed"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
-	// create the jwt claims and get them (verified) from the token
+	// Create the jwt claims and get them (verified) from the token.
 	claims := make(map[string]interface{})
-	if err := tok.Claims(decodedXyzAbcJWTKey, &claims); err != nil {
-		return handlers.WrapError(
-			appctx.ErrNotInContext, "xyzabc linking info validation failed", http.StatusBadRequest)
+	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
+		const msg = "xyzabc linking info validation failed"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
-	// make sure deposit id matches claims
+	// Make sure deposit id matches claims.
 	if dID, ok := claims["depositId"].(string); ok && dID != depositID {
-		return handlers.WrapError(
-			appctx.ErrNotInContext, "xyzabc deposit id does not match token", http.StatusBadRequest)
+		const msg = "xyzabc deposit id does not match token"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
-	// get the account id
+	// Get the account id.
 	accountID, ok := claims["accountId"].(string)
 	if !ok || accountID == "" {
-		return handlers.WrapError(
-			appctx.ErrNotInContext, "xyzabc account id invalid in token", http.StatusBadRequest)
+		const msg = "xyzabc account id invalid in token"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
 
-	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "US") // FIXME
-	if err != nil {
+	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
+	// FIXME
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "US"); err != nil {
+		if errors.Is(err, ErrUnusualActivity) {
+			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+		}
+
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
-		}
-		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
-		}
+
 		return handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
+
 	return nil
 }
 

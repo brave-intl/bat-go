@@ -29,7 +29,8 @@ var (
 	// ErrInvalidJSON - the input json is invalid
 	ErrInvalidJSON = errors.New("invalid json")
 	// ErrMissingLinkingInfo - required parameter missing from request
-	ErrMissingLinkingInfo = errors.New("missing linking information")
+	ErrMissingLinkingInfo    = errors.New("missing linking information")
+	ErrXyzAbcInvalidVrfToken = errors.New("failed to validate 'linking_info': must not be empty")
 )
 
 // CustodianName - input validation for custodian name
@@ -271,31 +272,33 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 	return handlers.ValidationError("brave link wallet request validation errors", issues)
 }
 
-// XyzAbcLinkingRequest holds info needed to link xyzabc account
+// XyzAbcLinkingRequest holds info needed to link xyzabc account.
 type XyzAbcLinkingRequest struct {
 	VerificationToken string `json:"linking_info"`
 	DepositID         string `json:"deposit_id"`
 }
 
-// Validate - implementation of validatable interface
-func (xalr *XyzAbcLinkingRequest) Validate(ctx context.Context) error {
-	if xalr.VerificationToken == "" {
-		return errors.New("failed to validate 'linking_info': must not be empty")
+// Validate implements DecodeValidate interface.
+func (r *XyzAbcLinkingRequest) Validate(ctx context.Context) error {
+	if r.VerificationToken == "" {
+		return ErrXyzAbcInvalidVrfToken
 	}
+
 	return nil
 }
 
-// Decode - implementation of  decodable interface
-func (xalr *XyzAbcLinkingRequest) Decode(ctx context.Context, v []byte) error {
-	if err := inputs.DecodeJSON(ctx, v, xalr); err != nil {
+// Decode implements DecodeValidate interface.
+func (r *XyzAbcLinkingRequest) Decode(ctx context.Context, v []byte) error {
+	if err := inputs.DecodeJSON(ctx, v, r); err != nil {
 		return fmt.Errorf("failed to decode json: %w", err)
 	}
+
 	return nil
 }
 
-// HandleErrors - handle any errors from this request
-func (xalr *XyzAbcLinkingRequest) HandleErrors(err error) *handlers.AppError {
-	issues := map[string]string{}
+// HandleErrorsXyzAbc returns an AppError for the given err.
+func HandleErrorsXyzAbc(err error) *handlers.AppError {
+	issues := make(map[string]string)
 	if errors.Is(err, ErrInvalidJSON) {
 		issues["invalidJSON"] = err.Error()
 	}
@@ -303,14 +306,20 @@ func (xalr *XyzAbcLinkingRequest) HandleErrors(err error) *handlers.AppError {
 	var merr *errorutils.MultiError
 	if errors.As(err, &merr) {
 		for _, e := range merr.Errs {
-			if strings.Contains(e.Error(), "failed decoding") {
-				issues["decoding"] = e.Error()
+			msg := e.Error()
+
+			if strings.Contains(msg, "failed decoding") {
+				issues["decoding"] = msg
+				continue
 			}
-			if strings.Contains(e.Error(), "failed validation") {
-				issues["validation"] = e.Error()
+
+			if strings.Contains(msg, "failed validation") {
+				issues["validation"] = msg
+				continue
 			}
 		}
 	}
+
 	return handlers.ValidationError("xyzabc wallet linking request validation errors", issues)
 }
 
