@@ -211,6 +211,58 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 	}
 }
 
+// LinkXyzAbcDepositAccountV3 returns a handler which handles deposit account linking of xyzabc wallets.
+func LinkXyzAbcDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		// Check whether it's disabled.
+		if disable, ok := ctx.Value(appctx.DisableXyzAbcLinkingCTXKey).(bool); ok && disable {
+			const msg = "Connecting Brave Rewards to XyzAbc is temporarily unavailable. Please try again later"
+			return handlers.ValidationError(msg, nil)
+		}
+
+		id := &inputs.ID{}
+		logger := logging.Logger(ctx, "wallet.LinkXyzAbcDepositAccountV3")
+
+		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
+			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+
+			const msg = "error validating paymentID url parameter"
+			return handlers.ValidationError(msg, map[string]interface{}{"paymentID": err.Error()})
+		}
+
+		// Check that payment id matches what was in the http signature.
+		signatureID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			const msg = "error validating paymentID url parameter"
+			return handlers.ValidationError(msg, map[string]interface{}{"paymentID": err.Error()})
+		}
+
+		if id.String() != signatureID {
+			const msg = "paymentId from URL does not match paymentId in http signature"
+			return handlers.ValidationError(msg, map[string]interface{}{
+				"paymentID": "does not match http signature id",
+			})
+		}
+
+		xalr := &XyzAbcLinkingRequest{}
+		if err := inputs.DecodeAndValidateReader(ctx, xalr, r.Body); err != nil {
+			return HandleErrorsXyzAbc(err)
+		}
+
+		if err := s.LinkXyzAbcWallet(ctx, *id.UUID(), xalr.VerificationToken, xalr.DepositID); err != nil {
+			if errors.Is(err, errorutils.ErrInvalidCountry) {
+				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
+			}
+
+			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
+	}
+}
+
 // LinkGeminiDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
 func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
