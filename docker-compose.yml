@@ -1,6 +1,7 @@
 version: "3.4"
 
 volumes:
+  pg_data:
   out:
     driver_opts:
       type: tmpfs
@@ -203,26 +204,14 @@ services:
     environment:
       - "POSTGRES_USER=grants"
       - "POSTGRES_PASSWORD=password"
+      - "POSTGRES_EXTRA_DATABASES=btokens:btokens:password"
       - "TZ=UTC"
     networks:
       - grant
     command: ["postgres", "-c", "log_statement=all"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-  challenge-bypass-postgres:
-    container_name: challenge-bypass-postgres
-    image: postgres:14
-    environment:
-      - "POSTGRES_USER=btokens"
-      - "POSTGRES_PASSWORD=password"
-      - "TZ=UTC"
-    networks:
-      - grant
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./create_dbs.sh:/docker-entrypoint-initdb.d/00_create_dbs.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready"]
       interval: 5s
@@ -239,7 +228,7 @@ services:
     environment:
       - "ENV=devtest"
       - "SENTRY_DSN"
-      - "DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
+      - "DATABASE_URL=postgres://btokens:password@grant-postgres/btokens?sslmode=disable"
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
       - KAFKA_BROKERS=kafka:19092
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
@@ -257,7 +246,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=dummy
       - AWS_REGION=us-west-2
     depends_on:
-      challenge-bypass-postgres:
+      postgres:
         condition: service_healthy
       dynamodb:
         condition: service_healthy
