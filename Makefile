@@ -208,5 +208,12 @@ download-mod:
 	cd ./serverless/email/unsubscribe && go mod download && cd ../../..
 	cd ./serverless/email/webhook && go mod download && cd ../../..
 
+docker-up-ext: ensure-shared-net
+	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ext.yml run --rm -p 3333:3333 dev /bin/bash
+
 ensure-gomod-volume:
 	docker volume create batgo_lint_gomod
+
+ensure-shared-net:
+	if [ -z $$(docker network ls -q -f "name=brave_shared_net") ]; then docker network create brave_shared_net; fi
