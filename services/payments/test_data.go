@@ -231,7 +231,7 @@ var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
 	},
 }
 
-/*var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
+var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
 	"dry_run": "false",
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
@@ -241,7 +241,7 @@ var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
 		"transfer_id":     "",
 	},
 	},
-}*/
+}
 
 var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 	"dry_run": "false",
@@ -255,7 +255,7 @@ var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 	},
 }
 
-/*var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
+var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
 	"dry_run": "false",
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
@@ -265,4 +265,8 @@ var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 		"transfer_id":     "",
 	},
 	},
-}*/
+}
+
+var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
+	"dry_run": "false",
+	"token":   "Look at me. I'm a token."}

@@ -109,6 +109,7 @@ func NewWithProxy(name string, serverURL string, authToken string, proxyURL stri
 	} else {
 		proxy = nil
 	}
+	fmt.Printf("BASEURL: %v\n", baseURL)
 	return &SimpleHTTPClient{
 		BaseURL:   baseURL,
 		AuthToken: authToken,

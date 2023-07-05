@@ -345,6 +345,7 @@ func NewWithContext(ctx context.Context) (Client, error) {
 func New() (Client, error) {
 	serverEnvKey := "BITFLYER_SERVER"
 	serverURL := os.Getenv(serverEnvKey)
+	fmt.Printf("SERVERURL: %v\n", serverURL)
 	if len(serverURL) == 0 {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
@@ -502,15 +503,17 @@ func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*T
 	}()
 
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload, nil)
+	fmt.Printf("REQ: %#v\n", c.client.BaseURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate refresh token request: %w", err)
 	}
 	c.setupRequestHeaders(req)
 
 	var body TokenResponse
 	resp, err := c.client.Do(ctx, req, &body)
+	fmt.Printf("RESP: %#v\n", resp)
 	if err != nil {
-		return &body, err
+		return &body, fmt.Errorf("failed to execute refresh token request: %w", err)
 	}
 	c.SetAuthToken(body.AccessToken)
 

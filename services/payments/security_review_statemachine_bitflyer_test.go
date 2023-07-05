@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	mockBitflyerHost = "fake://bitflyer.com"
+	mockBitflyerHost = "http://bravesoftware.com"
 	// bitflyerBulkPayload = bitflyer.WithdrawToDepositIDBulkPayload{
 	// 	DryRun:      true,
 	// 	Withdrawals: []bitflyer.WithdrawToDepositIDPayload{},
@@ -45,6 +45,8 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
 	must.Equal(t, nil, err)
+	err = os.Setenv("BITFLYER_SERVER", mockBitflyerHost)
+	must.Equal(t, nil, err)
 
 	// Mock transaction creation that will succeed
 	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitSuccessResponse)
@@ -64,6 +66,16 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		"POST",
 		fmt.Sprintf(
 			"%s/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
+			mockBitflyerHost,
+		),
+		httpmock.NewStringResponder(200, string(jsonResponse)),
+	)
+	jsonResponse, err = json.Marshal(bitflyerTransactionTokenRefreshResponse)
+	must.Equal(t, nil, err)
+	httpmock.RegisterResponder(
+		"POST",
+		fmt.Sprintf(
+			"%s/api/link/v1/token",
 			mockBitflyerHost,
 		),
 		httpmock.NewStringResponder(200, string(jsonResponse)),
@@ -141,6 +153,11 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
+	info := httpmock.GetCallCountInfo()
+	tokenInfoKey := fmt.Sprintf("GET %s/api/link/v1/token", mockBitflyerHost)
+	fmt.Printf("Calls to token refresh: %v\n", info[tokenInfoKey])
+	// Ensure that our Bitflyer calls are going through the mock and not anything else.
+	//must.Equal(t, info[tokenInfoKey], 1)
 	should.Equal(t, Authorized, newTransaction.State)
 
 	// Should transition transaction into the Pending state
@@ -163,15 +180,11 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	should.Equal(t, Paid, newTransaction.State)
 }
 
-/*
-TestBitflyerStateMachine500FailureToPaidTransition tests for a failure to progress status
-after a 500 error response while attempting to transfer from Pending to Paid
+// TestBitflyerStateMachine500FailureToPaidTransition tests for a failure to progress status
+// after a 500 error response while attempting to transfer from Pending to Paid
 func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-
-	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
-	must.Equal(t, nil, err)
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitFailureResponse)
@@ -195,8 +208,13 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	id := uuid.New()
 	transaction := Transaction{State: Prepared, ID: &id}
 	bitflyerStateMachine := BitflyerMachine{}
-	bitflyerStateMachine.setTransaction(&transaction)
-	bitflyerStateMachine.setService(&service)
+	bitflyerStateMachine.setPersistenceConfigValues(
+		service.datastore,
+		service.sdkClient,
+		service.kmsSigningClient,
+		service.kmsSigningKeyID,
+		&transaction,
+	)
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the meantime.
@@ -206,17 +224,12 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	newState, _ := Drive(ctx, &bitflyerStateMachine)
 	should.Equal(t, Authorized, newState)
 }
-*/
 
-/*
-TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
-Failure with 404 error when attempting to transfer from Pending to Paid
+// TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
+// Failure with 404 error when attempting to transfer from Pending to Paid
 func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
-
-	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
-	must.Equal(t, nil, err)
 
 	// Mock transaction commit that will fail
 	jsonResponse, err := json.Marshal(bitflyerTransactionCheckStatusFailureResponse)
@@ -240,8 +253,13 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	transaction := Transaction{State: Pending, ID: &id}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	bitflyerStateMachine := BitflyerMachine{}
-	bitflyerStateMachine.setTransaction(&transaction)
-	bitflyerStateMachine.setService(&service)
+	bitflyerStateMachine.setPersistenceConfigValues(
+		service.datastore,
+		service.sdkClient,
+		service.kmsSigningClient,
+		service.kmsSigningKeyID,
+		&transaction,
+	)
 	// When the implementation is in place, this Version value will not be necessary.
 	// However, it's set here to allow the placeholder implementation to return the
 	// correct value and allow this test to pass in the meantime.
@@ -251,4 +269,3 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	newState, _ := Drive(ctx, &bitflyerStateMachine)
 	should.Equal(t, Pending, newState)
 }
-*/
