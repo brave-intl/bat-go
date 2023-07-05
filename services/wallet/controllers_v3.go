@@ -251,7 +251,7 @@ func LinkXyzAbcDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return HandleErrorsXyzAbc(err)
 		}
 
-		if err := s.LinkXyzAbcWallet(ctx, *id.UUID(), xalr.VerificationToken, xalr.DepositID); err != nil {
+		if err := s.LinkXyzAbcWallet(ctx, *id.UUID(), xalr.VerificationToken); err != nil {
 			if errors.Is(err, errorutils.ErrInvalidCountry) {
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
 			}

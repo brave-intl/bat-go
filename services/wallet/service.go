@@ -410,7 +410,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 }
 
 // LinkXyzAbcWallet links a wallet and transfers funds to newly linked wallet.
-func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID, verificationToken, depositID string) error {
+func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
 	// Get xyzabc linking_info signing key.
 	linkingKeyB64, ok := ctx.Value(appctx.XyzAbcLinkingKeyCTXKey).(string)
 	if !ok {
@@ -439,8 +439,9 @@ func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
-	// Make sure deposit id matches claims.
-	if dID, ok := claims["depositId"].(string); ok && dID != depositID {
+	// Make sure deposit id exists
+	depositID, ok := claims["depositId"].(string)
+	if !ok || depositID == "" {
 		const msg = "xyzabc deposit id does not match token"
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
@@ -455,7 +456,7 @@ func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
 
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
-	// FIXME
+	// FIXME - correct country
 	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "US"); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
