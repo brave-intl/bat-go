@@ -274,8 +274,7 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 
 // XyzAbcLinkingRequest holds info needed to link xyzabc account.
 type XyzAbcLinkingRequest struct {
-	VerificationToken string `json:"linking_info"`
-	DepositID         string `json:"deposit_id"`
+	VerificationToken string `json:"linkingInfo"`
 }
 
 // Validate implements DecodeValidate interface.
