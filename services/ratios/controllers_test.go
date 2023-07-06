@@ -4,12 +4,15 @@
 package ratios_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/libs/clients/coingecko/mock"
 	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
+	"github.com/brave-intl/bat-go/libs/clients/stripe"
+	mockstripe "github.com/brave-intl/bat-go/libs/clients/stripe/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/ratios"
@@ -30,10 +33,11 @@ import (
 type ControllersTestSuite struct {
 	suite.Suite
 
-	ctx        context.Context
-	service    *ratios.Service
-	mockCtrl   *gomock.Controller
-	mockClient *mockcoingecko.MockClient
+	ctx                 context.Context
+	service             *ratios.Service
+	mockCtrl            *gomock.Controller
+	mockCoingeckoClient *mockcoingecko.MockClient
+	mockStripeClient    *mockstripe.MockClient
 }
 
 func TestControllersTestSuite(t *testing.T) {
@@ -93,10 +97,13 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	conn := redis.Get()
 	err = conn.Err()
 	suite.Require().NoError(err, "failed to setup redis conn")
-	client := mockcoingecko.NewMockClient(suite.mockCtrl)
-	suite.mockClient = client
+	coingecko := mockcoingecko.NewMockClient(suite.mockCtrl)
+	suite.mockCoingeckoClient = coingecko
 
-	suite.service = ratios.NewService(suite.ctx, client, redis)
+	stripe := mockstripe.NewMockClient(suite.mockCtrl)
+	suite.mockStripeClient = stripe
+
+	suite.service = ratios.NewService(suite.ctx, coingecko, stripe, redis)
 	suite.Require().NoError(err, "failed to setup ratios service")
 }
 
@@ -159,7 +166,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 	suite.Require().Empty(rr.Header().Get("Cache-Control"))
 
 	// Test success with 1h duration
-	suite.mockClient.EXPECT().
+	suite.mockCoingeckoClient.EXPECT().
 		FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingecko.MarketChartResponse{
 			Prices: [][]decimal.Decimal{
@@ -190,7 +197,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 	suite.Require().LessOrEqual(maxAge, 150, "Invalid max-age parameter in Cache-Control header")
 
 	// Test success with 1d duration
-	suite.mockClient.EXPECT().
+	suite.mockCoingeckoClient.EXPECT().
 		FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingecko.MarketChartResponse{
 			Prices: [][]decimal.Decimal{
@@ -219,7 +226,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 	suite.Require().LessOrEqual(maxAge, 3600, "Invalid max-age parameter in Cache-Control header")
 
 	// Test success with 1w duration
-	suite.mockClient.EXPECT().
+	suite.mockCoingeckoClient.EXPECT().
 		FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingecko.MarketChartResponse{
 			Prices: [][]decimal.Decimal{
@@ -252,7 +259,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 	durations := []string{"1m", "3m", "1y", "all"}
 
 	for _, duration := range durations {
-		suite.mockClient.EXPECT().
+		suite.mockCoingeckoClient.EXPECT().
 			FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(&coingecko.MarketChartResponse{
 				Prices: [][]decimal.Decimal{
@@ -365,7 +372,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	respy := coingecko.SimplePriceResponse(map[string]map[string]decimal.Decimal{
 		"basic-attention-token": map[string]decimal.Decimal{"usd": decimal.Zero},
 	})
-	suite.mockClient.EXPECT().
+	suite.mockCoingeckoClient.EXPECT().
 		FetchSimplePrice(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(
 			&respy, nil)
@@ -427,7 +434,7 @@ func (suite *ControllersTestSuite) TestGetCoinMarketsHandler() {
 			},
 		},
 	)
-	suite.mockClient.EXPECT().
+	suite.mockCoingeckoClient.EXPECT().
 		FetchCoinMarkets(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingeckoResp, time.Now(), nil)
 	req, err := http.NewRequest("GET", "/v2/market/provider/coingecko?vsCurrency=usd&limit=1", nil)
@@ -451,4 +458,164 @@ func (suite *ControllersTestSuite) TestGetCoinMarketsHandler() {
 	maxAge, err := strconv.Atoi(maxAgeMatch[1])
 	suite.Require().Greater(maxAge, 0, "Invalid max-age parameter in Cache-Control header")
 	suite.Require().LessOrEqual(maxAge, 3600, "Invalid max-age parameter in Cache-Control header")
+}
+
+func (suite *ControllersTestSuite) TestCreateStripeOnrampSessionsHandler() {
+	handler := ratios.CreateStripeOnrampSessionsHandler(suite.service)
+	// Missing payload results in 400
+	{
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", nil)
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
+	// SourceExchangeAmount less than 1 results in 400
+	{
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "usd",
+			SourceExchangeAmount:         "0.5",
+			DestinationNetwork:           "ethereum",
+			DestinationCurrency:          "eth",
+			SupportedDestinationNetworks: []string{"ethereum", "bitcoin", "solana", "polygon"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
+	// SourceExchangeAmount includes fractions of pennies results in 400
+	{
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "usd",
+			SourceExchangeAmount:         "1000.001",
+			DestinationNetwork:           "ethereum",
+			DestinationCurrency:          "eth",
+			SupportedDestinationNetworks: []string{"ethereum", "bitcoin", "solana", "polygon"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
+	// Invalid DestinationNetwork results in 400
+	{
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "USD",
+			SourceExchangeAmount:         "1000.00",
+			DestinationNetwork:           "unsupportedNetwork",
+			DestinationCurrency:          "ETH",
+			SupportedDestinationNetworks: []string{"ethereum", "bitcoin", "solana", "polygon"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
+	// Unsupported network in SupportedDestinationNetworks results in 400
+	{
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "usd",
+			SourceExchangeAmount:         "1000.00",
+			DestinationNetwork:           "ethereum",
+			DestinationCurrency:          "eth",
+			SupportedDestinationNetworks: []string{"ethereum", "binance", "cardano"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
+	// Invalid DestinationCurrency results in 400
+	{
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "usd",
+			SourceExchangeAmount:         "1000.00",
+			DestinationNetwork:           "ethereum",
+			DestinationCurrency:          "unsupportedCurrency",
+			SupportedDestinationNetworks: []string{"ethereum", "bitcoin", "solana", "polygon"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	}
+
+	// Valid request yields 200
+	{
+		stripeResp := stripe.OnrampSessionResponse{
+			RedirectURL: "https://example.com",
+		}
+		suite.mockStripeClient.EXPECT().
+			CreateOnrampSession(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).
+			Return(&stripeResp, nil)
+		payload := &ratios.StripeOnrampSessionRequest{
+			WalletAddress:                "0x123abc456def",
+			SourceCurrency:               "usd",
+			SourceExchangeAmount:         "1000.00",
+			DestinationNetwork:           "ethereum",
+			DestinationCurrency:          "eth",
+			SupportedDestinationNetworks: []string{"ethereum", "solana", "bitcoin"},
+		}
+		payloadBytes, err := json.Marshal(payload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v2/stripe/onramp_sessions", bytes.NewBuffer(payloadBytes))
+		suite.Require().NoError(err)
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(suite.ctx)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		suite.Require().Equal(http.StatusOK, rr.Code)
+		var ratiosResp = new(ratios.CreateStripeOnrampSessionResponse)
+		err = json.Unmarshal(rr.Body.Bytes(), ratiosResp)
+		suite.Require().NoError(err)
+		suite.Require().Equal(ratiosResp.URL, "https://example.com")
+	}
 }

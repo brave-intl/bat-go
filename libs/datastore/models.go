@@ -25,6 +25,14 @@ func (m *Metadata) Scan(value interface{}) error {
 	if !ok {
 		return errors.New("failed to scan Metadata, not byte slice")
 	}
+
+	// BUG: numbers stored in jsonb become float64 when retrieved.
+	//
+	// If there was an integer stored as jsonb on a table,
+	// when fetched, it will appear as float64 in the map.
+	//
+	// This is due to how Go treats JSON numbers when the destination is interface{}.
+	// See docs for [Unmarshal]](https://pkg.go.dev/encoding/json#Unmarshal).
 	return json.Unmarshal(b, &m)
 }
 
