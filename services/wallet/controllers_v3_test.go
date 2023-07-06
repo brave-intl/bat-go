@@ -740,7 +740,7 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.XyzAbcLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
 	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
-		"accountId": accountID, "deposit_id": idTo,
+		"accountId": accountID, "depositId": idTo,
 	}).CompactSerialize()
 	if err != nil {
 		panic(err)
@@ -750,11 +750,10 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 	r := httptest.NewRequest(
 		"POST",
 		fmt.Sprintf("/v3/wallet/xyzabc/%s/claim", idFrom),
-		bytes.NewBufferString(fmt.Sprintf(`
-				{
-					"linking_info": "%s",
-					"deposit_id": "%s"
-				}`, linkingInfo, idTo)),
+		bytes.NewBufferString(fmt.Sprintf(
+			`{"linkingInfo": "%s"}`,
+			linkingInfo,
+		)),
 	)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
