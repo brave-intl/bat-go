@@ -15,7 +15,7 @@ services:
       - no-new-privileges:true
     environment:
       - OUTPUT_DIR="/out"
-      - "CHALLENGE_BYPASS_DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
+      - "CHALLENGE_BYPASS_DATABASE_URL=postgres://btokens:password@grant-postgres/btokens?sslmode=disable"
       - "VAULT_ADDR=http://vault:8200"
       - TEST_TAGS
       - VAULT_TOKEN

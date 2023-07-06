@@ -78,9 +78,9 @@ func main() {
 
 	if *verbose {
 		log.Printf("attested report stats: %d transactions; %s total bat\n",
-			len(attestedReport), payments.SumBAT(attestedReport...))
+			len(attestedReport), attestedReport.SumBAT())
 		log.Printf("prepared report stats: %d transactions; %s total bat\n",
-			len(preparedReport), payments.SumBAT(preparedReport...))
+			len(preparedReport), preparedReport.SumBAT())
 	}
 
 	// check that the report is actually nitro attested

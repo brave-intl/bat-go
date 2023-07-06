@@ -1,0 +1,17 @@
+version: "3.4"
+
+networks:
+  brave_shared:
+    name: brave_shared_net
+    external: true
+
+services:
+  dev:
+    networks:
+      - grant
+      - brave_shared
+
+  web:
+    networks:
+      - grant
+      - brave_shared

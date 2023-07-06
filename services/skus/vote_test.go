@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 type BytesContains []byte
@@ -59,9 +60,12 @@ func TestVoteAnonCard(t *testing.T) {
 	}
 	s.Datastore = Datastore(
 		&Postgres{
-			datastore.Postgres{
+			Postgres: datastore.Postgres{
 				DB: sqlx.NewDb(db, "postgres"),
 			},
+			orderRepo:       repository.NewOrder(),
+			orderItemRepo:   repository.NewOrderItem(),
+			orderPayHistory: repository.NewOrderPayHistory(),
 		},
 	)
 

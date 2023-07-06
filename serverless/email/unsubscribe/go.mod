@@ -1,3 +1,9 @@
+module github.com/brave-intl/bat-go/serverless/email/unsubscribe
+
+go 1.18
+
+replace gopkg.in/yaml.v2 => gopkg.in/yaml.v2 v2.2.8
+
 require (
 	github.com/aws/aws-lambda-go v1.34.1
 	github.com/aws/aws-sdk-go-v2 v1.17.1
@@ -40,9 +46,3 @@ require (
 	golang.org/x/sys v0.1.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
-
-replace gopkg.in/yaml.v2 => gopkg.in/yaml.v2 v2.2.8
-
-module webhook
-
-go 1.18

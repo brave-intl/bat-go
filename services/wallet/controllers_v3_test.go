@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -679,6 +680,128 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestLinkXyzAbcWalletV3(t *testing.T) {
+	wallet.VerifiedWalletEnable = true
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// setup jwt token for the test
+	var secret = []byte("a jwt secret")
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: secret}, (&jose.SignerOptions{}).WithType("JWT"))
+	if err != nil {
+		panic(err)
+	}
+
+	var (
+		// setup test variables
+		idFrom    = uuid.NewV4()
+		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
+		accountID = uuid.NewV4()
+		idTo      = accountID
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				datastoreutils.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				datastoreutils.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// setup mock clients
+		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		handler = wallet.LinkXyzAbcDepositAccountV3(s)
+		w       = httptest.NewRecorder()
+	)
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	ctx = context.WithValue(ctx, appctx.XyzAbcLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
+
+	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
+		"accountId": accountID, "depositId": idTo,
+	}).CompactSerialize()
+	if err != nil {
+		panic(err)
+	}
+
+	// this is our main request
+	r := httptest.NewRequest(
+		"POST",
+		fmt.Sprintf("/v3/wallet/xyzabc/%s/claim", idFrom),
+		bytes.NewBufferString(fmt.Sprintf(
+			`{"linkingInfo": "%s"}`,
+			linkingInfo,
+		)),
+	)
+
+	mockReputationClient.EXPECT().IsLinkingReputable(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		gomock.Any(), // country
+	).Return(
+		true,
+		[]int{},
+		nil,
+	)
+
+	// begin linking tx
+	mock.ExpectBegin()
+
+	// make sure old linking id matches new one for same custodian
+	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
+	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "xyzabc").WillReturnRows(linkingIDRows)
+
+	// updates the link to the wallet_custodian record in wallets
+	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// this wallet has been linked prior, with the same linking id that the request is with
+	// SHOULD SKIP THE linking limit checks
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
+
+	// insert into wallet custodian
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "xyzabc", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
+
+	// updates the link to the wallet_custodian record in wallets
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "xyzabc", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction
+	mock.ExpectCommit()
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/xyzabc/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
 	if resp := w.Result(); resp.StatusCode != http.StatusOK {
