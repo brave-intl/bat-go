@@ -751,7 +751,7 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 		"POST",
 		fmt.Sprintf("/v3/wallet/xyzabc/%s/claim", idFrom),
 		bytes.NewBufferString(fmt.Sprintf(
-			`{"linkingInfo": "%s"}`,
+			`{"linking_info": "%s"}`,
 			linkingInfo,
 		)),
 	)
