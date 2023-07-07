@@ -470,7 +470,7 @@ func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID
 			status = http.StatusConflict
 		}
 
-		return handlers.WrapError(err, "unable to link gemini wallets", status)
+		return handlers.WrapError(err, "unable to link xyzabc wallets", status)
 	}
 
 	return nil
