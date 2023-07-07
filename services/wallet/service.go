@@ -456,8 +456,7 @@ func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
 
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
-	// FIXME - correct country
-	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "US"); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "IN"); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
@@ -471,7 +470,7 @@ func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID
 			status = http.StatusConflict
 		}
 
-		return handlers.WrapError(err, "unable to link gemini wallets", status)
+		return handlers.WrapError(err, "unable to link xyzabc wallets", status)
 	}
 
 	return nil
