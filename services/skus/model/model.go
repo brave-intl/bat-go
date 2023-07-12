@@ -4,6 +4,7 @@ package model
 import (
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -17,6 +18,7 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/customer"
 
+	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/datastore"
 )
 
@@ -30,6 +32,7 @@ const (
 
 const (
 	StripePaymentMethod = "stripe"
+	RadomPaymentMethod  = "radom"
 
 	// OrderStatus* represent order statuses at runtime and in db.
 	OrderStatusCanceled = "canceled"
@@ -61,12 +64,78 @@ type Order struct {
 	TrialDays             *int64               `json:"-" db:"trial_days"`
 }
 
+// IsRadomPayable returns true if every item is payable by Radom
+func (o *Order) IsRadomPayable() bool {
+	// TODO: if not we need to look into subscription trials:
+	/// -> https://stripe.com/docs/billing/subscriptions/trials
+	return strings.Contains(strings.Join(o.AllowedPaymentMethods, ","), RadomPaymentMethod)
+}
+
 // IsStripePayable returns true if every item is payable by Stripe.
 func (o *Order) IsStripePayable() bool {
 	// TODO: if not we need to look into subscription trials:
 	// -> https://stripe.com/docs/billing/subscriptions/trials
 
 	return strings.Contains(strings.Join(o.AllowedPaymentMethods, ","), StripePaymentMethod)
+}
+
+var (
+	//TODO: populate
+	acceptedTokens []radom.AcceptedToken
+	acceptedChains []int64
+)
+
+// CreateRadomCheckoutSession - Create a Stripe Checkout Session for an Order
+func (o *Order) CreateRadomCheckoutSession(radomClient radom.Client, sellerAddress string) (CreateCheckoutSessionResponse, error) {
+
+	if len(o.Items) < 1 {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no order items")
+	}
+
+	successURI, ok := o.Items[0].Metadata["radom_success_uri"].(string)
+	if !ok {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no success url in sku")
+	}
+	cancelURI, ok := o.Items[0].Metadata["radom_cancel_uri"].(string)
+	if !ok {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no cancel url in sku")
+	}
+	productID, ok := o.Items[0].Metadata["radom_product_id"].(string)
+	if !ok {
+		return CreateCheckoutSessionResponse{}, errors.New("failed to create checkout session, no product id in sku")
+	}
+
+	// create a checkout session
+	resp, err := radomClient.CreateCheckoutSession(&radom.CheckoutSessionRequest{
+		SuccessURL:     successURI,
+		CancelURL:      cancelURI,
+		Currency:       "BAT",
+		AcceptedTokens: acceptedTokens,
+		AcceptedChains: acceptedChains,
+		SellerAddress:  sellerAddress,
+		Metadata: radom.Metadata(
+			[]radom.KeyValue{
+				{
+					Key: "brave-metadata",
+					Value: map[string]interface{}{
+						"orderId": o.ID.String(),
+					},
+				},
+			},
+		),
+		LineItems: []radom.LineItem{
+			{
+				ProductID: productID,
+			},
+		},
+		ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+	})
+	if err != nil {
+		return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to get checkout session response: %w", err)
+	}
+	return CreateCheckoutSessionResponse{
+		SessionID: resp.CheckoutSessionID,
+	}, nil
 }
 
 // CreateStripeCheckoutSession creats a Stripe checkout session for the order.

@@ -193,6 +193,7 @@ require (
 	github.com/spf13/viper v1.13.0 // indirect
 	github.com/square/go-jose v2.6.0+incompatible // indirect
 	github.com/stretchr/testify v1.8.1 // indirect
+	github.com/stripe/stripe-go v70.15.0+incompatible // indirect
 	github.com/stripe/stripe-go/v72 v72.122.0 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5 // indirect
