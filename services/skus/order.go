@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/logging"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	uuid "github.com/satori/go.uuid"
@@ -211,11 +210,6 @@ func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
 	// if there is no record of an email, stripe will ask for it and make a new customer
 	return email
 }
-
-var (
-	acceptedChains = []int64{}
-	acceptedTokens = []radom.AcceptedToken{}
-)
 
 // RenewOrder updates the orders status to paid and paid at time, inserts record of this order
 // Status should either be one of pending, paid, fulfilled, or canceled.
