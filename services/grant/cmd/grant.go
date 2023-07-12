@@ -29,6 +29,7 @@ import (
 	"github.com/brave-intl/bat-go/services/grant"
 	"github.com/brave-intl/bat-go/services/promotion"
 	"github.com/brave-intl/bat-go/services/skus"
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
@@ -233,6 +234,11 @@ func init() {
 		Bind("gemini-client-secret").
 		Env("GEMINI_CLIENT_SECRET")
 
+	flagBuilder.Flag().String("xyzabc-linking-key", "",
+		"the linking key for xyzabc custodian").
+		Bind("xyzabc-linking-key").
+		Env("XYZABC_LINKING_KEY")
+
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
 		"tells bitflyer what the client id is during token generation").
@@ -406,7 +412,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// temporarily house batloss events in promotion to avoid widespread conflicts later
 	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
 
-	skusPG, err := skus.NewPostgres("", true, "skus_db")
+	skuOrderRepo := repository.NewOrder()
+	skuOrderItemRepo := repository.NewOrderItem()
+	skuOrderPayHistRepo := repository.NewOrderPayHistory()
+
+	skusPG, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "skus_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -440,11 +450,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgres("", true, "merch_skus_db")
+		skusDB, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "merch_skus_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
+
 		skusService, err := skus.InitService(ctx, skusDB, walletService)
 		if err != nil {
 			sentry.CaptureException(err)
@@ -552,7 +563,11 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
 
+	// xyzabc wallet linking signing key
+	ctx = context.WithValue(ctx, appctx.XyzAbcLinkingKeyCTXKey, viper.GetString("xyzabc-linking-key"))
+
 	// linking variables
+	ctx = context.WithValue(ctx, appctx.DisableXyzAbcLinkingCTXKey, viper.GetBool("disable-xyzabc-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableUpholdLinkingCTXKey, viper.GetBool("disable-uphold-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, viper.GetBool("disable-gemini-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, viper.GetBool("disable-bitflyer-linking"))

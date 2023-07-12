@@ -18,19 +18,29 @@ import (
 	nitrodoc "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 )
 
-func SumBAT[T isTransaction](txs ...T) decimal.Decimal {
+// AttestedReport is the report of payouts after being prepared
+type AttestedReport []*AttestedTx
+
+// SumBAT sums the total amount of BAT in the report.
+func (ar AttestedReport) SumBAT() decimal.Decimal {
 	total := decimal.Zero
-	for _, v := range txs {
+	for _, v := range ar {
 		total = total.Add(v.GetAmount())
 	}
 	return total
 }
 
-// AttestedReport is the report of payouts after being prepared
-type AttestedReport []*AttestedTx
-
 // PreparedReport is the report of payouts prior to being prepared
 type PreparedReport []*PrepareTx
+
+// SumBAT sums the total amount of BAT in the report.
+func (r PreparedReport) SumBAT() decimal.Decimal {
+	total := decimal.Zero
+	for _, v := range r {
+		total = total.Add(v.GetAmount())
+	}
+	return total
+}
 
 // ReadReport reads a report from the reader
 func ReadReport(report any, reader io.Reader) error {
@@ -94,9 +104,14 @@ func Compare(pr PreparedReport, ar AttestedReport) error {
 	if len(pr) != len(ar) {
 		return fmt.Errorf("number of transactions do not match - attested: %d; prepared: %d", len(ar), len(pr))
 	}
-	if !SumBAT(pr...).Equal(SumBAT(ar...)) {
-		return fmt.Errorf("sum of BAT do not match - attested: %s; prepared: %s", SumBAT(ar...).String(), SumBAT(pr...).String())
+
+	p := pr.SumBAT()
+	a := ar.SumBAT()
+
+	if !p.Equal(a) {
+		return fmt.Errorf("sum of BAT do not match - prepared: %s; attested: %s", p.String(), a.String())
 	}
+
 	return nil
 }
 
@@ -109,6 +124,7 @@ func (ar AttestedReport) Submit(ctx context.Context, key ed25519.PrivateKey, cli
 			Headers: []string{
 				"(request-target)",
 				"host",
+				"date",
 				"digest",
 				"content-length",
 				"content-type",
@@ -120,8 +136,6 @@ func (ar AttestedReport) Submit(ctx context.Context, key ed25519.PrivateKey, cli
 
 	return client.SubmitTransactions(ctx, signer, ar...)
 }
-
-const prepareWorkerCount = 1000
 
 // Prepare performs a preparation of transactions for a payout to the settlement client
 func (r PreparedReport) Prepare(ctx context.Context, client SettlementClient) error {

@@ -13,13 +13,15 @@ import (
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/jmoiron/sqlx"
+	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/jmoiron/sqlx"
-	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/assert"
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 func TestGenerateSecret(t *testing.T) {
@@ -127,9 +129,12 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 	service := Service{}
 	service.Datastore = Datastore(
 		&Postgres{
-			datastore.Postgres{
+			Postgres: datastore.Postgres{
 				DB: sqlx.NewDb(db, "postgres"),
 			},
+			orderRepo:       repository.NewOrder(),
+			orderItemRepo:   repository.NewOrderItem(),
+			orderPayHistory: repository.NewOrderPayHistory(),
 		},
 	)
 
@@ -252,9 +257,12 @@ func TestValidateOrderMerchantAndCaveats(t *testing.T) {
 	service := Service{}
 	service.Datastore = Datastore(
 		&Postgres{
-			datastore.Postgres{
+			Postgres: datastore.Postgres{
 				DB: sqlx.NewDb(db, "postgres"),
 			},
+			orderRepo:       repository.NewOrder(),
+			orderItemRepo:   repository.NewOrderItem(),
+			orderPayHistory: repository.NewOrderPayHistory(),
 		},
 	)
 	expectedOrderID := uuid.NewV4()

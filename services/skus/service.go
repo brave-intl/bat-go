@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,22 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getsentry/sentry-go"
-
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/libs/backoff"
-
 	"github.com/awa/go-iap/appstore"
-
-	"github.com/brave-intl/bat-go/libs/cryptography"
-	"github.com/brave-intl/bat-go/libs/datastore"
-	"github.com/brave-intl/bat-go/libs/handlers"
-	"github.com/brave-intl/bat-go/libs/logging"
-	srv "github.com/brave-intl/bat-go/libs/service"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
-	"github.com/brave-intl/bat-go/libs/wallet/provider"
-	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/wallet"
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -46,6 +33,24 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
+
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
+	"github.com/brave-intl/bat-go/libs/logging"
+	srv "github.com/brave-intl/bat-go/libs/service"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/libs/wallet/provider"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 var (
@@ -65,12 +70,14 @@ var (
 )
 
 const (
+	// TODO(pavelb): Gradually replace it everywhere.
+	//
 	// OrderStatusCanceled - string literal used in db for canceled status
-	OrderStatusCanceled = "canceled"
+	OrderStatusCanceled = model.OrderStatusCanceled
 	// OrderStatusPaid - string literal used in db for canceled status
-	OrderStatusPaid = "paid"
+	OrderStatusPaid = model.OrderStatusPaid
 	// OrderStatusPending - string literal used in db for pending status
-	OrderStatusPending = "pending"
+	OrderStatusPending = model.OrderStatusPending
 )
 
 // Default issuer V3 config default values
@@ -363,7 +370,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
 			parseURLAddOrderIDParam(stripeCancelURI, order.ID),
-			order.getTrialDays(),
+			order.GetTrialDays(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
@@ -428,9 +435,8 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 }
 
-// TransformStripeOrder - update checkout session if expired, check the status of the checkout session
+// TransformStripeOrder updates checkout session if expired, checks the status of the checkout session.
 func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
-
 	ctx := context.Background()
 
 	// check if this order has an expired checkout session
@@ -449,7 +455,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			getEmailFromCheckoutSession(stripeSession),
 			stripeSession.SuccessURL, stripeSession.CancelURL,
-			order.getTrialDays(),
+			order.GetTrialDays(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
@@ -481,6 +487,9 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 				if err != nil {
 					return nil, fmt.Errorf("failed to update order to add the subscription id")
 				}
+
+				// TODO(pavelb): Duplicate calls. Remove one.
+
 				// set paymentProcessor as stripe
 				err = s.Datastore.AppendOrderMetadata(context.Background(), &order.ID, paymentProcessor, StripePaymentMethod)
 				if err != nil {
@@ -504,35 +513,46 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 	return order, nil
 }
 
-// CancelOrder - cancels an order, propagates to stripe if needed
+// CancelOrder cancels an order, propagates to stripe if needed.
+//
+// TODO(pavelb): Refactor and make it precise.
+// Currently, this method does something weird for the case when the order was not found in the DB.
+// If we have an order id, but ended up without the order, that means either the id is wrong,
+// or we somehow lost data. The latter is less likely.
+// Yet we allow non-existing order ids to be searched for in Stripe, which is strange.
 func (s *Service) CancelOrder(orderID uuid.UUID) error {
-	// check the order, do we have a stripe subscription?
+	// Check the order, do we have a stripe subscription?
 	ok, subID, err := s.Datastore.IsStripeSub(orderID)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
 		return fmt.Errorf("failed to check stripe subscription: %w", err)
 	}
+
 	if ok && subID != "" {
-		// cancel the stripe subscription
+		// Cancel the stripe subscription.
 		if _, err := sub.Cancel(subID, nil); err != nil {
 			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
 		}
-	} else {
-		// last ditch, ask stripe if we can find one
-		params := &stripe.SubscriptionSearchParams{}
-		params.Query = *stripe.String(fmt.Sprintf(
-			"status:'active' AND metadata['orderID']:'%s'",
-			orderID.String())) // orderID is already checked as uuid
-		iter := sub.Search(params)
-		for iter.Next() {
-			// we have a result, fix the stripe sub on the db record, and then cancel sub
-			subscription := iter.Subscription()
-			// cancel the stripe subscription
-			if _, err := sub.Cancel(subscription.ID, nil); err != nil {
-				return fmt.Errorf("failed to cancel stripe subscription: %w", err)
-			}
-			if err := s.Datastore.AppendOrderMetadata(context.Background(), &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
-				return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
-			}
+
+		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+	}
+
+	// Try to find order in Stripe.
+	params := &stripe.SubscriptionSearchParams{}
+	params.Query = *stripe.String(fmt.Sprintf(
+		"status:'active' AND metadata['orderID']:'%s'",
+		orderID.String(), // orderID is already checked as uuid
+	))
+
+	iter := sub.Search(params)
+	for iter.Next() {
+		// we have a result, fix the stripe sub on the db record, and then cancel sub
+		subscription := iter.Subscription()
+		// cancel the stripe subscription
+		if _, err := sub.Cancel(subscription.ID, nil); err != nil {
+			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+		}
+		if err := s.Datastore.AppendOrderMetadata(context.Background(), &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+			return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
 		}
 	}
 
@@ -562,7 +582,7 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			getEmailFromCheckoutSession(stripeSession),
 			stripeSession.SuccessURL, stripeSession.CancelURL,
-			order.getTrialDays(),
+			order.GetTrialDays(),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create checkout session: %w", err)
@@ -1483,17 +1503,17 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 	// lookup the order based on the token as externalID
 	o, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
 	if err != nil {
-		return fmt.Errorf("failed to get order from db: %w", err)
+		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, err)
 	}
 
 	if o == nil {
-		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, errNotFound)
 	}
 
 	// check if we are past the expiration date on transaction or the order was revoked
 
 	if time.Now().After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
-		time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond))) {
+		(txInfo.RevocationDate > 0 && time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)))) {
 		// past our tx expires/renewal time
 		if err = s.CancelOrder(o.ID); err != nil {
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)

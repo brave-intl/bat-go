@@ -53,6 +53,10 @@ const (
 	BuildTimeCTXKey CTXKey = "build_time"
 	// ReputationClientCTXKey - context key for the build time of code
 	ReputationClientCTXKey CTXKey = "reputation_client"
+	// XyzAbcLinkingKeyCTXKey - context key for the build time of code
+	XyzAbcLinkingKeyCTXKey CTXKey = "xyzabc_linking_key"
+	// DisableXyzAbcLinkingCTXKey - context key for the build time of code
+	DisableXyzAbcLinkingCTXKey CTXKey = "disable_xyzabc_linking"
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
 	// GeminiBrowserClientIDCTXKey - context key for the gemini browser client id
@@ -199,6 +203,12 @@ const (
 	ParametersVBATDeadlineCTXKey CTXKey = "parameters_vbat_deadline"
 	// ParametersTransitionCTXKey - the context key for getting the vbat deadline
 	ParametersTransitionCTXKey CTXKey = "parameters_transition"
+
+	// StripeAccessTokenCTXKey - the context key for the Stripe secret key
+	StripeOnrampSecretKeyCTXKey CTXKey = "stripe_onramp_secret_key"
+
+	// StripeServerCTXKey - the context key for the Stripe  server
+	StripeOnrampServerCTXKey CTXKey = "stripe_onramp_server"
 
 	// Nitro
 	// LogWriterCTXKey - the context key for getting the log writer

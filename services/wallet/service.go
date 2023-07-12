@@ -3,6 +3,7 @@ package wallet
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,6 +12,13 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/go-chi/chi"
+	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -30,11 +38,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/cmd"
-	"github.com/go-chi/chi"
-	"github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/spf13/viper"
 )
 
 // ReputationGeoEnable - enable geo reputation check
@@ -272,6 +275,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
+			r.Post("/xyzabc/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
 			if !disableDisconnect { // if disable-disconnect is false then add this route
 				r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
@@ -285,6 +290,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
+			r.Post("/xyzabc/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
 			if !disableDisconnect { // if disable-disconnect is false then add this route
 				r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
@@ -399,6 +406,73 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		}
 		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
+	return nil
+}
+
+// LinkXyzAbcWallet links a wallet and transfers funds to newly linked wallet.
+func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
+	// Get xyzabc linking_info signing key.
+	linkingKeyB64, ok := ctx.Value(appctx.XyzAbcLinkingKeyCTXKey).(string)
+	if !ok {
+		const msg = "xyzabc linking validation misconfigured"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
+	}
+
+	// Decode base64 encoded jwt key.
+	decodedJWTKey, err := base64.StdEncoding.DecodeString(linkingKeyB64)
+	if err != nil {
+		const msg = "xyzabc linking validation misconfigured"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
+	}
+
+	// Parse the signed verification token from input.
+	tok, err := jwt.ParseSigned(verificationToken)
+	if err != nil {
+		const msg = "xyzabc linking info parsing failed"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	// Create the jwt claims and get them (verified) from the token.
+	claims := make(map[string]interface{})
+	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
+		const msg = "xyzabc linking info validation failed"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	// Make sure deposit id exists
+	depositID, ok := claims["depositId"].(string)
+	if !ok || depositID == "" {
+		const msg = "xyzabc deposit id does not match token"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	// Get the account id.
+	accountID, ok := claims["accountId"].(string)
+	if !ok || accountID == "" {
+		const msg = "xyzabc account id invalid in token"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
+
+	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "IN"); err != nil {
+		if errors.Is(err, ErrUnusualActivity) {
+			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+		}
+
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrTooManyCardsLinked) {
+			status = http.StatusConflict
+		}
+
+		return handlers.WrapError(err, "unable to link xyzabc wallets", status)
+	}
+
 	return nil
 }
 
@@ -575,6 +649,8 @@ func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian s
 // CreateRewardsWallet creates a brave rewards wallet and informs the reputation service.
 // If either the local transaction or call to the reputation service fails then the wallet is not created.
 func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey string, geoCountry string) (*walletutils.Info, error) {
+	log := logging.Logger(ctx, "wallets.CreateRewardsWallet")
+
 	valid, err := service.geoValidator.Validate(ctx, geoCountry)
 	if err != nil {
 		return nil, fmt.Errorf("error validating geo country: %w", err)
@@ -603,6 +679,10 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		var pgErr *pq.Error
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == "23505" { // unique constraint violation
+				if info != nil {
+					log.Error().Err(err).Interface("info", info).
+						Msg("error InsertWalletTx")
+				}
 				return nil, errRewardsWalletAlreadyExists
 			}
 		}
