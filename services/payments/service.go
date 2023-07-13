@@ -15,6 +15,7 @@ import (
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -48,6 +49,28 @@ type Service struct {
 }
 
 type serviceNamespaceContextKey struct{}
+
+// configureSigningKey creates the enclave kms key which is only sign capable with enclave attestation.
+func (s *Service) configureSigningKey(ctx context.Context) error {
+	// get the aws configuration loaded
+	kmsClient := kms.NewFromConfig(s.awsCfg)
+
+	input := &kms.CreateKeyInput{
+		BypassPolicyLockoutSafetyCheck: true,
+		Description:                    aws.String("Transaction signing key for settlement enclave"),
+		KeySpec:                        kmstypes.KeySpecEccNistP521,
+		KeyUsage:                       kmstypes.KeyUsageTypeSignVerify,
+	}
+
+	result, err := kmsClient.CreateKey(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to make key: %w", err)
+	}
+
+	s.kmsSigningKeyID = *result.KeyMetadata.KeyId
+	s.kmsSigningClient = kmsClient
+	return nil
+}
 
 // configureKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
 func (s *Service) configureKMSKey(ctx context.Context) error {
@@ -127,7 +150,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		region = "us-west-2"
 	}
 
-	_, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
+	awsCfg, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
 	if err != nil {
 		logger.Error().Msg("no egress addr for payments service")
 		return nil, nil, errors.New("no egress addr for payments service")
@@ -135,12 +158,16 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 
 	service := &Service{
 		baseCtx: ctx,
-		//secretMgr: &awsClient{},
+		awsCfg:  awsCfg,
 	}
 
 	if err := service.configureKMSKey(ctx); err != nil {
-		// FIXME: handle create error better
 		logger.Error().Err(err).Msg("could not create kms secret decryption key")
+	}
+
+	if err := service.configureSigningKey(ctx); err != nil {
+		logger.Error().Err(err).Msg("could not create kms signing key")
+		return nil, nil, errors.New("could not create kms signing key")
 	}
 
 	if err := service.configureDatastore(ctx); err != nil {
