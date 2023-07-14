@@ -118,6 +118,7 @@ type orderStore interface {
 	UpdateMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, data datastore.Metadata) error
 	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
 	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
+	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 	GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
 	HasExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (bool, error)
 	GetMetadata(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (datastore.Metadata, error)
@@ -1374,24 +1375,16 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 	return nil
 }
 
-// AppendOrderMetadataInt64 appends a key value pair to an order's metadata
+// AppendOrderMetadataInt64 appends the key and int64 value to an order's metadata.
 func (pg *Postgres) AppendOrderMetadataInt64(ctx context.Context, orderID *uuid.UUID, key string, value int64) error {
-	// get the db tx from context if exists, if not create it
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	defer rollback()
 	if err != nil {
 		return err
 	}
-	stmt := `update orders set metadata = coalesce(metadata||jsonb_build_object($1::text, $2::integer), metadata, jsonb_build_object($1::text, $2::integer)), updated_at = current_timestamp where id = $3`
+	defer rollback()
 
-	result, err := tx.Exec(stmt, key, value, orderID.String())
-	if err != nil {
+	if err := pg.orderRepo.AppendMetadataInt64(ctx, tx, *orderID, key, value); err != nil {
 		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
 	}
 
 	return commit()
