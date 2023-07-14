@@ -34,7 +34,6 @@ const (
 	StripeInvoiceUpdated              = "invoice.updated"
 	StripeInvoicePaid                 = "invoice.paid"
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
-	RadomPaymentMethod                = model.RadomPaymentMethod
 )
 
 var (
