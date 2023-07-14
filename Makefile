@@ -39,7 +39,6 @@ mock:
 	cd libs && mockgen -source=./clients/cbr/client.go -destination=clients/cbr/mock/mock.go -package=mock_cbr
 	cd libs && mockgen -source=./clients/reputation/client.go -destination=clients/reputation/mock/mock.go -package=mock_reputation
 	cd libs && mockgen -source=./clients/gemini/client.go -destination=clients/gemini/mock/mock.go -package=mock_gemini
-	cd libs && mockgen -source=./clients/radom/client.go -destination=clients/radom/mock/mock.go -package=mock_radom
 	cd libs && mockgen -source=./clients/bitflyer/client.go -destination=clients/bitflyer/mock/mock.go -package=mock_bitflyer
 	cd libs && mockgen -source=./clients/coingecko/client.go -destination=clients/coingecko/mock/mock.go -package=mock_coingecko
 	cd libs && mockgen -source=./clients/stripe/client.go -destination=clients/stripe/mock/mock.go -package=mock_stripe
@@ -72,7 +71,6 @@ instrumented:
 	sed -i'bak' 's/reputation.//g' libs/clients/reputation/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/gemini -i Client -t ../.prom-gowrap.tmpl -o ./clients/gemini/instrumented_client.go
 	sed -i'bak' 's/gemini.//g' libs/clients/gemini/instrumented_client.go
-	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/radom -i Client -t ../.prom-gowrap.tmpl -o ./clients/radom/instrumented_client.go
 	sed -i'bak' 's/radom.//g' libs/clients/radom/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/bitflyer -i Client -t ../.prom-gowrap.tmpl -o ./clients/bitflyer/instrumented_client.go
 	sed -i'bak' 's/bitflyer.//g' libs/clients/bitflyer/instrumented_client.go

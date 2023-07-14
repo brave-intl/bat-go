@@ -48,6 +48,7 @@ import (
 var (
 	errSetRetryAfter   = errors.New("set retry-after")
 	errClosingResource = errors.New("error closing resource")
+	errInvalidRadomURL = model.Error("service: invalid radom url")
 
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
@@ -93,7 +94,7 @@ type Service struct {
 	pauseVoteUntil     time.Time
 	pauseVoteUntilMu   sync.RWMutex
 	retry              backoff.RetryFunc
-	radomClient        radom.Client
+	radomClient        *radom.InstrumentedClient
 	radomSellerAddress string
 }
 
@@ -158,16 +159,36 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 
 	var (
 		radomSellerAddress string
-		radomClient        radom.Client
+		radomClient        *radom.InstrumentedClient
 	)
 
 	// setup radom if exists in context and enabled
 	if enabled, ok := ctx.Value(appctx.RadomEnabledCTXKey).(bool); ok && enabled {
-		radomClient, err = radom.New()
 		sublogger.Debug().Msg("radom enabled")
 		radomSellerAddress, err = appctx.GetStringFromContext(ctx, appctx.RadomSellerAddressCTXKey)
 		if err != nil {
-			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
+			sublogger.Error().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
+			return nil, err
+		}
+
+		srvURL := os.Getenv("RADOM_SERVER")
+		if srvURL == "" {
+			return nil, errInvalidRadomURL
+		}
+
+		rdSecret := os.Getenv("RADOM_SECRET")
+		proxyAddr := os.Getenv("HTTP_PROXY")
+
+		// TODO: Configure these.
+		var (
+			chains []int64
+			tokens []radom.AcceptedToken
+		)
+
+		var err error
+		radomClient, err = radom.NewInstrumented(srvURL, rdSecret, proxyAddr, chains, tokens)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -377,7 +398,9 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	if !order.IsPaid() && order.IsRadomPayable() {
 		// brand-new order, contains an email in the request
 		checkoutSession, err := order.CreateRadomCheckoutSession(
-			s.radomClient, s.radomSellerAddress, //TODO: fill in
+			ctx,
+			s.radomClient,
+			s.radomSellerAddress, //TODO: fill in
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
