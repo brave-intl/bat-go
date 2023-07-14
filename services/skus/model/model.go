@@ -64,19 +64,17 @@ type Order struct {
 	TrialDays             *int64               `json:"-" db:"trial_days"`
 }
 
-// IsRadomPayable returns true if every item is payable by Radom
-func (o *Order) IsRadomPayable() bool {
-	// TODO: if not we need to look into subscription trials:
-	/// -> https://stripe.com/docs/billing/subscriptions/trials
-	return strings.Contains(strings.Join(o.AllowedPaymentMethods, ","), RadomPaymentMethod)
-}
-
 // IsStripePayable returns true if every item is payable by Stripe.
 func (o *Order) IsStripePayable() bool {
 	// TODO: if not we need to look into subscription trials:
 	// -> https://stripe.com/docs/billing/subscriptions/trials
 
 	return strings.Contains(strings.Join(o.AllowedPaymentMethods, ","), StripePaymentMethod)
+}
+
+// IsRadomPayable indicates whether the order is payable by Radom.
+func (o *Order) IsRadomPayable() bool {
+	return o.AllowedPaymentMethods.Contains(RadomPaymentMethod)
 }
 
 var (
@@ -274,6 +272,16 @@ func (m *Methods) Scan(src interface{}) error {
 // Value satisifies the drive.Valuer interface.
 func (m *Methods) Value() (driver.Value, error) {
 	return pq.Array(m), nil
+}
+
+func (m Methods) Contains(target string) bool {
+	for _, v := range m {
+		if v == target {
+			return true
+		}
+	}
+
+	return false
 }
 
 // CreateCheckoutSessionResponse represents a checkout session response.
