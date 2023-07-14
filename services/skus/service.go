@@ -15,18 +15,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
-	"github.com/brave-intl/bat-go/libs/backoff"
-	"github.com/brave-intl/bat-go/libs/clients/cbr"
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
-	"github.com/brave-intl/bat-go/libs/clients/radom"
-	"github.com/brave-intl/bat-go/libs/cryptography"
-	"github.com/brave-intl/bat-go/libs/datastore"
-	"github.com/brave-intl/bat-go/libs/handlers"
-	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/wallet/provider"
-	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/skus/model"
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
@@ -43,6 +31,19 @@ import (
 	srv "github.com/brave-intl/bat-go/libs/service"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
+	"github.com/brave-intl/bat-go/libs/clients/radom"
+	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/wallet/provider"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/wallet"
 )
 
 var (
@@ -377,38 +378,39 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
-	if !order.IsPaid() && order.IsStripePayable() {
-		// brand-new order, contains an email in the request
-		checkoutSession, err := order.CreateStripeCheckoutSession(
-			req.Email,
-			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
-			parseURLAddOrderIDParam(stripeCancelURI, order.ID),
-			order.GetTrialDays(),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create checkout session: %w", err)
-		}
+	if !order.IsPaid() {
+		switch {
+		case order.IsStripePayable():
+			// brand-new order, contains an email in the request
+			session, err := order.CreateStripeCheckoutSession(
+				req.Email,
+				parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
+				parseURLAddOrderIDParam(stripeCancelURI, order.ID),
+				order.GetTrialDays(),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create checkout session: %w", err)
+			}
 
-		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
-		}
-	}
+			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", session.SessionID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			}
 
-	if !order.IsPaid() && order.IsRadomPayable() {
-		// brand-new order, contains an email in the request
-		checkoutSession, err := order.CreateRadomCheckoutSession(
-			ctx,
-			s.radomClient,
-			s.radomSellerAddress, //TODO: fill in
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create checkout session: %w", err)
-		}
+		case order.IsRadomPayable():
+			session, err := order.CreateRadomCheckoutSession(
+				ctx,
+				s.radomClient,
+				s.radomSellerAddress, //TODO: fill in
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create checkout session: %w", err)
+			}
 
-		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "radomCheckoutSessionId", checkoutSession.SessionID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "radomCheckoutSessionId", session.SessionID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			}
 		}
 	}
 
