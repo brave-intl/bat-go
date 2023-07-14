@@ -5,16 +5,16 @@ import (
 )
 
 type MockClient struct {
-	fnCreateCheckoutSession func(ctx context.Context, req *CheckoutSessionRequest) (*CheckoutSessionResponse, error)
+	FnCreateCheckoutSession func(ctx context.Context, req *CheckoutSessionRequest) (*CheckoutSessionResponse, error)
 }
 
 func (c *MockClient) CreateCheckoutSession(
 	ctx context.Context,
 	req *CheckoutSessionRequest,
 ) (*CheckoutSessionResponse, error) {
-	if c.fnCreateCheckoutSession == nil {
+	if c.FnCreateCheckoutSession == nil {
 		return &CheckoutSessionResponse{}, nil
 	}
 
-	return c.fnCreateCheckoutSession(ctx, req)
+	return c.FnCreateCheckoutSession(ctx, req)
 }
