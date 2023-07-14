@@ -156,7 +156,7 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 	ctx context.Context,
 	client radomClient,
 	sellerAddr string,
-	expiryTime time.Time,
+	expiresAt time.Time,
 ) (CreateCheckoutSessionResponse, error) {
 	if len(o.Items) < 1 {
 		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoItems
@@ -198,7 +198,7 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 				ProductID: productID,
 			},
 		},
-		ExpiresAt: expiryTime.Unix(),
+		ExpiresAt: expiresAt.Unix(),
 	})
 	if err != nil {
 		return EmptyCreateCheckoutSessionResponse(), fmt.Errorf("failed to get checkout session response: %w", err)

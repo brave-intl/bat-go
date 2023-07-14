@@ -71,7 +71,6 @@ instrumented:
 	sed -i'bak' 's/reputation.//g' libs/clients/reputation/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/gemini -i Client -t ../.prom-gowrap.tmpl -o ./clients/gemini/instrumented_client.go
 	sed -i'bak' 's/gemini.//g' libs/clients/gemini/instrumented_client.go
-	sed -i'bak' 's/radom.//g' libs/clients/radom/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/bitflyer -i Client -t ../.prom-gowrap.tmpl -o ./clients/bitflyer/instrumented_client.go
 	sed -i'bak' 's/bitflyer.//g' libs/clients/bitflyer/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/coingecko -i Client -t ../.prom-gowrap.tmpl -o ./clients/coingecko/instrumented_client.go
