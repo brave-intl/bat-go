@@ -294,8 +294,9 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
 			// disconnect verified custodial wallet
 			if !disableDisconnect { // if disable-disconnect is false then add this route
-				r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+				r.Delete("/{custodian}/{paymentID}/connect",
+					middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+						"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
 			}
 		}
 
@@ -318,6 +319,9 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
 		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
+		r.Get("/{paymentID}",
+			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"GetWalletV4", GetWalletV4)).ServeHTTP)
 	})
 
 	return r
