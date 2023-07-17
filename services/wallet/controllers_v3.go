@@ -410,11 +410,6 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 	}
 }
 
-// GetWalletV4 is the same as get wallet v3, but we are now requiring http signatures for get wallet requests
-func GetWalletV4(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return GetWalletV3(w, r)
-}
-
 // GetWalletV3 - produces an http handler for the service s which handles getting of brave wallets
 func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var ctx = r.Context()

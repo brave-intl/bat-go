@@ -277,11 +277,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			r.Post("/xyzabc/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
-			// disconnect verified custodial wallet
-			if !disableDisconnect { // if disable-disconnect is false then add this route
-				r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
-			}
 
 			// create wallet connect routes for our wallet providers
 			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
@@ -292,12 +287,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 			r.Post("/xyzabc/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
-			// disconnect verified custodial wallet
-			if !disableDisconnect { // if disable-disconnect is false then add this route
-				r.Delete("/{custodian}/{paymentID}/connect",
-					middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-						"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
-			}
 		}
 
 		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
@@ -322,6 +311,10 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 		r.Get("/{paymentID}",
 			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"GetWalletV4", GetWalletV4)).ServeHTTP)
+		// get wallet balance routes
+		r.Get("/uphold/{paymentID}",
+			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"GetUpholdWalletBalanceV4", GetUpholdWalletBalanceV4)).ServeHTTP)
 	})
 
 	return r
