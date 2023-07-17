@@ -424,6 +424,10 @@ func getEnvMaxCards(custodian string) int {
 		if v, err := strconv.Atoi(os.Getenv("GEMINI_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
+	case "xyzabc":
+		if v, err := strconv.Atoi(os.Getenv("XYZABC_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
 	}
 	return 4
 }

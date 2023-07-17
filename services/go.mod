@@ -13,7 +13,6 @@ require (
 	github.com/amazon-ion/ion-go v1.2.0
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/awa/go-iap v1.3.22
-	github.com/aws/aws-sdk-go v1.44.206
 	github.com/aws/aws-sdk-go-v2/service/qldb v1.15.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.29.1
 	github.com/aws/smithy-go v1.13.5
@@ -42,7 +41,6 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.8.1
-	github.com/stripe/stripe-go v70.15.0+incompatible
 	github.com/stripe/stripe-go/v72 v72.122.0
 	golang.org/x/crypto v0.8.0
 	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd
@@ -55,6 +53,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	github.com/amzn/ion-go v1.1.3 // indirect
 	github.com/amzn/ion-hash-go v1.1.1 // indirect
+	github.com/aws/aws-sdk-go v1.44.206 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.17.7 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.9 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.17.10 // indirect

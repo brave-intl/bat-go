@@ -196,6 +196,15 @@ func (r *Order) AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, i
 	return r.execUpdate(ctx, dbi, q, id, key, val)
 }
 
+// AppendMetadataInt64 sets int value by key to order's metadata, and might create metadata if it was missing.
+func (r *Order) AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error {
+	const q = `UPDATE orders
+	SET metadata = COALESCE(metadata||jsonb_build_object($2::text, $3::integer), metadata, jsonb_build_object($2::text, $3::integer)),
+	updated_at = CURRENT_TIMESTAMP where id = $1`
+
+	return r.execUpdate(ctx, dbi, q, id, key, val)
+}
+
 // GetExpiredStripeCheckoutSessionID returns stripeCheckoutSessionId if it's found and expired.
 func (r *Order) GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
 	const q = `SELECT metadata->>'stripeCheckoutSessionId' AS checkout_session
