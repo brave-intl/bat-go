@@ -116,7 +116,8 @@ func Compare(pr PreparedReport, ar AttestedReport) error {
 	for _, txn := range pr {
 		_, exists := u[txn.To]
 		if exists {
-			return ErrDuplicateDepositDestination
+			return fmt.Errorf("error validating preapre report duplicate to %s: %w",
+				txn.To, ErrDuplicateDepositDestination)
 		}
 		u[txn.To] = true
 	}
@@ -126,7 +127,8 @@ func Compare(pr PreparedReport, ar AttestedReport) error {
 	for _, txn := range ar {
 		_, exists := u[txn.To]
 		if exists {
-			return ErrDuplicateDepositDestination
+			return fmt.Errorf("error validating attested report duplicate to %s: %w",
+				txn.To, ErrDuplicateDepositDestination)
 		}
 		u[txn.To] = true
 	}
