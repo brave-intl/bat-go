@@ -256,7 +256,6 @@ func (service *Service) getCustodianRegions() custodian.Regions {
 
 // RegisterRoutes - register the wallet api routes given a chi.Mux
 func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
-	disableDisconnect, _ := ctx.Value(appctx.DisableDisconnectCTXKey).(bool) // defaults false
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
