@@ -486,7 +486,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 	}
 
 	if len(res.ValidDocuments) <= 0 {
-		return "", "", errors.New("error no valid documents in request")
+		return "", "", errors.New("error no valid documents in response")
 	}
 
 	issuingCountry := strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
