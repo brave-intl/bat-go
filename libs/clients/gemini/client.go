@@ -461,7 +461,19 @@ type ValidDocument struct {
 	IssuingCountry string `json:"issuingCountry"`
 }
 
-var documentTypePrecedence = []string{"passport", "drivers_license"}
+var documentTypePrecedence = []string{
+	"passport",
+	"drivers_license",
+	"national_identity_card",
+	"passport_card",
+	"tax_id",
+	"residence_permit",
+	"work_permit",
+	"voter_id",
+	"visa",
+	"national_insurance_card",
+	"indigenous_card",
+}
 
 // ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
 func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, string, error) {
