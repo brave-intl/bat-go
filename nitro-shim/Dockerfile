@@ -1,11 +1,17 @@
 # Build proxies that facilitate communication with the enclave.
-FROM golang:1.20 as builder
+FROM golang:1.20 as go-builder
 
 WORKDIR /src
 COPY tools/ ./
 RUN make -C ./viproxy/ viproxy
 RUN make -C ./gvproxy/ gvproxy
 RUN make -C ./eifbuild/ eifbuild
+
+FROM rust:1.71-alpine as rust-builder
+
+RUN apk add musl-dev
+
+RUN cargo install vsock-relay
 
 FROM amazonlinux:2.0.20230207.0
 
@@ -19,8 +25,9 @@ RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
 
 WORKDIR /enclave
 
-COPY --from=builder /src/viproxy/viproxy /enclave/
-COPY --from=builder /src/gvproxy/gvproxy /enclave/
-COPY --from=builder /src/eifbuild/eifbuild /enclave/
+COPY --from=go-builder /src/viproxy/viproxy /enclave/
+COPY --from=go-builder /src/gvproxy/gvproxy /enclave/
+COPY --from=go-builder /src/eifbuild/eifbuild /enclave/
+COPY --from=rust-builder /usr/local/cargo/bin/vsock-relay /enclave/
 
 COPY scripts/ /enclave/
