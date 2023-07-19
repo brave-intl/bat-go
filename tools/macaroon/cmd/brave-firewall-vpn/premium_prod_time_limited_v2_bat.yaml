@@ -16,7 +16,6 @@ tokens:
       - allowed_payment_methods: "radom"
       - metadata: '
 {
-  "radom_product_id": "prod_Lhv8qsPsn6WHrx",
   "radom_success_uri": "https://account.brave.com/account/?intent=provision",
   "radom_cancel_uri": "https://account.brave.com/plans/?intent=checkout"
 }'
