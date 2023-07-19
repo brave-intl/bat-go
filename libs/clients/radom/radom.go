@@ -101,8 +101,8 @@ type NewSubscriptionData struct {
 	Tags                 map[string]string `json:"tags"`
 }
 
-// RadomData is radom specific data attached to webhook calls
-type RadomData struct {
+// Data is radom specific data attached to webhook calls
+type Data struct {
 	CheckoutSession CheckoutSession `json:"checkoutSession"`
 }
 
@@ -128,7 +128,7 @@ type EventData struct {
 type WebhookRequest struct {
 	EventType string    `json:"eventType"`
 	EventData EventData `json:"eventData"`
-	RadomData RadomData `json:"radomData"`
+	Data      Data      `json:"radomData"`
 }
 
 // Client communicates with Radom.

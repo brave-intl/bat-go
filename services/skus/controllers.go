@@ -1080,7 +1080,7 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 		}
 
 		// Lookup the order, the checkout session was created with orderId in metadata.
-		rawOrderID, err := req.RadomData.CheckoutSession.Metadata.Get("braveOrderId")
+		rawOrderID, err := req.Data.CheckoutSession.Metadata.Get("braveOrderId")
 		if err != nil || rawOrderID == "" {
 			return handlers.WrapError(err, "brave metadata not found in webhook", http.StatusBadRequest)
 		}
@@ -1097,7 +1097,7 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 		}
 
 		if err := service.Datastore.AppendOrderMetadata(
-			ctx, &orderID, "radomCheckoutSession", req.RadomData.CheckoutSession.CheckoutSessionID); err != nil {
+			ctx, &orderID, "radomCheckoutSession", req.Data.CheckoutSession.CheckoutSessionID); err != nil {
 			lg.Error().Err(err).Msg("failed to update order metadata")
 			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 		}
