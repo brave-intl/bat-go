@@ -180,14 +180,8 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		rdSecret := os.Getenv("RADOM_SECRET")
 		proxyAddr := os.Getenv("HTTP_PROXY")
 
-		// TODO: Configure these.
-		var (
-			chains []int64
-			tokens []radom.AcceptedToken
-		)
-
 		var err error
-		radomClient, err = radom.NewInstrumented(srvURL, rdSecret, proxyAddr, chains, tokens)
+		radomClient, err = radom.NewInstrumented(srvURL, rdSecret, proxyAddr)
 		if err != nil {
 			return nil, err
 		}

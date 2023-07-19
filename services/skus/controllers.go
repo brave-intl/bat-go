@@ -1072,27 +1072,22 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
 
-		lg.Debug().Str("event_type", req.EventName).Str("data", fmt.Sprintf("%+v", req)).Msg("webhook event captured")
+		lg.Debug().Str("event_type", req.EventType).Str("data", fmt.Sprintf("%+v", req)).Msg("webhook event captured")
 
 		// Handle only successful payment events.
-		if req.EventName != "payment.successful" {
+		if req.EventType != "managedRecurringPayment" && req.EventType != "newSubscription" {
 			return handlers.WrapError(err, "event type not implemented", http.StatusBadRequest)
 		}
 
 		// Lookup the order, the checkout session was created with orderId in metadata.
-		mdata, err := req.Metadata.Get("brave-metadata")
-		if err != nil || mdata == nil {
+		rawOrderID, err := req.RadomData.CheckoutSession.Metadata.Get("braveOrderId")
+		if err != nil || rawOrderID == "" {
 			return handlers.WrapError(err, "brave metadata not found in webhook", http.StatusBadRequest)
-		}
-
-		rawOrderID, ok := mdata["orderId"].(string)
-		if !ok {
-			return handlers.WrapError(err, "order id not found in webhook", http.StatusBadRequest)
 		}
 
 		orderID, err := uuid.FromString(rawOrderID)
 		if err != nil {
-			return handlers.WrapError(err, "invalid brave-metadata.orderId in request", http.StatusBadRequest)
+			return handlers.WrapError(err, "invalid braveOrderId in request", http.StatusBadRequest)
 		}
 
 		// Set order id to paid, and update metadata values.
@@ -1101,24 +1096,28 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 		}
 
-		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "radomTransactionHash", req.TransactionHash); err != nil {
+		if err := service.Datastore.AppendOrderMetadata(
+			ctx, &orderID, "radomCheckoutSession", req.RadomData.CheckoutSession.CheckoutSessionID); err != nil {
 			lg.Error().Err(err).Msg("failed to update order metadata")
 			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 		}
 
-		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "customerAddress", req.CustomerAddress); err != nil {
-			lg.Error().Err(err).Msg("failed to update order metadata")
-			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-		}
+		if req.EventType == "newSubscription" {
 
-		if err := service.Datastore.AppendOrderMetadataInt64(ctx, &orderID, "chainId", req.ChainID); err != nil {
-			lg.Error().Err(err).Msg("failed to update order metadata")
-			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-		}
+			if err := service.Datastore.AppendOrderMetadata(
+				ctx, &orderID, "subscriptionId", req.EventData.NewSubscription.SubscriptionID); err != nil {
+				lg.Error().Err(err).Msg("failed to update order metadata")
+				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+			}
 
-		if err := service.Datastore.AppendOrderMetadataInt64(ctx, &orderID, "blockNumber", req.BlockNumber); err != nil {
-			lg.Error().Err(err).Msg("failed to update order metadata")
-			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+			if err := service.Datastore.AppendOrderMetadata(
+				ctx, &orderID, "subscriptionContractAddress",
+				req.EventData.NewSubscription.Subscription.AutomatedEVMSubscription.SubscriptionContractAddress); err != nil {
+
+				lg.Error().Err(err).Msg("failed to update order metadata")
+				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+			}
+
 		}
 
 		// Set paymentProcessor to Radom.

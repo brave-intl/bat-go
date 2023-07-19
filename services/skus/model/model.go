@@ -19,6 +19,7 @@ import (
 	"github.com/stripe/stripe-go/v72/customer"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 )
 
@@ -158,6 +159,34 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 	sellerAddr string,
 	expiresAt time.Time,
 ) (CreateCheckoutSessionResponse, error) {
+
+	// get the environment so we know what is acceptable chain/tokens
+	gateway := radom.Gateway{
+		Managed: radom.Managed{
+			Methods: []radom.Method{},
+		},
+	}
+	env, ok := ctx.Value(appctx.EnvironmentCTXKey).(string)
+	if !ok || env != "production" {
+		// append testnet
+		gateway.Managed.Methods = append(gateway.Managed.Methods, radom.Method{
+			Network: "SepoliaTestnet",
+			Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+		}, radom.Method{
+			Network: "PolygonTestnet",
+			Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+		})
+	} else {
+		// append production
+		gateway.Managed.Methods = append(gateway.Managed.Methods, radom.Method{
+			Network: "Polygon",
+			Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+		}, radom.Method{
+			Network: "Ethereum",
+			Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+		})
+	}
+
 	if len(o.Items) < 1 {
 		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoItems
 	}
@@ -180,17 +209,11 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 	resp, err := client.CreateCheckoutSession(ctx, &radom.CheckoutSessionRequest{
 		SuccessURL: successURI,
 		CancelURL:  cancelURI,
-		Currency:   "BAT",
-		// AcceptedChains and Tokens are set by the client.
-
-		// This can potentially be moved to the client too.
-		SellerAddress: sellerAddr,
+		Gateway:    gateway,
 		Metadata: radom.Metadata([]radom.KeyValue{
 			{
-				Key: "brave-metadata",
-				Value: map[string]interface{}{
-					"orderId": o.ID.String(),
-				},
+				Key:   "braveOrderId",
+				Value: o.ID.String(),
 			},
 		}),
 		LineItems: []radom.LineItem{
@@ -199,6 +222,11 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 			},
 		},
 		ExpiresAt: expiresAt.Unix(),
+		Customizations: map[string]interface{}{
+			"leftPanelColor":     "linear-gradient(125deg, rgba(0,0,128,1) 0%, RGBA(196,22,196,1) 100%)",
+			"primaryButtonColor": "#000000",
+			"slantedEdge":        true,
+		},
 	})
 	if err != nil {
 		return EmptyCreateCheckoutSessionResponse(), fmt.Errorf("failed to get checkout session response: %w", err)
