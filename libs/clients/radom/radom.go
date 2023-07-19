@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	ErrInvalidMetadataKey = errors.New("failed to get key from radom metadata")
+	ErrInvalidMetadataKey = errors.New("invalid metadata key")
 )
 
 // CheckoutSessionRequest represents a request to create a checkout session.
