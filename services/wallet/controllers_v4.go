@@ -166,3 +166,13 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	}
 }
+
+// GetWalletV4 is the same as get wallet v3, but we are now requiring http signatures for get wallet requests
+func GetWalletV4(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return GetWalletV3(w, r)
+}
+
+// GetUpholdWalletBalanceV4 produces an http handler for the service s which handles balance inquiries of uphold wallets
+func GetUpholdWalletBalanceV4(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return GetUpholdWalletBalanceV3(w, r)
+}
