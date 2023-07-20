@@ -38,6 +38,7 @@ import (
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
@@ -79,6 +80,7 @@ type ControllersTestSuite struct {
 	mockCtrl *gomock.Controller
 	storage  Datastore
 	suite.Suite
+	orderh *handler.Order
 }
 
 func TestControllersTestSuite(t *testing.T) {
@@ -239,6 +241,8 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 		retry: backoff.Retry,
 	}
 
+	suite.orderh = handler.NewOrder(suite.service)
+
 	// encrypt merchant key
 	cipher, nonce, err := cryptography.EncryptMessage(byteEncryptionKey, []byte("testing123"))
 	suite.Require().NoError(err)
@@ -274,7 +278,6 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	}
 
 	// create order this will also create the issuer
-	handler := CreateOrder(suite.service)
 
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
@@ -294,13 +297,16 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	handlers.AppHandler(suite.orderh.Create).ServeHTTP(rr, req)
 
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
 	var order Order
-	err = json.Unmarshal(rr.Body.Bytes(), &order)
-	suite.Require().NoError(err)
+	{
+		err := json.Unmarshal(rr.Body.Bytes(), &order)
+		suite.Require().NoError(err)
+	}
 
 	issuer, _ := suite.storage.GetIssuer(issuerID)
 
@@ -333,7 +339,6 @@ func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
 	handler.ServeHTTP(rr, req)
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-
 }
 
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
@@ -433,8 +438,6 @@ func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
 }
 
 func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
-	handler := CreateOrder(suite.service)
-
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
@@ -452,7 +455,8 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	handlers.AppHandler(suite.orderh.Create).ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
 
 	suite.Require().Contains(rr.Body.String(), "Invalid SKU Token provided in request")

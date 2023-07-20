@@ -26,6 +26,9 @@ const (
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
+
+	// The text of the error is preserved as is, in case anything depends on it.
+	ErrInvalidSKU Error = "Invalid SKU Token provided in request"
 )
 
 const (

@@ -11,6 +11,12 @@ import (
 	"strings"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
+	uuid "github.com/satori/go.uuid"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/webhook"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -19,11 +25,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/responses"
-	"github.com/go-chi/chi"
-	"github.com/go-chi/cors"
-	uuid "github.com/satori/go.uuid"
-	"github.com/stripe/stripe-go/v72"
-	"github.com/stripe/stripe-go/v72/webhook"
+	"github.com/brave-intl/bat-go/services/skus/handler"
 )
 
 func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {
@@ -47,11 +49,22 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 	r := chi.NewRouter()
 	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
-	if os.Getenv("ENV") == "local" {
-		r.Method("OPTIONS", "/", middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{"POST"})(nil)))
-		r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", corsMiddleware([]string{"POST"})(CreateOrder(service))))
-	} else {
-		r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
+	{
+		orderh := handler.NewOrder(service)
+
+		if os.Getenv("ENV") == "local" {
+			r.Method(http.MethodOptions, "/", middleware.InstrumentHandler(
+				"CreateOrderOptions",
+				corsMiddleware([]string{http.MethodPost})(nil),
+			))
+
+			r.Method(http.MethodPost, "/", middleware.InstrumentHandler(
+				"CreateOrder",
+				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
+			))
+		} else {
+			r.Method(http.MethodPost, "/", middleware.InstrumentHandler("CreateOrder", handlers.AppHandler(orderh.Create)))
+		}
 	}
 
 	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
@@ -241,58 +254,8 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 	return r
 }
 
-// OrderItemRequest is the body for creating new items
-type OrderItemRequest struct {
-	SKU      string `json:"sku" valid:"-"`
-	Quantity int    `json:"quantity" valid:"int"`
-}
-
-// CreateOrderRequest includes information needed to create an order
-type CreateOrderRequest struct {
-	Items []OrderItemRequest `json:"items" valid:"-"`
-	Email string             `json:"email" valid:"-"`
-}
-
-// CreateOrder is the handler for creating a new order
-func CreateOrder(service *Service) handlers.AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		ctx := r.Context()
-		sublogger := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
-
-		var req CreateOrderRequest
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
-		if len(req.Items) == 0 {
-			return handlers.ValidationError(
-				"Error validating request body",
-				map[string]interface{}{
-					"items": "array must contain at least one item",
-				},
-			)
-		}
-		// validation of sku tokens happens in createorderitemfrommacaroon
-		order, err := service.CreateOrderFromRequest(ctx, req)
-
-		if err != nil {
-			if errors.Is(err, ErrInvalidSKU) {
-				sublogger.Error().Err(err).Msg("invalid sku")
-				return handlers.ValidationError(ErrInvalidSKU.Error(), nil)
-			}
-			sublogger.Error().Err(err).Msg("error creating the order")
-			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
-	}
-}
+type OrderItemRequest = handler.OrderItemRequest
+type CreateOrderRequest = handler.CreateOrderRequest
 
 // SetOrderTrialDaysInput - SetOrderTrialDays handler input
 type SetOrderTrialDaysInput struct {
