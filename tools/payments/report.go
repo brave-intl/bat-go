@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 
@@ -98,13 +99,41 @@ func (ar AttestedReport) IsAttested() (bool, error) {
 	return true, nil
 }
 
-// Compare takes a prepared report and validates the transactions are the same as the attested report
+// ErrDuplicateDepositDestination is the error returned when a report contains duplicate deposit destinations.
+var ErrDuplicateDepositDestination = errors.New("duplicate deposit destination")
+
+// Compare takes a prepared and attested report and validates that both contain the same number of transactions,
+// that there is only a single deposit destination per transaction and that the total sum of BAT is the
+// same in each report.
 func Compare(pr PreparedReport, ar AttestedReport) error {
 	// check that the number of transactions match
 	if len(pr) != len(ar) {
 		return fmt.Errorf("number of transactions do not match - attested: %d; prepared: %d", len(ar), len(pr))
 	}
 
+	// Check for duplicate deposit destinations in prepared report.
+	u := make(map[string]bool)
+	for _, txn := range pr {
+		_, exists := u[txn.To]
+		if exists {
+			return fmt.Errorf("error validating preapre report duplicate to %s: %w",
+				txn.To, ErrDuplicateDepositDestination)
+		}
+		u[txn.To] = true
+	}
+
+	// Check for duplicate deposit destinations in attested report.
+	u = make(map[string]bool)
+	for _, txn := range ar {
+		_, exists := u[txn.To]
+		if exists {
+			return fmt.Errorf("error validating attested report duplicate to %s: %w",
+				txn.To, ErrDuplicateDepositDestination)
+		}
+		u[txn.To] = true
+	}
+
+	// Assert the total bat in each report is equal.
 	p := pr.SumBAT()
 	a := ar.SumBAT()
 
