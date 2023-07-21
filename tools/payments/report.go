@@ -19,6 +19,11 @@ import (
 	nitrodoc "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 )
 
+var (
+	// ErrDuplicateDepositDestination indicates that a report contains duplicate deposit destinations.
+	ErrDuplicateDepositDestination = errors.New("duplicate deposit destination")
+)
+
 // AttestedReport is the report of payouts after being prepared
 type AttestedReport []*AttestedTx
 
@@ -31,6 +36,23 @@ func (ar AttestedReport) SumBAT() decimal.Decimal {
 	return total
 }
 
+func (r AttestedReport) EnsureUniqueDest() error {
+	u := make(map[string]struct{})
+
+	for _, tx := range r {
+		if _, ok := u[tx.To]; ok {
+			return fmt.Errorf(
+				"error validating attested report duplicate to %s: %w",
+				tx.To, ErrDuplicateDepositDestination,
+			)
+		}
+
+		u[tx.To] = struct{}{}
+	}
+
+	return nil
+}
+
 // PreparedReport is the report of payouts prior to being prepared
 type PreparedReport []*PrepareTx
 
@@ -41,6 +63,23 @@ func (r PreparedReport) SumBAT() decimal.Decimal {
 		total = total.Add(v.GetAmount())
 	}
 	return total
+}
+
+func (r PreparedReport) EnsureUniqueDest() error {
+	u := make(map[string]struct{})
+
+	for _, tx := range r {
+		if _, ok := u[tx.To]; ok {
+			return fmt.Errorf(
+				"error validating prepare report duplicate to %s: %w",
+				tx.To, ErrDuplicateDepositDestination,
+			)
+		}
+
+		u[tx.To] = struct{}{}
+	}
+
+	return nil
 }
 
 // ReadReport reads a report from the reader
@@ -99,9 +138,6 @@ func (ar AttestedReport) IsAttested() (bool, error) {
 	return true, nil
 }
 
-// ErrDuplicateDepositDestination is the error returned when a report contains duplicate deposit destinations.
-var ErrDuplicateDepositDestination = errors.New("duplicate deposit destination")
-
 // Compare takes a prepared and attested report and validates that both contain the same number of transactions,
 // that there is only a single deposit destination per transaction and that the total sum of BAT is the
 // same in each report.
@@ -112,25 +148,13 @@ func Compare(pr PreparedReport, ar AttestedReport) error {
 	}
 
 	// Check for duplicate deposit destinations in prepared report.
-	u := make(map[string]bool)
-	for _, txn := range pr {
-		_, exists := u[txn.To]
-		if exists {
-			return fmt.Errorf("error validating preapre report duplicate to %s: %w",
-				txn.To, ErrDuplicateDepositDestination)
-		}
-		u[txn.To] = true
+	if err := pr.EnsureUniqueDest(); err != nil {
+		return err
 	}
 
 	// Check for duplicate deposit destinations in attested report.
-	u = make(map[string]bool)
-	for _, txn := range ar {
-		_, exists := u[txn.To]
-		if exists {
-			return fmt.Errorf("error validating attested report duplicate to %s: %w",
-				txn.To, ErrDuplicateDepositDestination)
-		}
-		u[txn.To] = true
+	if err := ar.EnsureUniqueDest(); err != nil {
+		return err
 	}
 
 	// Assert the total bat in each report is equal.
