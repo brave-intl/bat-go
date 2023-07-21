@@ -34,7 +34,7 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 	ctx := r.Context()
 
 	var req CreateOrderRequest
-	if err := requestutils.ReadJSON(r.Context(), r.Body, &req); err != nil {
+	if err := requestutils.ReadJSON(ctx, r.Body, &req); err != nil {
 		return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 	}
 
