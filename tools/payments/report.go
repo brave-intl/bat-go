@@ -39,10 +39,6 @@ func (ar AttestedReport) SumBAT() decimal.Decimal {
 func (r AttestedReport) EnsureUniqueDest() error {
 	u := make(map[string]struct{})
 
-	return r.EnsureUniqueDestSet(u)
-}
-
-func (r AttestedReport) EnsureUniqueDestSet(u map[string]struct{}) error {
 	for _, tx := range r {
 		if _, ok := u[tx.To]; ok {
 			return fmt.Errorf(
@@ -72,10 +68,6 @@ func (r PreparedReport) SumBAT() decimal.Decimal {
 func (r PreparedReport) EnsureUniqueDest() error {
 	u := make(map[string]struct{})
 
-	return r.EnsureUniqueDestSet(u)
-}
-
-func (r PreparedReport) EnsureUniqueDestSet(u map[string]struct{}) error {
 	for _, tx := range r {
 		if _, ok := u[tx.To]; ok {
 			return fmt.Errorf(
@@ -155,19 +147,13 @@ func Compare(pr PreparedReport, ar AttestedReport) error {
 		return fmt.Errorf("number of transactions do not match - attested: %d; prepared: %d", len(ar), len(pr))
 	}
 
-	u := make(map[string]struct{})
-
 	// Check for duplicate deposit destinations in prepared report.
-	if err := pr.EnsureUniqueDestSet(u); err != nil {
+	if err := pr.EnsureUniqueDest(); err != nil {
 		return err
 	}
 
-	for k := range u {
-		delete(u, k)
-	}
-
 	// Check for duplicate deposit destinations in attested report.
-	if err := ar.EnsureUniqueDestSet(u); err != nil {
+	if err := ar.EnsureUniqueDest(); err != nil {
 		return err
 	}
 
