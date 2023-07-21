@@ -5,7 +5,7 @@
 
 ## Developer Setup
 
-1. [Install Go 1.12](https://golang.org/doc/install) (NOTE: Go 1.10 and earlier will not work!)
+1. [Install Go 1.12](https://golang.org/doc/install) (NOTE: Go 1.09 and earlier will not work!)
 
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 
