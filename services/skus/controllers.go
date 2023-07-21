@@ -49,22 +49,20 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 	r := chi.NewRouter()
 	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
-	{
-		orderh := handler.NewOrder(service)
+	orderh := handler.NewOrder(service)
 
-		if os.Getenv("ENV") == "local" {
-			r.Method(http.MethodOptions, "/", middleware.InstrumentHandler(
-				"CreateOrderOptions",
-				corsMiddleware([]string{http.MethodPost})(nil),
-			))
+	if os.Getenv("ENV") == "local" {
+		r.Method(http.MethodOptions, "/", middleware.InstrumentHandler(
+			"CreateOrderOptions",
+			corsMiddleware([]string{http.MethodPost})(nil),
+		))
 
-			r.Method(http.MethodPost, "/", middleware.InstrumentHandler(
-				"CreateOrder",
-				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
-			))
-		} else {
-			r.Method(http.MethodPost, "/", middleware.InstrumentHandler("CreateOrder", handlers.AppHandler(orderh.Create)))
-		}
+		r.Method(http.MethodPost, "/", middleware.InstrumentHandler(
+			"CreateOrder",
+			corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
+		))
+	} else {
+		r.Method(http.MethodPost, "/", middleware.InstrumentHandler("CreateOrder", handlers.AppHandler(orderh.Create)))
 	}
 
 	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
