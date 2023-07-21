@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"strings"
+	"text/template"
 
 	"encoding/base64"
 	"encoding/json"
@@ -18,7 +18,6 @@ import (
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/google/uuid"
@@ -48,10 +47,60 @@ type Service struct {
 	pubKey           []byte
 }
 
+func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, error) {
+	// perform enclave attestation
+	nonce := make([]byte, 64)
+	_, err := rand.Read(nonce)
+	if err != nil {
+		return "", fmt.Errorf("failed to create nonce for attestation: %w", err)
+	}
+
+	document, err := nitro.Attest(nonce, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create attestation document: %w", err)
+	}
+
+	var logger = logging.Logger(ctx, "payments.configureKMSKey")
+	logger.Debug().Msgf("document: %+v", document)
+
+	t, err := template.ParseFiles(templateFile)
+	if err != nil {
+		logger.Error().Err(err).Msgf("failed to parse template file: %+v", templateFile)
+		return "", err
+	}
+
+	type keyTemplateData struct {
+		Pcr0 string
+		Pcr1 string
+		Pcr2 string
+		Sha  string
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	if err := t.Execute(buf, keyTemplateData{
+		Pcr0: "", // TODO: get the pcr values for the condition from the document ^^
+		Pcr1: "",
+		Pcr2: "",
+		Sha:  "",
+	}); err != nil {
+		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
 type serviceNamespaceContextKey struct{}
 
 // configureSigningKey creates the enclave kms key which is only sign capable with enclave attestation.
 func (s *Service) configureSigningKey(ctx context.Context) error {
+
+	// parse the key policy
+	policy, err := parseKeyPolicyTemplate(ctx, "templates/sign-policy.tmpl")
+	if err != nil {
+		return fmt.Errorf("failed to parse signing policy template: %w", err)
+	}
+
 	// get the aws configuration loaded
 	kmsClient := kms.NewFromConfig(s.awsCfg)
 
@@ -60,6 +109,7 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 		Description:                    aws.String("Transaction signing key for settlement enclave"),
 		KeySpec:                        kmstypes.KeySpecEccNistP521,
 		KeyUsage:                       kmstypes.KeyUsageTypeSignVerify,
+		Policy:                         aws.String(policy),
 	}
 
 	result, err := kmsClient.CreateKey(ctx, input)
@@ -74,57 +124,19 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 
 // configureKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
 func (s *Service) configureKMSKey(ctx context.Context) error {
-	// perform enclave attestation
-	nonce := make([]byte, 64)
-	_, err := rand.Read(nonce)
+
+	// parse the key policy
+	policy, err := parseKeyPolicyTemplate(ctx, "templates/decrypt-policy.tmpl")
 	if err != nil {
-		return fmt.Errorf("failed to create nonce for attestation: %w", err)
+		return fmt.Errorf("failed to parse decrypt policy template: %w", err)
 	}
-	document, err := nitro.Attest(nonce, nil, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create attestation document: %w", err)
-	}
-	var logger = logging.Logger(ctx, "payments.configureKMSKey")
-	logger.Debug().Msgf("document: %+v", document)
 
 	// get the aws configuration loaded
 	cfg := s.awsCfg
-
-	// TODO: get the pcr values for the condition from the document ^^
-	imageSha384 := ""
-	pcr0 := ""
-	pcr1 := ""
-	pcr2 := ""
-
-	// get the secretsmanager id from ctx for the template
-	templateSecretID, ok := ctx.Value(appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey).(string)
-	if !ok {
-		return errors.New("template secret id for enclave decrypt key not found on context")
-	}
-
-	smClient := secretsmanager.NewFromConfig(cfg)
-	o, err := smClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(templateSecretID),
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to get key policy template from secrets manager: %w", err)
-	}
-
-	if o.SecretString == nil {
-		return errors.New("secret is not defined in secrets manager")
-	}
-
-	keyPolicy := *o.SecretString
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<IMAGE_SHA384>", imageSha384)
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR0>", pcr0)
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR1>", pcr1)
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR2>", pcr2)
-
 	kmsClient := kms.NewFromConfig(cfg)
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(keyPolicy),
+		Policy: aws.String(policy),
 	}
 
 	result, err := kmsClient.CreateKey(ctx, input)

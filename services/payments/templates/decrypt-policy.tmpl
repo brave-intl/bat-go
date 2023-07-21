@@ -1,0 +1,156 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowKeyAdminAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Update*",
+        "kms:UntagResource",
+        "kms:TagResource",
+        "kms:ScheduleKeyDeletion",
+        "kms:Revoke*",
+        "kms:Put*",
+        "kms:List*",
+        "kms:Get*",
+        "kms:Enable*",
+        "kms:Disable*",
+        "kms:Describe*",
+        "kms:Delete*",
+        "kms:Create*",
+        "kms:CancelKeyDeletion"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "arn:aws:iam::021268868874:role/eks-payments-dev-nitro-shim"
+      }
+    },
+    {
+      "Sid": "AllowDevOpsReadOnlyAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:List*",
+        "kms:Get*",
+        "kms:Describe*"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": [
+          "arn:aws:iam::021268868874:role/devops-admin-rw-role",
+          "arn:aws:iam::021268868874:role/devops-admin-ro-role"
+        ]
+      }
+    },
+    {
+      "Sid": "AllowConfigServiceAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:ListResourceTags",
+        "kms:ListKeyPolicies",
+        "kms:ListGrants",
+        "kms:ListAliases",
+        "kms:GetKeyRotationStatus",
+        "kms:GetKeyPolicy",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Condition": {
+        "ArnLike": {
+          "aws:PrincipalArn": "arn:aws:iam::021268868874:role/config-service-role"
+        },
+        "StringEquals": {
+          "aws:PrincipalServiceName": [
+            "config.us-west-2.amazonaws.com",
+            "config.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "AllowSecurityAuditAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:UntagResource",
+        "kms:ScheduleKeyDeletion",
+        "kms:Revoke*",
+        "kms:List*",
+        "kms:Get*",
+        "kms:Disable*",
+        "kms:Describe*",
+        "kms:Delete*"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "arn:aws:iam::021268868874:role/security-admin-sa-role"
+      }
+    },
+    {
+      "Sid": "AllowAnalyzerAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:List*",
+        "kms:GetKeyPolicy",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Condition": {
+        "StringEquals": {
+          "kms:CallerAccount": "021268868874",
+          "kms:ViaService": "access-analyzer.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AllowSettlementsDeveloperAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:ReEncrypt*",
+        "kms:List*",
+        "kms:GetKeyPolicy",
+        "kms:GenerateDataKey",
+        "kms:Encrypt",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "arn:aws:iam::021268868874:role/settlements-sandbox-developer-role"
+      }
+    },
+    {
+      "Sid": "AllowEnclaveDecryptAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:GenerateRandom",
+        "kms:GenerateDataKey",
+        "kms:Decrypt"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "arn:aws:iam::021268868874:role/eks-payments-dev-nitro-shim"
+      },
+      "Condition": {
+        "StringLike": {
+          "kms:RecipientAttestation:ImageSha384": "\u003cIMAGE_SHA384\u003e",
+          "kms:RecipientAttestation:PCR0": "\u003cPCR0\u003e",
+          "kms:RecipientAttestation:PCR1": "\u003cPCR1\u003e",
+          "kms:RecipientAttestation:PCR2": "\u003cPCR2\u003e"
+        }
+      }
+    },
+    {
+      "Sid": "DenyAWSOverrideAccess",
+      "Effect": "Deny",
+      "Action": "kms:PutKeyPolicy",
+      "Resource": "*",
+      "Principal": {
+        "AWS": "*"
+      }
+    }
+  ]
+}
