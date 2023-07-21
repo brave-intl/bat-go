@@ -39,6 +39,20 @@ var (
 		},
 		[]string{"country_code", "status"},
 	)
+
+	documentTypePrecedence = []string{
+		"passport",
+		"drivers_license",
+		"national_identity_card",
+		"passport_card",
+		"tax_id",
+		"residence_permit",
+		"work_permit",
+		"voter_id",
+		"visa",
+		"national_insurance_card",
+		"indigenous_card",
+	}
 )
 
 func init() {
@@ -461,20 +475,6 @@ type ValidDocument struct {
 	IssuingCountry string `json:"issuingCountry"`
 }
 
-var documentTypePrecedence = []string{
-	"passport",
-	"drivers_license",
-	"national_identity_card",
-	"passport_card",
-	"tax_id",
-	"residence_permit",
-	"work_permit",
-	"voter_id",
-	"visa",
-	"national_insurance_card",
-	"indigenous_card",
-}
-
 // ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
 func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, string, error) {
 	// create the query string parameters
@@ -502,13 +502,8 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 	}
 
 	issuingCountry := strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
-	for _, p := range documentTypePrecedence {
-		for _, v := range res.ValidDocuments {
-			if strings.EqualFold(p, v.IssuingCountry) {
-				issuingCountry = strings.ToUpper(v.IssuingCountry)
-				break
-			}
-		}
+	if dcountry := countryForDocByPrecendence(documentTypePrecedence, res.ValidDocuments); dcountry != "" {
+		issuingCountry = strings.ToUpper(dcountry)
 	}
 
 	// feature flag for using new custodian regions
@@ -596,4 +591,18 @@ func (c *HTTPClient) FetchBalances(
 		return nil, err
 	}
 	return &body, err
+}
+
+func countryForDocByPrecendence(prec []string, docs []ValidDocument) string {
+	var result string
+
+	for _, pdoc := range prec {
+		for _, vdoc := range docs {
+			if strings.EqualFold(pdoc, vdoc.Type) {
+				return vdoc.IssuingCountry
+			}
+		}
+	}
+
+	return result
 }
