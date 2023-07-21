@@ -252,9 +252,6 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 	return r
 }
 
-type OrderItemRequest = handler.OrderItemRequest
-type CreateOrderRequest = handler.CreateOrderRequest
-
 // SetOrderTrialDaysInput - SetOrderTrialDays handler input
 type SetOrderTrialDaysInput struct {
 	TrialDays int64 `json:"trialDays" valid:"int"`

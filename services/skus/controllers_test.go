@@ -39,6 +39,7 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/skus/handler"
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
@@ -279,8 +280,8 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 
 	// create order this will also create the issuer
 
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
+	createRequest := &model.CreateOrderRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      skuToken,
 				Quantity: quantity,
@@ -438,8 +439,8 @@ func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
 }
 
 func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
+	createRequest := &model.CreateOrderRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      InvalidFreeTestSkuToken,
 				Quantity: 1,
@@ -1443,9 +1444,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{FreeTestSkuToken})
 
 	// create order with order items
-	request := CreateOrderRequest{
+	request := model.CreateOrderRequest{
 		Email: test.RandomString(),
-		Items: []OrderItemRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
 				Quantity: 3,
@@ -1580,9 +1581,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{token})
 
 	// create order with order items
-	request := CreateOrderRequest{
+	request := model.CreateOrderRequest{
 		Email: test.RandomString(),
-		Items: []OrderItemRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      token,
 				Quantity: 1,
@@ -1701,9 +1702,9 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{FreeTestSkuToken})
 
 	// create order with order items
-	request := CreateOrderRequest{
+	request := model.CreateOrderRequest{
 		Email: test.RandomString(),
-		Items: []OrderItemRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
 				Quantity: 3,

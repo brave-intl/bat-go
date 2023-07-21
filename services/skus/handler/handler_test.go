@@ -28,10 +28,10 @@ func TestMain(m *testing.M) {
 }
 
 type mockOrderService struct {
-	fnCreateOrderFromRequest func(ctx context.Context, req handler.CreateOrderRequest) (*model.Order, error)
+	fnCreateOrderFromRequest func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 }
 
-func (s *mockOrderService) CreateOrderFromRequest(ctx context.Context, req handler.CreateOrderRequest) (*model.Order, error) {
+func (s *mockOrderService) CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error) {
 	if s.fnCreateOrderFromRequest == nil {
 		return &model.Order{Items: []model.OrderItem{{}}}, nil
 	}
@@ -80,7 +80,7 @@ func TestOrder_Create(t *testing.T) {
 			name: "invalid_sku",
 			given: tcGiven{
 				svc: &mockOrderService{
-					fnCreateOrderFromRequest: func(ctx context.Context, req handler.CreateOrderRequest) (*model.Order, error) {
+					fnCreateOrderFromRequest: func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error) {
 						return nil, model.ErrInvalidSKU
 					},
 				},
@@ -103,7 +103,7 @@ func TestOrder_Create(t *testing.T) {
 			name: "some_error",
 			given: tcGiven{
 				svc: &mockOrderService{
-					fnCreateOrderFromRequest: func(ctx context.Context, req handler.CreateOrderRequest) (*model.Order, error) {
+					fnCreateOrderFromRequest: func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error) {
 						return nil, model.Error("some_error")
 					},
 				},
@@ -130,7 +130,7 @@ func TestOrder_Create(t *testing.T) {
 			name: "success",
 			given: tcGiven{
 				svc: &mockOrderService{
-					fnCreateOrderFromRequest: func(ctx context.Context, req handler.CreateOrderRequest) (*model.Order, error) {
+					fnCreateOrderFromRequest: func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error) {
 						result := &model.Order{
 							Location: datastore.NullString{
 								NullString: sql.NullString{

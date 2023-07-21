@@ -15,7 +15,7 @@ import (
 )
 
 type orderService interface {
-	CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*model.Order, error)
+	CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 }
 
 type Order struct {
@@ -33,7 +33,7 @@ func NewOrder(svc orderService) *Order {
 func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
-	var req CreateOrderRequest
+	var req model.CreateOrderRequest
 	if err := requestutils.ReadJSON(ctx, r.Body, &req); err != nil {
 		return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 	}
@@ -66,16 +66,4 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 	}
 
 	return handlers.RenderContent(ctx, order, w, http.StatusCreated)
-}
-
-// CreateOrderRequest includes information needed to create an order.
-type CreateOrderRequest struct {
-	Email string             `json:"email" valid:"-"`
-	Items []OrderItemRequest `json:"items" valid:"-"`
-}
-
-// OrderItemRequest represents an item in a order request.
-type OrderItemRequest struct {
-	SKU      string `json:"sku" valid:"-"`
-	Quantity int    `json:"quantity" valid:"int"`
 }
