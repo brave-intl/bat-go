@@ -10,12 +10,18 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/shopspring/decimal"
 	nitrodoc "github.com/veracruz-project/go-nitro-enclave-attestation-document"
+)
+
+var (
+	// ErrDuplicateDepositDestination indicates that a report contains duplicate deposit destinations.
+	ErrDuplicateDepositDestination = errors.New("duplicate deposit destination")
 )
 
 // AttestedReport is the report of payouts after being prepared
@@ -30,6 +36,23 @@ func (ar AttestedReport) SumBAT() decimal.Decimal {
 	return total
 }
 
+func (r AttestedReport) EnsureUniqueDest() error {
+	u := make(map[string]struct{})
+
+	for _, tx := range r {
+		if _, ok := u[tx.To]; ok {
+			return fmt.Errorf(
+				"error validating attested report duplicate to %s: %w",
+				tx.To, ErrDuplicateDepositDestination,
+			)
+		}
+
+		u[tx.To] = struct{}{}
+	}
+
+	return nil
+}
+
 // PreparedReport is the report of payouts prior to being prepared
 type PreparedReport []*PrepareTx
 
@@ -40,6 +63,23 @@ func (r PreparedReport) SumBAT() decimal.Decimal {
 		total = total.Add(v.GetAmount())
 	}
 	return total
+}
+
+func (r PreparedReport) EnsureUniqueDest() error {
+	u := make(map[string]struct{})
+
+	for _, tx := range r {
+		if _, ok := u[tx.To]; ok {
+			return fmt.Errorf(
+				"error validating prepare report duplicate to %s: %w",
+				tx.To, ErrDuplicateDepositDestination,
+			)
+		}
+
+		u[tx.To] = struct{}{}
+	}
+
+	return nil
 }
 
 // ReadReport reads a report from the reader
@@ -98,13 +138,26 @@ func (ar AttestedReport) IsAttested() (bool, error) {
 	return true, nil
 }
 
-// Compare takes a prepared report and validates the transactions are the same as the attested report
+// Compare takes a prepared and attested report and validates that both contain the same number of transactions,
+// that there is only a single deposit destination per transaction and that the total sum of BAT is the
+// same in each report.
 func Compare(pr PreparedReport, ar AttestedReport) error {
 	// check that the number of transactions match
 	if len(pr) != len(ar) {
 		return fmt.Errorf("number of transactions do not match - attested: %d; prepared: %d", len(ar), len(pr))
 	}
 
+	// Check for duplicate deposit destinations in prepared report.
+	if err := pr.EnsureUniqueDest(); err != nil {
+		return err
+	}
+
+	// Check for duplicate deposit destinations in attested report.
+	if err := ar.EnsureUniqueDest(); err != nil {
+		return err
+	}
+
+	// Assert the total bat in each report is equal.
 	p := pr.SumBAT()
 	a := ar.SumBAT()
 

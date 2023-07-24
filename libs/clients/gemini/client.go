@@ -39,6 +39,20 @@ var (
 		},
 		[]string{"country_code", "status"},
 	)
+
+	documentTypePrecedence = []string{
+		"passport",
+		"drivers_license",
+		"national_identity_card",
+		"passport_card",
+		"tax_id",
+		"residence_permit",
+		"work_permit",
+		"voter_id",
+		"visa",
+		"national_insurance_card",
+		"indigenous_card",
+	}
 )
 
 func init() {
@@ -450,8 +464,15 @@ func (v *ValidateAccountReq) GenerateQueryString() (url.Values, error) {
 
 // ValidateAccountRes - request structure for inputs to validate account client call
 type ValidateAccountRes struct {
-	ID          string `json:"id"`
-	CountryCode string `json:"countryCode"`
+	ID             string          `json:"id"`
+	CountryCode    string          `json:"countryCode"`
+	ValidDocuments []ValidDocument `json:"validDocuments"`
+}
+
+// ValidDocument represent a valid proof of identity document type.
+type ValidDocument struct {
+	Type           string `json:"type"`
+	IssuingCountry string `json:"issuingCountry"`
 }
 
 // ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
@@ -476,20 +497,26 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		return "", res.CountryCode, err
 	}
 
+	if len(res.ValidDocuments) <= 0 {
+		return "", "", errors.New("error no valid documents in response")
+	}
+
+	issuingCountry := strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
+	if dcountry := countryForDocByPrecendence(documentTypePrecedence, res.ValidDocuments); dcountry != "" {
+		issuingCountry = strings.ToUpper(dcountry)
+	}
+
 	// feature flag for using new custodian regions
 	if useCustodianRegions, ok := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool); ok && useCustodianRegions {
 		// get the uphold custodian supported regions
 		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.Regions); ok {
-			allowed := custodianRegions.Gemini.Verdict(
-				res.CountryCode,
-			)
-
+			allowed := custodianRegions.Gemini.Verdict(issuingCountry)
 			if !allowed {
 				countGeminiWalletAccountValidation.With(prometheus.Labels{
 					"country_code": res.CountryCode,
 					"status":       "failure",
 				}).Inc()
-				return res.ID, res.CountryCode, errorutils.ErrInvalidCountry
+				return res.ID, issuingCountry, errorutils.ErrInvalidCountry
 			}
 		}
 	} else { // use default blacklist functionality
@@ -497,25 +524,25 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 			// check country code
 			for _, v := range blacklist {
 				if strings.EqualFold(res.CountryCode, v) {
-					if res.CountryCode != "" {
+					if issuingCountry != "" {
 						countGeminiWalletAccountValidation.With(prometheus.Labels{
-							"country_code": res.CountryCode,
+							"country_code": issuingCountry,
 							"status":       "failure",
 						}).Inc()
 					}
-					return res.ID, res.CountryCode, errorutils.ErrInvalidCountry
+					return res.ID, issuingCountry, errorutils.ErrInvalidCountry
 				}
 			}
 		}
 	}
 	if res.CountryCode != "" {
 		countGeminiWalletAccountValidation.With(prometheus.Labels{
-			"country_code": res.CountryCode,
+			"country_code": issuingCountry,
 			"status":       "success",
 		}).Inc()
 	}
 
-	return res.ID, res.CountryCode, nil
+	return res.ID, issuingCountry, nil
 }
 
 // FetchAccountList fetches the list of accounts associated with the given api key
@@ -564,4 +591,18 @@ func (c *HTTPClient) FetchBalances(
 		return nil, err
 	}
 	return &body, err
+}
+
+func countryForDocByPrecendence(prec []string, docs []ValidDocument) string {
+	var result string
+
+	for _, pdoc := range prec {
+		for _, vdoc := range docs {
+			if strings.EqualFold(pdoc, vdoc.Type) {
+				return vdoc.IssuingCountry
+			}
+		}
+	}
+
+	return result
 }
