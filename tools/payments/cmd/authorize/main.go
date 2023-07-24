@@ -138,6 +138,6 @@ func main() {
 
 	if *verbose {
 		log.Printf("submit transactions loaded for %+v\n", wc)
-		log.Println("completed report submission")
+		log.Println("authorize command complete")
 	}
 }

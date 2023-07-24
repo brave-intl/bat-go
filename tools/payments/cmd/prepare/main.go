@@ -22,8 +22,6 @@ The flags are:
 		The redis cluster password
 	-ru
 		The redis cluster user
-	-p
-		The payout id
 */
 
 package main
@@ -33,9 +31,9 @@ import (
 	"flag"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/brave-intl/bat-go/tools/payments"
+	uuid "github.com/satori/go.uuid"
 )
 
 func main() {
@@ -61,10 +59,6 @@ func main() {
 		"ru", "",
 		"redis cluster username")
 
-	payoutID := flag.String(
-		"p", "",
-		"payout id")
-
 	flag.Parse()
 
 	// get the list of report files for prepare
@@ -83,12 +77,8 @@ func main() {
 		log.Fatalf("failed to create settlement client: %v\n", err)
 	}
 
-	if payoutID == nil || strings.TrimSpace(*payoutID) == "" {
-		log.Fatal("failed payout id cannot be nil or empty\n")
-	}
-
 	wc := &payments.WorkerConfig{
-		PayoutID:      *payoutID,
+		PayoutID:      uuid.NewV4().String(),
 		ConsumerGroup: payments.PrepareStream + "-cg",
 		Stream:        payments.PrepareStream,
 		Count:         0,
@@ -122,6 +112,6 @@ func main() {
 
 	if *verbose {
 		log.Printf("prepare transactions loaded for %+v\n", wc)
-		log.Println("completed report preparation")
+		log.Println("prepare command complete")
 	}
 }
