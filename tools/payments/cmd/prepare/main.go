@@ -22,8 +22,6 @@ The flags are:
 		The redis cluster password
 	-ru
 		The redis cluster user
-	-p
-		The payout id
 */
 
 package main
@@ -122,6 +120,6 @@ func main() {
 
 	if *verbose {
 		log.Printf("prepare transactions loaded for %+v\n", wc)
-		log.Println("completed report preparation")
+		log.Println("prepare command complete")
 	}
 }
