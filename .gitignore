@@ -1,5 +1,7 @@
 # IDE
 .idea
+*.work
+*.sum
 
 # Generic ignores
 .DS_Store
