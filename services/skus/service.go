@@ -231,7 +231,7 @@ func (s *Service) ExternalIDExists(ctx context.Context, externalID string) (bool
 }
 
 // CreateOrderFromRequest creates an order from the request
-func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
+func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	var (
 		currency              string

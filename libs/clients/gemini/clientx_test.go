@@ -66,7 +66,7 @@ func TestCountryForDocByPrecendence(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			act := countryForDocByPrecendence(documentTypePrecedence, tc.given)
+			act := countryForDocByPrecedence(documentTypePrecedence, tc.given)
 			should.Equal(t, tc.exp, act)
 		})
 	}

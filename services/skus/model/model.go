@@ -26,6 +26,9 @@ const (
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
+
+	// The text of the error is preserved as is, in case anything depends on it.
+	ErrInvalidSKU Error = "Invalid SKU Token provided in request"
 )
 
 const (
@@ -282,4 +285,16 @@ func (x *OrderTimeBounds) ExpiresAtWithFallback(fallback time.Time) time.Time {
 	}
 
 	return expiresAt
+}
+
+// CreateOrderRequest includes information needed to create an order.
+type CreateOrderRequest struct {
+	Email string             `json:"email" valid:"-"`
+	Items []OrderItemRequest `json:"items" valid:"-"`
+}
+
+// OrderItemRequest represents an item in a order request.
+type OrderItemRequest struct {
+	SKU      string `json:"sku" valid:"-"`
+	Quantity int    `json:"quantity" valid:"int"`
 }
