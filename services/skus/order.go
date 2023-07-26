@@ -3,7 +3,6 @@ package skus
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -34,11 +33,6 @@ const (
 	StripeInvoiceUpdated              = "invoice.updated"
 	StripeInvoicePaid                 = "invoice.paid"
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
-)
-
-var (
-	// ErrInvalidSKU - this sku is malformed or failed signature validation
-	ErrInvalidSKU = errors.New("Invalid SKU Token provided in request")
 )
 
 // TODO(pavelb): Gradually replace it everywhere.
@@ -84,7 +78,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	// perform validation
 	if !valid {
 		sublogger.Error().Err(err).Msg("invalid sku")
-		return nil, nil, nil, ErrInvalidSKU
+		return nil, nil, nil, model.ErrInvalidSKU
 	}
 
 	// read the macaroon, its valid
