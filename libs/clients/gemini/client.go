@@ -511,7 +511,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		return "", res.CountryCode, err
 	}
 
-	var issuingCountry = res.CountryCode
+	issuingCountry := res.CountryCode
 
 	if isIssueCountryEnabled() {
 		if len(res.ValidDocuments) <= 0 {
