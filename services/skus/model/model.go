@@ -3,11 +3,8 @@ package model
 
 import (
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
-	"reflect"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -27,8 +24,9 @@ const (
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
 
-	// The text of the error is preserved as is, in case anything depends on it.
-	ErrInvalidSKU Error = "Invalid SKU Token provided in request"
+	// The text of the following errors is preserved as is, in case anything depends on them.
+	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
+	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
 )
 
 const (
@@ -56,7 +54,7 @@ type Order struct {
 	Location              datastore.NullString `json:"location" db:"location"`
 	Status                string               `json:"status" db:"status"`
 	Items                 []OrderItem          `json:"items"`
-	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
+	AllowedPaymentMethods pq.StringArray       `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
 	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
 	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
@@ -69,7 +67,7 @@ func (o *Order) IsStripePayable() bool {
 	// TODO: if not we need to look into subscription trials:
 	// -> https://stripe.com/docs/billing/subscriptions/trials
 
-	return strings.Contains(strings.Join(o.AllowedPaymentMethods, ","), StripePaymentMethod)
+	return Slice[string](o.AllowedPaymentMethods).Contains(StripePaymentMethod)
 }
 
 // CreateStripeCheckoutSession creats a Stripe checkout session for the order.
@@ -176,40 +174,6 @@ type OrderItem struct {
 	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
 }
 
-// Methods represents payment methods.
-type Methods []string
-
-// Equal checks if m equals m2.
-func (m *Methods) Equal(m2 *Methods) bool {
-	s1 := []string(*m)
-	s2 := []string(*m2)
-	sort.Strings(s1)
-	sort.Strings(s2)
-
-	return reflect.DeepEqual(s1, s2)
-}
-
-// Scan scans the raw src value into m as JSONStringArray.
-func (m *Methods) Scan(src interface{}) error {
-	var x []sql.NullString
-	if err := pq.Array(&x).Scan(src); err != nil {
-		return err
-	}
-
-	for i := range x {
-		if x[i].Valid {
-			*m = append(*m, x[i].String)
-		}
-	}
-
-	return nil
-}
-
-// Value satisifies the drive.Valuer interface.
-func (m *Methods) Value() (driver.Value, error) {
-	return pq.Array(m), nil
-}
-
 // CreateCheckoutSessionResponse represents a checkout session response.
 type CreateCheckoutSessionResponse struct {
 	SessionID string `json:"checkoutSessionId"`
@@ -297,4 +261,44 @@ type CreateOrderRequest struct {
 type OrderItemRequest struct {
 	SKU      string `json:"sku" valid:"-"`
 	Quantity int    `json:"quantity" valid:"int"`
+}
+
+// EnsureEqualPaymentMethods checks if the methods lisy equals incoming list.
+//
+// This operation may change both slices due to sorting.
+func EnsureEqualPaymentMethods(methods, incoming []string) error {
+	sort.Strings(methods)
+	sort.Strings(incoming)
+
+	if !Slice[string](methods).Equal(Slice[string](incoming)) {
+		return ErrDifferentPaymentMethods
+	}
+
+	return nil
+}
+
+type Slice[K comparable] []K
+
+func (s Slice[K]) Equal(target []K) bool {
+	if len(s) != len(target) {
+		return false
+	}
+
+	for i, v := range s {
+		if v != target[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (s Slice[K]) Contains(target K) bool {
+	for _, v := range s {
+		if v == target {
+			return true
+		}
+	}
+
+	return false
 }
