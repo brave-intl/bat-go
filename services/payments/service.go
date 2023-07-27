@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"text/template"
 
 	"encoding/base64"
@@ -15,7 +16,6 @@ import (
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
@@ -70,18 +70,20 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 	}
 
 	type keyTemplateData struct {
-		Pcr0 string
-		Pcr1 string
-		Pcr2 string
-		Sha  string
+		Pcr0       string
+		Pcr1       string
+		Pcr2       string
+		ImageSHA   string
+		AWSAccount string
 	}
 
 	buf := bytes.NewBuffer([]byte{})
 	if err := t.Execute(buf, keyTemplateData{
-		Pcr0: "", // TODO: get the pcr values for the condition from the document ^^
-		Pcr1: "",
-		Pcr2: "",
-		Sha:  "",
+		PCR0:       "", // TODO: get the pcr values for the condition from the document ^^
+		PCR1:       "",
+		PCR2:       "",
+		ImageSHA:   "",
+		AWSAccount: os.Getenv("AWS_ACCOUNT"),
 	}); err != nil {
 		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)
 		return "", err
@@ -94,9 +96,8 @@ type serviceNamespaceContextKey struct{}
 
 // configureSigningKey creates the enclave kms key which is only sign capable with enclave attestation.
 func (s *Service) configureSigningKey(ctx context.Context) error {
-
 	// parse the key policy
-	policy, err := parseKeyPolicyTemplate(ctx, "templates/sign-policy.tmpl")
+	policy, err := parseKeyPolicyTemplate(ctx, "/sign-policy.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse signing policy template: %w", err)
 	}
@@ -105,11 +106,7 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	kmsClient := kms.NewFromConfig(s.awsCfg)
 
 	input := &kms.CreateKeyInput{
-		BypassPolicyLockoutSafetyCheck: true,
-		Description:                    aws.String("Transaction signing key for settlement enclave"),
-		KeySpec:                        kmstypes.KeySpecEccNistP521,
-		KeyUsage:                       kmstypes.KeyUsageTypeSignVerify,
-		Policy:                         aws.String(policy),
+		Policy: aws.String(policy),
 	}
 
 	result, err := kmsClient.CreateKey(ctx, input)
@@ -126,7 +123,7 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 func (s *Service) configureKMSKey(ctx context.Context) error {
 
 	// parse the key policy
-	policy, err := parseKeyPolicyTemplate(ctx, "templates/decrypt-policy.tmpl")
+	policy, err := parseKeyPolicyTemplate(ctx, "/decrypt-policy.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse decrypt policy template: %w", err)
 	}

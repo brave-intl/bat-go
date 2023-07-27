@@ -5,7 +5,7 @@
             "Sid": "AllowKeyAdminAccess",
             "Effect": "Allow",
             "Principal": {
-                "AWS": "arn:aws:iam::021268868874:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+            "AWS": "arn:aws:iam::{ .AWSAccount }:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
             },
             "Action": [
                 "kms:TagResource",
@@ -23,7 +23,7 @@
             "Sid": "AllowConfigServiceAccess",
             "Effect": "Allow",
             "Principal": {
-                "AWS": "arn:aws:iam::021268868874:role/config-service-role"
+            "AWS": "arn:aws:iam::{ .AWSAccount }:role/config-service-role"
             },
             "Action": [
                 "kms:ListResourceTags",
@@ -38,7 +38,7 @@
             "Sid": "AllowSecurityAuditAccess",
             "Effect": "Allow",
             "Principal": {
-                "AWS": "arn:aws:iam::021268868874:role/security-admin-sa-role"
+            "AWS": "arn:aws:iam::{ .AWSAccount }:role/security-admin-sa-role"
             },
             "Action": [
                 "kms:UntagResource",
@@ -67,7 +67,7 @@
             "Resource": "*",
             "Condition": {
                 "StringEquals": {
-                    "kms:CallerAccount": "021268868874",
+                "kms:CallerAccount": "{ .AWSAccount }",
                     "kms:ViaService": "access-analyzer.amazonaws.com"
                 }
             }
@@ -82,14 +82,14 @@
       ],
       "Resource": "*",
       "Principal": {
-        "AWS": "arn:aws:iam::021268868874:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+      "AWS": "arn:aws:iam::{ .AWSAccount }:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
       },
       "Condition": {
         "StringLike": {
-          "kms:RecipientAttestation:ImageSha384": "\u003cIMAGE_SHA384\u003e",
-          "kms:RecipientAttestation:PCR0": "\u003cPCR0\u003e",
-          "kms:RecipientAttestation:PCR1": "\u003cPCR1\u003e",
-          "kms:RecipientAttestation:PCR2": "\u003cPCR2\u003e"
+            "kms:RecipientAttestation:ImageSha384": "{ .ImageSHA }",
+            "kms:RecipientAttestation:PCR0": "{ .PCR0 }",
+            "kms:RecipientAttestation:PCR1": "{ .PCR1 }",
+            "kms:RecipientAttestation:PCR2": "{ .PCR2 }"
         }
       }
     },
