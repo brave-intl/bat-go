@@ -70,9 +70,9 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 	}
 
 	type keyTemplateData struct {
-		Pcr0       string
-		Pcr1       string
-		Pcr2       string
+		PCR0       string
+		PCR1       string
+		PCR2       string
 		ImageSHA   string
 		AWSAccount string
 	}
@@ -89,7 +89,11 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 		return "", err
 	}
 
-	return buf.String(), nil
+	policy := buf.String()
+
+	logger.Info().Msgf("key policy: %+v", policy)
+
+	return policy, nil
 }
 
 type serviceNamespaceContextKey struct{}
