@@ -1,4 +1,4 @@
-module notification
+module github.com/brave-intl/bat-go/serverless/email/status
 
 go 1.18
 

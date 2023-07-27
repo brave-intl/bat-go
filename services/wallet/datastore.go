@@ -424,6 +424,10 @@ func getEnvMaxCards(custodian string) int {
 		if v, err := strconv.Atoi(os.Getenv("GEMINI_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
+	case "xyzabc":
+		if v, err := strconv.Atoi(os.Getenv("XYZABC_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
 	}
 	return 4
 }
@@ -973,7 +977,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		) values (
 			$1, $2, $3
 		)
-		on conflict (wallet_id, custodian, linking_id) 
+		on conflict (wallet_id, custodian, linking_id)
 		do update set updated_at=now(), disconnected_at=null, unlinked_at=null, linked_at=now()
 		returning *
 	`
@@ -1019,7 +1023,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 
 // InsertVerifiedWalletOutboxTx inserts a verifiedWalletOutbox for processing.
 func (pg *Postgres) InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, walletID uuid.UUID, verifiedWallet bool) error {
-	_, err := tx.ExecContext(ctx, `insert into verified_wallet_outbox(payment_id, verified_wallet) 
+	_, err := tx.ExecContext(ctx, `insert into verified_wallet_outbox(payment_id, verified_wallet)
 											values ($1, $2)`, walletID, verifiedWallet)
 	if err != nil {
 		return fmt.Errorf("error inserting values into vefified wallet outbox: %w", err)
@@ -1041,7 +1045,7 @@ func (pg *Postgres) SendVerifiedWalletOutbox(ctx context.Context, client reputat
 	}
 	defer rollback()
 
-	err = tx.Get(&vw, `select id, payment_id, verified_wallet from verified_wallet_outbox 
+	err = tx.Get(&vw, `select id, payment_id, verified_wallet from verified_wallet_outbox
                                    order by created_at asc for update skip locked limit 1`)
 	if err != nil {
 		return false, fmt.Errorf("error get verified wallet: %w", err)

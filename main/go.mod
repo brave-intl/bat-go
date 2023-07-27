@@ -65,7 +65,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/qldb v1.15.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/qldbsession v1.14.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.29.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.19.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.11.25 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.17.1 // indirect
@@ -140,9 +139,9 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/hashicorp/hcp-sdk-go v0.23.0 // indirect
-	github.com/hashicorp/vault v1.12.5 // indirect
+	github.com/hashicorp/vault v1.12.7 // indirect
 	github.com/hashicorp/vault/api v1.8.1 // indirect
-	github.com/hashicorp/vault/sdk v0.6.1-0.20230302210543-38f40f637f4f // indirect
+	github.com/hashicorp/vault/sdk v0.6.1-0.20230427140652-b4b396ffc14f // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
@@ -216,15 +215,15 @@ require (
 	go.mongodb.org/mongo-driver v1.10.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/crypto v0.6.0 // indirect
+	golang.org/x/crypto v0.8.0 // indirect
 	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd // indirect
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.7.0 // indirect
+	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.5.0 // indirect
-	golang.org/x/term v0.5.0 // indirect
-	golang.org/x/text v0.7.0 // indirect
+	golang.org/x/sys v0.7.0 // indirect
+	golang.org/x/term v0.7.0 // indirect
+	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.1.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	google.golang.org/api v0.110.0 // indirect

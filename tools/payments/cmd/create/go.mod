@@ -6,7 +6,7 @@ go 1.20
 
 require (
 	filippo.io/age v1.1.1
-	github.com/hashicorp/vault v1.13.1
+	github.com/hashicorp/vault v1.13.3
 )
 
 require (
