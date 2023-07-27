@@ -277,9 +277,9 @@ func EnsureEqualPaymentMethods(methods, incoming []string) error {
 	return nil
 }
 
-type Slice[K comparable] []K
+type Slice[T comparable] []T
 
-func (s Slice[K]) Equal(target []K) bool {
+func (s Slice[T]) Equal(target []T) bool {
 	if len(s) != len(target) {
 		return false
 	}
@@ -293,7 +293,7 @@ func (s Slice[K]) Equal(target []K) bool {
 	return true
 }
 
-func (s Slice[K]) Contains(target K) bool {
+func (s Slice[T]) Contains(target T) bool {
 	for _, v := range s {
 		if v == target {
 			return true
