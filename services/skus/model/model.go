@@ -263,7 +263,7 @@ type OrderItemRequest struct {
 	Quantity int    `json:"quantity" valid:"int"`
 }
 
-// EnsureEqualPaymentMethods checks if the methods lisy equals incoming list.
+// EnsureEqualPaymentMethods checks if the methods list equals the incoming list.
 //
 // This operation may change both slices due to sorting.
 func EnsureEqualPaymentMethods(methods, incoming []string) error {
