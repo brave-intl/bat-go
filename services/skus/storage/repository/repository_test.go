@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
@@ -529,6 +530,220 @@ func TestOrder_GetExpiresAtAfterISOPeriod(t *testing.T) {
 			// TODO(pavelb): update local and testing containers to use Go 1.20+.
 			// Then switch to tc.exp.expiresAt.Compare(actual) == 0.
 			should.Equal(t, true, tc.exp.expiresAt.Sub(actual) == 0)
+		})
+	}
+}
+
+func TestOrder_CreateGet(t *testing.T) {
+	dbi, err := setupDBI()
+	must.Equal(t, nil, err)
+
+	defer func() {
+		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
+	}()
+
+	type tcGiven struct {
+		order *model.Order
+	}
+
+	type tcExpected struct {
+		result *model.Order
+		err    error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "nil_allowed_payment_methods",
+			given: tcGiven{
+				order: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice: mustDecimalFromString("5"),
+				},
+			},
+			exp: tcExpected{
+				result: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice: mustDecimalFromString("5"),
+				},
+			},
+		},
+
+		{
+			name: "empty_allowed_payment_methods",
+			given: tcGiven{
+				order: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{},
+				},
+			},
+			exp: tcExpected{
+				result: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{},
+				},
+			},
+		},
+
+		{
+			name: "single_allowed_payment_methods",
+			given: tcGiven{
+				order: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+				},
+			},
+			exp: tcExpected{
+				result: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+				},
+			},
+		},
+
+		{
+			name: "many_allowed_payment_methods",
+			given: tcGiven{
+				order: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{"stripe", "cash"},
+				},
+			},
+			exp: tcExpected{
+				result: &model.Order{
+					MerchantID: "brave.com",
+					Currency:   "USD",
+					Status:     "pending",
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "https://somewhere.brave.software",
+						},
+					},
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{"stripe", "cash"},
+				},
+			},
+		},
+	}
+
+	repo := repository.NewOrder()
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.TODO()
+
+			tx, err := dbi.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadUncommitted})
+			must.Equal(t, nil, err)
+
+			t.Cleanup(func() { _ = tx.Rollback() })
+
+			act1, err := repo.Create(
+				ctx,
+				tx,
+				tc.given.order.TotalPrice,
+				tc.given.order.MerchantID,
+				tc.given.order.Status,
+				tc.given.order.Currency,
+				tc.given.order.Location.String,
+				tc.given.order.AllowedPaymentMethods,
+				tc.given.order.ValidFor,
+			)
+			must.Equal(t, true, errors.Is(err, tc.exp.err))
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.result.MerchantID, act1.MerchantID)
+			should.Equal(t, tc.exp.result.Currency, act1.Currency)
+			should.Equal(t, tc.exp.result.Status, act1.Status)
+			should.Equal(t, tc.exp.result.Location, act1.Location)
+			should.Equal(t, true, tc.exp.result.TotalPrice.Equal(act1.TotalPrice))
+			should.Equal(t, tc.exp.result.AllowedPaymentMethods, act1.AllowedPaymentMethods)
+			should.Equal(t, tc.exp.result.ValidFor, act1.ValidFor)
+
+			act2, err := repo.Get(ctx, tx, act1.ID)
+			must.Equal(t, nil, err)
+
+			should.Equal(t, act1.ID, act2.ID)
+			should.Equal(t, act1.MerchantID, act2.MerchantID)
+			should.Equal(t, act1.Currency, act2.Currency)
+			should.Equal(t, act1.Status, act2.Status)
+			should.Equal(t, act1.Location, act2.Location)
+			should.Equal(t, true, act1.TotalPrice.Equal(act2.TotalPrice))
+			should.Equal(t, act1.AllowedPaymentMethods, act2.AllowedPaymentMethods)
+			should.Equal(t, act1.ValidFor, act2.ValidFor)
+			should.Equal(t, act1.CreatedAt, act2.CreatedAt)
+			should.Equal(t, act1.UpdatedAt, act2.UpdatedAt)
 		})
 	}
 }

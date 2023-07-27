@@ -37,8 +37,6 @@ const (
 
 // TODO(pavelb): Gradually replace it everywhere.
 
-type Methods = model.Methods
-
 type Order = model.Order
 
 type OrderItem = model.OrderItem
@@ -65,7 +63,7 @@ type IssuerConfig struct {
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, *IssuerConfig, error) {
+func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, []string, *IssuerConfig, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
 	// validation prior to decoding/unmarshalling
@@ -89,7 +87,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	}
 
 	caveats := mac.Caveats()
-	allowedPaymentMethods := new(Methods)
+	var allowedPaymentMethods []string
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
 
@@ -165,7 +163,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			}
 			issuerConfig.overlap = overlap
 		case "allowed_payment_methods":
-			*allowedPaymentMethods = Methods(strings.Split(value, ","))
+			allowedPaymentMethods = strings.Split(value, ",")
 		case "metadata":
 			err := json.Unmarshal([]byte(value), &orderItem.Metadata)
 			sublogger.Debug().Str("value", value).Msg("metadata string")
