@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,19 @@ import (
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
+
+// isIssueCountryEnabled temp feature flag for Gemini endpoint update
+func isIssueCountryEnabled() bool {
+	var toggle = false
+	if os.Getenv("GEMINI_ISSUING_COUNTRY_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_ISSUING_COUNTRY_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
 
 var (
 	balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -497,13 +511,17 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		return "", res.CountryCode, err
 	}
 
-	if len(res.ValidDocuments) <= 0 {
-		return "", "", errors.New("error no valid documents in response")
-	}
+	issuingCountry := res.CountryCode
 
-	issuingCountry := strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
-	if dcountry := countryForDocByPrecendence(documentTypePrecedence, res.ValidDocuments); dcountry != "" {
-		issuingCountry = strings.ToUpper(dcountry)
+	if isIssueCountryEnabled() {
+		if len(res.ValidDocuments) <= 0 {
+			return "", "", errors.New("error no valid documents in response")
+		}
+
+		issuingCountry = strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
+		if country := countryForDocByPrecedence(documentTypePrecedence, res.ValidDocuments); country != "" {
+			issuingCountry = strings.ToUpper(country)
+		}
 	}
 
 	// feature flag for using new custodian regions
@@ -513,7 +531,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 			allowed := custodianRegions.Gemini.Verdict(issuingCountry)
 			if !allowed {
 				countGeminiWalletAccountValidation.With(prometheus.Labels{
-					"country_code": res.CountryCode,
+					"country_code": issuingCountry,
 					"status":       "failure",
 				}).Inc()
 				return res.ID, issuingCountry, errorutils.ErrInvalidCountry
@@ -523,7 +541,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
 			// check country code
 			for _, v := range blacklist {
-				if strings.EqualFold(res.CountryCode, v) {
+				if strings.EqualFold(issuingCountry, v) {
 					if issuingCountry != "" {
 						countGeminiWalletAccountValidation.With(prometheus.Labels{
 							"country_code": issuingCountry,
@@ -535,7 +553,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 			}
 		}
 	}
-	if res.CountryCode != "" {
+	if issuingCountry != "" {
 		countGeminiWalletAccountValidation.With(prometheus.Labels{
 			"country_code": issuingCountry,
 			"status":       "success",
@@ -593,10 +611,10 @@ func (c *HTTPClient) FetchBalances(
 	return &body, err
 }
 
-func countryForDocByPrecendence(prec []string, docs []ValidDocument) string {
+func countryForDocByPrecedence(precedence []string, docs []ValidDocument) string {
 	var result string
 
-	for _, pdoc := range prec {
+	for _, pdoc := range precedence {
 		for _, vdoc := range docs {
 			if strings.EqualFold(pdoc, vdoc.Type) {
 				return vdoc.IssuingCountry
