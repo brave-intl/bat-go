@@ -211,7 +211,7 @@ func init() {
 	flagBuilder.Flag().String("zebpay-linking-key", "",
 		"the linking key for zebpay custodian").
 		Bind("zebpay-linking-key").
-		Env("zebpay_LINKING_KEY")
+		Env("ZEBPAY_LINKING_KEY")
 
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",

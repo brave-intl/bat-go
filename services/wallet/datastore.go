@@ -425,7 +425,7 @@ func getEnvMaxCards(custodian string) int {
 			return v
 		}
 	case "zebpay":
-		if v, err := strconv.Atoi(os.Getenv("zebpay_WALLET_LINKING_LIMIT")); err == nil {
+		if v, err := strconv.Atoi(os.Getenv("ZEBPAY_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
 	}
