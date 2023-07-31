@@ -18,10 +18,15 @@ RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
     mkdir -p /enclave
 
 RUN yum install build-essential cmake gcc -y
+RUN yum install pkgconfig -y
+RUN yum install openssl -y
+RUN yum install libssl-dev openssl-devel -y
 
 RUN curl https://sh.rustup.rs -sSf > rs.sh && sh rs.sh -y && \
     source "$HOME/.cargo/env" && \
-    cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
+    cargo install --path / --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
+
+RUN ls .cargo/
 
 WORKDIR /enclave
 
