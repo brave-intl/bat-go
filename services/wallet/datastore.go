@@ -657,6 +657,7 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	if err != nil {
 		sublogger.Error().Err(err).
 			Msg("error committing tx")
+		sentry.CaptureException(fmt.Errorf("error failed to commit link wallet transaction: %w", err))
 		return fmt.Errorf("error committing tx: %w", err)
 	}
 
