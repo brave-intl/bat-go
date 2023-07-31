@@ -644,6 +644,15 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		}
 	}
 
+	if directVerifiedWalletEnable {
+		if client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
+			err = client.UpdateReputationSummary(ctx, ID, true)
+			if err != nil {
+				return fmt.Errorf("error calling reputation for verified wallet: %w", err)
+			}
+		}
+	}
+
 	err = commit()
 	if err != nil {
 		sublogger.Error().Err(err).

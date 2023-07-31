@@ -70,6 +70,21 @@ func isVerifiedWalletEnable() bool {
 	return toggle
 }
 
+// directVerifiedWalletEnable enable direct verified wallet call
+var directVerifiedWalletEnable = isDirectVerifiedWalletEnable()
+
+func isDirectVerifiedWalletEnable() bool {
+	var toggle = false
+	if os.Getenv("DIRECT_VERIFIED_WALLET_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("DIRECT_VERIFIED_WALLET_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 var (
 	// ClaimNamespace uuidv5 namespace for provider linking - exported for tests
 	ClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
@@ -223,15 +238,18 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	s.jobs = []srv.Job{
 		{
-			Func:    s.RunVerifiedWalletWorker,
-			Cadence: 15 * time.Second,
-			Workers: 1,
-		},
-		{
 			Func:    s.RefreshCustodianRegionsWorker,
 			Cadence: 15 * time.Minute,
 			Workers: 1,
 		},
+	}
+
+	if VerifiedWalletEnable {
+		s.jobs = append(s.jobs, srv.Job{
+			Func:    s.RunVerifiedWalletWorker,
+			Cadence: 1 * time.Second,
+			Workers: 1,
+		})
 	}
 
 	err = cmd.SetupJobWorkers(ctx, s.Jobs())
