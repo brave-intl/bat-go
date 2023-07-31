@@ -226,7 +226,7 @@ func BuildEif(blobsPath string, image string, cmds []string, envs map[string]str
 	if err != nil {
 		return err
 	}
-	command = execCommand("eif_build",
+	command = execCommand("/root/.cargo/bin/eif_build",
 		"--kernel",
 		filepath.Join(blobsPath, "bzImage"),
 		"--kernel_config",

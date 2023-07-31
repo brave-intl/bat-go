@@ -24,9 +24,9 @@ RUN yum install libssl-dev openssl-devel -y
 
 RUN curl https://sh.rustup.rs -sSf > rs.sh && sh rs.sh -y && \
     source "$HOME/.cargo/env" && \
-    cargo install --path / --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
+    cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
 
-RUN ls .cargo/
+RUN ls $HOME/.cargo/bin
 
 WORKDIR /enclave
 
