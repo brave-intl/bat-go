@@ -17,6 +17,12 @@ RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
     rm -rf /var/cache/yum && \
     mkdir -p /enclave
 
+RUN yum install build-essential cmake gcc -y
+
+RUN curl https://sh.rustup.rs -sSf > rs.sh && sh rs.sh -y && \
+    source "$HOME/.cargo/env" && \
+    cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
+
 WORKDIR /enclave
 
 COPY --from=builder /src/viproxy/viproxy /enclave/
