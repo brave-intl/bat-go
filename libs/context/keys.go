@@ -53,10 +53,10 @@ const (
 	BuildTimeCTXKey CTXKey = "build_time"
 	// ReputationClientCTXKey - context key for the build time of code
 	ReputationClientCTXKey CTXKey = "reputation_client"
-	// XyzAbcLinkingKeyCTXKey - context key for the build time of code
-	XyzAbcLinkingKeyCTXKey CTXKey = "xyzabc_linking_key"
-	// DisableXyzAbcLinkingCTXKey - context key for the build time of code
-	DisableXyzAbcLinkingCTXKey CTXKey = "disable_xyzabc_linking"
+	// ZebPayLinkingKeyCTXKey - context key for the build time of code
+	ZebPayLinkingKeyCTXKey CTXKey = "zebpay_linking_key"
+	// DisableZebPayLinkingCTXKey - context key for the build time of code
+	DisableZebPayLinkingCTXKey CTXKey = "disable_zebpay_linking"
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
 	// GeminiBrowserClientIDCTXKey - context key for the gemini browser client id

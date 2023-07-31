@@ -211,19 +211,19 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 	}
 }
 
-// LinkXyzAbcDepositAccountV3 returns a handler which handles deposit account linking of xyzabc wallets.
-func LinkXyzAbcDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+// LinkZebPayDepositAccountV3 returns a handler which handles deposit account linking of zebpay wallets.
+func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
 		// Check whether it's disabled.
-		if disable, ok := ctx.Value(appctx.DisableXyzAbcLinkingCTXKey).(bool); ok && disable {
-			const msg = "Connecting Brave Rewards to XyzAbc is temporarily unavailable. Please try again later"
+		if disable, ok := ctx.Value(appctx.DisableZebPayLinkingCTXKey).(bool); ok && disable {
+			const msg = "Connecting Brave Rewards to ZebPay is temporarily unavailable. Please try again later"
 			return handlers.ValidationError(msg, nil)
 		}
 
 		id := &inputs.ID{}
-		logger := logging.Logger(ctx, "wallet.LinkXyzAbcDepositAccountV3")
+		logger := logging.Logger(ctx, "wallet.LinkZebPayDepositAccountV3")
 
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
@@ -246,12 +246,12 @@ func LinkXyzAbcDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			})
 		}
 
-		xalr := &XyzAbcLinkingRequest{}
+		xalr := &ZebPayLinkingRequest{}
 		if err := inputs.DecodeAndValidateReader(ctx, xalr, r.Body); err != nil {
-			return HandleErrorsXyzAbc(err)
+			return HandleErrorsZebPay(err)
 		}
 
-		if err := s.LinkXyzAbcWallet(ctx, *id.UUID(), xalr.VerificationToken); err != nil {
+		if err := s.LinkZebPayWallet(ctx, *id.UUID(), xalr.VerificationToken); err != nil {
 			if errors.Is(err, errorutils.ErrInvalidCountry) {
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
 			}

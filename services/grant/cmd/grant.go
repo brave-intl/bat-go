@@ -208,10 +208,10 @@ func init() {
 		Bind("gemini-client-secret").
 		Env("GEMINI_CLIENT_SECRET")
 
-	flagBuilder.Flag().String("xyzabc-linking-key", "",
-		"the linking key for xyzabc custodian").
-		Bind("xyzabc-linking-key").
-		Env("XYZABC_LINKING_KEY")
+	flagBuilder.Flag().String("zebpay-linking-key", "",
+		"the linking key for zebpay custodian").
+		Bind("zebpay-linking-key").
+		Env("zebpay_LINKING_KEY")
 
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
@@ -537,11 +537,11 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
 
-	// xyzabc wallet linking signing key
-	ctx = context.WithValue(ctx, appctx.XyzAbcLinkingKeyCTXKey, viper.GetString("xyzabc-linking-key"))
+	// zebpay wallet linking signing key
+	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, viper.GetString("zebpay-linking-key"))
 
 	// linking variables
-	ctx = context.WithValue(ctx, appctx.DisableXyzAbcLinkingCTXKey, viper.GetBool("disable-xyzabc-linking"))
+	ctx = context.WithValue(ctx, appctx.DisableZebPayLinkingCTXKey, viper.GetBool("disable-zebpay-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableUpholdLinkingCTXKey, viper.GetBool("disable-uphold-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, viper.GetBool("disable-gemini-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, viper.GetBool("disable-bitflyer-linking"))
