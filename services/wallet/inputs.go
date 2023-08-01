@@ -30,7 +30,7 @@ var (
 	ErrInvalidJSON = errors.New("invalid json")
 	// ErrMissingLinkingInfo - required parameter missing from request
 	ErrMissingLinkingInfo    = errors.New("missing linking information")
-	ErrXyzAbcInvalidVrfToken = errors.New("failed to validate 'linking_info': must not be empty")
+	ErrZebPayInvalidVrfToken = errors.New("failed to validate 'linking_info': must not be empty")
 )
 
 // CustodianName - input validation for custodian name
@@ -272,22 +272,22 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 	return handlers.ValidationError("brave link wallet request validation errors", issues)
 }
 
-// XyzAbcLinkingRequest holds info needed to link xyzabc account.
-type XyzAbcLinkingRequest struct {
+// ZebPayLinkingRequest holds info needed to link zebpay account.
+type ZebPayLinkingRequest struct {
 	VerificationToken string `json:"linking_info"`
 }
 
 // Validate implements DecodeValidate interface.
-func (r *XyzAbcLinkingRequest) Validate(ctx context.Context) error {
+func (r *ZebPayLinkingRequest) Validate(ctx context.Context) error {
 	if r.VerificationToken == "" {
-		return ErrXyzAbcInvalidVrfToken
+		return ErrZebPayInvalidVrfToken
 	}
 
 	return nil
 }
 
 // Decode implements DecodeValidate interface.
-func (r *XyzAbcLinkingRequest) Decode(ctx context.Context, v []byte) error {
+func (r *ZebPayLinkingRequest) Decode(ctx context.Context, v []byte) error {
 	if err := inputs.DecodeJSON(ctx, v, r); err != nil {
 		return fmt.Errorf("failed to decode json: %w", err)
 	}
@@ -295,8 +295,8 @@ func (r *XyzAbcLinkingRequest) Decode(ctx context.Context, v []byte) error {
 	return nil
 }
 
-// HandleErrorsXyzAbc returns an AppError for the given err.
-func HandleErrorsXyzAbc(err error) *handlers.AppError {
+// HandleErrorsZebPay returns an AppError for the given err.
+func HandleErrorsZebPay(err error) *handlers.AppError {
 	issues := make(map[string]string)
 	if errors.Is(err, ErrInvalidJSON) {
 		issues["invalidJSON"] = err.Error()
@@ -319,7 +319,7 @@ func HandleErrorsXyzAbc(err error) *handlers.AppError {
 		}
 	}
 
-	return handlers.ValidationError("xyzabc wallet linking request validation errors", issues)
+	return handlers.ValidationError("zebpay wallet linking request validation errors", issues)
 }
 
 // GeminiLinkingRequest holds info needed to link gemini account
