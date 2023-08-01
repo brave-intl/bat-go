@@ -645,21 +645,22 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	}
 
 	if directVerifiedWalletEnable {
-		if client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
-			upsertReputationSummary := func() (interface{}, error) {
-				return nil, client.UpdateReputationSummary(ctx, ID, true)
-			}
-			_, err = backoff.Retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
-			if err != nil {
-				return fmt.Errorf("error calling reputation for verified wallet: %w", err)
-			}
+		client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+		if !ok {
+			return errors.New("error calling reputation for verified wallet: no reputation client")
+		}
+		upsertReputationSummary := func() (interface{}, error) {
+			return nil, client.UpdateReputationSummary(ctx, ID, true)
+		}
+		_, err = backoff.Retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error calling reputation for verified wallet: %w", err)
 		}
 	}
 
 	err = commit()
 	if err != nil {
-		sublogger.Error().Err(err).
-			Msg("error committing tx")
+		sublogger.Error().Err(err).Msg("error committing tx")
 		sentry.CaptureException(fmt.Errorf("error failed to commit link wallet transaction: %w", err))
 		return fmt.Errorf("error committing tx: %w", err)
 	}
