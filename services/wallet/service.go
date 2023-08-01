@@ -70,6 +70,21 @@ func isVerifiedWalletEnable() bool {
 	return toggle
 }
 
+// directVerifiedWalletEnable enable direct verified wallet call
+var directVerifiedWalletEnable = isDirectVerifiedWalletEnable()
+
+func isDirectVerifiedWalletEnable() bool {
+	var toggle = false
+	if os.Getenv("DIRECT_VERIFIED_WALLET_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("DIRECT_VERIFIED_WALLET_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 var (
 	// ClaimNamespace uuidv5 namespace for provider linking - exported for tests
 	ClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
@@ -223,15 +238,18 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	s.jobs = []srv.Job{
 		{
-			Func:    s.RunVerifiedWalletWorker,
-			Cadence: 15 * time.Second,
-			Workers: 1,
-		},
-		{
 			Func:    s.RefreshCustodianRegionsWorker,
 			Cadence: 15 * time.Minute,
 			Workers: 1,
 		},
+	}
+
+	if VerifiedWalletEnable {
+		s.jobs = append(s.jobs, srv.Job{
+			Func:    s.RunVerifiedWalletWorker,
+			Cadence: 1 * time.Second,
+			Workers: 1,
+		})
 	}
 
 	err = cmd.SetupJobWorkers(ctx, s.Jobs())
@@ -274,8 +292,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
-			r.Post("/xyzabc/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
+			r.Post("/zebpay/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkZebPayDepositAccount", LinkZebPayDepositAccountV3(s))).ServeHTTP)
 
 			// create wallet connect routes for our wallet providers
 			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
@@ -284,8 +302,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
-			r.Post("/xyzabc/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
+			r.Post("/zebpay/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkZebPayDepositAccount", LinkZebPayDepositAccountV3(s))).ServeHTTP)
 		}
 
 		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
@@ -405,54 +423,54 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 	return nil
 }
 
-// LinkXyzAbcWallet links a wallet and transfers funds to newly linked wallet.
-func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
-	// Get xyzabc linking_info signing key.
-	linkingKeyB64, ok := ctx.Value(appctx.XyzAbcLinkingKeyCTXKey).(string)
+// LinkZebPayWallet links a wallet and transfers funds to newly linked wallet.
+func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
+	// Get zebpay linking_info signing key.
+	linkingKeyB64, ok := ctx.Value(appctx.ZebPayLinkingKeyCTXKey).(string)
 	if !ok {
-		const msg = "xyzabc linking validation misconfigured"
+		const msg = "zebpay linking validation misconfigured"
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
 	}
 
 	// Decode base64 encoded jwt key.
 	decodedJWTKey, err := base64.StdEncoding.DecodeString(linkingKeyB64)
 	if err != nil {
-		const msg = "xyzabc linking validation misconfigured"
+		const msg = "zebpay linking validation misconfigured"
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
 	}
 
 	// Parse the signed verification token from input.
 	tok, err := jwt.ParseSigned(verificationToken)
 	if err != nil {
-		const msg = "xyzabc linking info parsing failed"
+		const msg = "zebpay linking info parsing failed"
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
 	// Create the jwt claims and get them (verified) from the token.
 	claims := make(map[string]interface{})
 	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
-		const msg = "xyzabc linking info validation failed"
+		const msg = "zebpay linking info validation failed"
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
 	// Make sure deposit id exists
 	depositID, ok := claims["depositId"].(string)
 	if !ok || depositID == "" {
-		const msg = "xyzabc deposit id does not match token"
+		const msg = "zebpay deposit id does not match token"
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
 	// Get the account id.
 	accountID, ok := claims["accountId"].(string)
 	if !ok || accountID == "" {
-		const msg = "xyzabc account id invalid in token"
+		const msg = "zebpay account id invalid in token"
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
 
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
-	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "IN"); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "zebpay", "IN"); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
@@ -466,7 +484,7 @@ func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID
 			status = http.StatusConflict
 		}
 
-		return handlers.WrapError(err, "unable to link xyzabc wallets", status)
+		return handlers.WrapError(err, "unable to link zebpay wallets", status)
 	}
 
 	return nil
