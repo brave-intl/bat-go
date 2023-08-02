@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
-	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
