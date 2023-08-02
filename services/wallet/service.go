@@ -447,6 +447,11 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
+	if len(tok.Headers) == 0 {
+		const msg = "linking info token invalid no headers"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
 	// validate algorithm used
 	for i := range tok.Headers {
 		if subtle.ConstantTimeCompare([]byte("HS256"), []byte(tok.Headers[i].Algorithm)) != 1 {
