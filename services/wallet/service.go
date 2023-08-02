@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -14,11 +15,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
-	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
+	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -446,11 +447,42 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
+	// validate algorithm used
+	for i := range tok.Headers {
+		if subtle.ConstantTimeCompare([]byte("HS256"), []byte(tok.Headers[i].Algorithm)) != 1 {
+			const msg = "linking info token invalid"
+			return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+		}
+	}
+
 	// Create the jwt claims and get them (verified) from the token.
 	claims := make(map[string]interface{})
 	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
 		const msg = "zebpay linking info validation failed"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	// validate token (checks not before, expires with no leeway)
+	iat, ok := claims["iat"].(int64)
+	if !ok {
+		const msg = "zebpay linking info validation failed no iat"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	exp, ok := claims["exp"].(int64)
+	if !ok {
+		const msg = "zebpay linking info validation failed no exp"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	if time.Now().Before(time.Unix(iat, 0)) {
+		const msg = "zebpay linking info validation failed issued at is after now"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	if time.Now().After(time.Unix(exp, 0)) {
+		const msg = "zebpay linking info validation failed expired is before now"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
 	}
 
 	// Make sure deposit id exists
