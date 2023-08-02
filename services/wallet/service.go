@@ -2,7 +2,6 @@ package wallet
 
 import (
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -454,7 +453,7 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 
 	// validate algorithm used
 	for i := range tok.Headers {
-		if subtle.ConstantTimeCompare([]byte("HS256"), []byte(tok.Headers[i].Algorithm)) != 1 {
+		if tok.Headers[i].Algorithm != "HS256" {
 			const msg = "linking info token invalid"
 			return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
 		}
