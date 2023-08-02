@@ -10,19 +10,21 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/linkedin/goavro"
+	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/datastore"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/ptr"
-	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
@@ -112,7 +114,7 @@ func (s *Service) CreateIssuer(ctx context.Context, merchantID string, orderItem
 }
 
 // CreateIssuerV3 creates a new v3 issuer if it does not exist. This only happens in the event of a new sku being created.
-func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderItem OrderItem, issuerConfig IssuerConfig) error {
+func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderItem OrderItem, issuerConfig model.IssuerConfig) error {
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
@@ -139,8 +141,8 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 			ValidFrom: ptr.FromTime(time.Now()),
 			ExpiresAt: ptr.FromTime(defaultExpiresAt),
 			Duration:  *orderItem.EachCredentialValidForISO,
-			Buffer:    issuerConfig.buffer,
-			Overlap:   issuerConfig.overlap,
+			Buffer:    issuerConfig.Buffer,
+			Overlap:   issuerConfig.Overlap,
 		}
 
 		requestOperation := func() (interface{}, error) {

@@ -52,17 +52,42 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 	orderh := handler.NewOrder(service)
 
 	if os.Getenv("ENV") == "local" {
-		r.Method(http.MethodOptions, "/", middleware.InstrumentHandler(
-			"CreateOrderOptions",
-			corsMiddleware([]string{http.MethodPost})(nil),
-		))
+		r.Method(
+			http.MethodOptions,
+			"/",
+			middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{http.MethodPost})(nil)),
+		)
 
-		r.Method(http.MethodPost, "/", middleware.InstrumentHandler(
-			"CreateOrder",
-			corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
-		))
+		r.Method(
+			http.MethodOptions,
+			"/new",
+			middleware.InstrumentHandler("CreateOrderNewOptions", corsMiddleware([]string{http.MethodPost})(nil)),
+		)
+
+		r.Method(
+			http.MethodPost,
+			"/",
+			middleware.InstrumentHandler(
+				"CreateOrder",
+				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
+			),
+		)
+
+		r.Method(
+			http.MethodPost,
+			"/new",
+			middleware.InstrumentHandler(
+				"CreateOrderNew",
+				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.CreateNew)),
+			),
+		)
 	} else {
 		r.Method(http.MethodPost, "/", middleware.InstrumentHandler("CreateOrder", handlers.AppHandler(orderh.Create)))
+		r.Method(
+			http.MethodPost,
+			"/new",
+			middleware.InstrumentHandler("CreateOrderNew", merchantSignedMiddleware(handlers.AppHandler(orderh.CreateNew))),
+		)
 	}
 
 	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
