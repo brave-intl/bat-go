@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -446,11 +447,48 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
 	}
 
+	if len(tok.Headers) == 0 {
+		const msg = "linking info token invalid no headers"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	// validate algorithm used
+	for i := range tok.Headers {
+		if tok.Headers[i].Algorithm != "HS256" {
+			const msg = "linking info token invalid"
+			return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+		}
+	}
+
 	// Create the jwt claims and get them (verified) from the token.
 	claims := make(map[string]interface{})
 	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
 		const msg = "zebpay linking info validation failed"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	fmt.Println(claims)
+	// validate token (checks not before, expires with no leeway)
+	iat, ok := claims["iat"].(float64)
+	if !ok {
+		const msg = "zebpay linking info validation failed no iat"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		const msg = "zebpay linking info validation failed no exp"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	if time.Now().Before(time.Unix(int64(math.Round(iat)), 0)) {
+		const msg = "zebpay linking info validation failed issued at is after now"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	if time.Now().After(time.Unix(int64(math.Round(exp)), 0)) {
+		const msg = "zebpay linking info validation failed expired is before now"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
 	}
 
 	// Make sure deposit id exists
