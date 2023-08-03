@@ -102,6 +102,7 @@ type PayoutStatus struct {
 	Uphold     string `json:"uphold" valid:"in(off|processing|complete)"`
 	Gemini     string `json:"gemini" valid:"in(off|processing|complete)"`
 	Bitflyer   string `json:"bitflyer" valid:"in(off|processing|complete)"`
+	Zebpay     string `json:"zebpay" valid:"in(off|processing|complete)"`
 	Date       string `json:"payoutDate" valid:"-"`
 }
 
@@ -139,6 +140,7 @@ type Regions struct {
 	Uphold   GeoAllowBlockMap `json:"uphold" valid:"-"`
 	Gemini   GeoAllowBlockMap `json:"gemini" valid:"-"`
 	Bitflyer GeoAllowBlockMap `json:"bitflyer" valid:"-"`
+	Zebpay   GeoAllowBlockMap `json:"zebpay" valid:"-"`
 }
 
 // HandleErrors - handle any errors in input
