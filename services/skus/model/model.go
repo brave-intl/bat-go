@@ -331,8 +331,8 @@ func (r *OrderItemRequestNew) TokenOverlapOrDefault() int {
 
 // OrderStripeMetadata holds data relevant to the order in Stripe.
 type OrderStripeMetadata struct {
-	SuccessURI string `json:"stripe_success_uri" validate:"http_url"`
-	CancelURI  string `json:"stripe_cancel_uri" validate:"http_url"`
+	SuccessURI string `json:"success_uri" validate:"http_url"`
+	CancelURI  string `json:"cancel_uri" validate:"http_url"`
 }
 
 func (m *OrderStripeMetadata) SuccessURL(oid string) (string, error) {
@@ -353,8 +353,8 @@ func (m *OrderStripeMetadata) CancelURL(oid string) (string, error) {
 
 // ItemStripeMetadata holds data about the product in Stripe.
 type ItemStripeMetadata struct {
-	ProductID string `json:"stripe_product_id"`
-	ItemID    string `json:"stripe_item_id"`
+	ProductID string `json:"product_id"`
+	ItemID    string `json:"item_id"`
 }
 
 // Metadata returns the contents of m as a map for datastore.Metadata.

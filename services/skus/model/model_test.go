@@ -190,8 +190,8 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 			name: "stripe_metadata",
 			given: []byte(`{
 				"stripe_metadata": {
-					"stripe_product_id": "product_id",
-					"stripe_item_id": "item_id"
+					"product_id": "product_id",
+					"item_id": "item_id"
 				}
 			}`),
 			exp: &model.OrderItemRequestNew{
@@ -209,8 +209,8 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 				"each_credential_valid_duration": "P1D",
 				"issuance_interval": "P1M",
 				"stripe_metadata": {
-					"stripe_product_id": "product_id",
-					"stripe_item_id": "item_id"
+					"product_id": "product_id",
+					"item_id": "item_id"
 				}
 			}`),
 			exp: &model.OrderItemRequestNew{

@@ -286,8 +286,8 @@ func TestOrder_CreateNew(t *testing.T) {
 					"email": "you_example.com",
 					"currency": "USD",
 					"stripe_metadata": {
-						"stripe_success_uri": "https://example.com/success",
-						"stripe_cancel_uri": "https://example.com/cancel"
+						"success_uri": "https://example.com/success",
+						"cancel_uri": "https://example.com/cancel"
 					},
 					"payment_methods": ["stripe"],
 					"items": [
@@ -299,8 +299,8 @@ func TestOrder_CreateNew(t *testing.T) {
 							"credential_type": "credential_type",
 							"credential_valid_duration": "P1M",
 							"stripe_metadata": {
-								"stripe_product_id": "product_id",
-								"stripe_item_id": "item_id"
+								"product_id": "product_id",
+								"item_id": "item_id"
 							}
 						}
 					]
@@ -328,8 +328,8 @@ func TestOrder_CreateNew(t *testing.T) {
 					"email": "you@example.com",
 					"currency": "USD",
 					"stripe_metadata": {
-						"stripe_success_uri": "https://example.com/success",
-						"stripe_cancel_uri": "https://example.com/cancel"
+						"success_uri": "https://example.com/success",
+						"cancel_uri": "https://example.com/cancel"
 					},
 					"payment_methods": ["stripe"],
 					"items": [
@@ -341,8 +341,8 @@ func TestOrder_CreateNew(t *testing.T) {
 							"credential_type": "credential_type",
 							"credential_valid_duration": "P1M",
 							"stripe_metadata": {
-								"stripe_product_id": "product_id",
-								"stripe_item_id": "item_id"
+								"product_id": "product_id",
+								"item_id": "item_id"
 							}
 						}
 					]
@@ -365,8 +365,8 @@ func TestOrder_CreateNew(t *testing.T) {
 					"email": "you@example.com",
 					"currency": "USD",
 					"stripe_metadata": {
-						"stripe_success_uri": "https://example.com/success",
-						"stripe_cancel_uri": "https://example.com/cancel"
+						"success_uri": "https://example.com/success",
+						"cancel_uri": "https://example.com/cancel"
 					},
 					"payment_methods": ["stripe"],
 					"items": [
@@ -378,8 +378,8 @@ func TestOrder_CreateNew(t *testing.T) {
 							"credential_type": "credential_type",
 							"credential_valid_duration": "P1M",
 							"stripe_metadata": {
-								"stripe_product_id": "product_id",
-								"stripe_item_id": "item_id"
+								"product_id": "product_id",
+								"item_id": "item_id"
 							}
 						}
 					]
@@ -442,8 +442,8 @@ func TestOrder_CreateNew(t *testing.T) {
 					"email": "you@example.com",
 					"currency": "USD",
 					"stripe_metadata": {
-						"stripe_success_uri": "https://example.com/success",
-						"stripe_cancel_uri": "https://example.com/cancel"
+						"success_uri": "https://example.com/success",
+						"cancel_uri": "https://example.com/cancel"
 					},
 					"payment_methods": ["stripe"],
 					"items": [
@@ -455,8 +455,8 @@ func TestOrder_CreateNew(t *testing.T) {
 							"credential_type": "credential_type",
 							"credential_valid_duration": "P1M",
 							"stripe_metadata": {
-								"stripe_product_id": "product_id",
-								"stripe_item_id": "item_id"
+								"product_id": "product_id",
+								"item_id": "item_id"
 							}
 						}
 					]
