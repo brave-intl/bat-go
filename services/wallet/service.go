@@ -467,7 +467,6 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
 	}
 
-	fmt.Println(claims)
 	// validate token (checks not before, expires with no leeway)
 	iat, ok := claims["iat"].(float64)
 	if !ok {
