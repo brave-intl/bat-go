@@ -289,7 +289,7 @@ type CreateOrderRequestNew struct {
 	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
 }
 
-// OrderItemRequestNew represents an item in a order request.
+// OrderItemRequestNew represents an item in an order request.
 type OrderItemRequestNew struct {
 	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
 	IssuerTokenBuffer           int                 `json:"issuer_token_buffer"`
