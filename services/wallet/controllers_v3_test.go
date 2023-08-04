@@ -740,7 +740,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
 	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
-		"accountId": accountID, "depositId": idTo,
+		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
 	}).CompactSerialize()
 	if err != nil {
 		panic(err)
