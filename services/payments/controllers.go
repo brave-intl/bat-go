@@ -36,7 +36,7 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
 		}
 
-		attestationDocument, err := nitro.Attest(nonce, []byte{}, []byte{})
+		attestationDocument, err := nitro.Attest(ctx, nonce, []byte{}, []byte{})
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get attestation from nitro")
 			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
@@ -80,7 +80,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			if *req.DryRun != prepareFailure {
 				// populate document id on transaction
 				req.DocumentID = uuid.New().String()
-				attestation, err := nitro.Attest([]byte(uuid.New().String()), []byte(req.DocumentID), []byte{})
+				attestation, err := nitro.Attest(ctx, []byte(uuid.New().String()), []byte(req.DocumentID), []byte{})
 				if err != nil {
 					logger.Warn().Str("request", fmt.Sprintf("%+v", req)).Err(err).Msg("failed attestation")
 					return handlers.WrapError(errors.New("dry run failed to attest"), "Error in request body", http.StatusInternalServerError)
@@ -124,7 +124,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to create transaction json blob", http.StatusInternalServerError)
 		}
 
-		attestationDocument, err := nitro.Attest(nonce, tx, []byte{})
+		attestationDocument, err := nitro.Attest(ctx, nonce, tx, []byte{})
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get attestation from nitro")
 			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)

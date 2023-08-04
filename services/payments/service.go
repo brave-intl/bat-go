@@ -5,13 +5,18 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"os"
 	"text/template"
 
+	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
+
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -56,13 +61,30 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 		return "", fmt.Errorf("failed to create nonce for attestation: %w", err)
 	}
 
-	document, err := nitro.Attest(nonce, nil, nil)
+	document, err := nitro.Attest(ctx, nonce, nil, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create attestation document: %w", err)
 	}
 
 	var logger = logging.Logger(ctx, "payments.configureKMSKey")
-	logger.Debug().Msgf("document: %+v", document)
+	logger.Info().Msgf("document: %+v", document)
+
+	// parse the root certificate
+	block, _ := pem.Decode([]byte(nitro.RootAWSNitroCert))
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	// parse document
+	ad, err := nitro_eclave_attestation_document.AuthenticateDocument(document, *cert, true)
+	if err != nil {
+		logger.Error().Err(err).Msgf("failed to parse template attestation document: %+v", ad)
+		return "", err
+	}
+	logger.Info().Msgf("digest: %+v", ad.Digest)
+	logger.Info().Msgf("pcrs: %+v", ad.PCRs)
 
 	t, err := template.ParseFiles(templateFile)
 	if err != nil {
@@ -80,10 +102,10 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 
 	buf := bytes.NewBuffer([]byte{})
 	if err := t.Execute(buf, keyTemplateData{
-		PCR0:       "", // TODO: get the pcr values for the condition from the document ^^
-		PCR1:       "",
-		PCR2:       "",
-		ImageSHA:   "",
+		PCR0:       hex.EncodeToString(ad.PCRs[0]),
+		PCR1:       hex.EncodeToString(ad.PCRs[1]),
+		PCR2:       hex.EncodeToString(ad.PCRs[2]),
+		ImageSHA:   ad.Digest,
 		AWSAccount: os.Getenv("AWS_ACCOUNT"),
 	}); err != nil {
 		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)

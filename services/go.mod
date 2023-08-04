@@ -25,6 +25,7 @@ require (
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
+	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/getsentry/sentry-go v0.14.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.1
@@ -49,6 +50,7 @@ require (
 	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.8.1
 	github.com/stripe/stripe-go/v72 v72.122.0
+	github.com/veracruz-project/go-nitro-enclave-attestation-document v0.0.0-20230315135749-6fc97d770084
 	golang.org/x/crypto v0.8.0
 	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd
 	gopkg.in/macaroon.v2 v2.1.0
@@ -78,7 +80,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.2.0 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -118,6 +119,7 @@ require (
 	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/throttled/throttled v2.2.5+incompatible // indirect
+	github.com/veraison/go-cose v1.0.0-rc.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
