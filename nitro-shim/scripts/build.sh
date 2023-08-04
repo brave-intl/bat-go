@@ -33,7 +33,7 @@ if [ -z "${docker_image_tag}" ]; then
 fi
 
 if [[ ! -z "$EIF_PASS_ENV" && ! -z "$EIF_COMMAND" ]]; then
-  /enclave/eifbuild -pass-env $EIF_PASS_ENV -docker-uri ${docker_image_tag} -output-file nitro-image.eif -- sh -c \"$EIF_COMMAND\"
+  /enclave/eifbuild -pass-env $EIF_PASS_ENV -docker-uri ${docker_image_tag} -output-file nitro-image.eif -- $EIF_COMMAND
 else
   nitro-cli build-enclave --docker-uri ${docker_image_tag} --output-file nitro-image.eif
 fi

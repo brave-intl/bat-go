@@ -22,7 +22,7 @@
       ],
       "Resource": "*",
       "Principal": {
-      "AWS": "arn:aws:iam::{ .AWSAccount }:role/eks-payments-dev-nitro-shim"
+      "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eks-payments-dev-nitro-shim"
       }
     },
     {
@@ -36,8 +36,8 @@
       "Resource": "*",
       "Principal": {
         "AWS": [
-          "arn:aws:iam::{ .AWSAccount }:role/devops-admin-rw-role",
-          "arn:aws:iam::{ .AWSAccount }:role/devops-admin-ro-role"
+          "arn:aws:iam::{{.AWSAccount}}:role/devops-admin-rw-role",
+          "arn:aws:iam::{{.AWSAccount}}:role/devops-admin-ro-role"
         ]
       }
     },
@@ -59,7 +59,7 @@
       },
       "Condition": {
         "ArnLike": {
-        "aws:PrincipalArn": "arn:aws:iam::{ .AWSAccount }:role/config-service-role"
+        "aws:PrincipalArn": "arn:aws:iam::{{.AWSAccount}}:role/config-service-role"
         },
         "StringEquals": {
           "aws:PrincipalServiceName": [
@@ -84,7 +84,7 @@
       ],
       "Resource": "*",
       "Principal": {
-        "AWS": "arn:aws:iam::{ .AWSAccount }:role/security-admin-sa-role"
+        "AWS": "arn:aws:iam::{{.AWSAccount}}:role/security-admin-sa-role"
       }
     },
     {
@@ -101,7 +101,7 @@
       },
       "Condition": {
         "StringEquals": {
-        "kms:CallerAccount": "{ .AWSAccount }",
+        "kms:CallerAccount": "{{.AWSAccount}}",
           "kms:ViaService": "access-analyzer.amazonaws.com"
         }
       }
@@ -119,7 +119,7 @@
       ],
       "Resource": "*",
       "Principal": {
-      "AWS": "arn:aws:iam::{ .AWSAccount }:role/settlements-sandbox-developer-role"
+      "AWS": "arn:aws:iam::{{.AWSAccount}}:role/settlements-sandbox-developer-role"
       }
     },
     {
@@ -132,14 +132,14 @@
       ],
       "Resource": "*",
       "Principal": {
-        "AWS": "arn:aws:iam::{ .AWSAccount }:role/eks-payments-dev-nitro-shim"
+        "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eks-payments-dev-nitro-shim"
       },
       "Condition": {
         "StringLike": {
-            "kms:RecipientAttestation:ImageSha384": "{ .ImageSHA }",
-            "kms:RecipientAttestation:PCR0": "{ .PCR0 }",
-            "kms:RecipientAttestation:PCR1": "{ .PCR1 }",
-            "kms:RecipientAttestation:PCR2": "{ .PCR2 }"
+            "kms:RecipientAttestation:ImageSha384": "{{.ImageSHA}}",
+            "kms:RecipientAttestation:PCR0": "{{.PCR0}}",
+            "kms:RecipientAttestation:PCR1": "{{.PCR1}}",
+            "kms:RecipientAttestation:PCR2": "{{.PCR2}}"
         }
       }
     },

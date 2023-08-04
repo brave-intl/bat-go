@@ -5,7 +5,7 @@
             "Sid": "AllowKeyAdminAccess",
             "Effect": "Allow",
             "Principal": {
-            "AWS": "arn:aws:iam::{ .AWSAccount }:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+            "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
             },
             "Action": [
                 "kms:TagResource",
@@ -23,7 +23,7 @@
             "Sid": "AllowConfigServiceAccess",
             "Effect": "Allow",
             "Principal": {
-            "AWS": "arn:aws:iam::{ .AWSAccount }:role/config-service-role"
+            "AWS": "arn:aws:iam::{{.AWSAccount}}:role/config-service-role"
             },
             "Action": [
                 "kms:ListResourceTags",
@@ -38,7 +38,7 @@
             "Sid": "AllowSecurityAuditAccess",
             "Effect": "Allow",
             "Principal": {
-            "AWS": "arn:aws:iam::{ .AWSAccount }:role/security-admin-sa-role"
+            "AWS": "arn:aws:iam::{{.AWSAccount}}:role/security-admin-sa-role"
             },
             "Action": [
                 "kms:UntagResource",
@@ -67,32 +67,32 @@
             "Resource": "*",
             "Condition": {
                 "StringEquals": {
-                "kms:CallerAccount": "{ .AWSAccount }",
+                "kms:CallerAccount": "{{.AWSAccount}}",
                     "kms:ViaService": "access-analyzer.amazonaws.com"
                 }
             }
         },
-		{
-      "Sid": "AllowEnclaveDecryptAccess",
-      "Effect": "Allow",
-      "Action": [
-        "kms:GenerateRandom",
-        "kms:GenerateDataKey",
-        "kms:Decrypt"
-      ],
-      "Resource": "*",
-      "Principal": {
-      "AWS": "arn:aws:iam::{ .AWSAccount }:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
-      },
-      "Condition": {
-        "StringLike": {
-            "kms:RecipientAttestation:ImageSha384": "{ .ImageSHA }",
-            "kms:RecipientAttestation:PCR0": "{ .PCR0 }",
-            "kms:RecipientAttestation:PCR1": "{ .PCR1 }",
-            "kms:RecipientAttestation:PCR2": "{ .PCR2 }"
-        }
-      }
-    },
+        {
+          "Sid": "AllowEnclaveDecryptAccess",
+          "Effect": "Allow",
+          "Action": [
+            "kms:GenerateRandom",
+            "kms:GenerateDataKey",
+            "kms:Decrypt"
+          ],
+          "Resource": "*",
+          "Principal": {
+          "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+          },
+          "Condition": {
+            "StringLike": {
+            "kms:RecipientAttestation:ImageSha384": "{{.ImageSHA}}",
+            "kms:RecipientAttestation:PCR0": "{{.PCR0}}",
+            "kms:RecipientAttestation:PCR1": "{{.PCR1}}",
+            "kms:RecipientAttestation:PCR2": "{{.PCR2}}"
+            }
+          }
+        },
         {
             "Sid": "AllowVerifyAccess",
             "Effect": "Allow",
