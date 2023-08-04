@@ -1667,6 +1667,10 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 	return order, nil
 }
 
+// createOrderIssuers checks that the issuer exists for the item's product.
+//
+// TODO: Remove this when products & issuers have been reworked.
+// The issuer for a product must be created when the product is created.
 func (s *Service) createOrderIssuers(ctx context.Context, merchID string, items []model.OrderItem) (int, error) {
 	var numIntervals int
 	for i := range items {

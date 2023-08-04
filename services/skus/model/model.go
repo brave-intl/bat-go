@@ -178,6 +178,8 @@ type OrderItem struct {
 	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
 	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
 
+	// TODO: Remove this when products & issuers have been reworked.
+	// The issuer for a product must be created when the product is created.
 	IssuerConfig *IssuerConfig `json:"-" db:"-"`
 }
 
