@@ -170,10 +170,10 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		params.VBATDeadline = vbatDeadline
 	}
 
-	transition, ok := ctx.Value(appctx.ParametersTransitionCTXKey).(bool)
-	if ok {
-		params.Transition = transition
-	}
+	//transition, ok := ctx.Value(appctx.ParametersTransitionCTXKey).(bool)
+	//if ok {
+	params.Transition = false
+	//}
 
 	return params, nil
 }
