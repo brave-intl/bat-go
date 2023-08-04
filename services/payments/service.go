@@ -16,6 +16,7 @@ import (
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
@@ -110,7 +111,11 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	kmsClient := kms.NewFromConfig(s.awsCfg)
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
+		BypassPolicyLockoutSafetyCheck: true,
+		Tags: []kmsTypes.Tag{
+			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
+		},
 	}
 
 	result, err := kmsClient.CreateKey(ctx, input)
@@ -137,7 +142,11 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	kmsClient := kms.NewFromConfig(cfg)
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
+		BypassPolicyLockoutSafetyCheck: true,
+		Tags: []kmsTypes.Tag{
+			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
+		},
 	}
 
 	result, err := kmsClient.CreateKey(ctx, input)
