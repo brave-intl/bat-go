@@ -28,7 +28,9 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/handler"
 )
 
-func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {
+type middlewareFn func(next http.Handler) http.Handler
+
+func corsMiddleware(methods []string) func(next http.Handler) http.Handler {
 	debug, err := strconv.ParseBool(os.Getenv("DEBUG"))
 	if err != nil {
 		debug = false
@@ -36,7 +38,7 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 	return cors.Handler(cors.Options{
 		Debug:            debug,
 		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
-		AllowedMethods:   allowedMethods,
+		AllowedMethods:   methods,
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		ExposedHeaders:   []string{""},
 		AllowCredentials: false,
@@ -44,10 +46,8 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 	})
 }
 
-// Router for order endpoints
-func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
+func Router(service *Service, authMwr middlewareFn, metricsMwr middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
-	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
 	orderh := handler.NewOrder(service)
 
@@ -55,19 +55,19 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 		r.Method(
 			http.MethodOptions,
 			"/",
-			middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{http.MethodPost})(nil)),
+			metricsMwr("CreateOrderOptions", corsMiddleware([]string{http.MethodPost})(nil)),
 		)
 
 		r.Method(
 			http.MethodOptions,
 			"/new",
-			middleware.InstrumentHandler("CreateOrderNewOptions", corsMiddleware([]string{http.MethodPost})(nil)),
+			metricsMwr("CreateOrderNewOptions", corsMiddleware([]string{http.MethodPost})(nil)),
 		)
 
 		r.Method(
 			http.MethodPost,
 			"/",
-			middleware.InstrumentHandler(
+			metricsMwr(
 				"CreateOrder",
 				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
 			),
@@ -76,60 +76,68 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 		r.Method(
 			http.MethodPost,
 			"/new",
-			middleware.InstrumentHandler(
+			metricsMwr(
 				"CreateOrderNew",
 				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.CreateNew)),
 			),
 		)
 	} else {
-		r.Method(http.MethodPost, "/", middleware.InstrumentHandler("CreateOrder", handlers.AppHandler(orderh.Create)))
+		r.Method(http.MethodPost, "/", metricsMwr("CreateOrder", handlers.AppHandler(orderh.Create)))
 		r.Method(
 			http.MethodPost,
 			"/new",
-			middleware.InstrumentHandler("CreateOrderNew", merchantSignedMiddleware(handlers.AppHandler(orderh.CreateNew))),
+			metricsMwr("CreateOrderNew", authMwr(handlers.AppHandler(orderh.CreateNew))),
 		)
 	}
 
-	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
-	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
+	r.Method("OPTIONS", "/{orderID}", metricsMwr("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
+	r.Method("GET", "/{orderID}", metricsMwr("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
 
-	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
-	r.Method("PATCH", "/{orderID}/set-trial", middleware.InstrumentHandler("SetOrderTrialDays", corsMiddleware([]string{"PATCH"})(merchantSignedMiddleware(SetOrderTrialDays(service)))))
+	r.Method("DELETE", "/{orderID}", metricsMwr("CancelOrder", corsMiddleware([]string{"DELETE"})(authMwr(CancelOrder(service)))))
+	r.Method("PATCH", "/{orderID}/set-trial", metricsMwr("SetOrderTrialDays", corsMiddleware([]string{"PATCH"})(authMwr(SetOrderTrialDays(service)))))
 
-	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
-	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", instrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+	r.Method("GET", "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(service)))
+	r.Method("POST", "/{orderID}/transactions/uphold", metricsMwr("CreateUpholdTransaction", CreateUpholdTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/gemini", metricsMwr("CreateGeminiTransaction", CreateGeminiTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/anonymousCard", metricsMwr("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	// api routes for order receipt validation
-	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
+	r.Method("POST", "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
-		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
-		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
+		cr.Method("POST", "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(service)))
+		cr.Method("GET", "/", metricsMwr("GetOrderCreds", GetOrderCreds(service)))
+		cr.Method("GET", "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(service)))
+		cr.Method("DELETE", "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(service))))
 	})
 
 	return r
 }
 
-// CredentialRouter handles calls relating to credentials
-func CredentialRouter(service *Service) chi.Router {
+// CredentialRouter handles requests to /v1/credentials.
+func CredentialRouter(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
-	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredentialV1", merchantSignedMiddleware(VerifyCredentialV1(service))))
+	r.Method(
+		http.MethodPost,
+		"/subscription/verifications",
+		middleware.InstrumentHandler("VerifyCredentialV1", authMwr(VerifyCredentialV1(svc))),
+	)
+
 	return r
 }
 
-// CredentialV2Router handles calls relating to credentials
-func CredentialV2Router(service *Service) chi.Router {
+// CredentialV2Router handles requests to /v2/credentials.
+func CredentialV2Router(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
-	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredentialV2", merchantSignedMiddleware(VerifyCredentialV2(service))))
+	r.Method(
+		http.MethodPost,
+		"/subscription/verifications",
+		middleware.InstrumentHandler("VerifyCredentialV2", authMwr(VerifyCredentialV2(svc))),
+	)
+
 	return r
 }
 

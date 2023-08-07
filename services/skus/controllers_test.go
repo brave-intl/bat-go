@@ -991,11 +991,13 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	err := suite.service.InitKafka(ctx)
 	suite.Require().NoError(err)
 
-	// setup router and server with mock instrument handler
+	authMwr := NewAuthMwr(suite.service)
 	instrumentHandler := func(name string, h http.Handler) http.Handler {
 		return h
 	}
-	router := Router(suite.service, instrumentHandler)
+
+	router := Router(suite.service, authMwr, instrumentHandler)
+
 	router.Mount("/vote", VoteRouter(suite.service, instrumentHandler))
 	server := &http.Server{Addr: ":8080", Handler: router}
 
@@ -1483,10 +1485,6 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	rw := httptest.NewRecorder()
 
-	instrumentHandler := func(name string, h http.Handler) http.Handler {
-		return h
-	}
-
 	// Enable store signed order creds consumer
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
@@ -1494,7 +1492,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	skuService, err := InitService(ctx, suite.storage, nil)
 	suite.Require().NoError(err)
 
-	router := Router(skuService, instrumentHandler)
+	authMwr := NewAuthMwr(skuService)
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(skuService, authMwr, instrumentHandler)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1623,10 +1626,6 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	rw := httptest.NewRecorder()
 
-	instrumentHandler := func(name string, h http.Handler) http.Handler {
-		return h
-	}
-
 	// Enable store signed order creds consumer
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
@@ -1634,7 +1633,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	skuService, err := InitService(ctx, suite.storage, nil)
 	suite.Require().NoError(err)
 
-	router := Router(skuService, instrumentHandler)
+	authMwr := NewAuthMwr(skuService)
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(skuService, authMwr, instrumentHandler)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1741,11 +1745,13 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 
 	rw := httptest.NewRecorder()
 
+	authMwr := NewAuthMwr(service)
 	instrumentHandler := func(name string, h http.Handler) http.Handler {
 		return h
 	}
 
-	router := Router(service, instrumentHandler)
+	router := Router(service, authMwr, instrumentHandler)
+
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
 	suite.Require().Equal(http.StatusOK, rw.Code)

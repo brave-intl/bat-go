@@ -5,19 +5,23 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof" // Enable profiling.
 	"os"
 	"time"
 
+	"github.com/asaskevich/govalidator"
+	sentry "github.com/getsentry/sentry-go"
+	"github.com/go-chi/chi"
+	chiware "github.com/go-chi/chi/middleware"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-
-	// needed for profiling
-	_ "net/http/pprof"
-	// re-using viper bind-env for wallet env variables
-	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
-
-	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -31,14 +35,7 @@ import (
 	"github.com/brave-intl/bat-go/services/skus"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/wallet"
-	sentry "github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
-	chiware "github.com/go-chi/chi/middleware"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/hlog"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	_ "github.com/brave-intl/bat-go/services/wallet/cmd" // Reuse Wallet env variables bound by Viper bind-env.
 )
 
 var (
@@ -416,10 +413,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// initialize skus service keys for credentials to use
 	skus.InitEncryptionKeys()
 
-	r.Mount("/v1/credentials", skus.CredentialRouter(skusService))
-	r.Mount("/v2/credentials", skus.CredentialV2Router(skusService))
-	r.Mount("/v1/orders", skus.Router(skusService, middleware.InstrumentHandler))
-	// for skus webhook integrations
+	{
+		authMwr := skus.NewAuthMwr(skusService)
+		r.Mount("/v1/credentials", skus.CredentialRouter(skusService, authMwr))
+		r.Mount("/v2/credentials", skus.CredentialV2Router(skusService, authMwr))
+		r.Mount("/v1/orders", skus.Router(skusService, authMwr, middleware.InstrumentHandler))
+	}
+
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 

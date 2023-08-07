@@ -130,36 +130,6 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 	return ctx, &verifier, nil
 }
 
-// MerchantSignedMiddleware requires that requests are signed by valid merchant keys
-func (s *Service) MerchantSignedMiddleware() func(http.Handler) http.Handler {
-	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
-		SignatureParams: httpsignature.SignatureParams{
-			Algorithm: httpsignature.HS2019,
-			Headers: []string{
-				"(request-target)", "host", "date", "digest", "content-length", "content-type",
-			},
-		},
-		Keystore: s,
-		Opts:     crypto.Hash(0),
-	}
-
-	// TODO replace with returning VerifyHTTPSignedOnly once we've migrated
-	// subscriptions server auth off simple token
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if len(r.Header.Get("Signature")) == 0 {
-				// Assume legacy simple token auth
-
-				ctx := context.WithValue(r.Context(), merchantCtxKey{}, "brave.com")
-				middleware.SimpleTokenAuthorizedOnly(next).ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
-
-			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
-		})
-	}
-}
-
 // GetCaveats returns any authorized caveats that have been stored in the context
 func GetCaveats(ctx context.Context) map[string]string {
 	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
@@ -208,4 +178,37 @@ func (s *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.
 		}
 	}
 	return nil
+}
+
+// NewAuthMwr returns a hdndler that requires that requests are signed by valid merchant keys.
+func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
+	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.HS2019,
+			Headers: []string{
+				"(request-target)",
+				"host",
+				"date",
+				"digest",
+				"content-length",
+				"content-type",
+			},
+		},
+		Keystore: ks,
+		Opts:     crypto.Hash(0),
+	}
+
+	// TODO: Replace with returning VerifyHTTPSignedOnly migrating Subscriptions to this method.
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Signature") == "" {
+				// Assume legacy simple token auth.
+				ctx := context.WithValue(r.Context(), merchantCtxKey{}, "brave.com")
+				middleware.SimpleTokenAuthorizedOnly(next).ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
+		})
+	}
 }
