@@ -180,7 +180,7 @@ func (s *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.
 	return nil
 }
 
-// NewAuthMwr returns a hdndler that requires that requests are signed by valid merchant keys.
+// NewAuthMwr returns a handler that authorises requests via http signature or simple tokens.
 func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{
@@ -198,7 +198,7 @@ func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 		Opts:     crypto.Hash(0),
 	}
 
-	// TODO: Replace with returning VerifyHTTPSignedOnly migrating Subscriptions to this method.
+	// TODO: Keep only VerifyHTTPSignedOnly after migrating Subscriptions to this method.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get("Signature") == "" {
