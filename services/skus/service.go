@@ -1749,7 +1749,7 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 
 	result := &model.OrderItem{
 		SKU: req.SKU,
-		// Set Currency sepearately as it should be at the Order level.
+		// Set Currency separately as it should be at the Order level.
 		CredentialType:            req.CredentialType,
 		ValidFor:                  &validFor,
 		ValidForISO:               &req.CredentialValidDuration,

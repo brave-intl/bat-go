@@ -81,12 +81,12 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 	if err != nil {
-		return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		return handlers.WrapError(err, "Failed to read request body", http.StatusBadRequest)
 	}
 
 	req := &model.CreateOrderRequestNew{}
 	if err := json.Unmarshal(raw, req); err != nil {
-		return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		return handlers.WrapError(err, "Failed to deserialise request", http.StatusBadRequest)
 	}
 
 	ctx := r.Context()
@@ -94,10 +94,14 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	if err := h.valid.StructCtx(ctx, req); err != nil {
 		verrs, ok := collectValidationErrors(err)
 		if !ok {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+			return handlers.WrapError(err, "Faled to validate request", http.StatusBadRequest)
 		}
 
-		return handlers.ValidationError("request body", verrs)
+		return &handlers.AppError{
+			Message: "Validation failed",
+			Code:    http.StatusBadRequest,
+			Data:    map[string]interface{}{"validationErrors": verrs},
+		}
 	}
 
 	lg := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderNew").Logger()
@@ -106,11 +110,7 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	if err != nil {
 		lg.Error().Err(err).Msg("failed to create order")
 
-		if errors.Is(err, model.ErrInvalidSKU) {
-			return handlers.WrapError(err, "Error validating SKU", http.StatusBadRequest)
-		}
-
-		return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
+		return handlers.WrapError(err, "Couldn't finish creating order", http.StatusInternalServerError)
 	}
 
 	return handlers.RenderContent(ctx, result, w, http.StatusCreated)

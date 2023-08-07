@@ -307,49 +307,13 @@ func TestOrder_CreateNew(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError(
-					"request body",
-					map[string]string{
+				err: &handlers.AppError{
+					Message: "Validation failed",
+					Code:    http.StatusBadRequest,
+					Data: map[string]interface{}{"validationErrors": map[string]string{
 						"Email": "Key: 'CreateOrderRequestNew.Email' Error:Field validation for 'Email' failed on the 'email' tag",
-					},
-				),
-			},
-		},
-
-		{
-			name: "invalid_sku",
-			given: tcGiven{
-				svc: &mockOrderService{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error) {
-						return nil, model.ErrInvalidSKU
-					},
+					}},
 				},
-				body: `{
-					"email": "you@example.com",
-					"currency": "USD",
-					"stripe_metadata": {
-						"success_uri": "https://example.com/success",
-						"cancel_uri": "https://example.com/cancel"
-					},
-					"payment_methods": ["stripe"],
-					"items": [
-						{
-							"quantity": 1,
-							"sku": "sku",
-							"location": "location",
-							"description": "description",
-							"credential_type": "credential_type",
-							"credential_valid_duration": "P1M",
-							"stripe_metadata": {
-								"product_id": "product_id",
-								"item_id": "item_id"
-							}
-						}
-					]
-				}`,
-			},
-			exp: tcExpected{
-				err: handlers.WrapError(model.ErrInvalidSKU, "Error validating SKU", http.StatusBadRequest),
 			},
 		},
 
@@ -388,7 +352,7 @@ func TestOrder_CreateNew(t *testing.T) {
 			exp: tcExpected{
 				err: handlers.WrapError(
 					model.Error("some_error"),
-					"Error creating the order in the database",
+					"Couldn't finish creating order",
 					http.StatusInternalServerError,
 				),
 			},
