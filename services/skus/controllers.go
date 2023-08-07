@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
@@ -30,38 +29,23 @@ import (
 
 type middlewareFn func(next http.Handler) http.Handler
 
-func corsMiddleware(methods []string) func(next http.Handler) http.Handler {
-	debug, err := strconv.ParseBool(os.Getenv("DEBUG"))
-	if err != nil {
-		debug = false
-	}
-	return cors.Handler(cors.Options{
-		Debug:            debug,
-		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
-		AllowedMethods:   methods,
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		ExposedHeaders:   []string{""},
-		AllowCredentials: false,
-		MaxAge:           300, // Maximum value not ignored by any of major browsers
-	})
-}
-
-func Router(service *Service, authMwr middlewareFn, metricsMwr middleware.InstrumentHandlerDef) chi.Router {
+func Router(
+	svc *Service,
+	authMwr middlewareFn,
+	metricsMwr middleware.InstrumentHandlerDef,
+	copts cors.Options,
+) chi.Router {
 	r := chi.NewRouter()
 
-	orderh := handler.NewOrder(service)
+	orderh := handler.NewOrder(svc)
+
+	corsMwrPost := NewCORSMwr(copts, http.MethodPost)
 
 	if os.Getenv("ENV") == "local" {
 		r.Method(
 			http.MethodOptions,
 			"/",
-			metricsMwr("CreateOrderOptions", corsMiddleware([]string{http.MethodPost})(nil)),
-		)
-
-		r.Method(
-			http.MethodOptions,
-			"/new",
-			metricsMwr("CreateOrderNewOptions", corsMiddleware([]string{http.MethodPost})(nil)),
+			metricsMwr("CreateOrderOptions", corsMwrPost(nil)),
 		)
 
 		r.Method(
@@ -69,7 +53,7 @@ func Router(service *Service, authMwr middlewareFn, metricsMwr middleware.Instru
 			"/",
 			metricsMwr(
 				"CreateOrder",
-				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
+				corsMwrPost(handlers.AppHandler(orderh.Create)),
 			),
 		)
 
@@ -78,7 +62,7 @@ func Router(service *Service, authMwr middlewareFn, metricsMwr middleware.Instru
 			"/new",
 			metricsMwr(
 				"CreateOrderNew",
-				corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.CreateNew)),
+				corsMwrPost(handlers.AppHandler(orderh.CreateNew)),
 			),
 		)
 	} else {
@@ -90,26 +74,43 @@ func Router(service *Service, authMwr middlewareFn, metricsMwr middleware.Instru
 		)
 	}
 
-	r.Method("OPTIONS", "/{orderID}", metricsMwr("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
-	r.Method("GET", "/{orderID}", metricsMwr("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
+	{
+		corsMwrGet := NewCORSMwr(copts, http.MethodGet)
+		r.Method(http.MethodOptions, "/{orderID}", metricsMwr("GetOrderOptions", corsMwrGet(nil)))
+		r.Method(http.MethodGet, "/{orderID}", metricsMwr("GetOrder", corsMwrGet(GetOrder(svc))))
+	}
 
-	r.Method("DELETE", "/{orderID}", metricsMwr("CancelOrder", corsMiddleware([]string{"DELETE"})(authMwr(CancelOrder(service)))))
-	r.Method("PATCH", "/{orderID}/set-trial", metricsMwr("SetOrderTrialDays", corsMiddleware([]string{"PATCH"})(authMwr(SetOrderTrialDays(service)))))
+	r.Method(
+		http.MethodDelete,
+		"/{orderID}",
+		metricsMwr("CancelOrder", NewCORSMwr(copts, http.MethodDelete)(authMwr(CancelOrder(svc)))),
+	)
 
-	r.Method("GET", "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(service)))
-	r.Method("POST", "/{orderID}/transactions/uphold", metricsMwr("CreateUpholdTransaction", CreateUpholdTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/gemini", metricsMwr("CreateGeminiTransaction", CreateGeminiTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", metricsMwr("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+	r.Method(
+		http.MethodPatch,
+		"/{orderID}/set-trial",
+		metricsMwr("SetOrderTrialDays", NewCORSMwr(copts, http.MethodPatch)(authMwr(SetOrderTrialDays(svc)))),
+	)
 
-	// api routes for order receipt validation
-	r.Method("POST", "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
+	r.Method(http.MethodGet, "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(svc)))
+	r.Method(http.MethodPost, "/{orderID}/transactions/uphold", metricsMwr("CreateUpholdTransaction", CreateUpholdTransaction(svc)))
+	r.Method(http.MethodPost, "/{orderID}/transactions/gemini", metricsMwr("CreateGeminiTransaction", CreateGeminiTransaction(svc)))
+
+	r.Method(
+		http.MethodPost,
+		"/{orderID}/transactions/anonymousCard",
+		metricsMwr("CreateAnonCardTransaction", CreateAnonCardTransaction(svc)),
+	)
+
+	// Receipt validation.
+	r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc))))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
-		cr.Use(corsMiddleware([]string{"GET", "POST"}))
-		cr.Method("POST", "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(service)))
-		cr.Method("GET", "/", metricsMwr("GetOrderCreds", GetOrderCreds(service)))
-		cr.Method("GET", "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(service)))
-		cr.Method("DELETE", "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(service))))
+		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
+		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
+		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
+		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
+		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
 	})
 
 	return r
@@ -1266,4 +1267,23 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			Vendor:     req.Type.String(),
 		}, w, http.StatusOK)
 	})
+}
+
+func NewCORSMwr(opts cors.Options, methods ...string) func(next http.Handler) http.Handler {
+	opts.AllowedMethods = methods
+
+	return cors.Handler(opts)
+}
+
+func NewCORSOpts(origins []string, dbg bool) cors.Options {
+	result := cors.Options{
+		Debug:            dbg,
+		AllowedOrigins:   origins,
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		ExposedHeaders:   []string{""},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}
+
+	return result
 }

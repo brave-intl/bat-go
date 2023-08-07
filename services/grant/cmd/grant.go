@@ -7,6 +7,8 @@ import (
 	"net/http"
 	_ "net/http/pprof" // Enable profiling.
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -33,6 +35,7 @@ import (
 	"github.com/brave-intl/bat-go/services/grant"
 	"github.com/brave-intl/bat-go/services/promotion"
 	"github.com/brave-intl/bat-go/services/skus"
+	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/wallet"
 	_ "github.com/brave-intl/bat-go/services/wallet/cmd" // Reuse Wallet env variables bound by Viper bind-env.
@@ -414,10 +417,45 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skus.InitEncryptionKeys()
 
 	{
+		origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+		dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
+		corsOpts := skus.NewCORSOpts(origins, dbg)
+
 		authMwr := skus.NewAuthMwr(skusService)
+
 		r.Mount("/v1/credentials", skus.CredentialRouter(skusService, authMwr))
 		r.Mount("/v2/credentials", skus.CredentialV2Router(skusService, authMwr))
-		r.Mount("/v1/orders", skus.Router(skusService, authMwr, middleware.InstrumentHandler))
+		r.Mount("/v1/orders", skus.Router(skusService, authMwr, middleware.InstrumentHandler, corsOpts))
+
+		subr := chi.NewRouter()
+		orderh := handler.NewOrder(skusService)
+
+		if os.Getenv("ENV") == "local" {
+			corsMwrPost := skus.NewCORSMwr(corsOpts, http.MethodPost)
+
+			subr.Method(
+				http.MethodOptions,
+				"/",
+				middleware.InstrumentHandler("CreateOrderNewOptions", corsMwrPost(nil)),
+			)
+
+			subr.Method(
+				http.MethodPost,
+				"/",
+				middleware.InstrumentHandler(
+					"CreateOrderNew",
+					corsMwrPost(handlers.AppHandler(orderh.Create)),
+				),
+			)
+		} else {
+			subr.Method(
+				http.MethodPost,
+				"/",
+				middleware.InstrumentHandler("CreateOrderNew", authMwr(handlers.AppHandler(orderh.CreateNew))),
+			)
+		}
+
+		r.Mount("/v1/orders-new", subr)
 	}
 
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))

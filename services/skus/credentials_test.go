@@ -6,30 +6,28 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"net/http"
-
 	"sync"
 	"testing"
 	"time"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/services/skus/model"
-	"github.com/brave-intl/bat-go/services/skus/skustest"
-	"github.com/stretchr/testify/suite"
-
-	"github.com/brave-intl/bat-go/libs/backoff"
-	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/clients/cbr"
-	mock_cbr "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
-	"github.com/brave-intl/bat-go/libs/ptr"
-	"github.com/brave-intl/bat-go/libs/test"
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	mock_cbr "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/ptr"
+	"github.com/brave-intl/bat-go/libs/test"
+	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/skustest"
 
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
