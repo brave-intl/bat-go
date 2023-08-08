@@ -90,6 +90,7 @@ var (
 		"muso":  "mirrored-united-states-oil-fund",
 		"nct":   "polyswarm",
 		"ndx":   "ndex",
+		"neon":  "neon",
 		"oil":   "oiler",
 		"one":   "menlo-one",
 		"ousd":  "origin-dollar",
