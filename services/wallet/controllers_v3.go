@@ -296,6 +296,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		// validate payment id matches what was in the http signature
 		signatureID, err := middleware.GetKeyID(ctx)
 		if err != nil {
+			logger.Warn().Err(err).Msg("could not get http signing key id from context")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
 				map[string]interface{}{
@@ -305,6 +306,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		if id.String() != signatureID {
+			logger.Warn().Msg("id does not match signature id")
 			return handlers.ValidationError(
 				"paymentId from URL does not match paymentId in http signature",
 				map[string]interface{}{
@@ -315,11 +317,13 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		// read post body
 		if err := inputs.DecodeAndValidateReader(ctx, glr, r.Body); err != nil {
+			logger.Warn().Err(err).Msg("could not validate request")
 			return glr.HandleErrors(err)
 		}
 
 		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, glr.DepositID)
 		if err != nil {
+			logger.Error().Err(err).Msg("error linking gemini wallet")
 			if errors.Is(err, errorutils.ErrInvalidCountry) {
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
 			}
