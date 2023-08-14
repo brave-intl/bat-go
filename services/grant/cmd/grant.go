@@ -85,6 +85,11 @@ func init() {
 		Bind("disable-bitflyer-linking").
 		Env("DISABLE_BITFLYER_LINKING")
 
+	flagBuilder.Flag().Bool("disable-zebpay-linking", true,
+		"disable custodial linking for zebpay").
+		Bind("disable-zebpay-linking").
+		Env("DISABLE_ZEBPAY_LINKING")
+
 	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
 		"brave vg deposit destination promotion id").
 		Bind("brave-transfer-promotion-ids").
