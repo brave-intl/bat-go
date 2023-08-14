@@ -490,6 +490,12 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
 	}
 
+	isValid, ok := claims["isValid"].(bool)
+	if !ok || !isValid {
+		const msg = "zebpay linking info validation failed, no kyc"
+		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
 	// Make sure deposit id exists
 	depositID, ok := claims["depositId"].(string)
 	if !ok || depositID == "" {
