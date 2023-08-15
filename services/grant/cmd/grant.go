@@ -85,7 +85,7 @@ func init() {
 		Bind("disable-bitflyer-linking").
 		Env("DISABLE_BITFLYER_LINKING")
 
-	flagBuilder.Flag().Bool("disable-zebpay-linking", true,
+	flagBuilder.Flag().Bool("disable-zebpay-linking", false,
 		"disable custodial linking for zebpay").
 		Bind("disable-zebpay-linking").
 		Env("DISABLE_ZEBPAY_LINKING")
