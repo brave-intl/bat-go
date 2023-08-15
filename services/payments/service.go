@@ -5,19 +5,25 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"errors"
 	"fmt"
-	"strings"
+	"os"
+	"text/template"
+
+	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/google/uuid"
@@ -47,61 +53,122 @@ type Service struct {
 	pubKey           []byte
 }
 
-type serviceNamespaceContextKey struct{}
-
-// configureKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
-func (s *Service) configureKMSKey(ctx context.Context) error {
+func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, error) {
 	// perform enclave attestation
 	nonce := make([]byte, 64)
 	_, err := rand.Read(nonce)
 	if err != nil {
-		return fmt.Errorf("failed to create nonce for attestation: %w", err)
+		return "", fmt.Errorf("failed to create nonce for attestation: %w", err)
 	}
-	document, err := nitro.Attest(nonce, nil, nil)
+
+	document, err := nitro.Attest(ctx, nonce, nil, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create attestation document: %w", err)
+		return "", fmt.Errorf("failed to create attestation document: %w", err)
 	}
+
 	var logger = logging.Logger(ctx, "payments.configureKMSKey")
-	logger.Debug().Msgf("document: %+v", document)
+	logger.Info().Msgf("document: %+v", document)
+
+	// parse the root certificate
+	block, _ := pem.Decode([]byte(nitro.RootAWSNitroCert))
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	// parse document
+	ad, err := nitro_eclave_attestation_document.AuthenticateDocument(document, *cert, true)
+	if err != nil {
+		logger.Error().Err(err).Msgf("failed to parse template attestation document: %+v", ad)
+		return "", err
+	}
+	logger.Info().Msgf("digest: %+v", ad.Digest)
+	logger.Info().Msgf("pcrs: %+v", ad.PCRs)
+
+	t, err := template.ParseFiles(templateFile)
+	if err != nil {
+		logger.Error().Err(err).Msgf("failed to parse template file: %+v", templateFile)
+		return "", err
+	}
+
+	type keyTemplateData struct {
+		PCR0       string
+		PCR1       string
+		PCR2       string
+		ImageSHA   string
+		AWSAccount string
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	if err := t.Execute(buf, keyTemplateData{
+		PCR0:       hex.EncodeToString(ad.PCRs[0]),
+		PCR1:       hex.EncodeToString(ad.PCRs[1]),
+		PCR2:       hex.EncodeToString(ad.PCRs[2]),
+		ImageSHA:   ad.Digest,
+		AWSAccount: os.Getenv("AWS_ACCOUNT"),
+	}); err != nil {
+		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)
+		return "", err
+	}
+
+	policy := buf.String()
+
+	logger.Info().Msgf("key policy: %+v", policy)
+
+	return policy, nil
+}
+
+type serviceNamespaceContextKey struct{}
+
+// configureSigningKey creates the enclave kms key which is only sign capable with enclave attestation.
+func (s *Service) configureSigningKey(ctx context.Context) error {
+	// parse the key policy
+	policy, err := parseKeyPolicyTemplate(ctx, "/sign-policy.tmpl")
+	if err != nil {
+		return fmt.Errorf("failed to parse signing policy template: %w", err)
+	}
+
+	// get the aws configuration loaded
+	kmsClient := kms.NewFromConfig(s.awsCfg)
+
+	input := &kms.CreateKeyInput{
+		Policy:                         aws.String(policy),
+		BypassPolicyLockoutSafetyCheck: true,
+		Tags: []kmsTypes.Tag{
+			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
+		},
+	}
+
+	result, err := kmsClient.CreateKey(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to make key: %w", err)
+	}
+
+	s.kmsSigningKeyID = *result.KeyMetadata.KeyId
+	s.kmsSigningClient = kmsClient
+	return nil
+}
+
+// configureKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
+func (s *Service) configureKMSKey(ctx context.Context) error {
+
+	// parse the key policy
+	policy, err := parseKeyPolicyTemplate(ctx, "/decrypt-policy.tmpl")
+	if err != nil {
+		return fmt.Errorf("failed to parse decrypt policy template: %w", err)
+	}
 
 	// get the aws configuration loaded
 	cfg := s.awsCfg
-
-	// TODO: get the pcr values for the condition from the document ^^
-	imageSha384 := ""
-	pcr0 := ""
-	pcr1 := ""
-	pcr2 := ""
-
-	// get the secretsmanager id from ctx for the template
-	templateSecretID, ok := ctx.Value(appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey).(string)
-	if !ok {
-		return errors.New("template secret id for enclave decrypt key not found on context")
-	}
-
-	smClient := secretsmanager.NewFromConfig(cfg)
-	o, err := smClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(templateSecretID),
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to get key policy template from secrets manager: %w", err)
-	}
-
-	if o.SecretString == nil {
-		return errors.New("secret is not defined in secrets manager")
-	}
-
-	keyPolicy := *o.SecretString
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<IMAGE_SHA384>", imageSha384)
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR0>", pcr0)
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR1>", pcr1)
-	keyPolicy = strings.ReplaceAll(keyPolicy, "<PCR2>", pcr2)
-
 	kmsClient := kms.NewFromConfig(cfg)
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(keyPolicy),
+		Policy:                         aws.String(policy),
+		BypassPolicyLockoutSafetyCheck: true,
+		Tags: []kmsTypes.Tag{
+			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
+		},
 	}
 
 	result, err := kmsClient.CreateKey(ctx, input)
@@ -127,7 +194,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		region = "us-west-2"
 	}
 
-	_, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
+	awsCfg, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
 	if err != nil {
 		logger.Error().Msg("no egress addr for payments service")
 		return nil, nil, errors.New("no egress addr for payments service")
@@ -135,12 +202,16 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 
 	service := &Service{
 		baseCtx: ctx,
-		//secretMgr: &awsClient{},
+		awsCfg:  awsCfg,
 	}
 
 	if err := service.configureKMSKey(ctx); err != nil {
-		// FIXME: handle create error better
 		logger.Error().Err(err).Msg("could not create kms secret decryption key")
+	}
+
+	if err := service.configureSigningKey(ctx); err != nil {
+		logger.Error().Err(err).Msg("could not create kms signing key")
+		return nil, nil, errors.New("could not create kms signing key")
 	}
 
 	if err := service.configureDatastore(ctx); err != nil {

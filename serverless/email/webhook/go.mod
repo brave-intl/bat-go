@@ -1,3 +1,9 @@
+module github.com/brave-intl/bat-go/serverless/email/webhook
+
+go 1.18
+
+replace gopkg.in/yaml.v2 => gopkg.in/yaml.v2 v2.2.8
+
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/aws/aws-lambda-go v1.34.1
@@ -46,9 +52,3 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
-
-replace gopkg.in/yaml.v2 => gopkg.in/yaml.v2 v2.2.8
-
-module webhook
-
-go 1.18

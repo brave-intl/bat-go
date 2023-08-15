@@ -1,0 +1,121 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowKeyAdminAccess",
+            "Effect": "Allow",
+            "Principal": {
+            "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+            },
+            "Action": [
+                "kms:TagResource",
+                "kms:List*",
+                "kms:Get*",
+                "kms:Enable*",
+                "kms:Describe*",
+                "kms:CreateKey",
+                "kms:CreateAlias",
+                "kms:Sign"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AllowConfigServiceAccess",
+            "Effect": "Allow",
+            "Principal": {
+            "AWS": "arn:aws:iam::{{.AWSAccount}}:role/config-service-role"
+            },
+            "Action": [
+                "kms:ListResourceTags",
+                "kms:ListKeyPolicies",
+                "kms:ListGrants",
+                "kms:GetKeyRotationStatus",
+                "kms:DescribeKey"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AllowSecurityAuditAccess",
+            "Effect": "Allow",
+            "Principal": {
+            "AWS": "arn:aws:iam::{{.AWSAccount}}:role/security-admin-sa-role"
+            },
+            "Action": [
+                "kms:UntagResource",
+                "kms:ScheduleKeyDeletion",
+                "kms:Revoke*",
+                "kms:List*",
+                "kms:Get*",
+                "kms:Disable*",
+                "kms:Describe*",
+                "kms:Delete*",
+                "kms:CancelKeyDeletion"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AllowAnalyzerAccess",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "*"
+            },
+            "Action": [
+                "kms:List*",
+                "kms:GetKeyPolicy",
+                "kms:DescribeKey"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                "kms:CallerAccount": "{{.AWSAccount}}",
+                    "kms:ViaService": "access-analyzer.amazonaws.com"
+                }
+            }
+        },
+        {
+          "Sid": "AllowEnclaveDecryptAccess",
+          "Effect": "Allow",
+          "Action": [
+            "kms:GenerateRandom",
+            "kms:GenerateDataKey",
+            "kms:Decrypt"
+          ],
+          "Resource": "*",
+          "Principal": {
+          "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+          },
+          "Condition": {
+            "StringLike": {
+            "kms:RecipientAttestation:ImageSha384": "{{.ImageSHA}}",
+            "kms:RecipientAttestation:PCR0": "{{.PCR0}}",
+            "kms:RecipientAttestation:PCR1": "{{.PCR1}}",
+            "kms:RecipientAttestation:PCR2": "{{.PCR2}}"
+            }
+          }
+        },
+        {
+            "Sid": "AllowVerifyAccess",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "*"
+            },
+            "Action": [
+                "kms:Verify",
+                "kms:List*",
+                "kms:DescribeKey"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "DenyAWSOrverrideAccess",
+            "Effect": "Deny",
+            "Principal": {
+                "AWS": "*"
+            },
+            "Action": [
+                "kms:PutKeyPolicy"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

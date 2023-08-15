@@ -32,9 +32,13 @@ if [ -z "${docker_image_tag}" ]; then
     docker_image_tag=${docker_image_base}
 fi
 
-nitro-cli build-enclave --docker-uri ${docker_image_tag} --output-file nitro-image.eif
+if [[ ! -z "$EIF_PASS_ENV" && ! -z "$EIF_COMMAND" ]]; then
+  /enclave/eifbuild -pass-env $EIF_PASS_ENV -docker-uri ${docker_image_tag} -output-file nitro-image.eif -- $EIF_COMMAND
+else
+  nitro-cli build-enclave --docker-uri ${docker_image_tag} --output-file nitro-image.eif
+fi
 
-if [ "${and_run}" == "run" ]; then 
+if [ "${and_run}" == "run" ]; then
   /enclave/run.sh "${service}" ${run_cpu_count} ${run_memory}
 fi
 

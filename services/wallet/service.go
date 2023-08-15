@@ -3,6 +3,7 @@ package wallet
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,6 +12,13 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/go-chi/chi"
+	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
@@ -30,11 +38,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/cmd"
-	"github.com/go-chi/chi"
-	"github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/spf13/viper"
 )
 
 // ReputationGeoEnable - enable geo reputation check
@@ -253,7 +256,6 @@ func (service *Service) getCustodianRegions() custodian.Regions {
 
 // RegisterRoutes - register the wallet api routes given a chi.Mux
 func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
-	disableDisconnect, _ := ctx.Value(appctx.DisableDisconnectCTXKey).(bool) // defaults false
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
@@ -272,11 +274,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
-			// disconnect verified custodial wallet
-			if !disableDisconnect { // if disable-disconnect is false then add this route
-				r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
-			}
+			r.Post("/xyzabc/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
 
 			// create wallet connect routes for our wallet providers
 			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
@@ -285,11 +284,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
-			// disconnect verified custodial wallet
-			if !disableDisconnect { // if disable-disconnect is false then add this route
-				r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-					"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
-			}
+			r.Post("/xyzabc/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
 		}
 
 		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
@@ -311,6 +307,13 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
 		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
+		r.Get("/{paymentID}",
+			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"GetWalletV4", GetWalletV4)).ServeHTTP)
+		// get wallet balance routes
+		r.Get("/uphold/{paymentID}",
+			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"GetUpholdWalletBalanceV4", GetUpholdWalletBalanceV4)).ServeHTTP)
 	})
 
 	return r
@@ -399,6 +402,73 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		}
 		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
+	return nil
+}
+
+// LinkXyzAbcWallet links a wallet and transfers funds to newly linked wallet.
+func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
+	// Get xyzabc linking_info signing key.
+	linkingKeyB64, ok := ctx.Value(appctx.XyzAbcLinkingKeyCTXKey).(string)
+	if !ok {
+		const msg = "xyzabc linking validation misconfigured"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
+	}
+
+	// Decode base64 encoded jwt key.
+	decodedJWTKey, err := base64.StdEncoding.DecodeString(linkingKeyB64)
+	if err != nil {
+		const msg = "xyzabc linking validation misconfigured"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
+	}
+
+	// Parse the signed verification token from input.
+	tok, err := jwt.ParseSigned(verificationToken)
+	if err != nil {
+		const msg = "xyzabc linking info parsing failed"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	// Create the jwt claims and get them (verified) from the token.
+	claims := make(map[string]interface{})
+	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
+		const msg = "xyzabc linking info validation failed"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	// Make sure deposit id exists
+	depositID, ok := claims["depositId"].(string)
+	if !ok || depositID == "" {
+		const msg = "xyzabc deposit id does not match token"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	// Get the account id.
+	accountID, ok := claims["accountId"].(string)
+	if !ok || accountID == "" {
+		const msg = "xyzabc account id invalid in token"
+		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
+
+	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "IN"); err != nil {
+		if errors.Is(err, ErrUnusualActivity) {
+			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+		}
+
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrTooManyCardsLinked) {
+			status = http.StatusConflict
+		}
+
+		return handlers.WrapError(err, "unable to link xyzabc wallets", status)
+	}
+
 	return nil
 }
 
