@@ -6,7 +6,7 @@ import (
 	should "github.com/stretchr/testify/assert"
 )
 
-func TestCountryForDocByPrecendence(t *testing.T) {
+func TestCountryForDocByPrecedence(t *testing.T) {
 	type testCase struct {
 		name  string
 		given []ValidDocument
