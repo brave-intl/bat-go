@@ -60,6 +60,32 @@ func TestCountryForDocByPrecedence(t *testing.T) {
 			},
 			exp: "US",
 		},
+
+		{
+			name: "no_valid_document_type",
+			given: []ValidDocument{
+				{
+					Type:           "invalid_type",
+					IssuingCountry: "US",
+				},
+			},
+			exp: "",
+		},
+
+		{
+			name: "valid_and_invalid_document_type_lower_case",
+			given: []ValidDocument{
+				{
+					Type:           "invalid_type",
+					IssuingCountry: "US",
+				},
+				{
+					Type:           "passport",
+					IssuingCountry: "uk",
+				},
+			},
+			exp: "UK",
+		},
 	}
 
 	for i := range tests {

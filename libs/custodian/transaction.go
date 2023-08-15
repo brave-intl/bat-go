@@ -55,6 +55,7 @@ func (tx Transaction) BitflyerTransferID() string {
 	inputs := []string{
 		tx.SettlementID,
 		tx.WalletProviderID,
+		tx.Destination,
 	}
 	key := strings.Join(inputs, "_")
 	bytes := sha256.Sum256([]byte(key))
