@@ -70,6 +70,9 @@ var (
 	}
 )
 
+// ErrNoAcceptedDocumentType is the returned error when no accepted documents exist in the Gemini response.
+var ErrNoAcceptedDocumentType = errors.New("no accepted document type")
+
 func init() {
 	prometheus.MustRegister(balanceGauge)
 	prometheus.MustRegister(countGeminiWalletAccountValidation)
@@ -520,16 +523,16 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 			return "", "", errors.New("error no valid documents in response")
 		}
 
-		issuingCountry = strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
-		if country := countryForDocByPrecedence(documentTypePrecedence, res.ValidDocuments); country != "" {
-			issuingCountry = strings.ToUpper(country)
-		}
-
 		for i := range res.ValidDocuments {
 			countGeminiDocumentTypeByIssuingCountry.With(prometheus.Labels{
 				"document_type":   res.ValidDocuments[i].Type,
 				"issuing_country": res.ValidDocuments[i].IssuingCountry,
 			}).Inc()
+		}
+
+		issuingCountry = countryForDocByPrecedence(documentTypePrecedence, res.ValidDocuments)
+		if issuingCountry == "" {
+			return "", "", ErrNoAcceptedDocumentType
 		}
 	}
 
@@ -626,7 +629,7 @@ func countryForDocByPrecedence(precedence []string, docs []ValidDocument) string
 	for _, pdoc := range precedence {
 		for _, vdoc := range docs {
 			if strings.EqualFold(pdoc, vdoc.Type) {
-				return vdoc.IssuingCountry
+				return strings.ToUpper(vdoc.IssuingCountry)
 			}
 		}
 	}
