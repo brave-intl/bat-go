@@ -100,13 +100,13 @@ var (
 	errGeoCountryDisabled         = errors.New("geo country is disabled")
 	errRewardsWalletAlreadyExists = errors.New("rewards wallet already exists")
 
-	errZPInvalidIat       = errors.New("zebpay linking info validation failed no iat")
-	errZPInvalidExp       = errors.New("zebpay linking info validation failed no exp")
-	errZPInvalidAfter     = errors.New("zebpay linking info validation failed issued at is after now")
-	errZPInvalidBefore    = errors.New("zebpay linking info validation failed expired is before now")
-	errZPInvalid          = errors.New("zebpay linking info validation failed, no kyc")
-	errZPInvalidDepositID = errors.New("zebpay deposit id does not match token")
-	errZPInvalidAccountID = errors.New("zebpay account id invalid in token")
+	errZPInvalidIat       = errors.New("zebpay: linking info validation failed no iat")
+	errZPInvalidExp       = errors.New("zebpay: linking info validation failed no exp")
+	errZPInvalidAfter     = errors.New("zebpay: linking info validation failed issued at is after now")
+	errZPInvalidBefore    = errors.New("zebpay: linking info validation failed expired is before now")
+	errZPInvalid          = errors.New("zebpay: linking info validation failed, no kyc")
+	errZPInvalidDepositID = errors.New("zebpay: deposit id does not match token")
+	errZPInvalidAccountID = errors.New("zebpay: account id invalid in token")
 )
 
 // GeoValidator - interface describing validation of geolocation

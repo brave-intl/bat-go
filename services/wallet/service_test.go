@@ -5,7 +5,49 @@ import (
 	"time"
 
 	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
+	"gopkg.in/square/go-jose.v2"
+	"gopkg.in/square/go-jose.v2/jwt"
 )
+
+func TestParseClaims(t *testing.T) {
+	secret := []byte("a jwt secret")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.HS256, Key: secret},
+		(&jose.SignerOptions{}).WithType("JWT"),
+	)
+	must.Equal(t, nil, err)
+
+	info, err := jwt.Signed(sig).Claims(map[string]interface{}{
+		"accountId": "account_id",
+		"depositId": "deposit_id",
+		"iat":       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+		"exp":       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+		"isValid":   true,
+	}).CompactSerialize()
+
+	must.Equal(t, nil, err)
+
+	tok, err := jwt.ParseSigned(info)
+	must.Equal(t, nil, err)
+
+	actual := &claimsZP{}
+	{
+		err := tok.Claims(secret, actual)
+		must.Equal(t, nil, err)
+	}
+
+	expected := &claimsZP{
+		Iat:       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+		Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+		DepositID: "deposit_id",
+		AccountID: "account_id",
+		Valid:     true,
+	}
+
+	should.Equal(t, expected, actual)
+}
 
 func TestClaimsZP(t *testing.T) {
 	type tcGiven struct {
