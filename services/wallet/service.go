@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -41,7 +40,7 @@ import (
 	"github.com/brave-intl/bat-go/services/cmd"
 )
 
-// ReputationGeoEnable - enable geo reputation check
+// ReputationGeoEnable - enable geo reputation check.
 var ReputationGeoEnable = isReputationGeoEnabled()
 
 func isReputationGeoEnabled() bool {
@@ -100,6 +99,14 @@ var (
 var (
 	errGeoCountryDisabled         = errors.New("geo country is disabled")
 	errRewardsWalletAlreadyExists = errors.New("rewards wallet already exists")
+
+	errZPInvalidIat       = errors.New("zebpay: linking info validation failed no iat")
+	errZPInvalidExp       = errors.New("zebpay: linking info validation failed no exp")
+	errZPInvalidAfter     = errors.New("zebpay: linking info validation failed issued at is after now")
+	errZPInvalidBefore    = errors.New("zebpay: linking info validation failed expired is before now")
+	errZPInvalid          = errors.New("zebpay: linking info validation failed, no kyc")
+	errZPInvalidDepositID = errors.New("zebpay: deposit id does not match token")
+	errZPInvalidAccountID = errors.New("zebpay: account id invalid in token")
 )
 
 // GeoValidator - interface describing validation of geolocation
@@ -461,59 +468,20 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	// Create the jwt claims and get them (verified) from the token.
-	claims := make(map[string]interface{})
-	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
+	claims := &claimsZP{}
+	if err := tok.Claims(decodedJWTKey, claims); err != nil {
 		const msg = "zebpay linking info validation failed"
 		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
 	}
 
-	// validate token (checks not before, expires with no leeway)
-	iat, ok := claims["iat"].(float64)
-	if !ok {
-		const msg = "zebpay linking info validation failed no iat"
-		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	if err := claims.validate(time.Now()); err != nil {
+		return handlers.WrapError(err, err.Error(), http.StatusBadRequest)
 	}
 
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		const msg = "zebpay linking info validation failed no exp"
-		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
-	}
-
-	if time.Now().Before(time.Unix(int64(math.Round(iat)), 0)) {
-		const msg = "zebpay linking info validation failed issued at is after now"
-		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
-	}
-
-	if time.Now().After(time.Unix(int64(math.Round(exp)), 0)) {
-		const msg = "zebpay linking info validation failed expired is before now"
-		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
-	}
-
-	isValid, ok := claims["isValid"].(bool)
-	if !ok || !isValid {
-		const msg = "zebpay linking info validation failed, no kyc"
-		return handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
-	}
-
-	// Make sure deposit id exists
-	depositID, ok := claims["depositId"].(string)
-	if !ok || depositID == "" {
-		const msg = "zebpay deposit id does not match token"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
-	}
-
-	// Get the account id.
-	accountID, ok := claims["accountId"].(string)
-	if !ok || accountID == "" {
-		const msg = "zebpay account id invalid in token"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
-	}
-
-	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
+	providerLinkingID := uuid.NewV5(ClaimNamespace, claims.AccountID)
 
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
-	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "zebpay", "IN"); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), claims.DepositID, providerLinkingID, nil, "zebpay", "IN"); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
@@ -829,4 +797,54 @@ func canRetry(nonRetriableErrors []int) func(error) bool {
 		}
 		return false
 	}
+}
+
+type claimsZP struct {
+	Iat       int64  `json:"iat"`
+	Exp       int64  `json:"exp"`
+	DepositID string `json:"depositId"`
+	AccountID string `json:"accountId"`
+	Valid     bool   `json:"isValid"`
+}
+
+func (c *claimsZP) validate(now time.Time) error {
+	if c.Iat <= 0 {
+		return errZPInvalidIat
+	}
+
+	if c.Exp <= 0 {
+		return errZPInvalidExp
+	}
+
+	if !c.isKYC() {
+		return errZPInvalid
+	}
+
+	// Make sure deposit id exists
+	if c.DepositID == "" {
+		return errZPInvalidDepositID
+	}
+
+	// Get the account id.
+	if c.AccountID == "" {
+		return errZPInvalidAccountID
+	}
+
+	return c.validateTime(now)
+}
+
+func (c *claimsZP) isKYC() bool {
+	return c.Valid
+}
+
+func (c *claimsZP) validateTime(now time.Time) error {
+	if now.Before(time.Unix(c.Iat, 0)) {
+		return errZPInvalidAfter
+	}
+
+	if now.After(time.Unix(c.Exp, 0)) {
+		return errZPInvalidBefore
+	}
+
+	return nil
 }
