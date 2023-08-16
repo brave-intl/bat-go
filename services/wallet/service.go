@@ -104,7 +104,7 @@ var (
 	errZPInvalidExp       = errors.New("zebpay: linking info validation failed no exp")
 	errZPInvalidAfter     = errors.New("zebpay: linking info validation failed issued at is after now")
 	errZPInvalidBefore    = errors.New("zebpay: linking info validation failed expired is before now")
-	errZPInvalid          = errors.New("zebpay: linking info validation failed, no kyc")
+	errZPInvalidKYC       = errors.New("zebpay: user kyc did not pass")
 	errZPInvalidDepositID = errors.New("zebpay: deposit id does not match token")
 	errZPInvalidAccountID = errors.New("zebpay: account id invalid in token")
 )
@@ -475,7 +475,7 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	if err := claims.validate(time.Now()); err != nil {
-		return handlers.WrapError(err, err.Error(), http.StatusBadRequest)
+		return err
 	}
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, claims.AccountID)
@@ -817,7 +817,7 @@ func (c *claimsZP) validate(now time.Time) error {
 	}
 
 	if !c.isKYC() {
-		return errZPInvalid
+		return errZPInvalidKYC
 	}
 
 	// Make sure deposit id exists

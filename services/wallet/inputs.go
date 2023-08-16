@@ -297,6 +297,8 @@ func (r *ZebPayLinkingRequest) Decode(ctx context.Context, v []byte) error {
 
 // HandleErrorsZebPay returns an AppError for the given err.
 func HandleErrorsZebPay(err error) *handlers.AppError {
+
+	// all other errors are 400s
 	issues := make(map[string]string)
 	if errors.Is(err, ErrInvalidJSON) {
 		issues["invalidJSON"] = err.Error()
