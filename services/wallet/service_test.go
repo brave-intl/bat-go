@@ -101,7 +101,7 @@ func TestClaimsZP(t *testing.T) {
 					AccountID: "account_id",
 				},
 			},
-			exp: errZPInvalid,
+			exp: errZPInvalidKYC,
 		},
 
 		{

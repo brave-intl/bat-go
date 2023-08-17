@@ -256,7 +256,11 @@ func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
 			}
 
-			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
+			if errors.Is(err, errZPInvalidKYC) {
+				return handlers.WrapError(err, "KYC required", http.StatusForbidden)
+			}
+
+			return handlers.WrapError(err, err.Error(), http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
