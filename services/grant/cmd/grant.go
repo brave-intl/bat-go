@@ -273,19 +273,10 @@ func init() {
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
-	buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
-	commit := ctx.Value(appctx.CommitCTXKey).(string)
-	version := ctx.Value(appctx.VersionCTXKey).(string)
-	env := ctx.Value(appctx.EnvironmentCTXKey).(string)
-
-	// health check status of all services
-	serviceStatus := map[string]interface{}{}
-
-	serviceStatus["wallet"] = map[string]bool{
-		"uphold":   !(ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool)),
-		"gemini":   !(ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)),
-		"bitflyer": !(ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)),
-	}
+	buildTime, _ := ctx.Value(appctx.BuildTimeCTXKey).(string)
+	commit, _ := ctx.Value(appctx.CommitCTXKey).(string)
+	version, _ := ctx.Value(appctx.VersionCTXKey).(string)
+	env, _ := ctx.Value(appctx.EnvironmentCTXKey).(string)
 
 	// runnable jobs for the services created
 	jobs := []srv.Job{}
@@ -458,7 +449,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		Str("buildTime", buildTime).
 		Msg("server starting up")
 
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus, nil))
+	{
+		status := newSrvStatusFromCtx(ctx)
+		r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, status, nil))
+	}
 
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
@@ -646,4 +640,22 @@ func GrantServer(
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 	return nil
+}
+
+func newSrvStatusFromCtx(ctx context.Context) map[string]any {
+	uh, _ := ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool)
+	g, _ := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)
+	bf, _ := ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)
+	zp, _ := ctx.Value(appctx.DisableZebPayLinkingCTXKey).(bool)
+
+	result := map[string]interface{}{
+		"wallet": map[string]bool{
+			"uphold":   !uh,
+			"gemini":   !g,
+			"bitflyer": !bf,
+			"zebpay":   !zp,
+		},
+	}
+
+	return result
 }
