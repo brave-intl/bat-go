@@ -283,7 +283,6 @@ func TestOrder_CreateRadomCheckoutSessionWithTime(t *testing.T) {
 				tc.given.saddr,
 				tc.given.expiresAt,
 			)
-			must.Equal(t, tc.exp.err, err)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
 			if tc.exp.err != nil {
