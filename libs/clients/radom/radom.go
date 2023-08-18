@@ -9,6 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/clients"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 )
 
 var (
@@ -133,7 +134,9 @@ type WebhookRequest struct {
 
 // Client communicates with Radom.
 type Client struct {
-	client *clients.SimpleHTTPClient
+	client        *clients.SimpleHTTPClient
+	gwMethodsProd []Method
+	gwMethods     []Method
 }
 
 // New returns a ready to use Client.
@@ -156,7 +159,32 @@ func newClient(srvURL, secret, proxyAddr string) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{client: client}, nil
+	result := &Client{
+		client: client,
+		gwMethodsProd: []Method{
+			{
+				Network: "Polygon",
+				Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+			},
+
+			{
+				Network: "Ethereum",
+				Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+			},
+		},
+		gwMethods: []Method{
+			{
+				Network: "SepoliaTestnet",
+				Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+			},
+			{
+				Network: "PolygonTestnet",
+				Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+			},
+		},
+	}
+
+	return result, nil
 }
 
 // CreateCheckoutSession creates a Radom checkout session.
@@ -164,6 +192,21 @@ func (c *Client) CreateCheckoutSession(
 	ctx context.Context,
 	req *CheckoutSessionRequest,
 ) (*CheckoutSessionResponse, error) {
+	// Get the environment so we know what is acceptable chain/tokens.
+	methods := c.methodsForEnv(ctx)
+
+	req.Gateway = Gateway{
+		Managed: Managed{Methods: methods},
+	}
 
 	return nil, errors.New("not implemented")
+}
+
+func (c *Client) methodsForEnv(ctx context.Context) []Method {
+	env, ok := ctx.Value(appctx.EnvironmentCTXKey).(string)
+	if !ok || env != "production" {
+		return c.gwMethods
+	}
+
+	return c.gwMethodsProd
 }

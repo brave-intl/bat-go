@@ -4,9 +4,7 @@ package model
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
-	"reflect"
 	"sort"
 	"time"
 
@@ -18,7 +16,6 @@ import (
 	"github.com/stripe/stripe-go/v72/customer"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 )
 
@@ -162,34 +159,6 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 	sellerAddr string,
 	expiresAt time.Time,
 ) (CreateCheckoutSessionResponse, error) {
-
-	// get the environment so we know what is acceptable chain/tokens
-	gateway := radom.Gateway{
-		Managed: radom.Managed{
-			Methods: []radom.Method{},
-		},
-	}
-	env, ok := ctx.Value(appctx.EnvironmentCTXKey).(string)
-	if !ok || env != "production" {
-		// append testnet
-		gateway.Managed.Methods = append(gateway.Managed.Methods, radom.Method{
-			Network: "SepoliaTestnet",
-			Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
-		}, radom.Method{
-			Network: "PolygonTestnet",
-			Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
-		})
-	} else {
-		// append production
-		gateway.Managed.Methods = append(gateway.Managed.Methods, radom.Method{
-			Network: "Polygon",
-			Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
-		}, radom.Method{
-			Network: "Ethereum",
-			Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
-		})
-	}
-
 	if len(o.Items) < 1 {
 		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoItems
 	}
@@ -212,7 +181,7 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 	resp, err := client.CreateCheckoutSession(ctx, &radom.CheckoutSessionRequest{
 		SuccessURL: successURI,
 		CancelURL:  cancelURI,
-		Gateway:    gateway,
+		// Gateway will be set by the client.
 		Metadata: radom.Metadata([]radom.KeyValue{
 			{
 				Key:   "braveOrderId",
@@ -283,50 +252,6 @@ type OrderItem struct {
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
 	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
 	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
-}
-
-// Methods represents payment methods.
-type Methods []string
-
-// Equal checks if m equals m2.
-func (m *Methods) Equal(m2 *Methods) bool {
-	s1 := []string(*m)
-	s2 := []string(*m2)
-	sort.Strings(s1)
-	sort.Strings(s2)
-
-	return reflect.DeepEqual(s1, s2)
-}
-
-// Scan scans the raw src value into m as JSONStringArray.
-func (m *Methods) Scan(src interface{}) error {
-	var x []sql.NullString
-	if err := pq.Array(&x).Scan(src); err != nil {
-		return err
-	}
-
-	for i := range x {
-		if x[i].Valid {
-			*m = append(*m, x[i].String)
-		}
-	}
-
-	return nil
-}
-
-// Value satisifies the drive.Valuer interface.
-func (m *Methods) Value() (driver.Value, error) {
-	return pq.Array(m), nil
-}
-
-func (m Methods) Contains(target string) bool {
-	for _, v := range m {
-		if v == target {
-			return true
-		}
-	}
-
-	return false
 }
 
 // CreateCheckoutSessionResponse represents a checkout session response.
