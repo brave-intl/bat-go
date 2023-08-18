@@ -2,6 +2,7 @@
 package model
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/customer"
 
+	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/datastore"
 )
 
@@ -23,6 +25,10 @@ const (
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
+	ErrInvalidOrderNoItems                    Error = "model: invalid order: no items"
+	ErrInvalidOrderNoSuccessURL               Error = "model: invalid order: no success url"
+	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
+	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
 
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
@@ -31,6 +37,7 @@ const (
 
 const (
 	StripePaymentMethod = "stripe"
+	RadomPaymentMethod  = "radom"
 
 	// OrderStatus* represent order statuses at runtime and in db.
 	OrderStatusCanceled = "canceled"
@@ -42,6 +49,10 @@ var (
 	emptyCreateCheckoutSessionResp CreateCheckoutSessionResponse
 	emptyOrderTimeBounds           OrderTimeBounds
 )
+
+type radomClient interface {
+	CreateCheckoutSession(ctx context.Context, req *radom.CheckoutSessionRequest) (*radom.CheckoutSessionResponse, error)
+}
 
 // Order represents an individual order.
 type Order struct {
@@ -70,7 +81,12 @@ func (o *Order) IsStripePayable() bool {
 	return Slice[string](o.AllowedPaymentMethods).Contains(StripePaymentMethod)
 }
 
-// CreateStripeCheckoutSession creats a Stripe checkout session for the order.
+// IsRadomPayable indicates whether the order is payable by Radom.
+func (o *Order) IsRadomPayable() bool {
+	return Slice[string](o.AllowedPaymentMethods).Contains(RadomPaymentMethod)
+}
+
+// CreateStripeCheckoutSession creates a Stripe checkout session for the order.
 func (o *Order) CreateStripeCheckoutSession(
 	email, successURI, cancelURI string,
 	freeTrialDays int64,
@@ -125,6 +141,70 @@ func (o *Order) CreateStripeCheckoutSession(
 	}
 
 	return CreateCheckoutSessionResponse{SessionID: session.ID}, nil
+}
+
+// CreateRadomCheckoutSession creates a Radom checkout session for o.
+func (o *Order) CreateRadomCheckoutSession(
+	ctx context.Context,
+	client radomClient,
+	sellerAddr string,
+) (CreateCheckoutSessionResponse, error) {
+	return o.CreateRadomCheckoutSessionWithTime(ctx, client, sellerAddr, time.Now().Add(24*time.Hour))
+}
+
+// CreateRadomCheckoutSessionWithTime creates a Radom checkout session for o.
+func (o *Order) CreateRadomCheckoutSessionWithTime(
+	ctx context.Context,
+	client radomClient,
+	sellerAddr string,
+	expiresAt time.Time,
+) (CreateCheckoutSessionResponse, error) {
+	if len(o.Items) < 1 {
+		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoItems
+	}
+
+	successURI, ok := o.Items[0].Metadata["radom_success_uri"].(string)
+	if !ok {
+		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoSuccessURL
+	}
+
+	cancelURI, ok := o.Items[0].Metadata["radom_cancel_uri"].(string)
+	if !ok {
+		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoCancelURL
+	}
+
+	productID, ok := o.Items[0].Metadata["radom_product_id"].(string)
+	if !ok {
+		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoProductID
+	}
+
+	resp, err := client.CreateCheckoutSession(ctx, &radom.CheckoutSessionRequest{
+		SuccessURL: successURI,
+		CancelURL:  cancelURI,
+		// Gateway will be set by the client.
+		Metadata: radom.Metadata([]radom.KeyValue{
+			{
+				Key:   "braveOrderId",
+				Value: o.ID.String(),
+			},
+		}),
+		LineItems: []radom.LineItem{
+			{
+				ProductID: productID,
+			},
+		},
+		ExpiresAt: expiresAt.Unix(),
+		Customizations: map[string]interface{}{
+			"leftPanelColor":     "linear-gradient(125deg, rgba(0,0,128,1) 0%, RGBA(196,22,196,1) 100%)",
+			"primaryButtonColor": "#000000",
+			"slantedEdge":        true,
+		},
+	})
+	if err != nil {
+		return EmptyCreateCheckoutSessionResponse(), fmt.Errorf("failed to get checkout session response: %w", err)
+	}
+
+	return CreateCheckoutSessionResponse{SessionID: resp.SessionID}, nil
 }
 
 // IsPaid returns true if the order is paid.

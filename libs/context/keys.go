@@ -129,6 +129,17 @@ const (
 	// DisableBitflyerLinkingCTXKey - this informs if bitflyer linking is enabled
 	DisableBitflyerLinkingCTXKey CTXKey = "disable_bitflyer_linking"
 
+	// RadomWebhookSecretCTXKey - the webhook secret key for radom integration
+	RadomWebhookSecretCTXKey CTXKey = "radom_webhook_secret"
+	// RadomEnabledCTXKey - this informs if radom is enabled
+	RadomEnabledCTXKey CTXKey = "radom_enabled"
+	// RadomSellerAddressCTXKey is the seller address on radom
+	RadomSellerAddressCTXKey CTXKey = "radom_seller_address"
+	// RadomServerCTXKey is the server address on radom
+	RadomServerCTXKey CTXKey = "radom_server"
+	// RadomSecretCTXKey is the server secret on radom
+	RadomSecretCTXKey CTXKey = "radom_secret"
+
 	// stripe related keys
 
 	// StripeEnabledCTXKey - this informs if stripe is enabled

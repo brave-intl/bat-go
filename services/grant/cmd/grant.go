@@ -135,6 +135,37 @@ func init() {
 		Bind("reputation-withdrawal-on-drain").
 		Env("REPUTATION_WITHDRAWAL_ON_DRAIN")
 
+	// Configuration for Radom.
+	flagBuilder.Flag().Bool(
+		"radom-enabled",
+		false,
+		"is radom enabled for skus",
+	).Bind("radom-enabled").Env("RADOM_ENABLED")
+
+	flagBuilder.Flag().String(
+		"radom-seller-address",
+		"",
+		"the seller address for radom",
+	).Bind("radom-seller-address").Env("RADOM_SELLER_ADDRESS")
+
+	flagBuilder.Flag().String(
+		"radom-server",
+		"",
+		"the server address for radom",
+	).Bind("radom-server").Env("RADOM_SERVER")
+
+	flagBuilder.Flag().String(
+		"radom-secret",
+		"",
+		"the server token for radom",
+	).Bind("radom-secret").Env("RADOM_SECRET")
+
+	flagBuilder.Flag().String(
+		"radom-webhook-secret",
+		"",
+		"the server webhook secret for radom",
+	).Bind("radom-webhook-secret").Env("RADOM_WEBHOOK_SECRET")
+
 	// stripe configurations
 	flagBuilder.Flag().Bool("stripe-enabled", false,
 		"is stripe enabled for skus").
@@ -549,6 +580,13 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
 	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
+
+	// Variables for Radom.
+	ctx = context.WithValue(ctx, appctx.RadomEnabledCTXKey, viper.GetBool("radom-enabled"))
+	ctx = context.WithValue(ctx, appctx.RadomWebhookSecretCTXKey, viper.GetString("radom-webhook-secret"))
+	ctx = context.WithValue(ctx, appctx.RadomSecretCTXKey, viper.GetString("radom-secret"))
+	ctx = context.WithValue(ctx, appctx.RadomServerCTXKey, viper.GetString("radom-server"))
+	ctx = context.WithValue(ctx, appctx.RadomSellerAddressCTXKey, viper.GetString("radom-seller-address"))
 
 	// require country present from uphold txs
 	ctx = context.WithValue(ctx, appctx.RequireUpholdCountryCTXKey, viper.GetBool("require-uphold-destination-country"))
