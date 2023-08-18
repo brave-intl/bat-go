@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,19 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// isIssueCountryEnabled temp feature flag for Gemini endpoint update
+func isIssueCountryEnabled() bool {
+	var toggle = false
+	if os.Getenv("GEMINI_ISSUING_COUNTRY_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_ISSUING_COUNTRY_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 var (
 	balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "gemini_account_balance",
@@ -40,24 +54,29 @@ var (
 		[]string{"country_code", "status"},
 	)
 
+	countGeminiDocumentTypeByIssuingCountry = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_gemini_document_type_by_issuing_country",
+			Help: "Counts the number document types being used for KYC broken down by country",
+		},
+		[]string{"document_type", "issuing_country"},
+	)
+
 	documentTypePrecedence = []string{
 		"passport",
 		"drivers_license",
 		"national_identity_card",
 		"passport_card",
-		"tax_id",
-		"residence_permit",
-		"work_permit",
-		"voter_id",
-		"visa",
-		"national_insurance_card",
-		"indigenous_card",
 	}
 )
+
+// ErrNoAcceptedDocumentType is the returned error when no accepted documents exist in the Gemini response.
+var ErrNoAcceptedDocumentType = errors.New("no accepted document type")
 
 func init() {
 	prometheus.MustRegister(balanceGauge)
 	prometheus.MustRegister(countGeminiWalletAccountValidation)
+	prometheus.MustRegister(countGeminiDocumentTypeByIssuingCountry)
 }
 
 // WatchGeminiBalance - when called reports the balance to prometheus
@@ -497,13 +516,24 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		return "", res.CountryCode, err
 	}
 
-	if len(res.ValidDocuments) <= 0 {
-		return "", "", errors.New("error no valid documents in response")
-	}
+	issuingCountry := res.CountryCode
 
-	issuingCountry := strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
-	if dcountry := countryForDocByPrecendence(documentTypePrecedence, res.ValidDocuments); dcountry != "" {
-		issuingCountry = strings.ToUpper(dcountry)
+	if isIssueCountryEnabled() {
+		if len(res.ValidDocuments) <= 0 {
+			return "", "", errors.New("error no valid documents in response")
+		}
+
+		for i := range res.ValidDocuments {
+			countGeminiDocumentTypeByIssuingCountry.With(prometheus.Labels{
+				"document_type":   res.ValidDocuments[i].Type,
+				"issuing_country": res.ValidDocuments[i].IssuingCountry,
+			}).Inc()
+		}
+
+		issuingCountry = countryForDocByPrecedence(documentTypePrecedence, res.ValidDocuments)
+		if issuingCountry == "" {
+			return "", "", ErrNoAcceptedDocumentType
+		}
 	}
 
 	// feature flag for using new custodian regions
@@ -513,7 +543,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 			allowed := custodianRegions.Gemini.Verdict(issuingCountry)
 			if !allowed {
 				countGeminiWalletAccountValidation.With(prometheus.Labels{
-					"country_code": res.CountryCode,
+					"country_code": issuingCountry,
 					"status":       "failure",
 				}).Inc()
 				return res.ID, issuingCountry, errorutils.ErrInvalidCountry
@@ -523,7 +553,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
 			// check country code
 			for _, v := range blacklist {
-				if strings.EqualFold(res.CountryCode, v) {
+				if strings.EqualFold(issuingCountry, v) {
 					if issuingCountry != "" {
 						countGeminiWalletAccountValidation.With(prometheus.Labels{
 							"country_code": issuingCountry,
@@ -535,7 +565,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 			}
 		}
 	}
-	if res.CountryCode != "" {
+	if issuingCountry != "" {
 		countGeminiWalletAccountValidation.With(prometheus.Labels{
 			"country_code": issuingCountry,
 			"status":       "success",
@@ -593,13 +623,13 @@ func (c *HTTPClient) FetchBalances(
 	return &body, err
 }
 
-func countryForDocByPrecendence(prec []string, docs []ValidDocument) string {
+func countryForDocByPrecedence(precedence []string, docs []ValidDocument) string {
 	var result string
 
-	for _, pdoc := range prec {
+	for _, pdoc := range precedence {
 		for _, vdoc := range docs {
 			if strings.EqualFold(pdoc, vdoc.Type) {
-				return vdoc.IssuingCountry
+				return strings.ToUpper(vdoc.IssuingCountry)
 			}
 		}
 	}

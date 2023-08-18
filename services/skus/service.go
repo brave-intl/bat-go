@@ -266,7 +266,7 @@ func (s *Service) ExternalIDExists(ctx context.Context, externalID string) (bool
 }
 
 // CreateOrderFromRequest creates an order from the request
-func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
+func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	var (
 		currency              string
@@ -276,7 +276,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		stripeSuccessURI      string
 		stripeCancelURI       string
 		status                string
-		allowedPaymentMethods = new(Methods)
+		allowedPaymentMethods []string
 		merchantID            = "brave.com"
 		numIntervals          int
 		numPerInterval        = 2 // two per interval credentials to be submitted for signing
@@ -307,12 +307,12 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 
 		// make sure all the order item skus have the same allowed Payment Methods
 		if i >= 1 {
-			if !allowedPaymentMethods.Equal(pm) {
-				return nil, errors.New("all order items must have the same allowed payment methods")
+			if err := model.EnsureEqualPaymentMethods(allowedPaymentMethods, pm); err != nil {
+				return nil, err
 			}
 		} else {
 			// first order item
-			*allowedPaymentMethods = *pm
+			allowedPaymentMethods = pm
 		}
 
 		totalPrice = totalPrice.Add(orderItem.Subtotal)
@@ -365,9 +365,16 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		status = OrderStatusPending
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, merchantID, status, currency,
-		location, validFor, orderItems, allowedPaymentMethods)
-
+	order, err := s.Datastore.CreateOrder(
+		totalPrice,
+		merchantID,
+		status,
+		currency,
+		location,
+		validFor,
+		orderItems,
+		allowedPaymentMethods,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}

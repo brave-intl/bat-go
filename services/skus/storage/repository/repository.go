@@ -67,7 +67,7 @@ func (r *Order) Create(
 	dbi sqlx.QueryerContext,
 	totalPrice decimal.Decimal,
 	merchantID, status, currency, location string,
-	paymentMethods *model.Methods,
+	paymentMethods []string,
 	validFor *time.Duration,
 ) (*model.Order, error) {
 	const q = `INSERT INTO orders
@@ -84,7 +84,7 @@ func (r *Order) Create(
 		status,
 		currency,
 		location,
-		pq.Array(*paymentMethods),
+		pq.StringArray(paymentMethods),
 		validFor,
 	).StructScan(result); err != nil {
 		return nil, err

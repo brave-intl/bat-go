@@ -36,7 +36,7 @@ const (
 type Datastore interface {
 	datastore.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error)
 	// SetOrderTrialDays - set the number of days of free trial for this order
 	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
@@ -107,7 +107,7 @@ type orderStore interface {
 		dbi sqlx.QueryerContext,
 		totalPrice decimal.Decimal,
 		merchantID, status, currency, location string,
-		paymentMethods *model.Methods,
+		paymentMethods []string,
 		validFor *time.Duration,
 	) (*model.Order, error)
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -294,7 +294,7 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 }
 
 // CreateOrder creates an order with the given total price, merchant ID, status and orderItems.
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error) {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return nil, err

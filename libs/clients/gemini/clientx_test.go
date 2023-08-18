@@ -6,7 +6,7 @@ import (
 	should "github.com/stretchr/testify/assert"
 )
 
-func TestCountryForDocByPrecendence(t *testing.T) {
+func TestCountryForDocByPrecedence(t *testing.T) {
 	type testCase struct {
 		name  string
 		given []ValidDocument
@@ -60,13 +60,39 @@ func TestCountryForDocByPrecendence(t *testing.T) {
 			},
 			exp: "US",
 		},
+
+		{
+			name: "no_valid_document_type",
+			given: []ValidDocument{
+				{
+					Type:           "invalid_type",
+					IssuingCountry: "US",
+				},
+			},
+			exp: "",
+		},
+
+		{
+			name: "valid_and_invalid_document_type_lower_case",
+			given: []ValidDocument{
+				{
+					Type:           "invalid_type",
+					IssuingCountry: "US",
+				},
+				{
+					Type:           "passport",
+					IssuingCountry: "uk",
+				},
+			},
+			exp: "UK",
+		},
 	}
 
 	for i := range tests {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			act := countryForDocByPrecendence(documentTypePrecedence, tc.given)
+			act := countryForDocByPrecedence(documentTypePrecedence, tc.given)
 			should.Equal(t, tc.exp, act)
 		})
 	}

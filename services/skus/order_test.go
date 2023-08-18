@@ -171,8 +171,8 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon_WithBufferAndOverla
 	suite.assertSuccess(orderItem, apm, issuerConf, expectedIC)
 }
 
-func (suite *OrderTestSuite) assertSuccess(orderItem *OrderItem, apm *Methods, issuerConf *IssuerConfig, expectedIssuerConf IssuerConfig) {
-	suite.Assert().Equal("stripe", strings.Join(*apm, ","))
+func (suite *OrderTestSuite) assertSuccess(orderItem *OrderItem, apm []string, issuerConf *IssuerConfig, expectedIssuerConf IssuerConfig) {
+	suite.Assert().Equal("stripe", strings.Join(apm, ","))
 	suite.Assert().Equal("usd", orderItem.Currency)
 	suite.Assert().Equal("sku", orderItem.SKU)
 	suite.Assert().Equal("5.01", orderItem.Price.String())

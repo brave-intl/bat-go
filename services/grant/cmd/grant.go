@@ -85,6 +85,11 @@ func init() {
 		Bind("disable-bitflyer-linking").
 		Env("DISABLE_BITFLYER_LINKING")
 
+	flagBuilder.Flag().Bool("disable-zebpay-linking", false,
+		"disable custodial linking for zebpay").
+		Bind("disable-zebpay-linking").
+		Env("DISABLE_ZEBPAY_LINKING")
+
 	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
 		"brave vg deposit destination promotion id").
 		Bind("brave-transfer-promotion-ids").
@@ -239,10 +244,10 @@ func init() {
 		Bind("gemini-client-secret").
 		Env("GEMINI_CLIENT_SECRET")
 
-	flagBuilder.Flag().String("xyzabc-linking-key", "",
-		"the linking key for xyzabc custodian").
-		Bind("xyzabc-linking-key").
-		Env("XYZABC_LINKING_KEY")
+	flagBuilder.Flag().String("zebpay-linking-key", "",
+		"the linking key for zebpay custodian").
+		Bind("zebpay-linking-key").
+		Env("ZEBPAY_LINKING_KEY")
 
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
@@ -299,19 +304,10 @@ func init() {
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
-	buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
-	commit := ctx.Value(appctx.CommitCTXKey).(string)
-	version := ctx.Value(appctx.VersionCTXKey).(string)
-	env := ctx.Value(appctx.EnvironmentCTXKey).(string)
-
-	// health check status of all services
-	serviceStatus := map[string]interface{}{}
-
-	serviceStatus["wallet"] = map[string]bool{
-		"uphold":   !(ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool)),
-		"gemini":   !(ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)),
-		"bitflyer": !(ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)),
-	}
+	buildTime, _ := ctx.Value(appctx.BuildTimeCTXKey).(string)
+	commit, _ := ctx.Value(appctx.CommitCTXKey).(string)
+	version, _ := ctx.Value(appctx.VersionCTXKey).(string)
+	env, _ := ctx.Value(appctx.EnvironmentCTXKey).(string)
 
 	// runnable jobs for the services created
 	jobs := []srv.Job{}
@@ -484,7 +480,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		Str("buildTime", buildTime).
 		Msg("server starting up")
 
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus, nil))
+	{
+		status := newSrvStatusFromCtx(ctx)
+		r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, status, nil))
+	}
 
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
@@ -568,11 +567,11 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
 
-	// xyzabc wallet linking signing key
-	ctx = context.WithValue(ctx, appctx.XyzAbcLinkingKeyCTXKey, viper.GetString("xyzabc-linking-key"))
+	// zebpay wallet linking signing key
+	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, viper.GetString("zebpay-linking-key"))
 
 	// linking variables
-	ctx = context.WithValue(ctx, appctx.DisableXyzAbcLinkingCTXKey, viper.GetBool("disable-xyzabc-linking"))
+	ctx = context.WithValue(ctx, appctx.DisableZebPayLinkingCTXKey, viper.GetBool("disable-zebpay-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableUpholdLinkingCTXKey, viper.GetBool("disable-uphold-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, viper.GetBool("disable-gemini-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, viper.GetBool("disable-bitflyer-linking"))
@@ -679,4 +678,22 @@ func GrantServer(
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 	return nil
+}
+
+func newSrvStatusFromCtx(ctx context.Context) map[string]any {
+	uh, _ := ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool)
+	g, _ := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)
+	bf, _ := ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)
+	zp, _ := ctx.Value(appctx.DisableZebPayLinkingCTXKey).(bool)
+
+	result := map[string]interface{}{
+		"wallet": map[string]bool{
+			"uphold":   !uh,
+			"gemini":   !g,
+			"bitflyer": !bf,
+			"zebpay":   !zp,
+		},
+	}
+
+	return result
 }

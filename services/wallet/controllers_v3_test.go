@@ -690,7 +690,82 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	}
 }
 
-func TestLinkXyzAbcWalletV3(t *testing.T) {
+func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	// setup jwt token for the test
+	var secret = []byte("a jwt secret")
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: secret}, (&jose.SignerOptions{}).WithType("JWT"))
+	if err != nil {
+		panic(err)
+	}
+
+	var (
+		// setup test variables
+		idFrom    = uuid.NewV4()
+		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
+		accountID = uuid.NewV4()
+		idTo      = accountID
+
+		// setup db mocks
+		db, _, _  = sqlmock.New()
+		datastore = wallet.Datastore(
+			&wallet.Postgres{
+				datastoreutils.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				datastoreutils.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		handler = wallet.LinkZebPayDepositAccountV3(s)
+		w       = httptest.NewRecorder()
+	)
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
+
+	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
+		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
+	}).CompactSerialize()
+	if err != nil {
+		panic(err)
+	}
+
+	// this is our main request
+	r := httptest.NewRequest(
+		"POST",
+		fmt.Sprintf("/v3/wallet/zebpay/%s/claim", idFrom),
+		bytes.NewBufferString(fmt.Sprintf(
+			`{"linking_info": "%s"}`,
+			linkingInfo,
+		)),
+	)
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusForbidden {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusForbidden, resp.StatusCode))
+	}
+}
+
+func TestLinkZebPayWalletV3(t *testing.T) {
 	wallet.VerifiedWalletEnable = true
 
 	mockCtrl := gomock.NewController(t)
@@ -729,7 +804,7 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
 
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
-		handler = wallet.LinkXyzAbcDepositAccountV3(s)
+		handler = wallet.LinkZebPayDepositAccountV3(s)
 		w       = httptest.NewRecorder()
 	)
 
@@ -737,10 +812,11 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-	ctx = context.WithValue(ctx, appctx.XyzAbcLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
+	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
 	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
-		"accountId": accountID, "depositId": idTo,
+		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
+		"isValid": true,
 	}).CompactSerialize()
 	if err != nil {
 		panic(err)
@@ -749,7 +825,7 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 	// this is our main request
 	r := httptest.NewRequest(
 		"POST",
-		fmt.Sprintf("/v3/wallet/xyzabc/%s/claim", idFrom),
+		fmt.Sprintf("/v3/wallet/zebpay/%s/claim", idFrom),
 		bytes.NewBufferString(fmt.Sprintf(
 			`{"linking_info": "%s"}`,
 			linkingInfo,
@@ -777,7 +853,7 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "xyzabc").WillReturnRows(linkingIDRows)
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "zebpay").WillReturnRows(linkingIDRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -788,10 +864,10 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "xyzabc", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "zebpay", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "xyzabc", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "zebpay", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -801,7 +877,7 @@ func TestLinkXyzAbcWalletV3(t *testing.T) {
 	r = r.WithContext(ctx)
 
 	router := chi.NewRouter()
-	router.Post("/v3/wallet/xyzabc/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
 	if resp := w.Result(); resp.StatusCode != http.StatusOK {

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -33,6 +32,10 @@ const (
 	ErrInvalidOrderNoSuccessURL               Error = "model: invalid order: no success url"
 	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
 	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
+
+	// The text of the following errors is preserved as is, in case anything depends on them.
+	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
+	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
 )
 
 const (
@@ -65,7 +68,7 @@ type Order struct {
 	Location              datastore.NullString `json:"location" db:"location"`
 	Status                string               `json:"status" db:"status"`
 	Items                 []OrderItem          `json:"items"`
-	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
+	AllowedPaymentMethods pq.StringArray       `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
 	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
 	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
@@ -78,12 +81,12 @@ func (o *Order) IsStripePayable() bool {
 	// TODO: if not we need to look into subscription trials:
 	// -> https://stripe.com/docs/billing/subscriptions/trials
 
-	return strings.Contains(strings.Join(o.AllowedPaymentMethods, ","), StripePaymentMethod)
+	return Slice[string](o.AllowedPaymentMethods).Contains(StripePaymentMethod)
 }
 
 // IsRadomPayable indicates whether the order is payable by Radom.
 func (o *Order) IsRadomPayable() bool {
-	return o.AllowedPaymentMethods.Contains(RadomPaymentMethod)
+	return Slice[string](o.AllowedPaymentMethods).Contains(RadomPaymentMethod)
 }
 
 // CreateStripeCheckoutSession creates a Stripe checkout session for the order.
@@ -401,4 +404,56 @@ func (x *OrderTimeBounds) ExpiresAtWithFallback(fallback time.Time) time.Time {
 	}
 
 	return expiresAt
+}
+
+// CreateOrderRequest includes information needed to create an order.
+type CreateOrderRequest struct {
+	Email string             `json:"email" valid:"-"`
+	Items []OrderItemRequest `json:"items" valid:"-"`
+}
+
+// OrderItemRequest represents an item in a order request.
+type OrderItemRequest struct {
+	SKU      string `json:"sku" valid:"-"`
+	Quantity int    `json:"quantity" valid:"int"`
+}
+
+// EnsureEqualPaymentMethods checks if the methods list equals the incoming list.
+//
+// This operation may change both slices due to sorting.
+func EnsureEqualPaymentMethods(methods, incoming []string) error {
+	sort.Strings(methods)
+	sort.Strings(incoming)
+
+	if !Slice[string](methods).Equal(Slice[string](incoming)) {
+		return ErrDifferentPaymentMethods
+	}
+
+	return nil
+}
+
+type Slice[T comparable] []T
+
+func (s Slice[T]) Equal(target []T) bool {
+	if len(s) != len(target) {
+		return false
+	}
+
+	for i, v := range s {
+		if v != target[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (s Slice[T]) Contains(target T) bool {
+	for _, v := range s {
+		if v == target {
+			return true
+		}
+	}
+
+	return false
 }

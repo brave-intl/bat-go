@@ -424,8 +424,8 @@ func getEnvMaxCards(custodian string) int {
 		if v, err := strconv.Atoi(os.Getenv("GEMINI_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
-	case "xyzabc":
-		if v, err := strconv.Atoi(os.Getenv("XYZABC_WALLET_LINKING_LIMIT")); err == nil {
+	case "zebpay":
+		if v, err := strconv.Atoi(os.Getenv("ZEBPAY_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
 	}
@@ -644,10 +644,24 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		}
 	}
 
+	if directVerifiedWalletEnable {
+		client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+		if !ok {
+			return errors.New("error calling reputation for verified wallet: no reputation client")
+		}
+		upsertReputationSummary := func() (interface{}, error) {
+			return nil, client.UpdateReputationSummary(ctx, ID, true)
+		}
+		_, err = backoff.Retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error calling reputation for verified wallet: %w", err)
+		}
+	}
+
 	err = commit()
 	if err != nil {
-		sublogger.Error().Err(err).
-			Msg("error committing tx")
+		sublogger.Error().Err(err).Msg("error committing tx")
+		sentry.CaptureException(fmt.Errorf("error failed to commit link wallet transaction: %w", err))
 		return fmt.Errorf("error committing tx: %w", err)
 	}
 

@@ -163,7 +163,7 @@ func (mr *MockDatastoreMockRecorder) CreateKey(merchant, name, encryptedSecretKe
 }
 
 // CreateOrder mocks base method.
-func (m *MockDatastore) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
+func (m *MockDatastore) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateOrder", totalPrice, merchantID, status, currency, location, validFor, orderItems, allowedPaymentMethods)
 	ret0, _ := ret[0].(*Order)

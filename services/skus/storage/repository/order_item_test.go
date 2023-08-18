@@ -189,7 +189,7 @@ type orderCreator interface {
 		dbi sqlx.QueryerContext,
 		totalPrice decimal.Decimal,
 		merchantID, status, currency, location string,
-		paymentMethods *model.Methods,
+		paymentMethods []string,
 		validFor *time.Duration,
 	) (*model.Order, error)
 }
@@ -200,7 +200,7 @@ func createOrderForTest(ctx context.Context, dbi sqlx.QueryerContext, repo order
 		return nil, err
 	}
 
-	methods := model.Methods{"stripe"}
+	methods := []string{"stripe"}
 
 	result, err := repo.Create(
 		ctx,
@@ -210,7 +210,7 @@ func createOrderForTest(ctx context.Context, dbi sqlx.QueryerContext, repo order
 		"pending",
 		"USD",
 		"somelocation",
-		&methods,
+		methods,
 		nil,
 	)
 	if err != nil {
