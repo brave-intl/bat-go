@@ -267,9 +267,9 @@ func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 	}
 }
 
-// LinkGeminiDepositAccountV3 returns an HTTP handler handles which is responsible for the linking of Gemini wallets.
+// LinkGeminiDepositAccountV3 returns an HTTP handler which is responsible for linking a Gemini wallet.
 // This endpoint expects a walletID as part of the URL and takes a verification token which encodes the
-// linking info as well as a recipientID. The recipientID is synonymous with a wallets depositID.
+// linking information as well as a recipientID. The recipientID is synonymous with a wallets depositID.
 func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
