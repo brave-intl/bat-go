@@ -47,9 +47,10 @@ import (
 )
 
 var (
-	errSetRetryAfter   = errors.New("set retry-after")
-	errClosingResource = errors.New("error closing resource")
-	errInvalidRadomURL = model.Error("service: invalid radom url")
+	errSetRetryAfter             = errors.New("set retry-after")
+	errClosingResource           = errors.New("error closing resource")
+	errInvalidRadomURL           = model.Error("service: invalid radom url")
+	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
 
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
@@ -725,8 +726,12 @@ func getGeminiInfoFromCtx(ctx context.Context) (string, string, string, string, 
 	return apiKey, clientID, settlementAddress, apiSecret, nil
 }
 
-// getGeminiCustodialTx - the the custodial tx information from gemini
+// getGeminiCustodialTx returns the custodial tx information from Gemini
 func (s *Service) getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
+	if s.geminiConf == nil {
+		return nil, "", "", "", errGeminiClientNotConfigured
+	}
+
 	sublogger := logging.Logger(ctx, "payments").With().
 		Str("func", "getGeminiCustodialTx").
 		Logger()
@@ -767,7 +772,7 @@ func (s *Service) getGeminiCustodialTx(ctx context.Context, txRef string) (*deci
 	return &amount, status, currency, custodian, nil
 }
 
-// CreateTransactionFromRequest queries the endpoints and creates a transaciton
+// CreateTransactionFromRequest queries the endpoints and creates a transaction
 func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTransactionRequest, orderID uuid.UUID, getCustodialTx getCustodialTxFn) (*Transaction, error) {
 
 	sublogger := logging.Logger(ctx, "payments").With().
