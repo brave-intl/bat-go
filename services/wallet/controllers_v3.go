@@ -267,7 +267,9 @@ func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 	}
 }
 
-// LinkGeminiDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
+// LinkGeminiDepositAccountV3 returns an HTTP handler which is responsible for linking a Gemini wallet.
+// This endpoint expects a walletID as part of the URL and takes a verification token which encodes the
+// linking information as well as a recipientID. The recipientID is synonymous with a wallets depositID.
 func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
@@ -275,10 +277,10 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			id  = new(inputs.ID)
 			glr = new(GeminiLinkingRequest)
 		)
-		// get logger from context
+
 		logger := logging.Logger(ctx, "wallet.LinkGeminiDepositAccountV3")
 
-		// check if we have disabled gemini
+		// check if we have disabled Gemini
 		if disableGemini, ok := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool); ok && disableGemini {
 			return handlers.ValidationError(
 				"Connecting Brave Rewards to Gemini is temporarily unavailable.  Please try again later",
@@ -288,7 +290,8 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
-			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			logger.Warn().Str("paymentID", id.String()).Err(err).
+				Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
 				map[string]interface{}{
@@ -300,7 +303,8 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		// validate payment id matches what was in the http signature
 		signatureID, err := middleware.GetKeyID(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("could not get http signing key id from context")
+			logger.Warn().Str("paymentID", id.String()).
+				Err(err).Msg("could not get http signing key id from context")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
 				map[string]interface{}{
@@ -310,7 +314,8 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		if id.String() != signatureID {
-			logger.Warn().Msg("id does not match signature id")
+			logger.Warn().Str("paymentID", id.String()).
+				Msg("id does not match signature id")
 			return handlers.ValidationError(
 				"paymentId from URL does not match paymentId in http signature",
 				map[string]interface{}{
@@ -321,16 +326,20 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		// read post body
 		if err := inputs.DecodeAndValidateReader(ctx, glr, r.Body); err != nil {
-			logger.Warn().Err(err).Msg("could not validate request")
+			logger.Warn().Str("paymentID", id.String()).
+				Err(err).Msg("could not validate request")
 			return glr.HandleErrors(err)
 		}
 
 		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, glr.DepositID)
 		if err != nil {
-			logger.Error().Err(err).Msg("error linking gemini wallet")
+			logger.Error().Str("depositID", glr.DepositID).
+				Err(err).Msg("error linking gemini wallet")
+
 			if errors.Is(err, errorutils.ErrInvalidCountry) {
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
 			}
+
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 

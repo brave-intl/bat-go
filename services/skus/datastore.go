@@ -94,6 +94,7 @@ type Datastore interface {
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
+	AppendOrderMetadataInt64(context.Context, *uuid.UUID, string, int64) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
 	ExternalIDExists(context.Context, string) (bool, error)
 }
@@ -117,6 +118,7 @@ type orderStore interface {
 	UpdateMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, data datastore.Metadata) error
 	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
 	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
+	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 	GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
 	HasExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (bool, error)
 	GetMetadata(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (datastore.Metadata, error)
@@ -1371,6 +1373,21 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 	}
 
 	return nil
+}
+
+// AppendOrderMetadataInt64 appends the key and int64 value to an order's metadata.
+func (pg *Postgres) AppendOrderMetadataInt64(ctx context.Context, orderID *uuid.UUID, key string, value int64) error {
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
+	if err != nil {
+		return err
+	}
+	defer rollback()
+
+	if err := pg.orderRepo.AppendMetadataInt64(ctx, tx, *orderID, key, value); err != nil {
+		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
+	}
+
+	return commit()
 }
 
 // AppendOrderMetadataInt appends the key and int value to an order's metadata.
