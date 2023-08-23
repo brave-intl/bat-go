@@ -6,29 +6,28 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"net/http"
-
 	"sync"
 	"testing"
 	"time"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/services/skus/skustest"
-	"github.com/stretchr/testify/suite"
-
-	"github.com/brave-intl/bat-go/libs/backoff"
-	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/clients/cbr"
-	mock_cbr "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
-	"github.com/brave-intl/bat-go/libs/ptr"
-	"github.com/brave-intl/bat-go/libs/test"
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	mock_cbr "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/ptr"
+	"github.com/brave-intl/bat-go/libs/test"
+	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/skustest"
 
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
@@ -265,9 +264,9 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
 	assert.NoError(t, err)
 
-	issuerConfig := IssuerConfig{
-		buffer:  test.RandomInt(),
-		overlap: test.RandomInt(),
+	issuerConfig := model.IssuerConfig{
+		Buffer:  test.RandomInt(),
+		Overlap: test.RandomInt(),
 	}
 
 	// mock issuer calls
@@ -279,8 +278,8 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 		MaxTokens: defaultMaxTokensPerIssuer,
 		ValidFrom: ptr.FromTime(time.Now()),
 		Duration:  *orderItem.EachCredentialValidForISO,
-		Buffer:    issuerConfig.buffer,
-		Overlap:   issuerConfig.overlap,
+		Buffer:    issuerConfig.Buffer,
+		Overlap:   issuerConfig.Overlap,
 	}
 	cbrClient.EXPECT().
 		CreateIssuerV3(ctx, isCreateIssuerV3(createIssuerV3)).
@@ -375,9 +374,9 @@ func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
 	assert.NoError(t, err)
 
-	issuerConfig := IssuerConfig{
-		buffer:  test.RandomInt(),
-		overlap: test.RandomInt(),
+	issuerConfig := model.IssuerConfig{
+		Buffer:  test.RandomInt(),
+		Overlap: test.RandomInt(),
 	}
 
 	// mock datastore
@@ -431,9 +430,9 @@ func TestCreateOrderCredentials(t *testing.T) {
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
 	assert.NoError(t, err)
 
-	issuerConfig := IssuerConfig{
-		buffer:  test.RandomInt(),
-		overlap: test.RandomInt(),
+	issuerConfig := model.IssuerConfig{
+		Buffer:  test.RandomInt(),
+		Overlap: test.RandomInt(),
 	}
 
 	// mock datastore
