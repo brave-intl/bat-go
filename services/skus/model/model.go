@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"sort"
 	"time"
 
@@ -33,6 +34,7 @@ const (
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
 	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
+	ErrInvalidOrderRequest     Error = "model: no items to be created"
 )
 
 const (
@@ -43,6 +45,9 @@ const (
 	OrderStatusCanceled = "canceled"
 	OrderStatusPaid     = "paid"
 	OrderStatusPending  = "pending"
+
+	issuerBufferDefault  = 30
+	issuerOverlapDefault = 5
 )
 
 var (
@@ -252,6 +257,10 @@ type OrderItem struct {
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
 	Metadata                  datastore.Metadata   `json:"metadata" db:"metadata"`
 	IssuanceIntervalISO       *string              `json:"issuanceInterval" db:"issuance_interval"`
+
+	// TODO: Remove this when products & issuers have been reworked.
+	// The issuer for a product must be created when the product is created.
+	IssuerConfig *IssuerConfig `json:"-" db:"-"`
 }
 
 // CreateCheckoutSessionResponse represents a checkout session response.
@@ -269,6 +278,16 @@ func (l OrderItemList) SetOrderID(orderID uuid.UUID) {
 	for i := range l {
 		l[i].OrderID = orderID
 	}
+}
+
+func (l OrderItemList) TotalCost() decimal.Decimal {
+	var result decimal.Decimal
+
+	for i := range l {
+		result = result.Add(l[i].Subtotal)
+	}
+
+	return result
 }
 
 func (l OrderItemList) stripeLineItems() []*stripe.CheckoutSessionLineItemParams {
@@ -343,6 +362,103 @@ type OrderItemRequest struct {
 	Quantity int    `json:"quantity" valid:"int"`
 }
 
+// CreateOrderRequestNew includes information needed to create an order.
+type CreateOrderRequestNew struct {
+	Email          string                `json:"email" validate:"required,email"`
+	Currency       string                `json:"currency" validate:"required,iso4217"`
+	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
+	PaymentMethods []string              `json:"payment_methods" validate:"required,gt=0"`
+	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
+}
+
+// OrderItemRequestNew represents an item in an order request.
+type OrderItemRequestNew struct {
+	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
+	IssuerTokenBuffer           int                 `json:"issuer_token_buffer"`
+	IssuerTokenOverlap          int                 `json:"issuer_token_overlap"`
+	SKU                         string              `json:"sku" validate:"required"`
+	Location                    string              `json:"location" validate:"required"`
+	Description                 string              `json:"description" validate:"required"`
+	CredentialType              string              `json:"credential_type" validate:"required"`
+	CredentialValidDuration     string              `json:"credential_valid_duration" validate:"required"`
+	Price                       decimal.Decimal     `json:"price"`
+	CredentialValidDurationEach *string             `json:"each_credential_valid_duration"`
+	IssuanceInterval            *string             `json:"issuance_interval"`
+	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
+}
+
+func (r *OrderItemRequestNew) TokenBufferOrDefault() int {
+	if r == nil {
+		return 0
+	}
+
+	if r.IssuerTokenBuffer == 0 {
+		return issuerBufferDefault
+	}
+
+	return r.IssuerTokenBuffer
+}
+
+func (r *OrderItemRequestNew) TokenOverlapOrDefault() int {
+	if r == nil {
+		return 0
+	}
+
+	if r.IssuerTokenOverlap == 0 {
+		return issuerOverlapDefault
+	}
+
+	return r.IssuerTokenOverlap
+}
+
+// OrderStripeMetadata holds data relevant to the order in Stripe.
+type OrderStripeMetadata struct {
+	SuccessURI string `json:"success_uri" validate:"http_url"`
+	CancelURI  string `json:"cancel_uri" validate:"http_url"`
+}
+
+func (m *OrderStripeMetadata) SuccessURL(oid string) (string, error) {
+	if m == nil {
+		return "", nil
+	}
+
+	return addURLParam(m.SuccessURI, "order_id", oid)
+}
+
+func (m *OrderStripeMetadata) CancelURL(oid string) (string, error) {
+	if m == nil {
+		return "", nil
+	}
+
+	return addURLParam(m.CancelURI, "order_id", oid)
+}
+
+// ItemStripeMetadata holds data about the product in Stripe.
+type ItemStripeMetadata struct {
+	ProductID string `json:"product_id"`
+	ItemID    string `json:"item_id"`
+}
+
+// Metadata returns the contents of m as a map for datastore.Metadata.
+//
+// It can be called when m is nil.
+func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+	if m.ProductID != "" {
+		result["stripe_product_id"] = m.ProductID
+	}
+
+	if m.ItemID != "" {
+		result["stripe_item_id"] = m.ItemID
+	}
+
+	return result
+}
+
 // EnsureEqualPaymentMethods checks if the methods list equals the incoming list.
 //
 // This operation may change both slices due to sorting.
@@ -381,4 +497,28 @@ func (s Slice[T]) Contains(target T) bool {
 	}
 
 	return false
+}
+
+// IssuerConfig holds configuration of an issuer.
+type IssuerConfig struct {
+	Buffer  int
+	Overlap int
+}
+
+func (c *IssuerConfig) NumIntervals() int {
+	return c.Buffer + c.Overlap
+}
+
+func addURLParam(src, name, val string) (string, error) {
+	raw, err := url.Parse(src)
+	if err != nil {
+		return "", err
+	}
+
+	v := raw.Query()
+	v.Add(name, val)
+
+	raw.RawQuery = v.Encode()
+
+	return raw.String(), nil
 }

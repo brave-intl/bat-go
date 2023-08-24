@@ -14,12 +14,19 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/handlers"
-
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
+	"github.com/golang/mock/gomock"
+	"github.com/linkedin/goavro"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
@@ -30,6 +37,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
@@ -43,12 +51,6 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
-	"github.com/linkedin/goavro"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
 
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
@@ -991,11 +993,13 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	err := suite.service.InitKafka(ctx)
 	suite.Require().NoError(err)
 
-	// setup router and server with mock instrument handler
+	authMwr := NewAuthMwr(suite.service)
 	instrumentHandler := func(name string, h http.Handler) http.Handler {
 		return h
 	}
-	router := Router(suite.service, instrumentHandler)
+
+	router := Router(suite.service, authMwr, instrumentHandler, newCORSOptsEnv())
+
 	router.Mount("/vote", VoteRouter(suite.service, instrumentHandler))
 	server := &http.Server{Addr: ":8080", Handler: router}
 
@@ -1483,10 +1487,6 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	rw := httptest.NewRecorder()
 
-	instrumentHandler := func(name string, h http.Handler) http.Handler {
-		return h
-	}
-
 	// Enable store signed order creds consumer
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
@@ -1494,7 +1494,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	skuService, err := InitService(ctx, suite.storage, nil)
 	suite.Require().NoError(err)
 
-	router := Router(skuService, instrumentHandler)
+	authMwr := NewAuthMwr(skuService)
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1623,10 +1628,6 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	rw := httptest.NewRecorder()
 
-	instrumentHandler := func(name string, h http.Handler) http.Handler {
-		return h
-	}
-
 	// Enable store signed order creds consumer
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
@@ -1634,7 +1635,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	skuService, err := InitService(ctx, suite.storage, nil)
 	suite.Require().NoError(err)
 
-	router := Router(skuService, instrumentHandler)
+	authMwr := NewAuthMwr(skuService)
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1741,11 +1747,13 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 
 	rw := httptest.NewRecorder()
 
+	authMwr := NewAuthMwr(service)
 	instrumentHandler := func(name string, h http.Handler) http.Handler {
 		return h
 	}
 
-	router := Router(service, instrumentHandler)
+	router := Router(service, authMwr, instrumentHandler, newCORSOptsEnv())
+
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
 	suite.Require().Equal(http.StatusOK, rw.Code)
@@ -1823,4 +1831,11 @@ func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string 
 	skuMap["development"][mac] = true
 
 	return mac
+}
+
+func newCORSOptsEnv() cors.Options {
+	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
+
+	return NewCORSOpts(origins, dbg)
 }

@@ -2,10 +2,13 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -14,17 +17,26 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
+const (
+	reqBodyLimit10MB = 10 << 20
+
+	errSomethingWentWrong model.Error = "something went wrong"
+)
+
 type orderService interface {
 	CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
+	CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
 }
 
 type Order struct {
-	svc orderService
+	svc   orderService
+	valid *validator.Validate
 }
 
 func NewOrder(svc orderService) *Order {
 	result := &Order{
-		svc: svc,
+		svc:   svc,
+		valid: validator.New(),
 	}
 
 	return result
@@ -66,4 +78,60 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 	}
 
 	return handlers.RenderContent(ctx, order, w, http.StatusCreated)
+}
+
+func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return handlers.WrapError(err, "Failed to read request body", http.StatusBadRequest)
+	}
+
+	req := &model.CreateOrderRequestNew{}
+	if err := json.Unmarshal(raw, req); err != nil {
+		return handlers.WrapError(err, "Failed to deserialize request", http.StatusBadRequest)
+	}
+
+	ctx := r.Context()
+
+	if err := h.valid.StructCtx(ctx, req); err != nil {
+		verrs, ok := collectValidationErrors(err)
+		if !ok {
+			return handlers.WrapError(err, "Failed to validate request", http.StatusBadRequest)
+		}
+
+		return &handlers.AppError{
+			Message: "Validation failed",
+			Code:    http.StatusBadRequest,
+			Data:    map[string]interface{}{"validationErrors": verrs},
+		}
+	}
+
+	lg := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderNew").Logger()
+
+	result, err := h.svc.CreateOrder(ctx, req)
+	if err != nil {
+		lg.Error().Err(err).Msg("failed to create order")
+
+		if errors.Is(err, model.ErrInvalidOrderRequest) {
+			return handlers.WrapError(err, "Invalid order data supplied", http.StatusUnprocessableEntity)
+		}
+
+		return handlers.WrapError(errSomethingWentWrong, "Couldn't finish creating order", http.StatusInternalServerError)
+	}
+
+	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
+}
+
+func collectValidationErrors(err error) (map[string]string, bool) {
+	var verr validator.ValidationErrors
+	if !errors.As(err, &verr) {
+		return nil, false
+	}
+
+	result := make(map[string]string, len(verr))
+	for i := range verr {
+		result[verr[i].Field()] = verr[i].Error()
+	}
+
+	return result, true
 }
