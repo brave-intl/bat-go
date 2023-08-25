@@ -76,7 +76,7 @@ func newRedisClient(env, addrs, pass, username string) (*redisClient, error) {
 				MaxRetryBackoff: 500 * time.Millisecond,
 				PoolSize:        10,
 				PoolTimeout:     30 * time.Second,
-				TLSConfig:       tlsConfig,
+				//				TLSConfig:       tlsConfig,
 			}),
 	}
 	return rc, nil

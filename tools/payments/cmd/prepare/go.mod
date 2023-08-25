@@ -2,6 +2,8 @@ module github.com/brave-intl/bat-go/tools/payments/cmd/prepare
 
 replace github.com/brave-intl/bat-go/tools/payments => ../../
 
+replace github.com/brave-intl/bat-go/libs => ../../../../libs
+
 go 1.20
 
 require github.com/brave-intl/bat-go/tools/payments v0.0.0-00010101000000-000000000000
@@ -15,10 +17,12 @@ require (
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
+	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
+	github.com/mdlayher/socket v0.4.0 // indirect
+	github.com/mdlayher/vsock v1.2.0 // indirect
 	github.com/prometheus/client_golang v1.14.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
@@ -31,6 +35,8 @@ require (
 	github.com/veraison/go-cose v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.7.0 // indirect
+	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 )
