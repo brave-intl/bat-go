@@ -60,7 +60,8 @@ func (at AntifraudTransaction) ProviderInfo() ProviderInfo {
 	}
 }
 
-// ToTransaction turns the antifraud transaction into a transaction understandable by settlement tools
+// ToTransaction turns the antifraud transaction into a transaction understandable by settlement
+// tools
 func (at AntifraudTransaction) ToTransaction() (custodian.Transaction, error) {
 	t := at.Transaction
 
@@ -110,7 +111,8 @@ func CheckForDuplicates(transactions []AntifraudTransaction) error {
 	channelSet := map[string]bool{}
 	for _, settlementTransaction := range transactions {
 		if _, exists := channelSet[settlementTransaction.Channel]; exists {
-			return errors.New("DO NOT PROCEED WITH PAYOUT: Malformed settlement file, duplicate payments detected!:" + settlementTransaction.Channel)
+			return errors.New(
+				"DO NOT PROCEED WITH PAYOUT: Malformed settlement file, duplicate payments detected!:" + settlementTransaction.Channel)
 		}
 		channelSet[settlementTransaction.Channel] = true
 	}
@@ -118,7 +120,12 @@ func CheckForDuplicates(transactions []AntifraudTransaction) error {
 }
 
 // PrepareTransactions by embedding signed transactions into the settlement documents
-func PrepareTransactions(wallet *uphold.Wallet, settlements []custodian.Transaction, purpose string, beneficiary *uphold.Beneficiary) error {
+func PrepareTransactions(
+	wallet *uphold.Wallet,
+	settlements []custodian.Transaction,
+	purpose string,
+	beneficiary *uphold.Beneficiary,
+) error {
 	for i := 0; i < len(settlements); i++ {
 		settlement := &settlements[i]
 
@@ -127,7 +134,14 @@ func PrepareTransactions(wallet *uphold.Wallet, settlements []custodian.Transact
 		if len(settlement.Note) > 0 {
 			message = settlement.Note
 		}
-		tx, err := wallet.PrepareTransaction(*settlement.AltCurrency, settlement.Probi, settlement.Destination, message, purpose, beneficiary)
+		tx, err := wallet.PrepareTransaction(
+			*settlement.AltCurrency,
+			settlement.Probi,
+			settlement.Destination,
+			message,
+			purpose,
+			beneficiary,
+		)
 		if err != nil {
 			return err
 		}
@@ -152,7 +166,11 @@ func checkTransactionAgainstSettlement(settlement *custodian.Transaction, txInfo
 }
 
 // CheckPreparedTransactions performs sanity checks on an array of signed settlements
-func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []custodian.Transaction) error {
+func CheckPreparedTransactions(
+	ctx context.Context,
+	settlementWallet *uphold.Wallet,
+	settlements []custodian.Transaction,
+) error {
 	sumProbi := decimal.Zero
 	for i := 0; i < len(settlements); i++ {
 		settlement := &settlements[i]
@@ -186,7 +204,11 @@ func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wal
 // SubmitPreparedTransaction submits a single settlement transaction to uphold
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
-func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *custodian.Transaction) error {
+func SubmitPreparedTransaction(
+	ctx context.Context,
+	settlementWallet *uphold.Wallet,
+	settlement *custodian.Transaction,
+) error {
 	logger := logging.Logger(ctx, "settlement.SubmitPreparedTransaction")
 	if settlement.IsComplete() {
 		logger.Info().Msg(fmt.Sprintf("already complete, skipping submit for channel %s", settlement.Channel))
@@ -257,7 +279,11 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 // SubmitPreparedTransactions by submitting them to uphold after performing sanity checks
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
-func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []custodian.Transaction) error {
+func SubmitPreparedTransactions(
+	ctx context.Context,
+	settlementWallet *uphold.Wallet,
+	settlements []custodian.Transaction,
+) error {
 	err := CheckPreparedTransactions(ctx, settlementWallet, settlements)
 	if err != nil {
 		return err

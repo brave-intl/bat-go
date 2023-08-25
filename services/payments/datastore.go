@@ -458,7 +458,11 @@ func (s Service) UpdateTransactionsState(ctx context.Context, state string, tran
 // AuthorizeTransaction - Add an Authorization for the Transaction and attempt to Drive
 // the Transaction forward. NOTE: This function assumes that the http signature has been
 // verified before running. This is achieved in the SubmitHandler middleware.
-func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transaction Transaction) error {
+func (s *Service) AuthorizeTransaction(
+	ctx context.Context,
+	keyID string,
+	transaction Transaction,
+) error {
 	fetchedTxn, err := s.GetTransactionFromDocID(ctx, transaction.DocumentID)
 	if err != nil {
 		return fmt.Errorf("failed to get transaction %s by document ID %s: %w", transaction.ID, transaction.DocumentID, err)

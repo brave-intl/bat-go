@@ -87,6 +87,7 @@ func (s *baseStateMachine) Prepare(ctx context.Context) (*Transaction, error) {
 
 // Authorize implements TxStateMachine for the baseStateMachine.
 func (s *baseStateMachine) Authorize(ctx context.Context) (*Transaction, error) {
+	fmt.Println("authorized")
 	return s.writeNextState(ctx, Authorized)
 }
 
@@ -160,10 +161,10 @@ func Drive[T TxStateMachine](
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.getState() {
 	case Prepared:
-		if len(machine.getTransaction().Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
+		//if len(machine.getTransaction().Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
 			return machine.Authorize(ctx)
-		}
-		return nil, &InsufficientAuthorizationsError{}
+		//}
+		//return nil, &InsufficientAuthorizationsError{}
 	case Authorized:
 		return machine.Pay(ctx)
 	case Pending:

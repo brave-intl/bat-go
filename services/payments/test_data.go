@@ -269,4 +269,10 @@ var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
 
 var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
 	"dry_run": "false",
-	"token":   "Look at me. I'm a token."}
+	"access_token": "Look at me. I'm a token.",
+	"refresh_toke": "another token",
+	"expires_in": 4,
+	"scope": "some scope",
+	"account_hash": "hashed something",
+	"tokey_type": "token type",
+}

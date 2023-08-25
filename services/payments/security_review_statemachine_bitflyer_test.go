@@ -7,11 +7,13 @@ import (
 	"os"
 	"testing"
 	"time"
+	"net/http"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	//bitflyercmd "github.com/brave-intl/bat-go/tools/settlement/cmd"
 
 	"github.com/jarcoal/httpmock"
 	should "github.com/stretchr/testify/assert"
@@ -40,6 +42,8 @@ Initialized to Paid. Additionally, Paid status should be final and Failed status
 be permanent.
 */
 func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
+	bitflyerStateMachine := BitflyerMachine{}
+	bitflyerStateMachine.client = http.Client{}
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
@@ -85,7 +89,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	must.Equal(t, nil, err)
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Equal(t, nil, err)
-	bitflyerStateMachine := BitflyerMachine{}
 
 	testTransaction := Transaction{
 		State:          Prepared,
@@ -166,6 +169,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
+	fmt.Printf("transaction: %#v\n", newTransaction)
+	info = httpmock.GetCallCountInfo()
+	fmt.Printf("Calls to token refresh: %v\n", info[tokenInfoKey])
 	must.Equal(t, nil, err)
 	// @TODO: When tests include custodial mocks, this should be Pending
 	should.Equal(t, Paid, newTransaction.State)

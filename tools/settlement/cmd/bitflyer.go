@@ -300,7 +300,6 @@ func BitflyerUploadSettlement(
 
 func GetBitflyerAuthorizedClient(ctx context.Context, token string) (bitflyer.Client, error) {
 	bitflyerClient, err := bitflyer.New()
-	fmt.Printf("CLIENT: %#v\n", bitflyerClient)
 	if err != nil {
 		return bitflyerClient, fmt.Errorf("failed to create new bitflyer client: %w", err)
 	}
@@ -309,9 +308,8 @@ func GetBitflyerAuthorizedClient(ctx context.Context, token string) (bitflyer.Cl
 		bitflyerClient.SetAuthToken(token)
 	} else {
 		refreshTokenPayload := NewRefreshTokenPayloadFromViper()
-		fmt.Printf("TOKEN: %#v\n", refreshTokenPayload)
 		resp, err := bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
-		fmt.Printf("RESP: %v\n", resp)
+		fmt.Printf("TOKENRESP: %v\n", resp)
 		if err != nil {
 			return bitflyerClient, fmt.Errorf("failed to refresh bitflyer token: %w", err)
 		}
