@@ -56,7 +56,6 @@ func NewRedisClient(address string, username, password string) *RedisClient {
 		MinRetryBackoff: minRetryBackoff,
 		MaxRetryBackoff: maxRetryBackoff,
 		WriteTimeout:    writeTimeout,
-		RouteByLatency:  true,
 		TLSConfig: &tls.Config{
 			MinVersion:         tls.VersionTLS12,
 			ClientAuth:         0,
