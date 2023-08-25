@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/services/settlement/lua"
-	"github.com/go-redis/redis/v8"
+	redis "github.com/go-redis/redis/v8"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -41,13 +41,13 @@ var (
 
 // RedisClient defines a event client
 type RedisClient struct {
-	*redis.ClusterClient
+	*redis.Client
 }
 
 // NewRedisClient creates a new instance of redis client
-func NewRedisClient(addresses []string, username, password string) *RedisClient {
-	return &RedisClient{redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs:           addresses,
+func NewRedisClient(address string, username, password string) *RedisClient {
+	return &RedisClient{redis.NewClient(&redis.Options{
+		Addr:            address,
 		Username:        username,
 		Password:        password,
 		DialTimeout:     dialTimeout,

@@ -187,8 +187,8 @@ func WithPaymentClient(url string) Option {
 
 // CreateWorker is a factory method to create a new instance of submit.Worker.
 func CreateWorker(config *WorkerConfig) *Worker {
-	redisAddresses := []string{config.redisAddress + ":6379"}
-	redisClient := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
+	redisAddress := config.redisAddress + ":6379"
+	redisClient := event.NewRedisClient(redisAddress, config.redisUsername, config.redisPassword)
 
 	paymentClient := payment.New(config.paymentURL)
 

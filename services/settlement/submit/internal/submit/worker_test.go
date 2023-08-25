@@ -46,8 +46,8 @@ func (suite *WorkerTestSuite) TestE2ESubmit() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redisAddresses := []string{redisAddress + ":6379"}
-	redisClient := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
+	redisAddress := redisAddress + ":6379"
+	redisClient := event.NewRedisClient(redisAddress, redisUsername, redisPassword)
 
 	// stub payment service with expected response.
 	// this value is set on the message, and we want to assert it is passed to the submit endpoint.

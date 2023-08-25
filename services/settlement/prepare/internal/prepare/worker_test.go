@@ -21,7 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/services/settlement/payout"
 	"github.com/brave-intl/bat-go/services/settlement/prepare/internal/prepare"
 	"github.com/brave-intl/bat-go/services/settlement/settlementtest"
-	"github.com/go-redis/redis/v8"
+	redis "github.com/go-redis/redis/v8"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -50,8 +50,8 @@ func (suite *WorkerTestSuite) TestE2EPrepare() {
 	suite.Require().NotNil(redisPassword)
 
 	// Create newHandler redis client and clear streams.
-	redisAddresses := []string{redisAddress + ":6379"}
-	redisClient := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
+	redisAddress := redisAddress + ":6379"
+	redisClient := event.NewRedisClient(redisAddress, redisUsername, redisPassword)
 
 	// Stub payment service with expectedTransactions responses.
 	server := suite.stubPrepareEndpoint()

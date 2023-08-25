@@ -6,9 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/go-redis/redis/v8"
-
 	"github.com/brave-intl/bat-go/services/settlement/event"
+	redis "github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,8 +27,8 @@ func StreamsTearDown(t *testing.T) {
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	require.NotNil(t, redisPassword)
 
-	redisAddresses := []string{redisAddress + ":6379"}
-	rc := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
+	redisAddress := redisAddress + ":6379"
+	rc := event.NewRedisClient(redisAddress, redisUsername, redisPassword)
 
 	_, err := rc.Do(context.Background(), "DEL", PrepareConfig).Result()
 	require.NoError(t, err)

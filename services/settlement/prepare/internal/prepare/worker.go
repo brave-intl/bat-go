@@ -331,8 +331,8 @@ func WithNotificationTopic(notificationTopic string) Option {
 
 // CreateWorker in a factory method to create a new instance of prepare.Worker.
 func CreateWorker(ctx context.Context, config *WorkerConfig) (*Worker, error) {
-	redisAddresses := []string{config.redisAddress + ":6379"} //TODO add port address to ops
-	redisClient := event.NewRedisClient(redisAddresses, config.redisUsername, config.redisPassword)
+	redisAddress := config.redisAddress + ":6379" //TODO add port address to ops
+	redisClient := event.NewRedisClient(redisAddress, config.redisUsername, config.redisPassword)
 
 	paymentClient := payment.New(config.paymentURL)
 
