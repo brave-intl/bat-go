@@ -384,9 +384,6 @@ func (c *HTTPClient) FetchQuote(
 		return nil, err
 	}
 
-	// use the client auth token, token is required for bf api call
-	c.setupRequestHeaders(req)
-
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
 	if err == nil {

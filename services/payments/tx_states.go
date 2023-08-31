@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
 
 	"github.com/google/uuid"
 )
@@ -134,11 +136,16 @@ func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUI
 // StateMachineFromTransaction returns a state machine when provided a transaction.
 func StateMachineFromTransaction(transaction *Transaction, service *Service) (TxStateMachine, error) {
 	var machine TxStateMachine
+	httpClient := http.Client{}
 	switch transaction.Custodian {
 	case "uphold":
 		machine = &UpholdMachine{}
 	case "bitflyer":
-		machine = &BitflyerMachine{}
+		// Set Bitflyer-specific properties
+		machine = &BitflyerMachine{
+			client: httpClient,
+			bitflyerHost: os.Getenv("BITFLYER_SERVER"),
+		}
 	case "gemini":
 		machine = &GeminiMachine{}
 	}

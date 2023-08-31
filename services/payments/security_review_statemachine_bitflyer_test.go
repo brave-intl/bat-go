@@ -42,15 +42,18 @@ Initialized to Paid. Additionally, Paid status should be final and Failed status
 be permanent.
 */
 func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
-	bitflyerStateMachine := BitflyerMachine{}
-	bitflyerStateMachine.client = http.Client{}
-	httpmock.Activate()
-	defer httpmock.DeactivateAndReset()
-
 	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
 	must.Equal(t, nil, err)
 	err = os.Setenv("BITFLYER_SERVER", mockBitflyerHost)
 	must.Equal(t, nil, err)
+
+	bitflyerStateMachine := BitflyerMachine{
+		client: http.Client{},
+		bitflyerHost: mockBitflyerHost,
+	}
+
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
 
 	// Mock transaction creation that will succeed
 	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitSuccessResponse)
@@ -157,7 +160,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
 	info := httpmock.GetCallCountInfo()
-	tokenInfoKey := fmt.Sprintf("GET %s/api/link/v1/token", mockBitflyerHost)
+	tokenInfoKey := fmt.Sprintf("POST %s/api/link/v1/token", mockBitflyerHost)
 	fmt.Printf("Calls to token refresh: %v\n", info[tokenInfoKey])
 	// Ensure that our Bitflyer calls are going through the mock and not anything else.
 	//must.Equal(t, info[tokenInfoKey], 1)

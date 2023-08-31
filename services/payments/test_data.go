@@ -220,55 +220,51 @@ var geminiTransactionCheckSuccessResponse = map[string]string{
 }*/
 
 var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
 var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
 var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
 var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
 var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"access_token": "Look at me. I'm a token.",
 	"refresh_toke": "another token",
 	"expires_in": 4,

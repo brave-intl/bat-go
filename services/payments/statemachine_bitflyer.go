@@ -1,20 +1,15 @@
 package payments
 
 import (
-	"context"
-	"fmt"
-	"time"
-	"net/http"
 	"bytes"
-	//"io"
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"time"
 
-	"github.com/brave-intl/bat-go/libs/altcurrency"
-	//"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-	"github.com/brave-intl/bat-go/libs/custodian"
-	"github.com/brave-intl/bat-go/tools/settlement"
-	//bitflyersettlement "github.com/brave-intl/bat-go/tools/settlement/bitflyer"
-	//bitflyercmd "github.com/brave-intl/bat-go/tools/settlement/cmd"
+	"github.com/amazon-ion/ion-go/ion"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/shopspring/decimal"
 )
 
@@ -25,6 +20,7 @@ type quote struct {
 	SubCurrency  string          `json:"sub_currency"`
 	Rate         decimal.Decimal `json:"rate"`
 	PriceToken   string          `json:"price_token"`
+	ExpiresAt    time.Time
 }
 
 // quoteQuery holds the query params for the quote
@@ -32,20 +28,20 @@ type quoteQuery struct {
 	ProductCode string `url:"product_code,omitempty"`
 }
 
-// withdrawToDepositIDPayload holds a single withdrawal request
-type withdrawToDepositIDPayload struct {
+// bitflyerTransactionPayload holds a single withdrawal request
+type bitflyerTransactionPayload struct {
 	CurrencyCode string  `json:"currency_code"`
-	Amount       float64 `json:"amount"`
+	Amount       *ion.Decimal `json:"amount"`
 	DryRun       *bool   `json:"dry_run,omitempty"`
 	DepositID    string  `json:"deposit_id"`
 	TransferID   string  `json:"transfer_id"`
 	SourceFrom   string  `json:"source_from"`
 }
 
-// withdrawToDepositIDBulkPayload holds all WithdrawToDepositIDPayload(s) for a single bulk request
-type withdrawToDepositIDBulkPayload struct {
+// bitflyerBulkTransactionPayload holds all WithdrawToDepositIDPayload(s) for a single bulk request
+type bitflyerBulkTransactionPayload struct {
 	DryRun       bool                         `json:"dry_run"`
-	Withdrawals  []withdrawToDepositIDPayload `json:"withdrawals"`
+	Withdrawals  []bitflyerTransactionPayload `json:"withdrawals"`
 	PriceToken   string                       `json:"price_token"`
 }
 
@@ -59,8 +55,8 @@ type checkBulkStatusPayload struct {
 	Withdrawals []checkStatusPayload `json:"withdrawals"`
 }
 
-// withdrawToDepositIDResponse holds a single withdrawal request
-type withdrawToDepositIDResponse struct {
+// bitflyerTransactionResponse holds a single withdrawal request
+type bitflyerTransactionResponse struct {
 	CurrencyCode string          `json:"currency_code"`
 	Amount       decimal.Decimal `json:"amount"`
 	Message      string          `json:"message"`
@@ -68,10 +64,10 @@ type withdrawToDepositIDResponse struct {
 	TransferID   string          `json:"transfer_id"`
 }
 
-// withdrawToDepositIDBulkResponse holds info about the status of the bulk settlements
-type withdrawToDepositIDBulkResponse struct {
+// bitflyerBulkTransactionResponse holds info about the status of the bulk settlements
+type bitflyerBulkTransactionResponse struct {
 	DryRun      bool                          `json:"dry_run"`
-	Withdrawals []withdrawToDepositIDResponse `json:"withdrawals"`
+	Withdrawals []bitflyerTransactionResponse `json:"withdrawals"`
 }
 
 // tokenPayload holds the data needed to get a new token
@@ -90,6 +86,7 @@ type tokenResponse struct {
 	Scope        string `json:"scope"`
 	AccountHash  string `json:"account_hash"`
 	TokenType    string `json:"token_type"`
+	ExpiresAt    time.Time
 }
 
 // inventory holds the balance for a particular currency
@@ -105,38 +102,76 @@ type inventoryResponse struct {
 	Inventory   []inventory `json:"inventory"`
 }
 
-// categorizeStatus checks the status of a withdrawal response and categorizes it
-//func categorizeStatus(withdrawResponse withdrawToDepositIDResponse) string {
-//	switch withdrawResponse.Status {
-//	case "SUCCESS", "EXECUTED":
-//		return "complete"
-//	case "CREATED", "PENDING":
-//		return "pending"
-//	}
-//	return "failed"
-//}
-//
-//func fetchQuote(
-//	ctx context.Context,
-//	productCode string,
-//	readFromFile bool,
-//) (*quote, error) {
-//
-//}
-//
+func parseJWTExpiry(token string) (time.Time, error) {
+	var claims map[string]interface{}
+	parsed, err := jwt.ParseSigned(token)
+	if err != nil {
+		return time.Time{}, err
+	}
+	err = parsed.UnsafeClaimsWithoutVerification(&claims)
+	if err != nil {
+		return time.Time{}, err
+	}
+	exp := claims["exp"].(float64)
+	ts := time.Unix(int64(exp), 0)
+	return ts, nil
+}
+
+func (bm *BitflyerMachine) fetchQuote(
+	ctx context.Context,
+) (error) {
+	if !bm.priceQuote.ExpiresAt.IsZero() && time.Now().Before(bm.priceQuote.ExpiresAt) {
+		return nil
+	}
+
+	quoteQuery := quoteQuery{
+		ProductCode: "BAT_JPY",
+	}
+	payloadString, err := json.Marshal(quoteQuery)
+	if err != nil {
+		return fmt.Errorf("failed to parse payload into JSON: %w", err)
+	}
+
+	req, err := bm.makeRequest(ctx, "/api/link/v1/getprice", "GET", payloadString)
+	if err != nil {
+		return fmt.Errorf("failed to create price quote request: %w", err)
+	}
+
+	resp, err := bm.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to get price quote: %w", err)
+	}
+
+	var quoteResponse quote
+	err = json.NewDecoder(resp.Body).Decode(&quoteResponse)
+	if err != nil {
+		return fmt.Errorf("failed to parse withdrawal response: %w", err)
+	}
+
+	expiresAt, err := parseJWTExpiry(quoteResponse.PriceToken)
+	if err != nil {
+		return fmt.Errorf("failed to get price quote: %w", err)
+	}
+
+	bm.priceQuote.ExpiresAt = expiresAt
+	bm.priceQuote = quoteResponse
+
+	return nil
+}
+
 // uploadBulkPayout posts a signed bulk layout to bitflyer
 func (bm *BitflyerMachine) uploadBulkPayout(
 	ctx context.Context,
-	payload withdrawToDepositIDBulkPayload,
-) (*withdrawToDepositIDBulkResponse, error) {
+	payload bitflyerBulkTransactionPayload,
+) (*bitflyerBulkTransactionResponse, error) {
 	payloadString, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse payload into JSON: %w", err)
 	}
 	req, err := bm.makeRequest(
 		ctx,
+		bm.bitflyerHost + "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request",
 		http.MethodPost,
-		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-request",
 		payloadString,
 	)
 	if err != nil {
@@ -147,7 +182,7 @@ func (bm *BitflyerMachine) uploadBulkPayout(
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute withdrawal request: %w", err)
 	}
-	var withdrawToDepositIDBulkResponse withdrawToDepositIDBulkResponse
+	var withdrawToDepositIDBulkResponse bitflyerBulkTransactionResponse
 	err = json.NewDecoder(resp.Body).Decode(&withdrawToDepositIDBulkResponse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse withdrawal response: %w", err)
@@ -155,16 +190,40 @@ func (bm *BitflyerMachine) uploadBulkPayout(
 
 	return &withdrawToDepositIDBulkResponse, nil
 }
-//
-//// checkPayoutStatus checks the status of a transaction
-//func checkPayoutStatus(
-//	ctx context.Context,
-//	payload checkBulkStatusPayload,
-//) (*withdrawToDepositIDBulkResponse, error) {
-//
-//}
-//
-//// checkInventory check available balance of bitflyer account
+
+// checkPayoutStatus checks the status of a transaction
+func (bm *BitflyerMachine) checkPayoutStatus(
+	ctx context.Context,
+	payload checkBulkStatusPayload,
+) (*bitflyerBulkTransactionResponse, error) {
+	payloadString, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse payload into JSON: %w", err)
+	}
+	req, err := bm.makeRequest(
+		ctx,
+		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
+		http.MethodPost,
+		payloadString,
+	)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := bm.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute status check request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var bulkTransactionRespoonse bitflyerBulkTransactionResponse
+	err = json.NewDecoder(resp.Body).Decode(&bulkTransactionRespoonse)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse status check response: %w", err)
+	}
+	return &bulkTransactionRespoonse, nil
+}
+
+// checkInventory check available balance of bitflyer account
 //func checkInventory(ctx context.Context) (map[string]inventory, error) {
 //
 //}
@@ -174,13 +233,18 @@ func (bm *BitflyerMachine) refreshToken(
 	ctx context.Context,
 	payload tokenPayload,
 ) (error) {
+	// Only refresh the token if the existing token is defined and has expired
+	if time.Now().Before(bm.authToken.ExpiresAt) {
+		return nil
+	}
+
 	payloadString, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to parse payload into JSON: %w", err)
 	}
 	req, err := bm.makeRequest(
 		ctx,
-		"http://bravesoftware.com/api/link/v1/token",
+		bm.bitflyerHost + "/api/link/v1/token",
 		http.MethodPost,
 		payloadString,
 	)
@@ -200,7 +264,11 @@ func (bm *BitflyerMachine) refreshToken(
 		return fmt.Errorf("failed to parse token refresh response: %w", err)
 	}
 	bm.authToken = token
-	fmt.Printf("TOKEN: %#v\n", token)
+	expiresAt, err := time.ParseDuration(fmt.Sprintf("%ds", token.ExpiresIn))
+	if err != nil {
+		return fmt.Errorf("failed to parse token refresh expires_in: %w", err)
+	}
+	bm.authToken.ExpiresAt = time.Now().Add(expiresAt)
 
 	return nil
 }
@@ -233,12 +301,18 @@ type BitflyerMachine struct {
 	baseStateMachine
 	client http.Client
 	authToken tokenResponse
+	bitflyerHost string
+	priceQuote quote
+	backoffFactor time.Duration
 }
 
 // Pay implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
-	fmt.Println("refreshing token")
 	err := bm.refreshToken(ctx, tokenPayload{})
+	if err != nil {
+		return nil, err
+	}
+	err = bm.fetchQuote(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -249,36 +323,70 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 		entry                 *Transaction
 		//submittedTransactions map[string][]custodian.Transaction
 	)
+	batchOfOneTransaction := transactionToBitflyerBulkTransaction(
+		bm.transaction,
+		bm.priceQuote.PriceToken,
+	)
 	if bm.transaction.State == Pending {
+		// We don't want to check status too fast
+		time.Sleep(bm.backoffFactor * time.Second)
 		// Get status of transaction and update the state accordingly
-		return bm.writeNextState(ctx, Paid)
+		transactionsStatus, err := bm.checkPayoutStatus(ctx, checkBulkStatusPayload{
+			Withdrawals: []checkStatusPayload{
+				checkStatusPayload{
+					TransferID: batchOfOneTransaction.Withdrawals[0].TransferID,
+				},
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to check transaction status: %w", err)
+		}
+		switch transactionsStatus.Withdrawals[0].Status {
+		case "SUCCESS", "EXECUTED":
+			// Write the Paid status and end the loop by not calling Drive
+			entry, err = bm.writeNextState(ctx, Paid)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write next state: %w", err)
+			}
+		case "CREATED", "PENDING":
+			// Set backoff without changing status
+			bm.backoffFactor = bm.backoffFactor * 2
+			entry, err = Drive(ctx, bm)
+			if err != nil {
+				return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+			}
+		}
+		return entry, nil
 	} else {
 		// Submit formatted transaction
-		aggregateTransaction := transactionToSettlementAggregateTransaction(bm.transaction)
-		aggregateTransactionSet := []settlement.AggregateTransaction{aggregateTransaction}
-		request, err := getBitflyerRequest(ctx, bitflyerClient, aggregateTransactionSet)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get bitflyer request: %w", err)
-		}
-		submittedTransactions, err = bitflyersettlement.SubmitBulkPayoutTransactions(
-			ctx,
-			aggregateTransactionSet,
-			submittedTransactions,
-			*request,
-			bitflyerClient,
-			1, // Hard code number of transactions, as we will only do one at a time
-			1, // Hard code progress, as there is only one
-		)
+		submittedTransactions, err := bm.uploadBulkPayout(ctx, batchOfOneTransaction)
 		if err != nil {
 			return nil, fmt.Errorf("failed to submit bulk payout transactions: %w", err)
 		}
-		entry, err = bm.writeNextState(ctx, Pending)
-		if err != nil {
-			return nil, fmt.Errorf("failed to write next state: %w", err)
+		if len(submittedTransactions.Withdrawals) != 1 {
+			return nil, fmt.Errorf("received an unexpected number of results: %d", len(submittedTransactions.Withdrawals))
 		}
-		entry, err = Drive(ctx, bm)
-		if err != nil {
-			return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+		// Take the first because it is the only one
+		submittedTransaction := submittedTransactions.Withdrawals[0]
+		switch submittedTransaction.Status {
+		case "SUCCESS", "EXECUTED":
+			// Write the Paid status and end the loop by not calling Drive
+			entry, err = bm.writeNextState(ctx, Paid)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write next state: %w", err)
+			}
+		case "CREATED", "PENDING":
+			// Write the Pending status and call Drive to come around again
+			entry, err = bm.writeNextState(ctx, Pending)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write next state: %w", err)
+			}
+			// Set initial backoff
+			bm.backoffFactor = 2
+			entry, err = Drive(ctx, bm)
+			if err != nil {
+				return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+			}
 		}
 	}
 	return entry, nil
@@ -292,59 +400,23 @@ func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
 	return bm.writeNextState(ctx, Failed)
 }
 
-//func getBitflyerRequest(
-//	ctx context.Context,
-//	bitflyerClient bitflyer.Client,
-//	aggregateTransactions []settlement.AggregateTransaction,
-//) (*withdrawToDepositIDBulkPayload, error) {
-//	//  this will only fetch a new quote when needed - but ensures that we don't have problems due
-//	//  to quote expiring midway through
-//	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
-//	}
-//
-//	request, err := bitflyersettlement.CreateBitflyerRequest(
-//		nil, // Ignore dry run settings for now. We handle it ourselves.
-//		quote.PriceToken,
-//		aggregateTransactions,
-//	)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return request, nil
-//}
+func transactionToBitflyerBulkTransaction(
+	transaction *Transaction,
+	priceToken string,
+) bitflyerBulkTransactionPayload {
+	dryRun := false
+	bitflyerTransactions := bitflyerTransactionPayload{
+		Amount: transaction.Amount,
+		DepositID: transaction.To,
+		TransferID: transaction.PayoutID,
+		SourceFrom: transaction.From,
+		DryRun: &dryRun,
+	}
+	aggregateTransaction := bitflyerBulkTransactionPayload{
+		Withdrawals:      []bitflyerTransactionPayload{bitflyerTransactions},
+		PriceToken: priceToken,
+		DryRun: false,
+	}
 
-func transactionToSettlementAggregateTransaction(transaction *Transaction) settlement.AggregateTransaction {
-	altCurrencyBAT := altcurrency.BAT
-	custodianTransaction := custodian.Transaction{
-		AltCurrency:      &altCurrencyBAT,
-		Authority:        "",
-		Amount:           decimal.New(1, 1),
-		ExchangeFee:      decimal.New(1, 1),
-		FailureReason:    "",
-		Currency:         "",
-		Destination:      "",
-		Publisher:        "",
-		BATPlatformFee:   decimal.New(1, 1),
-		Probi:            decimal.New(1, 1),
-		ProviderID:       "",
-		WalletProvider:   "",
-		WalletProviderID: "",
-		Channel:          "",
-		SignedTx:         "",
-		Status:           "",
-		SettlementID:     "",
-		TransferFee:      decimal.New(1, 1),
-		Type:             "",
-		ValidUntil:       time.Now(),
-		DocumentID:       "",
-		Note:             "",
-	}
-	aggregateTransaction := settlement.AggregateTransaction{
-		Transaction: custodianTransaction,
-		Inputs:      []custodian.Transaction{custodianTransaction},
-		SourceFrom:  "",
-	}
 	return aggregateTransaction
 }
