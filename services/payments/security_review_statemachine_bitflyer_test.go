@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -56,7 +57,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	defer httpmock.DeactivateAndReset()
 
 	// Mock transaction creation that will succeed
-	jsonResponse, err := json.Marshal(bitflyerTransactionSubmitSuccessResponse)
+	jsonSumbitaSuccessResponse, err := json.Marshal(bitflyerTransactionSubmitSuccessResponse)
 	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
@@ -64,10 +65,10 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 			"%s/api/link/v1/coin/withdraw-to-deposit-id/bulk-request",
 			mockBitflyerHost,
 		),
-		httpmock.NewStringResponder(200, string(jsonResponse)),
+		httpmock.NewStringResponder(200, string(jsonSumbitaSuccessResponse)),
 	)
-	// Mock transaction commit that will succeed
-	jsonResponse, err = json.Marshal(bitflyerTransactionCheckStatusSuccessResponse)
+	// Mock transaction status check that will stay stuck in pending
+	jsonCheckStatusResponsePending, err := json.Marshal(bitflyerTransactionCheckStatusSuccessResponsePending)
 	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
@@ -75,9 +76,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 			"%s/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
 			mockBitflyerHost,
 		),
-		httpmock.NewStringResponder(200, string(jsonResponse)),
+		httpmock.NewStringResponder(200, string(jsonCheckStatusResponsePending)),
 	)
-	jsonResponse, err = json.Marshal(bitflyerTransactionTokenRefreshResponse)
+	jsonTokenRefreshResponse, err := json.Marshal(bitflyerTransactionTokenRefreshResponse)
 	must.Equal(t, nil, err)
 	httpmock.RegisterResponder(
 		"POST",
@@ -85,7 +86,17 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 			"%s/api/link/v1/token",
 			mockBitflyerHost,
 		),
-		httpmock.NewStringResponder(200, string(jsonResponse)),
+		httpmock.NewStringResponder(200, string(jsonTokenRefreshResponse)),
+	)
+	jsonPriceFetchResponse, err := json.Marshal(bitflyerFetchPriceResponse)
+	must.Equal(t, nil, err)
+	httpmock.RegisterResponder(
+		"GET",
+		fmt.Sprintf(
+			"%s/api/link/v1/getprice",
+			mockBitflyerHost,
+		),
+		httpmock.NewStringResponder(200, string(jsonPriceFetchResponse)),
 	)
 
 	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
@@ -171,20 +182,37 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	marshaledData, _ = testTransaction.MarshalJSON()
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
-	fmt.Printf("transaction: %#v\n", newTransaction)
-	info = httpmock.GetCallCountInfo()
-	fmt.Printf("Calls to token refresh: %v\n", info[tokenInfoKey])
-	must.Equal(t, nil, err)
-	// @TODO: When tests include custodial mocks, this should be Pending
-	should.Equal(t, Paid, newTransaction.State)
+	timeout, cancel := context.WithTimeout(ctx, 1 * time.Millisecond)
+	defer cancel()
+	// For this test, we will return Pending status forever, so we need it to time out
+	// in order to capture and verify that pending status.
+	newTransaction, err = Drive(timeout, &bitflyerStateMachine)
+	// The only tolerable error is a timeout, and that's what we expect here
+	must.True(t, errors.Is(err, context.DeadlineExceeded))
+	should.Equal(t, Pending, newTransaction.State)
 
 	// Should transition transaction into the Paid state
+	// Mock transaction status check that will succeed, overriding the one about that will stay
+	// stuck in pending
+	jsonCheckStatusResponse, err := json.Marshal(bitflyerTransactionCheckStatusSuccessResponse)
+	must.Equal(t, nil, err)
+	httpmock.RegisterResponder(
+		"POST",
+		fmt.Sprintf(
+			"%s/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
+			mockBitflyerHost,
+		),
+		httpmock.NewStringResponder(200, string(jsonCheckStatusResponse)),
+	)
 	testTransaction.State = Pending
 	marshaledData, _ = testTransaction.MarshalJSON()
 	mockTransitionHistory.Data.Data = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
+	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
+	// is 5 minutes and we don't want the test to run that long even if it's broken.
+	timeout, cancel = context.WithTimeout(ctx, 100 * time.Millisecond)
+	defer cancel()
+	newTransaction, err = Drive(timeout, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
 	should.Equal(t, Paid, newTransaction.State)
 }

@@ -225,7 +225,7 @@ var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
-		"transfer_Status": "",
+		"transfer_Status": "pending",
 		"transfer_id":     "",
 	}},
 }
@@ -247,7 +247,18 @@ var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
-		"transfer_Status": "",
+		"transfer_Status": "success",
+		"transfer_id":     "",
+	}},
+}
+
+var bitflyerTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
+	"dry_run": false,
+	"withdrawals": []map[string]interface{}{{
+		"currency_code":   "",
+		"amount":          1.0,
+		"message":         "",
+		"transfer_Status": "pending",
 		"transfer_id":     "",
 	}},
 }
@@ -271,4 +282,12 @@ var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
 	"scope": "some scope",
 	"account_hash": "hashed something",
 	"tokey_type": "token type",
+}
+
+var bitflyerFetchPriceResponse = map[string]interface{}{
+	"product_code": "BAT_JPY",
+	"main_currency": "BAT",
+	"sub_currency": "",
+	"rate": 4,
+	"price_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
 }

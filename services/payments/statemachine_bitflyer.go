@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/amazon-ion/ion-go/ion"
@@ -132,7 +134,7 @@ func (bm *BitflyerMachine) fetchQuote(
 		return fmt.Errorf("failed to parse payload into JSON: %w", err)
 	}
 
-	req, err := bm.makeRequest(ctx, "/api/link/v1/getprice", "GET", payloadString)
+	req, err := bm.makeRequest(ctx, bm.bitflyerHost + "/api/link/v1/getprice", "GET", payloadString)
 	if err != nil {
 		return fmt.Errorf("failed to create price quote request: %w", err)
 	}
@@ -202,7 +204,7 @@ func (bm *BitflyerMachine) checkPayoutStatus(
 	}
 	req, err := bm.makeRequest(
 		ctx,
-		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
+		bm.bitflyerHost + "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
 		http.MethodPost,
 		payloadString,
 	)
@@ -284,7 +286,7 @@ func (bm *BitflyerMachine) makeRequest(
 	method string,
 	body []byte,
 ) (*http.Request, error) {
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
@@ -306,9 +308,58 @@ type BitflyerMachine struct {
 	backoffFactor time.Duration
 }
 
+type bitflyerResult struct {
+    Transaction *Transaction
+    Error error
+}
+
+// Pay implements TxStateMachine interface for Bitflyer. In this case we want to return
+// a value even if the context deadline is exceeded, as we could wind up in an infinite pending
+// loop. For now, we return as-is. However, @TODO we want to fail.
+//func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
+	//	resultChan := make(chan bitflyerResult)
+	//	fmt.Print("STARTING GOROUTINE")
+	//	go func() {
+	//		var result bitflyerResult
+	//		result.Transaction, result.Error = bm.PayWithTimeout(ctx)
+	//		fmt.Print("COMPLETED GOROUTINE")
+	//		resultChan <- result
+	//	}()
+	//
+	//	// Wait for the operation to complete or the context to expire.
+	//	for {
+	//		select {
+	//		case result := <-resultChan:
+	//			fmt.Print("GOT MESSAGE")
+	//			return result.Transaction, result.Error
+	//		case <-ctx.Done():
+	//			fmt.Print("CONTEXT DONE")
+	//			// Context deadline exceeded
+	//			err := ctx.Err()
+	//			if errors.Is(err, context.DeadlineExceeded) {
+	//				fmt.Print("DEADLINE EXCEEDED")
+	//				return bm.transaction, err
+	//			}
+	//			return nil, err
+	//		}
+	//	}
+	//}
+
 // Pay implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
-	err := bm.refreshToken(ctx, tokenPayload{})
+	err := ctx.Err()
+	if errors.Is(err, context.DeadlineExceeded) {
+		fmt.Println("DEADLINE EXCEEDED")
+		fmt.Printf("txn: %+v\n", bm.transaction)
+		return bm.transaction, err
+	}
+
+	// Do nothing if the state is already final
+	if bm.transaction.State == Paid || bm.transaction.State == Failed {
+		return bm.transaction, nil
+	}
+
+	err = bm.refreshToken(ctx, tokenPayload{})
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +380,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 	)
 	if bm.transaction.State == Pending {
 		// We don't want to check status too fast
-		time.Sleep(bm.backoffFactor * time.Second)
+		time.Sleep(bm.backoffFactor * time.Millisecond)
 		// Get status of transaction and update the state accordingly
 		transactionsStatus, err := bm.checkPayoutStatus(ctx, checkBulkStatusPayload{
 			Withdrawals: []checkStatusPayload{
@@ -341,7 +392,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to check transaction status: %w", err)
 		}
-		switch transactionsStatus.Withdrawals[0].Status {
+		switch strings.ToUpper(transactionsStatus.Withdrawals[0].Status) {
 		case "SUCCESS", "EXECUTED":
 			// Write the Paid status and end the loop by not calling Drive
 			entry, err = bm.writeNextState(ctx, Paid)
@@ -353,10 +404,16 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 			bm.backoffFactor = bm.backoffFactor * 2
 			entry, err = Drive(ctx, bm)
 			if err != nil {
-				return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+				return entry, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
 			}
+		default:
+			// Status unknown. Fail
+			entry, err = bm.writeNextState(ctx, Failed)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write next state: %w", err)
+			}
+			return nil, fmt.Errorf("received unknown status from bitflyer for transaction: %v", entry)
 		}
-		return entry, nil
 	} else {
 		// Submit formatted transaction
 		submittedTransactions, err := bm.uploadBulkPayout(ctx, batchOfOneTransaction)
@@ -368,7 +425,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 		}
 		// Take the first because it is the only one
 		submittedTransaction := submittedTransactions.Withdrawals[0]
-		switch submittedTransaction.Status {
+		switch strings.ToUpper(submittedTransaction.Status) {
 		case "SUCCESS", "EXECUTED":
 			// Write the Paid status and end the loop by not calling Drive
 			entry, err = bm.writeNextState(ctx, Paid)
@@ -385,11 +442,18 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 			bm.backoffFactor = 2
 			entry, err = Drive(ctx, bm)
 			if err != nil {
-				return nil, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
+				return entry, fmt.Errorf("failed to drive transaction from pending to paid: %w", err)
 			}
+		default:
+			// Status unknown. Fail
+			entry, err = bm.writeNextState(ctx, Failed)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write next state: %w", err)
+			}
+			return nil, fmt.Errorf("received unknown status from bitflyer for transaction: %v", entry)
 		}
 	}
-	return entry, nil
+	return bm.transaction, nil
 }
 
 // Fail implements TxStateMachine for the Bitflyer machine.

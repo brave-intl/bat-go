@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -165,6 +166,17 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 ) (*Transaction, error) {
+	// Drive is called recursively, so we need to check whether a deadline has been set
+	// by a prior caller and only set the default deadline if not.
+	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
+		ctx, _ = context.WithTimeout(ctx, 5 * time.Minute)
+	}
+	err := ctx.Err()
+	if errors.Is(err, context.DeadlineExceeded) {
+		transaction := machine.getTransaction()
+		return transaction, err
+	}
+
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.getState() {
 	case Prepared:
