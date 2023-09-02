@@ -29,7 +29,6 @@ type TxStateMachine interface {
 	getKMSSigningClient() wrappedKMSClient
 	GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error)
 	Prepare(context.Context) (*Transaction, error)
-	Authorize(context.Context) (*Transaction, error)
 	Pay(context.Context) (*Transaction, error)
 	Fail(context.Context) (*Transaction, error)
 }

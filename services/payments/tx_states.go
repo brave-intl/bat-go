@@ -88,12 +88,6 @@ func (s *baseStateMachine) Prepare(ctx context.Context) (*Transaction, error) {
 	return s.writeNextState(ctx, Prepared)
 }
 
-// Authorize implements TxStateMachine for the baseStateMachine.
-func (s *baseStateMachine) Authorize(ctx context.Context) (*Transaction, error) {
-	fmt.Println("authorized")
-	return s.writeNextState(ctx, Authorized)
-}
-
 func (s *baseStateMachine) setTransaction(transaction *Transaction) {
 	s.transaction = transaction
 }
