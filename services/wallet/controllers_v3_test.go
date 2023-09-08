@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -17,6 +18,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
+
 	mockgemini "github.com/brave-intl/bat-go/libs/clients/gemini/mock"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -306,6 +309,12 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
+
+	var res wallet.LinkDepositAccountResponse
+	err = json.NewDecoder(w.Body).Decode(&res)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "JP", res.GeoCountry)
 }
 
 func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
@@ -447,6 +456,12 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
+
+	var res wallet.LinkDepositAccountResponse
+	err := json.NewDecoder(w.Body).Decode(&res)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "US", res.GeoCountry)
 
 	// delete linking
 	r = httptest.NewRequest(
@@ -886,6 +901,12 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
+
+	var res wallet.LinkDepositAccountResponse
+	err = json.NewDecoder(w.Body).Decode(&res)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "IN", res.GeoCountry)
 }
 
 func TestLinkGeminiWalletV3(t *testing.T) {
@@ -948,7 +969,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		gomock.Any(),
 	).Return(
 		accountID.String(),
-		"",
+		"GB",
 		nil,
 	)
 
@@ -1006,6 +1027,12 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
+
+	var res wallet.LinkDepositAccountResponse
+	err := json.NewDecoder(w.Body).Decode(&res)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "GB", res.GeoCountry)
 }
 
 func TestDisconnectCustodianLinkV3(t *testing.T) {
