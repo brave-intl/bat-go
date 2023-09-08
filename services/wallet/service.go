@@ -523,8 +523,8 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	// If a wallet has previously been linked i.e. has a prior linking, but the country is now invalid/blocked
-	// then we can ignore this error and allow the account to link due to its prior successful linking.
-	// If there is no prior linking then we should return the original error.
+	// then we can allow the account to link due to its prior successful linking i.e. it is grandfathered.
+	// If there is no prior linking and the country is invalid/blocked then we should apply the current rules and block it.
 
 	accountID, country, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
