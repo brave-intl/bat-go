@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -837,7 +838,7 @@ func (c *claimsZP) validate(now time.Time) error {
 		return errZPInvalidAccountID
 	}
 
-	if c.CountryCode != "IN" {
+	if strings.ToUpper(c.CountryCode) != "IN" {
 		return errorutils.ErrInvalidCountry
 	}
 
