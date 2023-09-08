@@ -432,6 +432,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 
 		return "", handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
+
 	return country, nil
 }
 
