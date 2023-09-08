@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -75,24 +74,6 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		// if dryrun and prepare we will fail here
-		if req.DryRun != nil {
-			if *req.DryRun != prepareFailure {
-				// populate document id on transaction
-				req.DocumentID = uuid.New().String()
-				attestation, err := nitro.Attest(ctx, []byte(uuid.New().String()), []byte(req.DocumentID), []byte{})
-				if err != nil {
-					logger.Warn().Str("request", fmt.Sprintf("%+v", req)).Err(err).Msg("failed attestation")
-					return handlers.WrapError(errors.New("dry run failed to attest"), "Error in request body", http.StatusInternalServerError)
-				}
-				req.AttestationDocument = base64.StdEncoding.EncodeToString(attestation)
-				// return a success
-				return handlers.RenderContent(r.Context(), req, w, http.StatusOK)
-			}
-			// return a failure
-			return handlers.WrapError(errors.New("dry run forced error"), "Error in request body", http.StatusBadRequest)
-		}
-
 		logger.Debug().Str("request", fmt.Sprintf("%+v", req)).Msg("structure of request")
 		// validate the transaction
 
@@ -152,16 +133,6 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		err := requestutils.ReadJSON(ctx, r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		// if dryrun and submit we will fail here
-		if req.DryRun != nil {
-			if *req.DryRun != submitFailure {
-				// return a success
-				return handlers.RenderContent(r.Context(), req, w, http.StatusOK)
-			}
-			// return a failure
-			return handlers.WrapError(errors.New("dry run forced error"), "Error in request body", http.StatusBadRequest)
 		}
 
 		_, err = govalidator.ValidateStruct(req)
