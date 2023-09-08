@@ -796,7 +796,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 
 	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
 		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
-		"isValid": true,
+		"isValid": true, "countryCode": "IN",
 	}).CompactSerialize()
 	if err != nil {
 		panic(err)
