@@ -23,6 +23,11 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+// LinkDepositAccountResponse is the response returned by the linking endpoints.
+type LinkDepositAccountResponse struct {
+	GeoCountry string `json:"geoCountry"`
+}
+
 // CreateUpholdWalletV3 produces a http handler for the service which handles creation of uphold wallets.
 func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var (
@@ -201,13 +206,14 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 			return blr.HandleErrors(err)
 		}
 
-		err = s.LinkBitFlyerWallet(ctx, *id.UUID(), blr.DepositID, blr.AccountHash)
+		country, err := s.LinkBitFlyerWallet(ctx, *id.UUID(), blr.DepositID, blr.AccountHash)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 
-		// render the wallet
-		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
+		return handlers.RenderContent(ctx, LinkDepositAccountResponse{
+			GeoCountry: country,
+		}, w, http.StatusOK)
 	}
 }
 
@@ -223,10 +229,10 @@ func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		id := &inputs.ID{}
-		logger := logging.Logger(ctx, "wallet.LinkZebPayDepositAccountV3")
+		l := logging.Logger(ctx, "wallet.LinkZebPayDepositAccountV3")
 
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
-			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			l.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
 
 			const msg = "error validating paymentID url parameter"
 			return handlers.ValidationError(msg, map[string]interface{}{"paymentID": err.Error()})
@@ -251,19 +257,23 @@ func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return HandleErrorsZebPay(err)
 		}
 
-		if err := s.LinkZebPayWallet(ctx, *id.UUID(), xalr.VerificationToken); err != nil {
-			if errors.Is(err, errorutils.ErrInvalidCountry) {
+		country, err := s.LinkZebPayWallet(ctx, *id.UUID(), xalr.VerificationToken)
+		if err != nil {
+			l.Error().Err(err).Str("paymentID", id.String()).
+				Msg("failed to link wallet")
+			switch {
+			case errors.Is(err, errorutils.ErrInvalidCountry):
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
-			}
-
-			if errors.Is(err, errZPInvalidKYC) {
+			case errors.Is(err, errZPInvalidKYC):
 				return handlers.WrapError(err, "KYC required", http.StatusForbidden)
+			default:
+				return handlers.WrapError(err, err.Error(), http.StatusBadRequest)
 			}
-
-			return handlers.WrapError(err, err.Error(), http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
+		return handlers.RenderContent(ctx, LinkDepositAccountResponse{
+			GeoCountry: country,
+		}, w, http.StatusOK)
 	}
 }
 
@@ -331,7 +341,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return glr.HandleErrors(err)
 		}
 
-		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, glr.DepositID)
+		country, err := s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, glr.DepositID)
 		if err != nil {
 			logger.Error().Str("depositID", glr.DepositID).
 				Err(err).Msg("error linking gemini wallet")
@@ -343,8 +353,9 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 
-		// render the wallet
-		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
+		return handlers.RenderContent(ctx, LinkDepositAccountResponse{
+			GeoCountry: country,
+		}, w, http.StatusOK)
 	}
 }
 
@@ -357,7 +368,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			cuw = new(LinkUpholdDepositAccountRequest)
 		)
 		// get logger from context
-		logger := logging.Logger(ctx, "wallet.LinkUpholdDepositAccountV3")
+		l := logging.Logger(ctx, "wallet.LinkUpholdDepositAccountV3")
 
 		// check if we have disabled uphold
 		if disableUphold, ok := ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool); ok && disableUphold {
@@ -369,7 +380,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
-			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			l.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
 				map[string]interface{}{
@@ -403,7 +414,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		publicKey, err := hex.DecodeString(wallet.PublicKey)
 		if err != nil {
-			logger.Warn().Err(err).Msg("unable to decode wallet public key")
+			l.Warn().Err(err).Msg("unable to decode wallet public key")
 			return handlers.WrapError(errors.New("unable to decode wallet public key"),
 				"unable to decode wallet public key for creation request validation",
 				http.StatusInternalServerError)
@@ -414,8 +425,10 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 		}
 
-		err = s.LinkWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)
+		country, err := s.LinkWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)
 		if err != nil {
+			l.Error().Err(err).Str("paymentID", id.String()).
+				Msg("failed to link wallet")
 			if errors.Is(err, errorutils.ErrInvalidCountry) {
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
 			}
@@ -423,7 +436,9 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
+		return handlers.RenderContent(ctx, LinkDepositAccountResponse{
+			GeoCountry: country,
+		}, w, http.StatusOK)
 	}
 }
 
