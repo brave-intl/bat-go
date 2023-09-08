@@ -668,6 +668,7 @@ func (service *Service) LinkWallet(ctx context.Context, wallet uphold.Wallet, tr
 			return "", handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
 		}
 	}
+
 	return country, nil
 }
 
