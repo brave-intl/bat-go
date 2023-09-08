@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -485,7 +486,6 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, claims.AccountID)
-
 	if err := service.Datastore.LinkWallet(ctx, walletID.String(), claims.DepositID, providerLinkingID, nil, "zebpay", country); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
@@ -807,11 +807,12 @@ func canRetry(nonRetriableErrors []int) func(error) bool {
 }
 
 type claimsZP struct {
-	Iat       int64  `json:"iat"`
-	Exp       int64  `json:"exp"`
-	DepositID string `json:"depositId"`
-	AccountID string `json:"accountId"`
-	Valid     bool   `json:"isValid"`
+	Iat         int64  `json:"iat"`
+	Exp         int64  `json:"exp"`
+	DepositID   string `json:"depositId"`
+	AccountID   string `json:"accountId"`
+	Valid       bool   `json:"isValid"`
+	CountryCode string `json:"countryCode"`
 }
 
 func (c *claimsZP) validate(now time.Time) error {
@@ -835,6 +836,10 @@ func (c *claimsZP) validate(now time.Time) error {
 	// Get the account id.
 	if c.AccountID == "" {
 		return errZPInvalidAccountID
+	}
+
+	if strings.ToUpper(c.CountryCode) != "IN" {
+		return errorutils.ErrInvalidCountry
 	}
 
 	return c.validateTime(now)
