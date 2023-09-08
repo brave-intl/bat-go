@@ -522,10 +522,10 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, &cr)
 	}
 
-	// Validate the account with Gemini. If a wallet has previously been linked but the country is now invalid
-	// i.e. validate account returns errorutils.ErrInvalidCountry then we can ignore this
-	// error and allow the account to link due to its prior successful linking.
+	// If a wallet has previously been linked i.e. has a prior linking, but the country is now invalid/blocked
+	// then we can ignore this error and allow the account to link due to its prior successful linking.
 	// If there is no prior linking then we should return the original error.
+
 	accountID, country, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
@@ -568,8 +568,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 }
 
 // LinkWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkWallet(ctx context.Context, wallet uphold.Wallet, transaction string,
-	anonymousAddress *uuid.UUID) (string, error) {
+func (service *Service) LinkWallet(ctx context.Context, wallet uphold.Wallet, transaction string, anonymousAddress *uuid.UUID) (string, error) {
 	// do not confirm this transaction yet
 	info := wallet.GetWalletInfo()
 

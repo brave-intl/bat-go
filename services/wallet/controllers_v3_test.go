@@ -19,6 +19,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	mockgemini "github.com/brave-intl/bat-go/libs/clients/gemini/mock"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
@@ -303,18 +304,19 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	router.Post("/v3/wallet/bitflyer/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 
-	var res wallet.LinkDepositAccountResponse
-	err = json.NewDecoder(w.Body).Decode(&res)
-	assert.NoError(t, err)
+	var linkDepositAccountResponse wallet.LinkDepositAccountResponse
+	err = json.NewDecoder(resp.Body).Decode(&linkDepositAccountResponse)
+	require.NoError(t, err)
 
-	assert.Equal(t, "JP", res.GeoCountry)
+	assert.Equal(t, "JP", linkDepositAccountResponse.GeoCountry)
 }
 
 func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
@@ -450,18 +452,19 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 
-	var res wallet.LinkDepositAccountResponse
-	err := json.NewDecoder(w.Body).Decode(&res)
-	assert.NoError(t, err)
+	var linkDepositAccountResponse wallet.LinkDepositAccountResponse
+	err := json.NewDecoder(resp.Body).Decode(&linkDepositAccountResponse)
+	require.NoError(t, err)
 
-	assert.Equal(t, "US", res.GeoCountry)
+	require.Equal(t, "US", linkDepositAccountResponse.GeoCountry)
 
 	// delete linking
 	r = httptest.NewRequest(
@@ -501,18 +504,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		},
 	}
 	ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
-
-	/*
-		mockGeminiClient.EXPECT().ValidateAccount(
-			gomock.Any(),
-			gomock.Any(),
-			gomock.Any(),
-		).Return(
-			accountID.String(),
-			"US",
-			nil,
-		)
-	*/
 
 	// begin linking tx
 	mock.ExpectBegin()
@@ -570,7 +561,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
-
 }
 
 func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
@@ -895,18 +885,19 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 
-	var res wallet.LinkDepositAccountResponse
-	err = json.NewDecoder(w.Body).Decode(&res)
-	assert.NoError(t, err)
+	var linkDepositAccountResponse wallet.LinkDepositAccountResponse
+	err = json.NewDecoder(resp.Body).Decode(&linkDepositAccountResponse)
+	require.NoError(t, err)
 
-	assert.Equal(t, "IN", res.GeoCountry)
+	assert.Equal(t, "IN", linkDepositAccountResponse.GeoCountry)
 }
 
 func TestLinkGeminiWalletV3(t *testing.T) {
@@ -1021,18 +1012,19 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 
-	var res wallet.LinkDepositAccountResponse
-	err := json.NewDecoder(w.Body).Decode(&res)
-	assert.NoError(t, err)
+	var linkDepositAccountResponse wallet.LinkDepositAccountResponse
+	err := json.NewDecoder(resp.Body).Decode(&linkDepositAccountResponse)
+	require.NoError(t, err)
 
-	assert.Equal(t, "GB", res.GeoCountry)
+	assert.Equal(t, "GB", linkDepositAccountResponse.GeoCountry)
 }
 
 func TestDisconnectCustodianLinkV3(t *testing.T) {
