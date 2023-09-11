@@ -17,6 +17,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
 	"github.com/getsentry/sentry-go"
+	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
@@ -84,12 +85,17 @@ const (
 
 // Service contains datastore
 type Service struct {
+	orderRepo  orderStore
+	issuerRepo issuerStore
+
+	// TODO: Eventually remove it.
+	Datastore Datastore
+
 	wallet             *wallet.Service
 	cbClient           cbr.Client
 	geminiClient       gemini.Client
 	geminiConf         *gemini.Conf
 	scClient           *client.API
-	Datastore          Datastore
 	codecs             map[string]*goavro.Codec
 	kafkaWriter        *kafka.Writer
 	kafkaDialer        *kafka.Dialer
@@ -142,16 +148,17 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	return nil
 }
 
-// InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (service *Service, err error) {
+// InitService creates a service using the passed datastore and clients configured from the environment.
+func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service, orderRepo orderStore, issuerRepo issuerStore) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 	// setup the in app purchase clients
 	initClients(ctx)
 
 	// setup stripe if exists in context and enabled
-	var scClient = &client.API{}
+	scClient := &client.API{}
 	if enabled, ok := ctx.Value(appctx.StripeEnabledCTXKey).(bool); ok && enabled {
 		sublogger.Debug().Msg("stripe enabled")
+		var err error
 		stripe.Key, err = appctx.GetStringFromContext(ctx, appctx.StripeSecretCTXKey)
 		if err != nil {
 			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
@@ -168,6 +175,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	// setup radom if exists in context and enabled
 	if enabled, ok := ctx.Value(appctx.RadomEnabledCTXKey).(bool); ok && enabled {
 		sublogger.Debug().Msg("radom enabled")
+		var err error
 		radomSellerAddress, err = appctx.GetStringFromContext(ctx, appctx.RadomSellerAddressCTXKey)
 		if err != nil {
 			sublogger.Error().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
@@ -182,7 +190,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		rdSecret := os.Getenv("RADOM_SECRET")
 		proxyAddr := os.Getenv("HTTP_PROXY")
 
-		var err error
 		radomClient, err = radom.NewInstrumented(srvURL, rdSecret, proxyAddr)
 		if err != nil {
 			return nil, err
@@ -203,6 +210,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		if err != nil {
 			return nil, fmt.Errorf("failed to get gemini info: %w", err)
 		}
+
 		// get the correct env variables for bulk pay API call
 		geminiConf = &gemini.Conf{
 			ClientID:          clientID,
@@ -217,13 +225,16 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		}
 	}
 
-	service = &Service{
+	service := &Service{
+		orderRepo:  orderRepo,
+		issuerRepo: issuerRepo,
+		Datastore:  datastore,
+
 		wallet:             walletService,
 		geminiClient:       geminiClient,
 		geminiConf:         geminiConf,
 		cbClient:           cbClient,
 		scClient:           scClient,
-		Datastore:          datastore,
 		pauseVoteUntilMu:   sync.RWMutex{},
 		retry:              backoff.Retry,
 		radomClient:        radomClient,
@@ -244,8 +255,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		},
 	}
 
-	err = service.InitKafka(ctx)
-	if err != nil {
+	if err := service.InitKafka(ctx); err != nil {
 		return nil, err
 	}
 
@@ -293,16 +303,17 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 		// Create issuer for sku. This only happens when a new sku is created.
 		switch orderItem.CredentialType {
 		case singleUse:
-			err = s.CreateIssuer(ctx, merchantID, *orderItem)
-			if err != nil {
+			if err := s.CreateIssuer(ctx, s.Datastore.RawDB(), merchantID, orderItem); err != nil {
 				return nil, errorutils.Wrap(err, "error finding issuer")
 			}
 		case timeLimitedV2:
-			err = s.CreateIssuerV3(ctx, merchantID, *orderItem, *issuerConfig)
-			if err != nil {
-				return nil, fmt.Errorf("error creating issuer for merchantID %s and sku %s: %w",
-					merchantID, orderItem.SKU, err)
+			if err := s.CreateIssuerV3(ctx, s.Datastore.RawDB(), merchantID, orderItem, *issuerConfig); err != nil {
+				return nil, fmt.Errorf(
+					"error creating issuer for merchantID %s and sku %s: %w",
+					merchantID, orderItem.SKU, err,
+				)
 			}
+
 			// set num tokens and token multi
 			numIntervals = issuerConfig.Buffer + issuerConfig.Overlap
 		}
@@ -1660,8 +1671,20 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 
 	const merchID = "brave.com"
 
-	numIntervals, err := s.createOrderIssuers(ctx, merchID, items)
+	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	numIntervals, err := s.createOrderIssuers(ctx, tx, merchID, items)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Gradually use this tx for other database operations.
+	// Eventually, move this call to the end of the method.
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -1729,16 +1752,16 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 //
 // TODO: Remove this when products & issuers have been reworked.
 // The issuer for a product must be created when the product is created.
-func (s *Service) createOrderIssuers(ctx context.Context, merchID string, items []model.OrderItem) (int, error) {
+func (s *Service) createOrderIssuers(ctx context.Context, dbi sqlx.QueryerContext, merchID string, items []model.OrderItem) (int, error) {
 	var numIntervals int
 	for i := range items {
 		switch items[i].CredentialType {
 		case singleUse:
-			if err := s.CreateIssuer(ctx, merchID, items[i]); err != nil {
+			if err := s.CreateIssuer(ctx, dbi, merchID, &items[i]); err != nil {
 				return 0, errorutils.Wrap(err, "error finding issuer")
 			}
 		case timeLimitedV2:
-			if err := s.CreateIssuerV3(ctx, merchID, items[i], *items[i].IssuerConfig); err != nil {
+			if err := s.CreateIssuerV3(ctx, dbi, merchID, &items[i], *items[i].IssuerConfig); err != nil {
 				const msg = "error creating issuer for merchantID %s and sku %s: %w"
 				return 0, fmt.Errorf(msg, merchID, items[i].SKU, err)
 			}

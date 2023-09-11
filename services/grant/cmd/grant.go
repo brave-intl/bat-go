@@ -416,8 +416,15 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skuOrderRepo := repository.NewOrder()
 	skuOrderItemRepo := repository.NewOrderItem()
 	skuOrderPayHistRepo := repository.NewOrderPayHistory()
+	skuIssuerRepo := repository.NewPromIssuer("skus_repository_issuer", repository.NewIssuer())
 
-	skusPG, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "skus_db")
+	skusPG, err := skus.NewPostgres(
+		skuOrderRepo,
+		skuOrderItemRepo,
+		skuOrderPayHistRepo,
+		skuIssuerRepo,
+		"", true, "skus_db",
+	)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -431,7 +438,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientIDCTXKey, viper.GetString("skus-gemini-client-id"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientSecretCTXKey, viper.GetString("skus-gemini-client-secret"))
 
-	skusService, err := skus.InitService(skuCtx, skusPG, walletService)
+	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuIssuerRepo)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("SKUs service initialization failed")
@@ -489,13 +496,19 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "merch_skus_db")
+		skusDB, err := skus.NewPostgres(
+			skuOrderRepo,
+			skuOrderItemRepo,
+			skuOrderPayHistRepo,
+			skuIssuerRepo,
+			"", true, "merch_skus_db",
+		)
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 
-		skusService, err := skus.InitService(ctx, skusDB, walletService)
+		skusService, err := skus.InitService(ctx, skusDB, walletService, skuOrderRepo, skuIssuerRepo)
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("SKUs service initialization failed")

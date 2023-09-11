@@ -264,21 +264,6 @@ func (mr *MockDatastoreMockRecorder) ExternalIDExists(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExternalIDExists", reflect.TypeOf((*MockDatastore)(nil).ExternalIDExists), arg0, arg1)
 }
 
-// GetIssuer mocks base method.
-func (m *MockDatastore) GetIssuer(merchantID string) (*Issuer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetIssuer", merchantID)
-	ret0, _ := ret[0].(*Issuer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetIssuer indicates an expected call of GetIssuer.
-func (mr *MockDatastoreMockRecorder) GetIssuer(merchantID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuer", reflect.TypeOf((*MockDatastore)(nil).GetIssuer), merchantID)
-}
-
 // GetIssuerByPublicKey mocks base method.
 func (m *MockDatastore) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 	m.ctrl.T.Helper()
@@ -564,21 +549,6 @@ func (m *MockDatastore) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx
 func (mr *MockDatastoreMockRecorder) GetUncommittedVotesForUpdate(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUncommittedVotesForUpdate", reflect.TypeOf((*MockDatastore)(nil).GetUncommittedVotesForUpdate), ctx)
-}
-
-// InsertIssuer mocks base method.
-func (m *MockDatastore) InsertIssuer(issuer *Issuer) (*Issuer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertIssuer", issuer)
-	ret0, _ := ret[0].(*Issuer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// InsertIssuer indicates an expected call of InsertIssuer.
-func (mr *MockDatastoreMockRecorder) InsertIssuer(issuer interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertIssuer", reflect.TypeOf((*MockDatastore)(nil).InsertIssuer), issuer)
 }
 
 // InsertOrderCredsTx mocks base method.

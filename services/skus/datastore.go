@@ -59,8 +59,7 @@ type Datastore interface {
 	GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (*[]Transaction, int, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
-	InsertIssuer(issuer *Issuer) (*Issuer, error)
-	GetIssuer(merchantID string) (*Issuer, error)
+
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
 	DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
@@ -134,6 +133,12 @@ type orderPayHistoryStore interface {
 	Insert(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
+type issuerStore interface {
+	GetByMerchID(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error)
+	GetByPubKey(ctx context.Context, dbi sqlx.QueryerContext, pubKey string) (*model.Issuer, error)
+	Create(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error)
+}
+
 // VoteRecord - how the ac votes are stored in the queue
 type VoteRecord struct {
 	ID                 uuid.UUID
@@ -151,6 +156,7 @@ type Postgres struct {
 	orderRepo       orderStore
 	orderItemRepo   orderItemStore
 	orderPayHistory orderPayHistoryStore
+	issuerRepo      issuerStore
 }
 
 // NewPostgres creates a new Postgres Datastore.
@@ -158,6 +164,7 @@ func NewPostgres(
 	orderRepo orderStore,
 	orderItemRepo orderItemStore,
 	orderPayHistory orderPayHistoryStore,
+	issuerRepo issuerStore,
 	databaseURL string,
 	performMigration bool,
 	migrationTrack string,
@@ -171,6 +178,7 @@ func NewPostgres(
 	pg.orderRepo = orderRepo
 	pg.orderItemRepo = orderItemRepo
 	pg.orderPayHistory = orderPayHistory
+	pg.issuerRepo = issuerRepo
 
 	return &DatastoreWithPrometheus{base: pg, instanceName: "payment_datastore"}, nil
 }
@@ -658,49 +666,23 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	return sum, err
 }
 
-// InsertIssuer inserts the given issuer
-func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
-	statement := `
-	INSERT INTO order_cred_issuers (merchant_id, public_key)
-	VALUES ($1, $2)
-	RETURNING id, created_at, merchant_id, public_key`
-	var issuers []Issuer
-	err := pg.RawDB().Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
+// GetIssuerByPublicKey returns an issuer by the pubKey.
+//
+// Deprecated: Use the corresponding repository directly with GetByPubKey.
+func (pg *Postgres) GetIssuerByPublicKey(pubKey string) (*Issuer, error) {
+	result, err := pg.issuerRepo.GetByPubKey(context.TODO(), pg.RawDB(), pubKey)
 	if err != nil {
+		// Preserve the old behaviour.
+		// TODO: Fix this as it defeats the purpose of multiple returns and has risks for callers.
+		// Thankfully, there is only one caller, but that coller, hypothetically, might panic.
+		if errors.Is(err, model.ErrIssuerNotFound) {
+			return nil, nil
+		}
+
 		return nil, err
 	}
 
-	if len(issuers) != 1 {
-		return nil, errors.New("unexpected number of issuers returned")
-	}
-
-	return &issuers[0], nil
-}
-
-// GetIssuer retrieves the given issuer
-func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where merchant_id = $1"
-	var issuer Issuer
-	err := pg.RawDB().Get(&issuer, statement, merchantID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &issuer, nil
-}
-
-// GetIssuerByPublicKey or return an error
-func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where public_key = $1"
-	var issuer Issuer
-	err := pg.RawDB().Get(&issuer, statement, publicKey)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	return &issuer, nil
+	return result, nil
 }
 
 // InsertOrderCredsTx inserts the given order creds.

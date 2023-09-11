@@ -25,9 +25,9 @@ func TestOrder_SetTrialDays(t *testing.T) {
 	dbi, err := setupDBI()
 	must.Equal(t, nil, err)
 
-	defer func() {
+	t.Cleanup(func() {
 		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
-	}()
+	})
 
 	type tcExpected struct {
 		ndays int64
@@ -65,7 +65,7 @@ func TestOrder_SetTrialDays(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.TODO()
+			ctx := context.Background()
 
 			tx, err := dbi.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadUncommitted})
 			must.Equal(t, nil, err)
