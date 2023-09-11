@@ -838,7 +838,7 @@ func (c *claimsZP) validate(now time.Time) error {
 		return errZPInvalidAccountID
 	}
 
-	if strings.ToUpper(c.CountryCode) != "IN" {
+	if !strings.EqualFold(c.CountryCode, "IN") {
 		return errorutils.ErrInvalidCountry
 	}
 
