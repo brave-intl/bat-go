@@ -113,7 +113,7 @@ type ReadOnlyDatastore interface {
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
 	GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error)
-	// GetWalletByPublicKey
+	// GetWalletByPublicKey retrieves a wallet by its public key.
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
 	// GetCustodianLinkByWalletID - get the current custodian link by wallet id
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
@@ -551,9 +551,6 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 
 	return infos, nil
 }
-
-// ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
-var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
 
 var (
 	// ErrUnusualActivity - error for wallets with unusual activity
