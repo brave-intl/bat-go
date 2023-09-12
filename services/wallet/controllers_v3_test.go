@@ -49,12 +49,6 @@ func TestCreateBraveWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 		// add the datastore to the context
 		ctx     = context.Background()
 		handler = wallet.CreateBraveWalletV3
@@ -67,7 +61,6 @@ func TestCreateBraveWalletV3(t *testing.T) {
 	mock.ExpectExec("^INSERT INTO wallets (.+)").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(result{})
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	// setup keypair
@@ -97,12 +90,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 		// add the datastore to the context
 		ctx     = context.Background()
 		handler = wallet.CreateUpholdWalletV3
@@ -116,7 +103,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	mock.ExpectExec("^INSERT INTO wallets (.+)").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(result{})
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
@@ -216,12 +202,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 
 		// add the datastore to the context
 		ctx = middleware.AddKeyID(context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret)), idFrom.String())
@@ -273,7 +253,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
@@ -324,12 +303,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 		linkingInfo = "this is the fake jwt for linking_info"
 
 		// setup mock clients
@@ -362,7 +335,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -559,12 +531,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 		linkingInfo = "this is the fake jwt for linking_info"
 
 		// setup mock clients
@@ -597,7 +563,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -697,12 +662,6 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
@@ -710,7 +669,6 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
@@ -773,12 +731,6 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 
 		// setup mock clients
 		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
@@ -789,7 +741,6 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
@@ -891,12 +842,6 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 		linkingInfo = "this is the fake jwt for linking_info"
 
 		// setup mock clients
@@ -919,7 +864,6 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -1011,12 +955,6 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 
 		// this is our main request
 		r = httptest.NewRequest(
@@ -1041,7 +979,6 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)

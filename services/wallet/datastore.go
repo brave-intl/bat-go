@@ -172,6 +172,8 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 var (
 	// ErrTooManyCardsLinked denotes when more than 3 cards have been linked to a single wallet
 	ErrTooManyCardsLinked = errors.New("unable to add too many wallets to a single user")
+	// ErrNoReputationClient is returned when no reputation client is in the ctx.
+	ErrNoReputationClient = errors.New("wallet: no reputation client")
 )
 
 // UpsertWallet upserts the given wallet
@@ -637,21 +639,21 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	if VerifiedWalletEnable {
 		err := pg.InsertVerifiedWalletOutboxTx(ctx, tx, id, true)
 		if err != nil {
-			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
 	}
 
 	if directVerifiedWalletEnable {
 		client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
 		if !ok {
-			return errors.New("error calling reputation for verified wallet: no reputation client")
+			return ErrNoReputationClient
 		}
 		upsertReputationSummary := func() (interface{}, error) {
 			return nil, client.UpdateReputationSummary(ctx, ID, true)
 		}
 		_, err = backoff.Retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
 		if err != nil {
-			return fmt.Errorf("error calling reputation for verified wallet: %w", err)
+			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
 	}
 
