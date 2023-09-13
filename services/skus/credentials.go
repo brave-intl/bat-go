@@ -22,7 +22,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
@@ -68,8 +67,6 @@ func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, mer
 	if !errors.Is(err, model.ErrIssuerNotFound) {
 		return fmt.Errorf("error get issuer for issuerID %s: %w", encMerchID, err)
 	}
-
-	logging.FromContext(ctx).Info().Msgf("creating new issuer %s", encMerchID)
 
 	reqFn := func() (interface{}, error) {
 		return nil, s.cbClient.CreateIssuer(ctx, encMerchID, defaultMaxTokensPerIssuer)
@@ -123,8 +120,6 @@ func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, m
 	if !errors.Is(err, model.ErrIssuerNotFound) {
 		return fmt.Errorf("error get issuer for issuerID %s: %w", encMerchID, err)
 	}
-
-	logging.FromContext(ctx).Info().Msgf("creating new v3 issuer %s", encMerchID)
 
 	if item.EachCredentialValidForISO == nil {
 		return fmt.Errorf("error each credential valid iso is empty for order item sku %s", item.SKU)

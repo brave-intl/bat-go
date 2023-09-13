@@ -86,15 +86,15 @@ func TestIssuer_GetByMerchID(t *testing.T) {
 				must.Equal(t, nil, err)
 			}
 
-			act, err := repo.GetByMerchID(ctx, tx, tc.given.merchID)
+			actual, err := repo.GetByMerchID(ctx, tx, tc.given.merchID)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
 			if tc.exp.err != nil {
 				return
 			}
 
-			should.Equal(t, tc.exp.result.MerchantID, act.MerchantID)
-			should.Equal(t, tc.exp.result.PublicKey, act.PublicKey)
+			should.Equal(t, tc.exp.result.MerchantID, actual.MerchantID)
+			should.Equal(t, tc.exp.result.PublicKey, actual.PublicKey)
 		})
 	}
 }
@@ -169,15 +169,15 @@ func TestIssuer_GetByPubKey(t *testing.T) {
 				must.Equal(t, nil, err)
 			}
 
-			act, err := repo.GetByPubKey(ctx, tx, tc.given.pubKey)
+			actual, err := repo.GetByPubKey(ctx, tx, tc.given.pubKey)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
 			if tc.exp.err != nil {
 				return
 			}
 
-			should.Equal(t, tc.exp.result.MerchantID, act.MerchantID)
-			should.Equal(t, tc.exp.result.PublicKey, act.PublicKey)
+			should.Equal(t, tc.exp.result.MerchantID, actual.MerchantID)
+			should.Equal(t, tc.exp.result.PublicKey, actual.PublicKey)
 		})
 	}
 }
@@ -252,22 +252,22 @@ func TestIssuer_Create(t *testing.T) {
 
 			t.Cleanup(func() { _ = tx.Rollback() })
 
-			act1, err := repo.Create(ctx, tx, tc.given.req)
+			actual1, err := repo.Create(ctx, tx, tc.given.req)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
-			should.Equal(t, tc.exp.result.MerchantID, act1.MerchantID)
-			should.Equal(t, tc.exp.result.PublicKey, act1.PublicKey)
+			should.Equal(t, tc.exp.result.MerchantID, actual1.MerchantID)
+			should.Equal(t, tc.exp.result.PublicKey, actual1.PublicKey)
 
-			act2, err := repo.GetByMerchID(ctx, tx, act1.MerchantID)
+			actual2, err := repo.GetByMerchID(ctx, tx, actual1.MerchantID)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
-			should.Equal(t, act1, act2)
+			should.Equal(t, actual1, actual2)
 
-			act3, err := repo.GetByPubKey(ctx, tx, act2.PublicKey)
+			actual3, err := repo.GetByPubKey(ctx, tx, actual2.PublicKey)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
-			should.Equal(t, act2, act3)
-			should.Equal(t, act1, act3)
+			should.Equal(t, actual2, actual3)
+			should.Equal(t, actual1, actual3)
 		})
 	}
 }
