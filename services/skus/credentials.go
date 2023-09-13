@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
@@ -21,7 +22,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
@@ -32,169 +32,158 @@ const (
 	defaultCohort             int16 = 1
 )
 
-// Retry and backoff variables
 var (
-	defaultExpiresAt   = time.Now().Add(17532 * time.Hour) // 2 years
-	retryPolicy        = retrypolicy.DefaultRetry
-	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden,
-		http.StatusInternalServerError, http.StatusConflict}
-)
-
-var (
-	// ErrOrderUnpaid - unpaid order variable
-	ErrOrderUnpaid = errors.New("order not paid")
-
-	// ErrOrderHasNoItems is an order has no order items error
+	ErrOrderUnpaid     = errors.New("order not paid")
 	ErrOrderHasNoItems = errors.New("order has no items")
+
+	errInvalidIssuerResp model.Error = "invalid issuer response"
+
+	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
+	retryPolicy      = retrypolicy.DefaultRetry
+	dontRetryCodes   = map[int]struct{}{
+		http.StatusBadRequest:          struct{}{},
+		http.StatusUnauthorized:        struct{}{},
+		http.StatusForbidden:           struct{}{},
+		http.StatusInternalServerError: struct{}{},
+		http.StatusConflict:            struct{}{},
+	}
 )
 
-// Issuer includes information about a particular credential issuer
-type Issuer struct {
-	ID         uuid.UUID `json:"id" db:"id"`
-	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
-	MerchantID string    `json:"merchantId" db:"merchant_id"`
-	PublicKey  string    `json:"publicKey" db:"public_key"`
-}
-
-// Name returns the name of the issuer as known by the challenge bypass server
-func (issuer *Issuer) Name() string {
-	return issuer.MerchantID
-}
-
-// CreateIssuer creates a new v1 issuer if it does not exist. This only happens in the event of a new sku being created.
-func (s *Service) CreateIssuer(ctx context.Context, merchantID string, orderItem OrderItem) error {
-	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+// CreateIssuer creates a new v1 issuer if it does not exist.
+//
+// This only happens in the event of a new sku being created.
+func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, merchID string, item *OrderItem) error {
+	encMerchID, err := encodeIssuerID(merchID, item.SKU)
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}
 
-	issuer, err := s.Datastore.GetIssuer(issuerID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("error get issuer for issuerID %s: %w", issuerID, err)
+	_, err = s.issuerRepo.GetByMerchID(ctx, dbi, encMerchID)
+	// Found, nothing to do.
+	if err == nil {
+		return nil
 	}
 
-	if issuer == nil {
-		logging.FromContext(ctx).Info().
-			Msgf("creating new issuer %s", issuerID)
+	if !errors.Is(err, model.ErrIssuerNotFound) {
+		return fmt.Errorf("error get issuer for issuerID %s: %w", encMerchID, err)
+	}
 
-		requestOperation := func() (interface{}, error) {
-			return nil, s.cbClient.CreateIssuer(ctx, issuerID, defaultMaxTokensPerIssuer)
-		}
+	reqFn := func() (interface{}, error) {
+		return nil, s.cbClient.CreateIssuer(ctx, encMerchID, defaultMaxTokensPerIssuer)
+	}
 
-		// The create issuer endpoint returns a conflict if the issuer already exists
-		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil && !isConflict(err) {
-			return fmt.Errorf("error calling cbr create issuer: %w", err)
-		}
+	// The create issuer endpoint returns a conflict if the issuer already exists.
+	_, err = s.retry(ctx, reqFn, retryPolicy, canRetry(dontRetryCodes))
+	if err != nil && !isConflict(err) {
+		return fmt.Errorf("error calling cbr create issuer: %w", err)
+	}
 
-		requestOperation = func() (interface{}, error) {
-			return s.cbClient.GetIssuer(ctx, issuerID)
-		}
+	reqFn = func() (interface{}, error) {
+		return s.cbClient.GetIssuer(ctx, encMerchID)
+	}
 
-		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
-			return fmt.Errorf("error getting issuer %s: %w", issuerID, err)
-		}
+	resp, err := s.retry(ctx, reqFn, retryPolicy, canRetry(dontRetryCodes))
+	if err != nil {
+		return fmt.Errorf("error getting issuer %s: %w", encMerchID, err)
+	}
 
-		issuerResponse, ok := response.(*cbr.IssuerResponse)
-		if !ok {
-			return errors.New("error converting response to type issuer response")
-		}
+	issuerResp, ok := resp.(*cbr.IssuerResponse)
+	if !ok {
+		return errInvalidIssuerResp
+	}
 
-		_, err = s.Datastore.InsertIssuer(&Issuer{
-			MerchantID: issuerResponse.Name,
-			PublicKey:  issuerResponse.PublicKey,
-		})
-		if err != nil {
-			return fmt.Errorf("error creating new issuer: %w", err)
-		}
+	if _, err := s.issuerRepo.Create(ctx, dbi, model.IssuerNew{
+		MerchantID: issuerResp.Name,
+		PublicKey:  issuerResp.PublicKey,
+	}); err != nil {
+		return fmt.Errorf("error creating new issuer: %w", err)
 	}
 
 	return nil
 }
 
-// CreateIssuerV3 creates a new v3 issuer if it does not exist. This only happens in the event of a new sku being created.
-func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderItem OrderItem, issuerConfig model.IssuerConfig) error {
-	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+// CreateIssuerV3 creates a new v3 issuer if it does not exist.
+//
+// This only happens in the event of a new sku being created.
+func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, merchID string, item *OrderItem, issuerCfg model.IssuerConfig) error {
+	encMerchID, err := encodeIssuerID(merchID, item.SKU)
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}
 
-	issuer, err := s.Datastore.GetIssuer(issuerID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("error get issuer for issuerID %s: %w", issuerID, err)
+	_, err = s.issuerRepo.GetByMerchID(ctx, dbi, encMerchID)
+	// Found, nothing to do.
+	if err == nil {
+		return nil
 	}
 
-	// Create a new issuer if one is not present.
-	if issuer == nil {
-		logging.FromContext(ctx).Info().
-			Msgf("creating new v3 issuer %s", issuerID)
+	if !errors.Is(err, model.ErrIssuerNotFound) {
+		return fmt.Errorf("error get issuer for issuerID %s: %w", encMerchID, err)
+	}
 
-		if orderItem.EachCredentialValidForISO == nil {
-			return fmt.Errorf("error each credential valid iso is empty for order item sku %s", orderItem.SKU)
-		}
+	if item.EachCredentialValidForISO == nil {
+		return fmt.Errorf("error each credential valid iso is empty for order item sku %s", item.SKU)
+	}
 
-		createIssuerV3 := cbr.IssuerRequest{
-			Name:      issuerID,
-			Cohort:    defaultCohort,
-			MaxTokens: defaultMaxTokensPerIssuer,
-			ValidFrom: ptr.FromTime(time.Now()),
-			ExpiresAt: ptr.FromTime(defaultExpiresAt),
-			Duration:  *orderItem.EachCredentialValidForISO,
-			Buffer:    issuerConfig.Buffer,
-			Overlap:   issuerConfig.Overlap,
-		}
+	req := cbr.IssuerRequest{
+		Name:      encMerchID,
+		Cohort:    defaultCohort,
+		MaxTokens: defaultMaxTokensPerIssuer,
+		ValidFrom: ptr.FromTime(time.Now()),
+		ExpiresAt: ptr.FromTime(defaultExpiresAt),
+		Duration:  *item.EachCredentialValidForISO,
+		Buffer:    issuerCfg.Buffer,
+		Overlap:   issuerCfg.Overlap,
+	}
 
-		requestOperation := func() (interface{}, error) {
-			return nil, s.cbClient.CreateIssuerV3(ctx, createIssuerV3)
-		}
+	reqFn := func() (interface{}, error) {
+		return nil, s.cbClient.CreateIssuerV3(ctx, req)
+	}
 
-		// The create issuer v3 endpoints returns a conflict if the issuer already exists.
-		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil && !isConflict(err) {
-			return fmt.Errorf("error calling cbr create issuer v3: %w", err)
-		}
+	// The create issuer v3 endpoints returns a conflict if the issuer already exists.
+	_, err = s.retry(ctx, reqFn, retryPolicy, canRetry(dontRetryCodes))
+	if err != nil && !isConflict(err) {
+		return fmt.Errorf("error calling cbr create issuer v3: %w", err)
+	}
 
-		requestOperation = func() (interface{}, error) {
-			return s.cbClient.GetIssuerV3(ctx, createIssuerV3.Name)
-		}
+	reqFn = func() (interface{}, error) {
+		return s.cbClient.GetIssuerV3(ctx, req.Name)
+	}
 
-		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
-			return fmt.Errorf("error getting issuer %s: %w", createIssuerV3.Name, err)
-		}
+	resp, err := s.retry(ctx, reqFn, retryPolicy, canRetry(dontRetryCodes))
+	if err != nil {
+		return fmt.Errorf("error getting issuer %s: %w", req.Name, err)
+	}
 
-		issuerResponse, ok := response.(*cbr.IssuerResponse)
-		if !ok {
-			return fmt.Errorf("error converting v3 response to type issuer response")
-		}
+	issuerResp, ok := resp.(*cbr.IssuerResponse)
+	if !ok {
+		return errInvalidIssuerResp
+	}
 
-		_, err = s.Datastore.InsertIssuer(&Issuer{
-			MerchantID: issuerResponse.Name,
-			PublicKey:  issuerResponse.PublicKey,
-		})
-		if err != nil {
-			return fmt.Errorf("error creating new issuer: %w", err)
-		}
+	if _, err := s.issuerRepo.Create(ctx, dbi, model.IssuerNew{
+		MerchantID: issuerResp.Name,
+		PublicKey:  issuerResp.PublicKey,
+	}); err != nil {
+		return fmt.Errorf("error creating new issuer: %w", err)
 	}
 
 	return nil
 }
 
-func canRetry(nonRetriableErrors []int) func(error) bool {
+func canRetry(nonRetrySet map[int]struct{}) func(error) bool {
 	return func(err error) bool {
 		var eb *errorutils.ErrorBundle
 		switch {
 		case errors.As(err, &eb):
-			if hs, ok := eb.Data().(clients.HTTPState); ok {
-				for _, httpStatusCode := range nonRetriableErrors {
-					if hs.Status == httpStatusCode {
-						return false
-					}
+			if state, ok := eb.Data().(clients.HTTPState); ok {
+				if _, ok := nonRetrySet[state.Status]; ok {
+					return false
 				}
+
 				return true
 			}
 		}
+
 		return false
 	}
 }
@@ -206,6 +195,7 @@ func isConflict(err error) bool {
 			return httpState.Status == http.StatusConflict
 		}
 	}
+
 	return false
 }
 
@@ -268,7 +258,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}
 
-	issuer, err := s.Datastore.GetIssuer(issuerID)
+	issuer, err := s.issuerRepo.GetByMerchID(ctx, s.Datastore.RawDB(), issuerID)
 	if err != nil {
 		return fmt.Errorf("error getting issuer for issuerID %s: %w", issuerID, err)
 	}

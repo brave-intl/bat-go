@@ -35,13 +35,13 @@ const (
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
 )
 
-// TODO(pavelb): Gradually replace it everywhere.
-
-type Order = model.Order
-
-type OrderItem = model.OrderItem
-
-type CreateCheckoutSessionResponse = model.CreateCheckoutSessionResponse
+// TODO(pavelb): Gradually replace these everywhere.
+type (
+	Order                         = model.Order
+	OrderItem                     = model.OrderItem
+	CreateCheckoutSessionResponse = model.CreateCheckoutSessionResponse
+	Issuer                        = model.Issuer
+)
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))

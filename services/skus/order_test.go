@@ -31,7 +31,13 @@ func TestOrderTestSuite(t *testing.T) {
 
 func (suite *OrderTestSuite) SetupSuite() {
 	govalidator.SetFieldsRequiredByDefault(true)
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -61,7 +67,13 @@ func (suite *OrderTestSuite) TearDownTest() {
 func (suite *OrderTestSuite) CleanDB() {
 	tables := []string{"api_keys"}
 
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {

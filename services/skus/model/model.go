@@ -23,6 +23,7 @@ import (
 const (
 	ErrOrderNotFound                          Error = "model: order not found"
 	ErrOrderItemNotFound                      Error = "model: order item not found"
+	ErrIssuerNotFound                         Error = "model: issuer not found"
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
@@ -497,6 +498,25 @@ func (s Slice[T]) Contains(target T) bool {
 	}
 
 	return false
+}
+
+// Issuer represents a credential issuer.
+type Issuer struct {
+	ID         uuid.UUID `json:"id" db:"id"`
+	MerchantID string    `json:"merchantId" db:"merchant_id"`
+	PublicKey  string    `json:"publicKey" db:"public_key"`
+	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
+}
+
+// Name returns the name of the issuer as known by the challenge bypass server.
+func (x *Issuer) Name() string {
+	return x.MerchantID
+}
+
+// IssuerNew is a request to create an issuer in the database.
+type IssuerNew struct {
+	MerchantID string `db:"merchant_id"`
+	PublicKey  string `db:"public_key"`
 }
 
 // IssuerConfig holds configuration of an issuer.

@@ -41,21 +41,6 @@ import (
 	"github.com/brave-intl/bat-go/services/cmd"
 )
 
-// ReputationGeoEnable - enable geo reputation check.
-var ReputationGeoEnable = isReputationGeoEnabled()
-
-func isReputationGeoEnabled() bool {
-	var toggle = false
-	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
 // VerifiedWalletEnable enable verified wallet call
 var VerifiedWalletEnable = isVerifiedWalletEnable()
 
@@ -567,8 +552,8 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	return country, nil
 }
 
-// LinkWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkWallet(ctx context.Context, wallet uphold.Wallet, transaction string, anonymousAddress *uuid.UUID) (string, error) {
+// LinkUpholdWallet links an uphold.Wallet and transfers funds.
+func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wallet, transaction string, anonymousAddress *uuid.UUID) (string, error) {
 	// do not confirm this transaction yet
 	info := wallet.GetWalletInfo()
 
@@ -838,7 +823,7 @@ func (c *claimsZP) validate(now time.Time) error {
 		return errZPInvalidAccountID
 	}
 
-	if strings.ToUpper(c.CountryCode) != "IN" {
+	if !strings.EqualFold(c.CountryCode, "IN") {
 		return errorutils.ErrInvalidCountry
 	}
 

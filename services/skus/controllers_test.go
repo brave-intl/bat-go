@@ -95,7 +95,13 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast for cbr http requests
 	govalidator.SetFieldsRequiredByDefault(true)
 
-	storage, _ := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	storage, _ := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 
 	suite.storage = storage
 
@@ -223,7 +229,13 @@ func (suite *ControllersTestSuite) SetupSuite() {
 }
 
 func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	suite.mockCtrl = gomock.NewController(suite.T())
@@ -236,8 +248,9 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	InitEncryptionKeys()
 
 	suite.service = &Service{
-		Datastore: pg,
-		cbClient:  suite.mockCB,
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  pg,
+		cbClient:   suite.mockCB,
 		wallet: &wallet.Service{
 			Datastore: walletDB,
 		},
@@ -264,20 +277,17 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	issuerID, err := encodeIssuerID(token.Location, token.FirstPartyCaveats[0]["sku"])
 	suite.Require().NoError(err)
 
-	// mock out create issuer calls before we create the order
-	if credType, ok := token.FirstPartyCaveats[0]["credential_type"]; ok {
-		if credType == singleUse {
-			suite.mockCB.EXPECT().
-				CreateIssuer(gomock.Any(), issuerID, gomock.Any()).
-				Return(nil)
-			issuerResponse := &cbr.IssuerResponse{
-				Name:      issuerID,
-				PublicKey: base64.StdEncoding.EncodeToString([]byte(test.RandomString())),
-			}
-			suite.mockCB.EXPECT().
-				GetIssuer(gomock.Any(), gomock.Any()).
-				Return(issuerResponse, nil)
+	// Mock out create issuer calls before we create the order.
+	credType, ok := token.FirstPartyCaveats[0]["credential_type"]
+	if ok && credType == singleUse {
+		suite.mockCB.EXPECT().CreateIssuer(gomock.Any(), issuerID, gomock.Any()).Return(nil)
+
+		resp := &cbr.IssuerResponse{
+			Name:      issuerID,
+			PublicKey: base64.StdEncoding.EncodeToString([]byte(test.RandomString())),
 		}
+
+		suite.mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Any()).Return(resp, nil)
 	}
 
 	// create order this will also create the issuer
@@ -311,7 +321,15 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 		suite.Require().NoError(err)
 	}
 
-	issuer, _ := suite.storage.GetIssuer(issuerID)
+	repo := repository.NewIssuer()
+
+	var exp error
+	if credType == timeLimited {
+		exp = model.ErrIssuerNotFound
+	}
+
+	issuer, err := repo.GetByMerchID(context.TODO(), suite.storage.RawDB(), issuerID)
+	suite.Require().Equal(exp, err)
 
 	return order, issuer
 }
@@ -510,7 +528,13 @@ func (suite *ControllersTestSuite) TestGetMissingOrder() {
 }
 
 func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -1321,7 +1345,13 @@ func (suite *ControllersTestSuite) TestDeleteKey() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeys() {
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
@@ -1351,7 +1381,13 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeysFiltered() {
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
@@ -1463,8 +1499,13 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
-	// Create order and issuer
-	service := Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	service := &Service{
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  suite.storage,
+		cbClient:   client,
+		retry:      backoff.Retry,
+	}
+
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
@@ -1491,7 +1532,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil)
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer())
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
@@ -1601,8 +1642,13 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
-	// Create order and issuer
-	service := Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	service := &Service{
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  suite.storage,
+		cbClient:   client,
+		retry:      backoff.Retry,
+	}
+
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
@@ -1632,7 +1678,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil)
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer())
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
@@ -1723,8 +1769,13 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
-	// create order and also create issuer
-	service := &Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	service := &Service{
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  suite.storage,
+		cbClient:   client,
+		retry:      backoff.Retry,
+	}
+
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
