@@ -416,7 +416,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skuOrderRepo := repository.NewOrder()
 	skuOrderItemRepo := repository.NewOrderItem()
 	skuOrderPayHistRepo := repository.NewOrderPayHistory()
-	skuIssuerRepo := repository.NewPromIssuer("skus_repository_issuer", repository.NewIssuer())
+	skuIssuerRepo := repository.NewIssuer()
 
 	skusPG, err := skus.NewPostgres(
 		skuOrderRepo,
