@@ -558,7 +558,8 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			ctx    = r.Context()
 			logger = logging.Logger(ctx, "skus.CreateOrderCreds")
 		)
-		err := requestutils.ReadJSON(r.Context(), r.Body, req)
+
+		err := requestutils.ReadJSON(ctx, r.Body, req)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read body payload")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
@@ -571,7 +572,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			logger.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError(
 				"Error validating request url parameter",
@@ -581,7 +582,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderItem, err := service.Datastore.GetOrderItem(r.Context(), req.ItemID)
+		orderItem, err := service.Datastore.GetOrderItem(ctx, req.ItemID)
 		if err != nil {
 			logger.Error().Err(err).Msg("error getting the order item for creds")
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
@@ -589,7 +590,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 
 		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
 		if orderItem.CredentialType == timeLimitedV2 {
-			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(r.Context(), req.BlindedCreds...)
+			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, req.BlindedCreds...)
 			if err != nil {
 				// This is an existing error message so don't want to change it incase client are relying on it.
 				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
@@ -597,14 +598,14 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			if alreadySubmitted {
 				// since these are already submitted, no need to create order credentials
 				// return ok
-				return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+				return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 			}
 		}
 
 		// check if we already have a signing request for this order, delete order creds will
 		// delete the prior signing request.  this allows subscriptions to manage how many
 		// order creds are handed out.
-		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
+		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, req.ItemID)
 		if err != nil {
 			// This is an existing error message so don't want to change it incase client are relying on it.
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
@@ -614,13 +615,12 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
-		err = service.CreateOrderItemCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
-		if err != nil {
+		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, req.BlindedCreds); err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	}
 }
 
