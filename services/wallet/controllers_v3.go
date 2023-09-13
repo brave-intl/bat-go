@@ -425,7 +425,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 		}
 
-		country, err := s.LinkWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)
+		country, err := s.LinkUpholdWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)
 		if err != nil {
 			l.Error().Err(err).Str("paymentID", id.String()).
 				Msg("failed to link wallet")
