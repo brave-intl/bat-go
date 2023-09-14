@@ -9,14 +9,17 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	mockgemini "github.com/brave-intl/bat-go/libs/clients/gemini/mock"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -46,12 +49,6 @@ func TestCreateBraveWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 		// add the datastore to the context
 		ctx     = context.Background()
 		handler = wallet.CreateBraveWalletV3
@@ -64,7 +61,6 @@ func TestCreateBraveWalletV3(t *testing.T) {
 	mock.ExpectExec("^INSERT INTO wallets (.+)").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(result{})
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	// setup keypair
@@ -76,14 +72,11 @@ func TestCreateBraveWalletV3(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	var w = httptest.NewRecorder()
-	handlers.AppHandler(handler).ServeHTTP(w, r)
-	if resp := w.Result(); resp.StatusCode != http.StatusCreated {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected 200, got %d", resp.StatusCode))
-	}
+	var rw = httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rw, r)
+
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusCreated, rw.Code, string(b))
 }
 
 func TestCreateUpholdWalletV3(t *testing.T) {
@@ -92,12 +85,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	var (
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
 				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
@@ -116,19 +103,15 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	mock.ExpectExec("^INSERT INTO wallets (.+)").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(result{})
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
-	var w = httptest.NewRecorder()
-	handlers.AppHandler(handler).ServeHTTP(w, r)
-	if resp := w.Result(); resp.StatusCode != http.StatusBadRequest {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected 400, got %d", resp.StatusCode))
-	}
+	var rw = httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rw, r)
+
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusBadRequest, rw.Code, string(b))
 }
 
 func TestGetWalletV3(t *testing.T) {
@@ -151,7 +134,7 @@ func TestGetWalletV3(t *testing.T) {
 		id      = uuid.NewV4()
 		r       = httptest.NewRequest("GET", fmt.Sprintf("/v3/wallet/%s", id), nil)
 		handler = wallet.GetWalletV3
-		w       = httptest.NewRecorder()
+		rw      = httptest.NewRecorder()
 		rows    = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
 			AddRow(id, "brave", "", "12345", id, id)
 	)
@@ -166,14 +149,10 @@ func TestGetWalletV3(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Get("/v3/wallet/{paymentID}", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected 201, got %d", resp.StatusCode))
-	}
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusOK, rw.Code, string(b))
 }
 
 func TestLinkBitFlyerWalletV3(t *testing.T) {
@@ -219,13 +198,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -243,7 +216,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
 		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
-		w              = httptest.NewRecorder()
+		rw             = httptest.NewRecorder()
 	)
 	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -280,7 +253,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
@@ -298,14 +270,16 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/bitflyer/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
-	}
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusOK, rw.Code, string(b))
+
+	var l wallet.LinkDepositAccountResponse
+	err = json.Unmarshal(b, &l)
+	require.NoError(t, err)
+
+	assert.Equal(t, "JP", l.GeoCountry)
 }
 
 func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
@@ -324,12 +298,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		// setup db mocks
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
 				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
@@ -353,7 +321,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		)
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
-		w       = httptest.NewRecorder()
+		rw      = httptest.NewRecorder()
 	)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
@@ -367,7 +335,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -439,14 +406,16 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
-	}
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusOK, rw.Code, string(b))
+
+	var l wallet.LinkDepositAccountResponse
+	err := json.Unmarshal(b, &l)
+	require.NoError(t, err)
+
+	assert.Equal(t, "US", l.GeoCountry)
 
 	// delete linking
 	r = httptest.NewRequest(
@@ -455,7 +424,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	s, _ = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 	handler = wallet.DisconnectCustodianLinkV3(s)
-	w = httptest.NewRecorder()
+	rw = httptest.NewRecorder()
 
 	// create transaction
 	mock.ExpectBegin()
@@ -473,9 +442,9 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	router = chi.NewRouter()
 	router.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+	if resp := rw.Result(); resp.StatusCode != http.StatusOK {
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 
@@ -486,18 +455,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		},
 	}
 	ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
-
-	/*
-		mockGeminiClient.EXPECT().ValidateAccount(
-			gomock.Any(),
-			gomock.Any(),
-			gomock.Any(),
-		).Return(
-			accountID.String(),
-			"US",
-			nil,
-		)
-	*/
 
 	// begin linking tx
 	mock.ExpectBegin()
@@ -547,15 +504,10 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	router = chi.NewRouter()
 	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
-	}
-
+	b = rw.Body.Bytes()
+	require.Equal(t, http.StatusOK, rw.Code, string(b))
 }
 
 func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
@@ -574,12 +526,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		// setup db mocks
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
 				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
@@ -603,7 +549,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		)
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
-		w       = httptest.NewRecorder()
+		rw      = httptest.NewRecorder()
 	)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
@@ -617,7 +563,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -680,14 +625,14 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
-	}
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusOK, rw.Code, string(b))
+
+	var l wallet.LinkDepositAccountResponse
+	err := json.Unmarshal(b, &l)
+	require.NoError(t, err)
 }
 
 func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
@@ -713,24 +658,17 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 		db, _, _  = sqlmock.New()
 		datastore = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
-		w       = httptest.NewRecorder()
+		rw      = httptest.NewRecorder()
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
@@ -755,14 +693,14 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusForbidden {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusForbidden, resp.StatusCode))
-	}
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusForbidden, rw.Code, string(b))
+
+	var l wallet.LinkDepositAccountResponse
+	err = json.Unmarshal(b, &l)
+	require.NoError(t, err)
 }
 
 func TestLinkZebPayWalletV3(t *testing.T) {
@@ -789,13 +727,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -805,18 +737,17 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
-		w       = httptest.NewRecorder()
+		rw      = httptest.NewRecorder()
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
 	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
 		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
-		"isValid": true,
+		"isValid": true, "countryCode": "IN",
 	}).CompactSerialize()
 	if err != nil {
 		panic(err)
@@ -878,14 +809,16 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
-	}
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusOK, rw.Code, string(b))
+
+	var l wallet.LinkDepositAccountResponse
+	err = json.Unmarshal(b, &l)
+	require.NoError(t, err)
+
+	assert.Equal(t, "IN", l.GeoCountry)
 }
 
 func TestLinkGeminiWalletV3(t *testing.T) {
@@ -905,13 +838,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -933,11 +860,10 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		)
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
-		w       = httptest.NewRecorder()
+		rw      = httptest.NewRecorder()
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -948,7 +874,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		gomock.Any(),
 	).Return(
 		accountID.String(),
-		"",
+		"GB",
 		nil,
 	)
 
@@ -998,14 +924,16 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
+	router.ServeHTTP(rw, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
-	}
+	b := rw.Body.Bytes()
+	require.Equal(t, http.StatusOK, rw.Code, string(b))
+
+	var l wallet.LinkDepositAccountResponse
+	err := json.Unmarshal(b, &l)
+	require.NoError(t, err)
+
+	assert.Equal(t, "GB", l.GeoCountry)
 }
 
 func TestDisconnectCustodianLinkV3(t *testing.T) {
@@ -1023,13 +951,7 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -1057,7 +979,6 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)

@@ -113,7 +113,7 @@ type ReadOnlyDatastore interface {
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
 	GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error)
-	// GetWalletByPublicKey
+	// GetWalletByPublicKey retrieves a wallet by its public key.
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
 	// GetCustodianLinkByWalletID - get the current custodian link by wallet id
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
@@ -172,6 +172,8 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 var (
 	// ErrTooManyCardsLinked denotes when more than 3 cards have been linked to a single wallet
 	ErrTooManyCardsLinked = errors.New("unable to add too many wallets to a single user")
+	// ErrNoReputationClient is returned when no reputation client is in the ctx.
+	ErrNoReputationClient = errors.New("wallet: no reputation client")
 )
 
 // UpsertWallet upserts the given wallet
@@ -552,9 +554,6 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 	return infos, nil
 }
 
-// ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
-var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
-
 var (
 	// ErrUnusualActivity - error for wallets with unusual activity
 	ErrUnusualActivity = errors.New("unusual activity")
@@ -640,21 +639,21 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	if VerifiedWalletEnable {
 		err := pg.InsertVerifiedWalletOutboxTx(ctx, tx, id, true)
 		if err != nil {
-			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
 	}
 
 	if directVerifiedWalletEnable {
 		client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
 		if !ok {
-			return errors.New("error calling reputation for verified wallet: no reputation client")
+			return ErrNoReputationClient
 		}
 		upsertReputationSummary := func() (interface{}, error) {
 			return nil, client.UpdateReputationSummary(ctx, ID, true)
 		}
 		_, err = backoff.Retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
 		if err != nil {
-			return fmt.Errorf("error calling reputation for verified wallet: %w", err)
+			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
 	}
 

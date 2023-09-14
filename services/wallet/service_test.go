@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 	"gopkg.in/square/go-jose.v2"
@@ -67,10 +68,11 @@ func TestClaimsZP(t *testing.T) {
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 1, 0, time.UTC),
 				claims: claimsZP{
-					Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					Valid:     true,
-					DepositID: "deposit_id",
-					AccountID: "account_id",
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Valid:       true,
+					DepositID:   "deposit_id",
+					AccountID:   "account_id",
+					CountryCode: "IN",
 				},
 			},
 			exp: errZPInvalidIat,
@@ -81,10 +83,11 @@ func TestClaimsZP(t *testing.T) {
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 1, 0, time.UTC),
 				claims: claimsZP{
-					Iat:       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
-					Valid:     true,
-					DepositID: "deposit_id",
-					AccountID: "account_id",
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+					Valid:       true,
+					DepositID:   "deposit_id",
+					AccountID:   "account_id",
+					CountryCode: "IN",
 				},
 			},
 			exp: errZPInvalidExp,
@@ -95,10 +98,11 @@ func TestClaimsZP(t *testing.T) {
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 1, 0, time.UTC),
 				claims: claimsZP{
-					Iat:       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
-					Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					DepositID: "deposit_id",
-					AccountID: "account_id",
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					DepositID:   "deposit_id",
+					AccountID:   "account_id",
+					CountryCode: "IN",
 				},
 			},
 			exp: errZPInvalidKYC,
@@ -109,10 +113,11 @@ func TestClaimsZP(t *testing.T) {
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 1, 0, time.UTC),
 				claims: claimsZP{
-					Iat:       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
-					Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					Valid:     true,
-					AccountID: "account_id",
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Valid:       true,
+					AccountID:   "account_id",
+					CountryCode: "IN",
 				},
 			},
 			exp: errZPInvalidDepositID,
@@ -123,10 +128,11 @@ func TestClaimsZP(t *testing.T) {
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 1, 0, time.UTC),
 				claims: claimsZP{
-					Iat:       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
-					Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					Valid:     true,
-					DepositID: "deposit_id",
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Valid:       true,
+					DepositID:   "deposit_id",
+					CountryCode: "IN",
 				},
 			},
 			exp: errZPInvalidAccountID,
@@ -137,11 +143,12 @@ func TestClaimsZP(t *testing.T) {
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 1, 0, time.UTC),
 				claims: claimsZP{
-					Iat:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					Valid:     true,
-					DepositID: "deposit_id",
-					AccountID: "account_id",
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Valid:       true,
+					DepositID:   "deposit_id",
+					AccountID:   "account_id",
+					CountryCode: "IN",
 				},
 			},
 			exp: errZPInvalidAfter,
@@ -152,26 +159,42 @@ func TestClaimsZP(t *testing.T) {
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 3, 0, time.UTC),
 				claims: claimsZP{
-					Iat:       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
-					Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					Valid:     true,
-					DepositID: "deposit_id",
-					AccountID: "account_id",
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Valid:       true,
+					DepositID:   "deposit_id",
+					AccountID:   "account_id",
+					CountryCode: "IN",
 				},
 			},
 			exp: errZPInvalidBefore,
 		},
-
+		{
+			name: "invalid_country_code",
+			given: tcGiven{
+				now: time.Date(2023, time.August, 16, 1, 1, 3, 0, time.UTC),
+				claims: claimsZP{
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Valid:       true,
+					DepositID:   "deposit_id",
+					AccountID:   "account_id",
+					CountryCode: "US",
+				},
+			},
+			exp: errorutils.ErrInvalidCountry,
+		},
 		{
 			name: "valid",
 			given: tcGiven{
 				now: time.Date(2023, time.August, 16, 1, 1, 1, 0, time.UTC),
 				claims: claimsZP{
-					Iat:       time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
-					Exp:       time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
-					Valid:     true,
-					DepositID: "deposit_id",
-					AccountID: "account_id",
+					Iat:         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
+					Exp:         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
+					Valid:       true,
+					DepositID:   "deposit_id",
+					AccountID:   "account_id",
+					CountryCode: "IN",
 				},
 			},
 		},
