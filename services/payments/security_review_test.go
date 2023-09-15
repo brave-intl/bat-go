@@ -105,10 +105,11 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	must.Equal(t, nil, err)
 	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	must.Equal(t, nil, err)
-	testTransaction := Transaction{
-		State:  Prepared,
-		ID:     &idempotencyKey,
-		Amount: ion.MustParseDecimal("1.1"),
+	testTransaction := AuthenticatedPaymentState{
+		Status: Prepared,
+		PaymentDetails: PaymentDetails{
+			Amount: ion.MustParseDecimal("1.1"),
+		},
 	}
 	marshaledData, err := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
@@ -118,10 +119,10 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: qldbPaymentTransitionHistoryEntryData{
-			Data:           marshaledData,
-			Signature:      []byte{},
-			IdempotencyKey: &idempotencyKey,
+		Data: PaymentState{
+			unsafePaymentState: marshaledData,
+			Signature:          []byte{},
+			ID:                 &idempotencyKey,
 		},
 		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
@@ -146,14 +147,14 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		valid, err := validateTransactionHistory(ctx, &idempotencyKey, namespaceUUID, transactionHistorySet, mockKMS)
+		valid, err := validateTransactionHistory(ctx, transactionHistorySet)
 		must.Equal(t, nil, err)
 		should.True(t, valid)
 	}
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		valid, _ := validateTransactionHistory(ctx, &idempotencyKey, namespaceUUID, transactionHistorySet, mockKMS)
+		valid, _ := validateTransactionHistory(ctx, transactionHistorySet)
 		should.False(t, valid)
 	}
 }
@@ -182,9 +183,9 @@ func TestValidateRevision(t *testing.T) {
 				SequenceNo: 10,
 			},
 			Hash: "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY=",
-			Data: qldbPaymentTransitionHistoryEntryData{
-				Signature: []byte{},
-				Data:      []byte{},
+			Data: PaymentState{
+				Signature:          []byte{},
+				unsafePaymentState: []byte{},
 			},
 			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid1",
@@ -199,9 +200,9 @@ func TestValidateRevision(t *testing.T) {
 				SequenceNo: 10,
 			},
 			Hash: "dGVzdGVzdGVzdAo=",
-			Data: qldbPaymentTransitionHistoryEntryData{
-				Signature: []byte{},
-				Data:      []byte{},
+			Data: PaymentState{
+				Signature:          []byte{},
+				unsafePaymentState: []byte{},
 			},
 			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid2",
@@ -318,8 +319,8 @@ valid transition sequences. The purpose of this test is to alert us if outside c
 impact the set of valid transitions.
 */
 func TestRecurseTransitionResolution(t *testing.T) {
-	allValidTransitionSequences := recurseTransitionResolution("prepared", []TransactionState{})
-	knownValidTransitionSequences := [][]TransactionState{
+	allValidTransitionSequences := recurseTransitionResolution("prepared", []PaymentStatus{})
+	knownValidTransitionSequences := [][]PaymentStatus{
 		{Prepared, Authorized, Pending, Paid},
 		{Prepared, Authorized, Pending, Failed},
 		{Prepared, Authorized, Failed},
@@ -350,12 +351,11 @@ func TestRecurseTransitionResolution(t *testing.T) {
 // TestQLDBSignedInteractions mocks QLDB to test signing and verifying of records that are
 // persisted into QLDB
 func TestQLDBSignedInteractions(t *testing.T) {
-	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	must.Equal(t, nil, err)
-	testTransaction := Transaction{
-		State:  Prepared,
-		ID:     &idempotencyKey,
-		Amount: ion.MustParseDecimal("1.1"),
+	testTransaction := AuthenticatedPaymentState{
+		Status: Prepared,
+		PaymentDetails: PaymentDetails{
+			Amount: ion.MustParseDecimal("1.1"),
+		},
 	}
 	marshaledData, err := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
@@ -365,9 +365,9 @@ func TestQLDBSignedInteractions(t *testing.T) {
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: qldbPaymentTransitionHistoryEntryData{
-			Data:      marshaledData,
-			Signature: []byte{},
+		Data: PaymentState{
+			unsafePaymentState: marshaledData,
+			Signature:          []byte{},
 		},
 		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",

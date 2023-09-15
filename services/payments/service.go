@@ -26,7 +26,6 @@ import (
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
-	"github.com/google/uuid"
 	"github.com/hashicorp/vault/shamir"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -121,7 +120,8 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 
 type serviceNamespaceContextKey struct{}
 
-// configureSigningKey creates the enclave kms key which is only sign capable with enclave attestation.
+// configureSigningKey creates the enclave kms key which is only sign capable with enclave
+// attestation.
 func (s *Service) configureSigningKey(ctx context.Context) error {
 	// parse the key policy
 	policy, err := parseKeyPolicyTemplate(ctx, "/sign-policy.tmpl")
@@ -150,7 +150,8 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	return nil
 }
 
-// configureKMSKey creates the enclave kms key which is only decrypt capable with enclave attestation.
+// configureKMSKey creates the enclave kms key which is only decrypt capable with enclave
+// attestation.
 func (s *Service) configureKMSKey(ctx context.Context) error {
 
 	// parse the key policy
@@ -180,7 +181,8 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	return nil
 }
 
-// NewService creates a service using the passed datastore and clients configured from the environment.
+// NewService creates a service using the passed datastore and clients configured from the
+// environment.
 func NewService(ctx context.Context) (context.Context, *Service, error) {
 	var logger = logging.Logger(ctx, "payments.NewService")
 
@@ -248,7 +250,10 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 }
 
 // DecryptBootstrap - use service keyShares to reconstruct the decryption key.
-func (s *Service) DecryptBootstrap(ctx context.Context, ciphertext []byte) (map[appctx.CTXKey]interface{}, error) {
+func (s *Service) DecryptBootstrap(
+	ctx context.Context,
+	ciphertext []byte,
+) (map[appctx.CTXKey]interface{}, error) {
 	// combine the service configured key shares
 	key, err := shamir.Combine(s.keyShares)
 	if err != nil {
@@ -287,25 +292,23 @@ func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes
 	}
 }
 
-// validateTransactionHistory returns whether a slice of entries representing the entire state history for a given id
-// include exclusively valid transitions. It also verifies IdempotencyKeys among states and the Merkle tree position of each state.
+// validateTransactionHistory returns whether a slice of entries representing the entire state
+// history for a given id include exclusively valid transitions. It also verifies IdempotencyKeys
+// among states and the Merkle tree position of each state.
 func validateTransactionHistory(
 	ctx context.Context,
-	idempotencyKey *uuid.UUID,
-	namespace uuid.UUID,
 	transactionHistory []qldbPaymentTransitionHistoryEntry,
-	kmsClient wrappedKMSClient,
 ) (bool, error) {
 	var (
 		reason                    error
 		err                       error
-		unmarshaledTransactionSet []Transaction
+		unmarshaledTransactionSet []AuthenticatedPaymentState
 	)
 	// Unmarshal the transactions in advance so that we don't have to do it multiple
 	// times per transaction in the next loop.
 	for _, marshaledTransaction := range transactionHistory {
-		var transaction Transaction
-		err = json.Unmarshal(marshaledTransaction.Data.Data, &transaction)
+		var transaction AuthenticatedPaymentState
+		err = json.Unmarshal(marshaledTransaction.Data.unsafePaymentState, &transaction)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
 		}
@@ -314,48 +317,17 @@ func validateTransactionHistory(
 	for i, transaction := range unmarshaledTransactionSet {
 		// Transitions must always start at 0
 		if i == 0 {
-			if transaction.State != Prepared {
+			if transaction.Status != Prepared {
 				return false, &InvalidTransitionState{}
 			}
 			continue
 		}
 
-		// Before starting State validation, check that keys and signatures for the record are valid.
-		// GenerateIdempotencyKey will verify that the ID is internally consistent within the Transaction.
-		dataIdempotencyKey, err := transaction.GenerateIdempotencyKey(namespace)
-		if err != nil {
-			return false, fmt.Errorf("ID invalid: %w", err)
-		}
-		// The data object is serialized in QLDB, but when deserialized should contain an ID that matches
-		// the ID on the top level of the QLDB record
-		if *dataIdempotencyKey != *idempotencyKey {
-			return false, fmt.Errorf("top level ID does not match Transaction ID: %s, %s", dataIdempotencyKey, idempotencyKey)
-		}
-		// Each transaction's signature must be verified
-		txID := transaction.ID.String()
-		verifyOutput, err := kmsClient.Verify(ctx, &kms.VerifyInput{
-			KeyId:   &txID,
-			Message: transactionHistory[i].Data.Data,
-		})
-		if err != nil {
-			return false, fmt.Errorf("failed to verify signature: %w", err)
-		}
-		if !verifyOutput.SignatureValid {
-			return false, fmt.Errorf("signature for record %s invalid with metadata: %v", transaction.ID.String(), verifyOutput.ResultMetadata)
-		}
-
 		// Now that the data itself is verified, proceed to check transition States.
 		previousTransitionData := unmarshaledTransactionSet[i-1]
-		previousIdempotencyKey, err := previousTransitionData.GenerateIdempotencyKey(namespace)
-		if err != nil {
-			return false, fmt.Errorf("ID invalid: %w", err)
-		}
-		// The IdempotencyKeys of all records in the transition history of a Transaction should match
-		if *dataIdempotencyKey != *previousIdempotencyKey {
-			return false, fmt.Errorf("idempotencyKeys in transition history do not match: %s, %s", idempotencyKey.String(), previousIdempotencyKey.String())
-		}
-		// New transaction state should be present in the list of valid next states for the "previous" (current) state.
-		if !previousTransitionData.nextStateValid(transaction.State) {
+		// New transaction state should be present in the list of valid next states for the
+		// "previous" (current) state.
+		if !previousTransitionData.nextStateValid(transaction.Status) {
 			return false, &InvalidTransitionState{}
 		}
 	}
@@ -446,11 +418,10 @@ func transactionHistoryIsValid(
 	ctx context.Context,
 	txn wrappedQldbTxnAPI,
 	kmsClient wrappedKMSClient,
-	id *uuid.UUID,
-	namespace uuid.UUID,
+	documentID string,
 ) (bool, *qldbPaymentTransitionHistoryEntry, error) {
 	// Fetch all historical states for this record
-	result, err := getTransactionHistory(txn, id)
+	result, err := getTransactionHistory(txn, documentID)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to get transaction history: %w", err)
 	}
@@ -458,7 +429,10 @@ func transactionHistoryIsValid(
 		return false, nil, &QLDBTransitionHistoryNotFoundError{}
 	}
 	// Ensure that all state changes in record history were valid
-	stateTransitionsAreValid, err := validateTransactionHistory(ctx, id, namespace, result, kmsClient)
+	stateTransitionsAreValid, err := validateTransactionHistory(
+		ctx,
+		result,
+	)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to validate history: %w", err)
 	}
@@ -502,12 +476,12 @@ func isQLDBReady(ctx context.Context) bool {
 	return false
 }
 
-func (t *Transaction) shouldDryRun() bool {
+func (t *AuthenticatedPaymentState) shouldDryRun() bool {
 	if t.DryRun == nil {
 		return false
 	}
 
-	switch t.State {
+	switch t.Status {
 	case Prepared:
 		return *t.DryRun == "prepare"
 	case Authorized:

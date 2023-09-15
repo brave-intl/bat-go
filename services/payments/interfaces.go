@@ -19,19 +19,26 @@ type idempotentObject interface {
 // TxStateMachine is anything that be progressed through states by the
 // Drive function.
 type TxStateMachine interface {
-	setPersistenceConfigValues(wrappedQldbDriverAPI, wrappedQldbSDKClient, wrappedKMSClient, string, *Transaction)
-	setTransaction(*Transaction)
-	getState() TransactionState
-	getTransaction() *Transaction
-	getTransactionID() *uuid.UUID
+	setPersistenceConfigValues(
+		*uuid.UUID,
+		wrappedQldbDriverAPI,
+		wrappedQldbSDKClient,
+		wrappedKMSClient,
+		string,
+		*AuthenticatedPaymentState,
+	)
+	setTransaction(*AuthenticatedPaymentState)
+	getState() PaymentStatus
+	getTransaction() *AuthenticatedPaymentState
+	getIdempotencyKey() *uuid.UUID
 	getDatastore() wrappedQldbDriverAPI
 	getSDKClient() wrappedQldbSDKClient
 	getKMSSigningClient() wrappedKMSClient
 	GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error)
-	Prepare(context.Context) (*Transaction, error)
-	Authorize(context.Context) (*Transaction, error)
-	Pay(context.Context) (*Transaction, error)
-	Fail(context.Context) (*Transaction, error)
+	Prepare(context.Context) (*AuthenticatedPaymentState, error)
+	Authorize(context.Context) (*AuthenticatedPaymentState, error)
+	Pay(context.Context) (*AuthenticatedPaymentState, error)
+	Fail(context.Context) (*AuthenticatedPaymentState, error)
 }
 
 // wrappedQldbDriverAPI defines the API for QLDB methods that we'll be using.

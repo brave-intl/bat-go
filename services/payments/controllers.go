@@ -23,6 +23,27 @@ type getConfResponse struct {
 	PublicKey           string
 }
 
+type PrepareRequst struct {
+	PaymentDetails
+	DryRun *string `json:"dryRun"` // determines dry-run
+}
+
+// PrepareResponse is sent to the client in response to a PrepareRequest. It must include
+// an Attestation in the header of the response.
+type PrepareResponse struct {
+	PaymentDetails
+	DocumentID string `json:"documentId,omitempty"`
+}
+
+type SubmitRequest struct {
+	DocumentID string `json:"documentId,omitempty"`
+}
+
+type SubmitResponse struct {
+	Status PaymentStatus `json:"status" valid:"required"`
+	LastError *PaymentError `json:"error,omitempty"`
+}
+
 // GetConfigurationHandler gets important payments configuration information, attested by nitro.
 func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -65,7 +86,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
-			req    = new(Transaction)
+			req    = new(AuthenticatedPaymentState)
 		)
 
 		// read the transactions in the body
@@ -84,7 +105,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.PrepareTransaction(ctx, req)
+		resp, err := service.PrepareTransaction(ctx, &namespaceUUID, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}
@@ -111,7 +132,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
 		}
 
-		resp.AttestationDocument = base64.StdEncoding.EncodeToString(attestationDocument)
+		w.Header().Add("X-Nitro-Attestation", base64.StdEncoding.EncodeToString(attestationDocument))
 		// Should be in QLDB in prepared state
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
@@ -126,7 +147,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "SubmitHandler")
-			req    = &Transaction{}
+			req    = &AuthenticatedPaymentState{}
 		)
 
 		// read the transactions in the body
@@ -158,7 +179,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// TODO: state machine handling for custodian submissions
 
 		// get the current state of the transaction from qldb
-		resp, err := service.GetTransactionFromDocID(ctx, req.DocumentID)
+		resp, _, err := service.GetTransactionFromDocumentID(ctx, req.documentID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}

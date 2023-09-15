@@ -84,12 +84,13 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 	upholdStateMachine := UpholdMachine{}
 
-	testTransaction := Transaction{
-		State:          Prepared,
-		ID:             &idempotencyKey,
-		Amount:         ion.MustParseDecimal("1.1"),
-		Authorizations: []Authorization{{}, {}, {}},
-		Custodian:      "uphold",
+	testTransaction := AuthenticatedPaymentState{
+		Status: Prepared,
+		PaymentDetails: PaymentDetails{
+			Amount:    ion.MustParseDecimal("1.1"),
+			Custodian: "uphold",
+		},
+		Authorizations: []PaymentAuthorization{{}, {}, {}},
 	}
 	marshaledData, err := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
@@ -99,10 +100,10 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: qldbPaymentTransitionHistoryEntryData{
-			Data:           marshaledData,
-			Signature:      []byte{},
-			IdempotencyKey: &idempotencyKey,
+		Data: PaymentState{
+			unsafePaymentState: marshaledData,
+			Signature:          []byte{},
+			ID:                 &idempotencyKey,
 		},
 		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
@@ -123,6 +124,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	upholdStateMachine.setPersistenceConfigValues(
+		&idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
@@ -136,37 +138,37 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	// the object does not yet exist.
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	newTransaction, err := service.PrepareTransaction(ctx, &testTransaction)
+	newTransaction, err := service.PrepareTransaction(ctx, &idempotencyKey, &testTransaction)
 	must.Equal(t, nil, err)
-	should.Equal(t, Prepared, newTransaction.State)
+	should.Equal(t, Prepared, newTransaction.Status)
 
 	// Should transition transaction into the Authorized state
-	testTransaction.State = Prepared
+	testTransaction.Status = Prepared
 	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.Data = marshaledData
+	mockTransitionHistory.Data.unsafePaymentState = marshaledData
 	upholdStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &upholdStateMachine)
 	must.Equal(t, nil, err)
-	should.Equal(t, Authorized, newTransaction.State)
+	should.Equal(t, Authorized, newTransaction.Status)
 
 	// Should transition transaction into the Pending state
-	testTransaction.State = Authorized
+	testTransaction.Status = Authorized
 	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.Data = marshaledData
+	mockTransitionHistory.Data.unsafePaymentState = marshaledData
 	upholdStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &upholdStateMachine)
 	must.Equal(t, nil, err)
 	// @TODO: When tests include custodial mocks, this should be Pending
-	should.Equal(t, Paid, newTransaction.State)
+	should.Equal(t, Paid, newTransaction.Status)
 
 	// Should transition transaction into the Paid state
-	testTransaction.State = Pending
+	testTransaction.Status = Pending
 	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.Data = marshaledData
+	mockTransitionHistory.Data.unsafePaymentState = marshaledData
 	upholdStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &upholdStateMachine)
 	must.Equal(t, nil, err)
-	should.Equal(t, Paid, newTransaction.State)
+	should.Equal(t, Paid, newTransaction.Status)
 }
 
 /*

@@ -26,32 +26,33 @@ import (
 	"github.com/google/uuid"
 )
 
-// Transaction - the main type explaining a transaction, type used for qldb via ion.
-type Transaction struct {
-	ID                  *uuid.UUID       `json:"idempotencyKey,omitempty" valid:"required"`
-	Amount              *ion.Decimal     `json:"amount" valid:"required"`
-	To                  string           `json:"to,omitempty" valid:"required"`
-	From                string           `json:"from,omitempty" valid:"required"`
-	Custodian           string           `json:"custodian,omitempty" valid:"in(uphold|gemini|bitflyer)"`
-	State               TransactionState `json:"state" valid:"required"`
-	DocumentID          string           `json:"documentId,omitempty"`
-	AttestationDocument string           `json:"attestation,omitempty"`
-	PayoutID            string           `json:"payoutId" valid:"required"`
-	Signature           string           `json:"signature" valid:"required"` // KMS signature only enclave can sign
-	Authorizations      []Authorization  `json:"authorizations"`
-	PublicKey           string           `json:"publicKey" valid:"required"` // KMS signature only enclave can sign
-	Currency            string           `json:"currency"`
-	DryRun              *string          `json:"dryRun"` // determines dry-run
+type AuthenticatedPaymentState struct {
+	PaymentDetails
+	Status         PaymentStatus
+	Authorizations []PaymentAuthorization `json:"authorizations"`
+	DryRun         *string                `json:"dryRun"` // determines dry-run
+	LastError      *PaymentError
+	documentID     string
 }
 
-// Authorization represents a single authorization from a payment authorizer indicating that
+type PaymentDetails struct {
+	Amount    *ion.Decimal `json:"amount" valid:"required"`
+	To        string       `json:"to,omitempty" valid:"required"`
+	From      string       `json:"from,omitempty" valid:"required"`
+	Custodian string       `json:"custodian,omitempty" valid:"in(uphold|gemini|bitflyer)"`
+	PayoutID  string       `json:"payoutId" valid:"required"`
+	Currency  string       `json:"currency"`
+}
+
+// PaymentAuthorization represents a single authorization from a payment authorizer indicating that
 // the payout represented by a document ID should be processed
-type Authorization struct {
+type PaymentAuthorization struct {
 	KeyID      string `json:"keyId" valid:"required"`
 	DocumentID string `json:"documentId" valid:"required"`
 }
 
-// qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for qldbPaymentTransitionHistoryEntry.
+// qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for
+// qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntryBlockAddress struct {
 	StrandID   string `ion:"strandId"`
 	SequenceNo int64  `ion:"sequenceNo"`
@@ -60,14 +61,17 @@ type qldbPaymentTransitionHistoryEntryBlockAddress struct {
 // qldbPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntryHash string
 
-// qldbPaymentTransitionHistoryEntrySignature defines signature for qldbPaymentTransitionHistoryEntry.
+// qldbPaymentTransitionHistoryEntrySignature defines signature for
+// qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntrySignature []byte
 
-// qldbPaymentTransitionHistoryEntryData defines data for qldbPaymentTransitionHistoryEntry.
-type qldbPaymentTransitionHistoryEntryData struct {
-	Signature      []byte     `ion:"signature"`
-	Data           []byte     `ion:"data"`
-	IdempotencyKey *uuid.UUID `ion:"idempotencyKey"`
+// PaymentState defines data for qldbPaymentTransitionHistoryEntry.
+type PaymentState struct {
+	// Serialized AuthenticatedPaymentState. Should only ever be access via GetSafePaymentState,
+	// which does all of the needed validation of the state
+	unsafePaymentState []byte     `ion:"data"`
+	Signature          []byte     `ion:"signature"`
+	ID                 *uuid.UUID `ion:"idempotencyKey"`
 }
 
 // qldbPaymentTransitionHistoryEntryMetadata defines metadata for qldbPaymentTransitionHistoryEntry
@@ -82,34 +86,96 @@ type qldbPaymentTransitionHistoryEntryMetadata struct {
 type qldbPaymentTransitionHistoryEntry struct {
 	BlockAddress qldbPaymentTransitionHistoryEntryBlockAddress `ion:"blockAddress"`
 	Hash         qldbPaymentTransitionHistoryEntryHash         `ion:"hash"`
-	Data         qldbPaymentTransitionHistoryEntryData         `ion:"data"`
+	Data         PaymentState                                  `ion:"data"`
 	Metadata     qldbPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
 
-func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*Transaction, error) {
-	var txn Transaction
-	err := json.Unmarshal(e.Data.Data, &txn)
+type qldbDocumentIDResult struct {
+	documentID string `ion:"documentId"`
+}
+
+func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*AuthenticatedPaymentState, error) {
+	var txn AuthenticatedPaymentState
+	err := json.Unmarshal(e.Data.unsafePaymentState, &txn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w", err)
+		return nil, fmt.Errorf(
+			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
+			err,
+		)
 	}
 	return &txn, nil
 }
 
-// GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
-// an error.
-func (t *Transaction) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
-	generatedIdempotencyKey := t.generateIdempotencyKey(namespace)
-	if generatedIdempotencyKey != *t.ID {
-		return nil, fmt.Errorf("ID does not match transaction fields: have %s, want %s", *t.ID, generatedIdempotencyKey)
+func (p *PaymentState) toAuthenticatedPaymentState() (*AuthenticatedPaymentState, error) {
+	var txn AuthenticatedPaymentState
+	err := json.Unmarshal(p.unsafePaymentState, &txn)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
+			err,
+		)
 	}
-
-	return t.ID, nil
+	return &txn, nil
 }
 
-// SetIdempotencyKey assigns a UUID v5 value to Transaction.ID.
-func (t *Transaction) SetIdempotencyKey(namespace uuid.UUID) error {
-	generatedIdempotencyKey := t.generateIdempotencyKey(namespace)
-	t.ID = &generatedIdempotencyKey
+// PaymentError is an error used to communicate whether an error is temporary.
+type PaymentError struct {
+	OriginalError  error
+	FailureMessage string
+	Temporary      bool
+}
+
+// Error makes ProcessingError an error
+func (e PaymentError) Error() string {
+	msg := fmt.Sprintf("error: %s", e.FailureMessage)
+	if e.Cause() != nil {
+		msg = fmt.Sprintf("%s: %s", msg, e.Cause())
+	}
+	return msg
+}
+
+// Cause implements Cause for error
+func (e PaymentError) Cause() error {
+	return e.OriginalError
+}
+
+// Unwrap implements Unwrap for error
+func (e PaymentError) Unwrap() error {
+	return e.OriginalError
+}
+
+// ProcessingErrorFromError - given an error turn it into a processing error
+func ProcessingErrorFromError(cause error, isTemporary bool) error {
+	return &PaymentError{
+		OriginalError:  cause,
+		FailureMessage: cause.Error(),
+		Temporary:      isTemporary,
+	}
+}
+
+// GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
+// an error.
+func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
+	authenticatedState, err := p.toAuthenticatedPaymentState()
+	if err != nil {
+		return nil, err
+	}
+	generatedIdempotencyKey := authenticatedState.generateIdempotencyKey(namespace)
+	if generatedIdempotencyKey != *p.ID {
+		return nil, fmt.Errorf("ID does not match transaction fields: have %s, want %s", *p.ID, generatedIdempotencyKey)
+	}
+
+	return p.ID, nil
+}
+
+// SetIdempotencyKey assigns a UUID v5 value to PaymentState.ID.
+func (p *PaymentState) SetIdempotencyKey(namespace uuid.UUID) error {
+	authenticatedPaymentState, err := p.toAuthenticatedPaymentState()
+	if err != nil {
+		return err
+	}
+	generatedIdempotencyKey := authenticatedPaymentState.generateIdempotencyKey(namespace)
+	p.ID = &generatedIdempotencyKey
 	return nil
 }
 
@@ -118,8 +184,13 @@ var (
 	submitFailure  = "submit"
 )
 
-// SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex string.
-func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSClient, keyID string) (string, string, error) {
+// SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex
+// string.
+func (a *AuthenticatedPaymentState) SignTransaction(
+	ctx context.Context,
+	kmsClient wrappedKMSClient,
+	keyID string,
+) (string, string, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyID,
 	})
@@ -128,7 +199,7 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSC
 		return "", "", fmt.Errorf("Failed to get public key: %w", err)
 	}
 
-	marshaled, err := ion.MarshalBinary(t)
+	marshaled, err := ion.MarshalBinary(a)
 	if err != nil {
 		return "", "", fmt.Errorf("Ion marshal failed: %w", err)
 	}
@@ -147,25 +218,25 @@ func (t *Transaction) SignTransaction(ctx context.Context, kmsClient wrappedKMSC
 }
 
 // MarshalJSON - custom marshaling of transaction type.
-func (t *Transaction) MarshalJSON() ([]byte, error) {
-	type Alias Transaction
+func (a *AuthenticatedPaymentState) MarshalJSON() ([]byte, error) {
+	type Alias AuthenticatedPaymentState
 	return json.Marshal(&struct {
 		Amount *decimal.Decimal `json:"amount"`
 		*Alias
 	}{
-		Amount: fromIonDecimal(t.Amount),
-		Alias:  (*Alias)(t),
+		Amount: fromIonDecimal(a.Amount),
+		Alias:  (*Alias)(a),
 	})
 }
 
 // UnmarshalJSON - custom unmarshal of transaction type.
-func (t *Transaction) UnmarshalJSON(data []byte) error {
-	type Alias Transaction
+func (a *AuthenticatedPaymentState) UnmarshalJSON(data []byte) error {
+	type Alias AuthenticatedPaymentState
 	aux := &struct {
 		Amount *decimal.Decimal `json:"amount"`
 		*Alias
 	}{
-		Alias: (*Alias)(t),
+		Alias: (*Alias)(a),
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return fmt.Errorf("failed to unmarshal transaction: %w", err)
@@ -177,24 +248,36 @@ func (t *Transaction) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse transaction Amount into ion decimal: %w", err)
 	}
-	t.Amount = parsedAmount
+	a.Amount = parsedAmount
 	return nil
 }
 
-func (t *Transaction) generateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
-	return uuid.NewSHA1(namespace, []byte(fmt.Sprintf("%s%s%s%s%s%s", t.To, t.From, t.Currency, t.Amount, t.Custodian, t.PayoutID)))
+func (p *AuthenticatedPaymentState) generateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
+	return uuid.NewSHA1(
+		namespace,
+		[]byte(fmt.Sprintf(
+			"%s%s%s%s%s%s",
+			p.To,
+			p.From,
+			p.Currency,
+			p.Amount,
+			p.Custodian,
+			p.PayoutID,
+		)),
+	)
 }
 
-func (t *Transaction) getIdempotencyKey() *uuid.UUID {
+func (t *PaymentState) getIdempotencyKey() *uuid.UUID {
 	return t.ID
 }
 
-func (t *Transaction) nextStateValid(nextState TransactionState) bool {
-	if t.State == nextState {
+func (t *AuthenticatedPaymentState) nextStateValid(nextState PaymentStatus) bool {
+	if t.Status == nextState {
 		return true
 	}
-	// New transaction state should be present in the list of valid next states for the current state.
-	if !slices.Contains(t.State.GetValidTransitions(), nextState) {
+	// New transaction state should be present in the list of valid next states for the current
+	// state.
+	if !slices.Contains(t.Status.GetValidTransitions(), nextState) {
 		return false
 	}
 	return true
@@ -276,8 +359,12 @@ func (s *Service) setupLedger(ctx context.Context) error {
 }
 
 // PrepareTransaction - perform a qldb insertion on the transaction.
-func (s *Service) PrepareTransaction(ctx context.Context, transaction *Transaction) (*Transaction, error) {
-	stateMachine, err := StateMachineFromTransaction(transaction, s)
+func (s *Service) PrepareTransaction(
+	ctx context.Context,
+	ID *uuid.UUID,
+	transaction *AuthenticatedPaymentState,
+) (*AuthenticatedPaymentState, error) {
+	stateMachine, err := StateMachineFromTransaction(ID, transaction, s)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create state machine: %w", err)
 	}
@@ -380,92 +467,106 @@ const (
 )
 
 // InsertTransaction - perform a qldb insertion on the transactions.
-func (s Service) InsertTransaction(ctx context.Context, transaction *Transaction) (Transaction, error) {
-	enrichedTransaction, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		// for all of the transactions load up a check to see if this transaction has already existed
-		// or not, then perform the insertion of the records.
-		resp := Transaction{}
+func (s Service) InsertTransaction(
+	ctx context.Context,
+	state *AuthenticatedPaymentState,
+) (AuthenticatedPaymentState, error) {
+	enrichedTransaction, err := s.datastore.Execute(context.Background(), func(
+		txn qldbdriver.Transaction,
+	) (interface{}, error) {
+		// for all of the transactions load up a check to see if this transaction has already
+		// existed or not, then perform the insertion of the records.
+		resp := AuthenticatedPaymentState{}
+
+		namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
+		id := state.generateIdempotencyKey(namespace)
 
 		// Check if a document with this idempotencyKey exists
-		result, err := txn.Execute("SELECT * FROM transactions WHERE idempotencyKey = ?", transaction.ID)
+		result, err := txn.Execute("SELECT * FROM transactions WHERE idempotencyKey = ?", id)
 		if err != nil {
-			return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.ID, err)
+			return nil, fmt.Errorf("failed to insert tx: %s due to: %w", id, err)
 		}
-		// Check if there are any results
+		// Check if there are any results. There should not be. If there are, we should not insert.
 		if !result.Next(txn) {
 			// set transaction state to prepared
-			transaction.State = StatePrepared
+			state.Status = StatePrepared
 			// insert the transaction
-			_, err = txn.Execute("INSERT INTO transactions ?", transaction)
+			insert_result, err := txn.Execute("INSERT INTO transactions ?", state)
 			if err != nil {
-				return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.ID, err)
+				return nil, fmt.Errorf("failed to insert tx: %s due to: %w", id, err)
 			}
-		}
-		// get the document id for the inserted transaction
-		result, err = txn.Execute("SELECT data.*, metadata.id FROM _ql_committed_transactions as t WHERE t.data.idempotencyKey = ?", transaction.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.ID, err)
-		}
-		// Check if there are any results
-		if result.Next(txn) {
+			ionBinary := insert_result.GetCurrentData()
 
-			// get the enriched version of the transaction for the response
-			enriched := new(Transaction)
-			// unmarshal enriched version
-			err := ion.Unmarshal(result.GetCurrentData(), enriched)
+			temp := new(qldbDocumentIDResult)
+			err = ion.Unmarshal(ionBinary, temp)
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal enriched tx: %s due to: %w", transaction.ID, err)
+				return nil, err
 			}
-			resp = *enriched
+			resp.documentID = temp.documentID
 		}
 
-		return resp, nil
+		return resp, fmt.Errorf("failed to insert transaction because id already exists: %s", id)
 	})
 	if err != nil {
-		return Transaction{}, fmt.Errorf("failed to insert transactions: %w", err)
+		return AuthenticatedPaymentState{}, fmt.Errorf("failed to insert transaction: %w", err)
 	}
-	return enrichedTransaction.(Transaction), nil
+	return enrichedTransaction.(AuthenticatedPaymentState), nil
 }
 
 // UpdateTransactionsState - Change transaction state.
-func (s Service) UpdateTransactionsState(ctx context.Context, state string, transactions ...Transaction) error {
-	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		// for all of the transactions load up a check to see if this transaction has already existed
-		// or not, then perform the insertion of the records.
-		for _, transaction := range transactions {
-			// Check if a document with this idempotencyKey exists
-			result, err := txn.Execute("SELECT * FROM transactions WHERE idempotencyKey = ?", transaction.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update tx: %s due to: %w", transaction.ID, err)
-			}
-			// Check if there are any results
-			if result.Next(txn) {
-				// update the transaction state
-				_, err = txn.Execute("UPDATE transactions SET state = ? WHERE idempotencyKey = ?", state, transaction.ID)
-				if err != nil {
-					return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.ID, err)
-				}
-			}
-		}
-		return nil, nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to update transactions: %w", err)
-	}
-	return nil
-}
+//func (s Service) UpdateTransactionsState(
+//	ctx context.Context,
+//	state string,
+//	transactions ...AuthenticatedPaymentState,
+//) error {
+//	_, err := s.datastore.Execute(
+//		context.Background(),
+//		func(txn qldbdriver.Transaction) (interface{}, error) {
+//			// for all of the transactions load up a check to see if this transaction has already
+//			// existed or not, then perform the insertion of the records.
+//			for _, transaction := range transactions {
+//				// update the transaction state, ignoring the returned document ID
+//				_, err := txn.Execute(
+//					"UPDATE transactions BY d_id SET state = ? WHERE d_id = ?",
+//					state,
+//					transaction.documentID,
+//				)
+//				if err != nil {
+//					return nil, fmt.Errorf(
+//						"failed to update state for document: %s due to: %w",
+//						transaction.documentID,
+//						err,
+//					)
+//				}
+//			}
+//			return nil, nil
+//		})
+//	if err != nil {
+//		return fmt.Errorf("failed to update transactions: %w", err)
+//	}
+//	return nil
+//}
 
 // AuthorizeTransaction - Add an Authorization for the Transaction and attempt to Drive
 // the Transaction forward. NOTE: This function assumes that the http signature has been
 // verified before running. This is achieved in the SubmitHandler middleware.
-func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transaction Transaction) error {
-	fetchedTxn, err := s.GetTransactionFromDocID(ctx, transaction.DocumentID)
+func (s *Service) AuthorizeTransaction(
+	ctx context.Context,
+	keyID string,
+	transaction AuthenticatedPaymentState,
+) error {
+	fetchedTxn, idempotencyKey, err := s.GetTransactionFromDocumentID(ctx, transaction.documentID)
 	if err != nil {
-		return fmt.Errorf("failed to get transaction %s by document ID %s: %w", transaction.ID, transaction.DocumentID, err)
+		return fmt.Errorf(
+			"failed to get transaction with idempotencyKey %s by document ID %s: %w",
+			idempotencyKey,
+			transaction.documentID,
+			err,
+		)
 	}
-	auth := Authorization{
+	auth := PaymentAuthorization{
 		KeyID:      keyID,
-		DocumentID: transaction.DocumentID,
+		DocumentID: transaction.documentID,
 	}
 	keyHasNotYetSigned := true
 	for _, authorization := range fetchedTxn.Authorizations {
@@ -474,7 +575,7 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 		}
 	}
 	if !keyHasNotYetSigned {
-		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)
+		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.documentID)
 	}
 	fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
 	writtenTxn, err := WriteTransaction(
@@ -488,7 +589,7 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 	if err != nil {
 		return fmt.Errorf("failed to update transaction: %w", err)
 	}
-	stateMachine, err := StateMachineFromTransaction(writtenTxn, s)
+	stateMachine, err := StateMachineFromTransaction(idempotencyKey, writtenTxn, s)
 	if err != nil {
 		return fmt.Errorf("failed to create stateMachine: %w", err)
 	}
@@ -512,42 +613,62 @@ func (s *Service) AuthorizeTransaction(ctx context.Context, keyID string, transa
 	return nil
 }
 
-// GetTransactionFromDocID - get the transaction data from the document ID in qldb.
-func (s *Service) GetTransactionFromDocID(ctx context.Context, docID string) (*Transaction, error) {
-	transaction, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		resp := new(Transaction)
+// GetTransactionFromDocumentID - get the transaction data from the document ID in qldb.
+func (s *Service) GetTransactionFromDocumentID(
+	ctx context.Context,
+	documentID string,
+) (*AuthenticatedPaymentState, *uuid.UUID, error) {
+	paymentStateInterface, err := s.datastore.Execute(
+		context.Background(),
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+			resp := new(PaymentState)
 
-		result, err := txn.Execute("SELECT data.*,metadata.id FROM _ql_committed_transactions WHERE metadata.id = ?", docID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get tx: %s due to: %w", docID, err)
-		}
-		// Check if there are any results
-		if result.Next(txn) {
-			// unmarshal enriched version
-			err := ion.Unmarshal(result.GetCurrentData(), resp)
+			result, err := txn.Execute(
+				"SELECT data.*, d_id FROM transactions BY d_id WHERE d_id = ?",
+				documentID,
+			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal tx: %s due to: %w", docID, err)
+				return nil, fmt.Errorf("failed to get tx: %s due to: %w", documentID, err)
 			}
-		}
+			// Check if there are any results
+			if result.Next(txn) {
+				// unmarshal enriched version
+				err := ion.Unmarshal(result.GetCurrentData(), resp)
+				if err != nil {
+					return nil, fmt.Errorf("failed to unmarshal tx: %s due to: %w", documentID, err)
+				}
+			}
 
-		return resp, nil
-	})
+			return resp, nil
+		},
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get transactions: %w", err)
+		return nil, nil, fmt.Errorf("failed to get transactions: %w", err)
 	}
-	return transaction.(*Transaction), nil
+	paymentState := paymentStateInterface.(*PaymentState)
+	authenticatedState, err := paymentState.toAuthenticatedPaymentState()
+	if err != nil {
+		return nil, nil, err
+	}
+	authenticatedState.documentID = documentID
+	return authenticatedState, paymentState.ID, nil
 }
 
-// getQLDBObject returns the latest version of an entry for a given ID after doing all requisite validation.
+// getQLDBObject returns the latest version of an entry for a given ID after doing all requisite
+// validation.
 func getQLDBObject(
 	ctx context.Context,
 	qldbTransactionDriver wrappedQldbTxnAPI,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
-	txnID *uuid.UUID,
-	namespace uuid.UUID,
+	documentID string,
 ) (*qldbPaymentTransitionHistoryEntry, error) {
-	valid, result, err := transactionHistoryIsValid(ctx, qldbTransactionDriver, kmsSigningClient, txnID, namespace)
+	valid, result, err := transactionHistoryIsValid(
+		ctx,
+		qldbTransactionDriver,
+		kmsSigningClient,
+		documentID,
+	)
 	if err != nil || !valid {
 		return nil, fmt.Errorf("failed to validate transition history: %w", err)
 	}
@@ -565,43 +686,55 @@ func getQLDBObject(
 	return result, nil
 }
 
-// GetTransactionByID returns the latest version of a record from QLDB if it exists, after doing all requisite validation.
-func GetTransactionByID(
+// GetTransactionByIdempotencyKey returns the latest version of a record from QLDB if it exists, after doing all requisite validation.
+func GetTransactionByIdempotencyKey(
 	ctx context.Context,
 	datastore wrappedQldbDriverAPI,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
-	id *uuid.UUID,
-) (*Transaction, error) {
-	namespace, ok := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
-	if !ok {
-		return nil, fmt.Errorf("Failed to get UUID namespace from context")
-	}
-	data, err := datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
-		entry, err := getQLDBObject(ctx, txn, sdkClient, kmsSigningClient, id, namespace)
+	idempotencyKey *uuid.UUID,
+) (*AuthenticatedPaymentState, error) {
+	stateInterface, err := datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
+		resp := new(AuthenticatedPaymentState)
+
+		// Check if a document with this idempotencyKey exists
+		result, err := txn.Execute(
+			"SELECT data.*, d_id FROM transactions BY d_id WHERE idempotencyKey = ?",
+			idempotencyKey,
+		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get QLDB record: %w", err)
+			return nil, fmt.Errorf("failed to get by id: %s due to: %w", idempotencyKey, err)
 		}
-		return entry, nil
+		if result.Next(txn) {
+			// unmarshal enriched version
+			err := ion.Unmarshal(result.GetCurrentData(), resp)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal tx: %s due to: %w", idempotencyKey, err)
+			}
+		}
+
+		return resp, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to query QLDB: %w", err)
 	}
-	assertedData, ok := data.(*qldbPaymentTransitionHistoryEntry)
+	assertedState, ok := stateInterface.(*AuthenticatedPaymentState)
 	if !ok {
-		return nil, fmt.Errorf("database response was the wrong type: %#v", data)
+		return nil, fmt.Errorf("database response was the wrong type: %#v", stateInterface)
 	}
-	transaction, err := assertedData.toTransaction()
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert record to Transaction: %w", err)
-	}
-	return transaction, nil
+	return assertedState, nil
 }
 
 // getTransactionHistory returns a slice of entries representing the entire state history
 // for a given id.
-func getTransactionHistory(txn wrappedQldbTxnAPI, id *uuid.UUID) ([]qldbPaymentTransitionHistoryEntry, error) {
-	result, err := txn.Execute("SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?", id)
+func getTransactionHistory(
+	txn wrappedQldbTxnAPI,
+	documentID string,
+) ([]qldbPaymentTransitionHistoryEntry, error) {
+	result, err := txn.Execute(
+		"SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?",
+		documentID,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("QLDB transaction failed: %w", err)
 	}
@@ -625,30 +758,45 @@ func WriteTransaction(
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
 	kmsSigningKeyID string,
-	transaction *Transaction,
-) (*Transaction, error) {
-	namespace, ok := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
-	if !ok {
-		return nil, fmt.Errorf("Failed to get UUID namespace from context")
-	}
-	_, err := datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
-		// Determine if the transaction already exists or if it needs to be initialized. This call will do all necessary
-		// record and history validation if they exist for this record
-		_, err := getQLDBObject(ctx, txn, sdkClient, kmsSigningClient, transaction.ID, namespace)
-		var notFound *QLDBReocrdNotFoundError
-		if err != nil && !errors.As(err, &notFound) {
-			return nil, fmt.Errorf("failed to query QLDB: %w", err)
-		}
-		transaction.PublicKey, transaction.Signature, err = transaction.SignTransaction(ctx, kmsSigningClient, kmsSigningKeyID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign transaction: %w", err)
-		}
+	transaction *AuthenticatedPaymentState,
+) (*AuthenticatedPaymentState, error) {
+	_, err := datastore.Execute(
+		ctx,
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+			// This call will do all necessary record and history validation if they exist for this
+			// record
+			_, err := getQLDBObject(ctx, txn, sdkClient, kmsSigningClient, transaction.documentID)
+			var notFound *QLDBReocrdNotFoundError
+			if err != nil {
+				if errors.As(err, &notFound) {
+					return nil, fmt.Errorf("document does not exist: %w", err)
+				}
+				return nil, fmt.Errorf("failed to query QLDB: %w", err)
+			}
 
-		if errors.As(err, &notFound) {
-			return txn.Execute("INSERT INTO transactions ?", transaction)
-		}
-		return txn.Execute("UPDATE transactions SET state = ? WHERE id = ?", transaction.State, transaction.ID)
-	})
+			result, err := json.Marshal(transaction)
+			if err != nil {
+				return nil, err
+			}
+
+			/*publicKey*/
+			_, signature, err := transaction.SignTransaction(
+				ctx,
+				kmsSigningClient,
+				kmsSigningKeyID,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to sign transaction: %w", err)
+			}
+
+			return txn.Execute(
+				"UPDATE transactions BY d_id SET data = ?, signature = ? WHERE d_id = ?",
+				result,
+				signature,
+				transaction.documentID,
+			)
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("QLDB write execution failed: %w", err)
 	}

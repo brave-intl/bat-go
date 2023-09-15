@@ -8,25 +8,25 @@ import (
 	"github.com/google/uuid"
 )
 
-// TransactionState is an integer representing transaction status.
-type TransactionState string
+// PaymentStatus is an integer representing transaction status.
+type PaymentStatus string
 
 // TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 const (
 	// Prepared represents a record that has been prepared for authorization.
-	Prepared TransactionState = "prepared"
+	Prepared PaymentStatus = "prepared"
 	// Authorized represents a record that has been authorized.
-	Authorized TransactionState = "authorized"
+	Authorized PaymentStatus = "authorized"
 	// Pending represents a record that is being or has been submitted to a processor.
-	Pending TransactionState = "pending"
+	Pending PaymentStatus = "pending"
 	// Paid represents a record that has entered a finalized success state with a processor.
-	Paid TransactionState = "paid"
+	Paid PaymentStatus = "paid"
 	// Failed represents a record that has failed processing permanently.
-	Failed TransactionState = "failed"
+	Failed PaymentStatus = "failed"
 )
 
 // Transitions represents the valid forward-transitions for each given state.
-var Transitions = map[TransactionState][]TransactionState{
+var Transitions = map[PaymentStatus][]PaymentStatus{
 	Prepared:   {Authorized, Failed},
 	Authorized: {Pending, Failed},
 	Pending:    {Paid, Failed},
@@ -35,7 +35,8 @@ var Transitions = map[TransactionState][]TransactionState{
 }
 
 type baseStateMachine struct {
-	transaction      *Transaction
+	idempotencyKey   *uuid.UUID
+	transaction      *AuthenticatedPaymentState
 	datastore        wrappedQldbDriverAPI
 	sdkClient        wrappedQldbSDKClient
 	kmsSigningClient wrappedKMSClient
@@ -43,12 +44,14 @@ type baseStateMachine struct {
 }
 
 func (s *baseStateMachine) setPersistenceConfigValues(
+	idempotencyKey *uuid.UUID,
 	datastore wrappedQldbDriverAPI,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
 	kmsSigningKeyID string,
-	transaction *Transaction,
+	transaction *AuthenticatedPaymentState,
 ) {
+	s.idempotencyKey = idempotencyKey
 	s.datastore = datastore
 	s.sdkClient = sdkClient
 	s.kmsSigningClient = kmsSigningClient
@@ -56,7 +59,7 @@ func (s *baseStateMachine) setPersistenceConfigValues(
 	s.transaction = transaction
 }
 
-func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*Transaction, error) {
+func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	return WriteTransaction(
 		ctx,
 		s.datastore,
@@ -67,11 +70,19 @@ func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*Transaction, erro
 	)
 }
 
-func (s *baseStateMachine) writeNextState(ctx context.Context, nextState TransactionState) (*Transaction, error) {
+func (s *baseStateMachine) writeNextState(
+	ctx context.Context,
+	nextState PaymentStatus,
+) (*AuthenticatedPaymentState, error) {
 	if !s.transaction.nextStateValid(nextState) {
-		return nil, fmt.Errorf("invalid state transition from %s to %s for transaction %s", s.transaction.State, nextState, s.transaction.ID)
+		return nil, fmt.Errorf(
+			"invalid state transition from %s to %s for transaction %s",
+			s.transaction.Status,
+			nextState,
+			s.transaction.documentID,
+		)
 	}
-	s.transaction.State = nextState
+	s.transaction.Status = nextState
 	entry, err := s.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
@@ -81,32 +92,32 @@ func (s *baseStateMachine) writeNextState(ctx context.Context, nextState Transac
 }
 
 // Prepare implements TxStateMachine for the baseStateMachine.
-func (s *baseStateMachine) Prepare(ctx context.Context) (*Transaction, error) {
+func (s *baseStateMachine) Prepare(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	return s.writeNextState(ctx, Prepared)
 }
 
 // Authorize implements TxStateMachine for the baseStateMachine.
-func (s *baseStateMachine) Authorize(ctx context.Context) (*Transaction, error) {
+func (s *baseStateMachine) Authorize(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	return s.writeNextState(ctx, Authorized)
 }
 
-func (s *baseStateMachine) setTransaction(transaction *Transaction) {
+func (s *baseStateMachine) setTransaction(transaction *AuthenticatedPaymentState) {
 	s.transaction = transaction
 }
 
 // GetState returns transaction state for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getState() TransactionState {
-	return s.transaction.State
+func (s *baseStateMachine) getState() PaymentStatus {
+	return s.transaction.Status
 }
 
 // GetTransaction returns a full transaction for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getTransaction() *Transaction {
+func (s *baseStateMachine) getTransaction() *AuthenticatedPaymentState {
 	return s.transaction
 }
 
-// GetTransactionID returns a transaction id for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getTransactionID() *uuid.UUID {
-	return s.transaction.ID
+// getTransactionID returns a transaction id for a state machine, implementing TxStateMachine.
+func (s *baseStateMachine) getIdempotencyKey() *uuid.UUID {
+	return s.idempotencyKey
 }
 
 // getDatastore returns a transaction id for a state machine, implementing TxStateMachine.
@@ -127,12 +138,18 @@ func (s *baseStateMachine) getKMSSigningClient() wrappedKMSClient {
 // GenerateTransactionID returns the generated transaction id for a state machine's transaction,
 // implementing TxStateMachine.
 func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
-	return s.transaction.GenerateIdempotencyKey(namespace)
+	paymentStateID := s.transaction.generateIdempotencyKey(namespace)
+	return &paymentStateID, nil
 }
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
-func StateMachineFromTransaction(transaction *Transaction, service *Service) (TxStateMachine, error) {
+func StateMachineFromTransaction(
+	ID *uuid.UUID,
+	transaction *AuthenticatedPaymentState,
+	service *Service,
+) (TxStateMachine, error) {
 	var machine TxStateMachine
+
 	switch transaction.Custodian {
 	case "uphold":
 		machine = &UpholdMachine{}
@@ -142,6 +159,7 @@ func StateMachineFromTransaction(transaction *Transaction, service *Service) (Tx
 		machine = &GeminiMachine{}
 	}
 	machine.setPersistenceConfigValues(
+		ID,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
@@ -156,7 +174,7 @@ func StateMachineFromTransaction(transaction *Transaction, service *Service) (Tx
 func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
-) (*Transaction, error) {
+) (*AuthenticatedPaymentState, error) {
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.getState() {
 	case Prepared:
@@ -181,23 +199,36 @@ func Drive[T TxStateMachine](
 // method on it. When creating the initial object in the database for a transaction we must
 // verify that the transaction does not already exist. Once a transaction exists, we alawys
 // refer to it by DocumentID and progress it with Drive.
-func populateInitialTransaction[T TxStateMachine](ctx context.Context, machine T) (*Transaction, error) {
+func populateInitialTransaction[T TxStateMachine](
+	ctx context.Context,
+	machine T,
+) (*AuthenticatedPaymentState, error) {
 	namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
-	// Make sure the transaction we have has an ID that matches its contents before we check if it exists
+	// Make sure the transaction we have has an ID that matches its contents before we check if it
+	// exists
 	generatedID, err := machine.GenerateTransactionID(namespace)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate idempotency key for %s: %w", machine.getTransactionID(), err)
+		return nil, fmt.Errorf(
+			"failed to generate idempotency key for %s: %w",
+			machine.getIdempotencyKey(),
+			err,
+		)
 	}
-	if generatedID != machine.getTransactionID() {
-		return nil, errors.New("provided idempotencyKey does not match transaction")
+
+	if generatedID.String() != machine.getIdempotencyKey().String() {
+		return nil, fmt.Errorf(
+			"provided idempotencyKey does not match the generated key: %s %s",
+			generatedID.String(),
+			machine.getIdempotencyKey().String(),
+		)
 	}
 	// Check if the transaction exists so that we know whether to create it
-	transaction, err := GetTransactionByID(
+	_, err = GetTransactionByIdempotencyKey(
 		ctx,
 		machine.getDatastore(),
 		machine.getSDKClient(),
 		machine.getKMSSigningClient(),
-		machine.getTransactionID(),
+		machine.getIdempotencyKey(),
 	)
 	if err != nil {
 		// If the transaction doesn't exist in the database, prepare it
@@ -205,34 +236,37 @@ func populateInitialTransaction[T TxStateMachine](ctx context.Context, machine T
 		if errors.As(err, &notFound) {
 			return machine.Prepare(ctx)
 		}
-		return nil, fmt.Errorf("failed to get transaction from QLDB: %w", err)
+		return nil, fmt.Errorf("failed to check for the existence of transaction in QLDB: %w", err)
 	}
-	return nil, fmt.Errorf("transaction %s already exists in QLDB and cannot be prepared", transaction.ID)
+	return nil, fmt.Errorf(
+		"transaction %s already exists in QLDB and cannot be prepared",
+		generatedID,
+	)
 }
 
 // GetValidTransitions returns valid transitions.
-func (ts TransactionState) GetValidTransitions() []TransactionState {
+func (ts PaymentStatus) GetValidTransitions() []PaymentStatus {
 	return Transitions[ts]
 }
 
 // GetAllValidTransitionSequences returns all valid transition sequences.
-func GetAllValidTransitionSequences() [][]TransactionState {
-	return recurseTransitionResolution("prepared", []TransactionState{})
+func GetAllValidTransitionSequences() [][]PaymentStatus {
+	return recurseTransitionResolution("prepared", []PaymentStatus{})
 }
 
 // recurseTransitionResolution returns the list of valid transition paths that are
 // possible for a given state.
 func recurseTransitionResolution(
-	state TransactionState,
-	currentTree []TransactionState,
-) [][]TransactionState {
+	state PaymentStatus,
+	currentTree []PaymentStatus,
+) [][]PaymentStatus {
 	var (
-		result      [][]TransactionState
+		result      [][]PaymentStatus
 		updatedTree = append(currentTree, state)
 	)
 	possibleStates := state.GetValidTransitions()
 	if len(possibleStates) == 0 {
-		tempTree := make([]TransactionState, len(updatedTree))
+		tempTree := make([]PaymentStatus, len(updatedTree))
 		copy(tempTree, updatedTree)
 		result = append(result, tempTree)
 		return result
