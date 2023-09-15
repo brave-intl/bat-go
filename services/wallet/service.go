@@ -589,14 +589,14 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 
 // LinkUpholdWallet links an uphold.Wallet and transfers funds.
 func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wallet, transaction string, anonymousAddress *uuid.UUID) (string, error) {
+	const depositProvider = "uphold"
 	// do not confirm this transaction yet
 	info := wallet.GetWalletInfo()
 
 	var (
-		userID          string
-		country         string
-		depositProvider string
-		probi           decimal.Decimal
+		userID  string
+		country string
+		probi   decimal.Decimal
 	)
 
 	transactionInfo, err := wallet.VerifyTransaction(ctx, transaction)
@@ -665,7 +665,6 @@ func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wall
 	}
 
 	probi = transactionInfo.Probi
-	depositProvider = "uphold"
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
