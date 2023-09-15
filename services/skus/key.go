@@ -76,6 +76,17 @@ func (key *Key) GetSecretKey() (*string, error) {
 	return &secretKey, nil
 }
 
+func randomString(n int) (string, error) {
+	b := make([]byte, n)
+
+	// Note that err == nil only if we read len(b) bytes.
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
 // GenerateSecret creates a random key for merchants
 func GenerateSecret() (secret string, nonce string, err error) {
 	unencryptedSecret, err := randomString(keyLength)
@@ -87,17 +98,6 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
-}
-
-func randomString(n int) (string, error) {
-	b := make([]byte, n)
-
-	// Note that err == nil only if we read len(b) bytes.
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // LookupVerifier returns the merchant key corresponding to the keyID used for verifying requests
