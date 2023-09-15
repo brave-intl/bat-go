@@ -93,52 +93,59 @@ func (o *Order) IsRadomPayable() bool {
 }
 
 // CreateStripeCheckoutSession creates a Stripe checkout session for the order.
+//
+// Deprecated: Use CreateStripeCheckoutSession function instead of this method.
 func (o *Order) CreateStripeCheckoutSession(
 	email, successURI, cancelURI string,
 	freeTrialDays int64,
 ) (CreateCheckoutSessionResponse, error) {
+	return CreateStripeCheckoutSession(o.ID.String(), email, successURI, cancelURI, freeTrialDays, o.Items)
+}
+
+// CreateStripeCheckoutSession creates a Stripe checkout session for the order.
+func CreateStripeCheckoutSession(
+	oid, email, successURI, cancelURI string,
+	trialDays int64,
+	items []OrderItem,
+) (CreateCheckoutSessionResponse, error) {
 	var custID string
 	if email != "" {
-		// find the existing customer by email
-		// so we can use the customer id instead of a customer email
-		i := customer.List(&stripe.CustomerListParams{
+		// Find the existing customer by email to use the customer id instead email.
+		l := customer.List(&stripe.CustomerListParams{
 			Email: stripe.String(email),
 		})
 
-		for i.Next() {
-			custID = i.Customer().ID
+		for l.Next() {
+			custID = l.Customer().ID
 		}
 	}
 
-	sd := &stripe.CheckoutSessionSubscriptionDataParams{}
-	// If a free trial is set, apply it.
-	if freeTrialDays > 0 {
-		sd.TrialPeriodDays = &freeTrialDays
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		Mode:               stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		SuccessURL:         stripe.String(successURI),
+		CancelURL:          stripe.String(cancelURI),
+		ClientReferenceID:  stripe.String(oid),
+		SubscriptionData:   &stripe.CheckoutSessionSubscriptionDataParams{},
+		LineItems:          OrderItemList(items).stripeLineItems(),
 	}
 
-	params := &stripe.CheckoutSessionParams{
-		PaymentMethodTypes: stripe.StringSlice([]string{
-			"card",
-		}),
-		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL:        stripe.String(successURI),
-		CancelURL:         stripe.String(cancelURI),
-		ClientReferenceID: stripe.String(o.ID.String()),
-		SubscriptionData:  sd,
-		LineItems:         OrderItemList(o.Items).stripeLineItems(),
+	// If a free trial is set, apply it.
+	if trialDays > 0 {
+		params.SubscriptionData.TrialPeriodDays = &trialDays
 	}
 
 	if custID != "" {
-		// try to use existing customer we found by email
+		// Use existing customer if found.
 		params.Customer = stripe.String(custID)
 	} else if email != "" {
-		// if we dont have an existing customer, this CustomerEmail param will create a new one
+		// Otherwise, create a new using email.
 		params.CustomerEmail = stripe.String(email)
 	}
-	// else we have no record of this email for this checkout session
-	// the user will be asked for the email, we cannot send an empty customer email as a param
+	// Otherwise, we have no record of this email for this checkout session.
+	// ? The user will be asked for the email, we cannot send an empty customer email as a param.
 
-	params.SubscriptionData.AddMetadata("orderID", o.ID.String())
+	params.SubscriptionData.AddMetadata("orderID", oid)
 	params.AddExtra("allow_promotion_codes", "true")
 
 	session, err := session.New(params)
@@ -262,6 +269,17 @@ type OrderItem struct {
 	// TODO: Remove this when products & issuers have been reworked.
 	// The issuer for a product must be created when the product is created.
 	IssuerConfig *IssuerConfig `json:"-" db:"-"`
+}
+
+// OrderNew represents a request to create an order in the database.
+type OrderNew struct {
+	MerchantID            string          `db:"merchant_id"`
+	Currency              string          `db:"currency"`
+	Status                string          `db:"status"`
+	Location              sql.NullString  `db:"location"`
+	TotalPrice            decimal.Decimal `db:"total_price"`
+	AllowedPaymentMethods pq.StringArray  `db:"allowed_payment_methods"`
+	ValidFor              *time.Duration  `db:"valid_for"`
 }
 
 // CreateCheckoutSessionResponse represents a checkout session response.

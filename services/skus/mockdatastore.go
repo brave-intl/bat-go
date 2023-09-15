@@ -10,6 +10,7 @@ import (
 	time "time"
 
 	inputs "github.com/brave-intl/bat-go/libs/inputs"
+	model "github.com/brave-intl/bat-go/services/skus/model"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
@@ -163,18 +164,18 @@ func (mr *MockDatastoreMockRecorder) CreateKey(merchant, name, encryptedSecretKe
 }
 
 // CreateOrder mocks base method.
-func (m *MockDatastore) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error) {
+func (m *MockDatastore) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, req *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrder", totalPrice, merchantID, status, currency, location, validFor, orderItems, allowedPaymentMethods)
-	ret0, _ := ret[0].(*Order)
+	ret := m.ctrl.Call(m, "CreateOrder", ctx, dbi, req, items)
+	ret0, _ := ret[0].(*model.Order)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateOrder indicates an expected call of CreateOrder.
-func (mr *MockDatastoreMockRecorder) CreateOrder(totalPrice, merchantID, status, currency, location, validFor, orderItems, allowedPaymentMethods interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreateOrder(ctx, dbi, req, items interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrder", reflect.TypeOf((*MockDatastore)(nil).CreateOrder), totalPrice, merchantID, status, currency, location, validFor, orderItems, allowedPaymentMethods)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrder", reflect.TypeOf((*MockDatastore)(nil).CreateOrder), ctx, dbi, req, items)
 }
 
 // CreateTransaction mocks base method.

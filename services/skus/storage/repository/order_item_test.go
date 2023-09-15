@@ -6,9 +6,9 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
@@ -184,14 +184,7 @@ func setupDBI() (*sqlx.DB, error) {
 }
 
 type orderCreator interface {
-	Create(
-		ctx context.Context,
-		dbi sqlx.QueryerContext,
-		totalPrice decimal.Decimal,
-		merchantID, status, currency, location string,
-		paymentMethods []string,
-		validFor *time.Duration,
-	) (*model.Order, error)
+	Create(ctx context.Context, dbi sqlx.QueryerContext, req *model.OrderNew) (*model.Order, error)
 }
 
 func createOrderForTest(ctx context.Context, dbi sqlx.QueryerContext, repo orderCreator) (*model.Order, error) {
@@ -200,19 +193,19 @@ func createOrderForTest(ctx context.Context, dbi sqlx.QueryerContext, repo order
 		return nil, err
 	}
 
-	methods := []string{"stripe"}
+	req := &model.OrderNew{
+		MerchantID: "brave.com",
+		Currency:   "USD",
+		Status:     "pending",
+		Location: sql.NullString{
+			Valid:  true,
+			String: "somelocation",
+		},
+		TotalPrice:            price,
+		AllowedPaymentMethods: pq.StringArray{"stripe"},
+	}
 
-	result, err := repo.Create(
-		ctx,
-		dbi,
-		price,
-		"brave.com",
-		"pending",
-		"USD",
-		"somelocation",
-		methods,
-		nil,
-	)
+	result, err := repo.Create(ctx, dbi, req)
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/services/skus/model"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -155,18 +156,8 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 	return _d.base.CreateKey(merchant, name, encryptedSecretKey, nonce)
 }
 
-// CreateOrder implements Datastore
-func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (op1 *Order, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateOrder", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, validFor, orderItems, allowedPaymentMethods)
+func (_d DatastoreWithPrometheus) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, req *model.OrderNew, items []model.OrderItem) (op1 *model.Order, err error) {
+	return _d.base.CreateOrder(ctx, dbi, req, items)
 }
 
 // CreateTransaction implements Datastore
