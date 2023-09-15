@@ -142,7 +142,7 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 	return ctx, &verifier, nil
 }
 
-// caveatsFromCtx returns an authorized caveats from ctx.
+// caveatsFromCtx returns authorized caveats from ctx.
 func caveatsFromCtx(ctx context.Context) map[string]string {
 	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
 	if !ok {
