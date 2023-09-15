@@ -275,8 +275,7 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 	return r
 }
 
-// SetOrderTrialDaysInput - SetOrderTrialDays handler input
-type SetOrderTrialDaysInput struct {
+type setTrialDaysRequest struct {
 	TrialDays int64 `json:"trialDays" valid:"int"`
 }
 
@@ -301,7 +300,7 @@ func SetOrderTrialDays(service *Service) handlers.AppHandler {
 			)
 		}
 
-		req := &SetOrderTrialDaysInput{}
+		req := &setTrialDaysRequest{}
 		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
