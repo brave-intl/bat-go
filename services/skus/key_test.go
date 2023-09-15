@@ -17,6 +17,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -451,6 +452,13 @@ func TestValidateOrderMerchantAndCaveats(t *testing.T) {
 		},
 	}
 
+	dbi, _, err := sqlmock.New()
+	must.Equal(t, nil, err)
+
+	ds := &Postgres{
+		Postgres: datastore.Postgres{DB: sqlx.NewDb(dbi, "postgres")},
+	}
+
 	for i := range tests {
 		tc := tests[i]
 
@@ -458,7 +466,10 @@ func TestValidateOrderMerchantAndCaveats(t *testing.T) {
 			ctx := context.WithValue(context.Background(), merchantCtxKey{}, tc.given.merch)
 			ctx = context.WithValue(ctx, caveatsCtxKey{}, tc.given.cvt)
 
-			svc := &Service{orderRepo: tc.given.repo}
+			svc := &Service{
+				Datastore: ds,
+				orderRepo: tc.given.repo,
+			}
 
 			err := svc.validateOrderMerchantAndCaveats(ctx, tc.given.orderID)
 			assert.Equal(t, tc.exp, err)
