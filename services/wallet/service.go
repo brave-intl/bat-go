@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/go-chi/chi"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/lib/pq"
@@ -890,7 +891,7 @@ func (c *claimsZP) validateTime(now time.Time) error {
 
 func checkCustodianLinkingMismatch(ctx context.Context, storage Datastore, walletID uuid.UUID, depositProvider string) error {
 	c, err := storage.GetCustodianLinkByWalletID(ctx, walletID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, model.ErrNoWalletCustodian) {
 		return err
 	}
 
