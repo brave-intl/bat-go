@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/services/wallet/model"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
@@ -781,21 +782,7 @@ func getTx(ctx context.Context, datastore Datastore) (context.Context, *sqlx.Tx,
 
 // GetCustodianLinkByWalletID retrieves the currently linked wallet custodian by walletID.
 func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
-	var (
-		cl  = new(CustodianLink)
-		err error
-	)
-
-	// get tx
-	_, tx, rollback, commit, err := getTx(ctx, pg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create db transaction GetCustodianLinkByWalletID: %w", err)
-	}
-	// will rollback if tx created at this scope
-	defer rollback()
-
-	// query
-	stmt := `
+	const q = `
 		select
 			wc.wallet_id, wc.custodian, wc.linking_id,
 			wc.created_at, wc.disconnected_at, wc.linked_at
@@ -806,17 +793,17 @@ func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID
 			wc.disconnected_at is null and
 			wc.unlinked_at is null
 	`
-	err = tx.Get(cl, stmt, ID)
+
+	result := &CustodianLink{}
+	err := pg.GetContext(ctx, result, q, ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get CustodianLink from DB: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, model.ErrNoWalletCustodian
+		}
+		return nil, err
 	}
 
-	// if the tx was created in this scope we will commit here
-	if err := commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit GetCustodianByWalletID transaction: %w", err)
-	}
-
-	return cl, nil
+	return result, nil
 }
 
 // DisconnectCustodialWallet - disconnect the wallet's custodial id
