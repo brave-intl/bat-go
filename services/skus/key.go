@@ -12,18 +12,30 @@ import (
 	"os"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	uuid "github.com/satori/go.uuid"
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
-// EncryptionKey for encrypting secrets
-var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
-var byteEncryptionKey [32]byte
+const (
+	// What the merchant key length should be.
+	keyLength = 24
 
-// What the merchant key length should be
-var keyLength = 24
+	errInvalidMerchant  model.Error = "merchant was missing from context"
+	errMerchantMismatch model.Error = "Order merchant does not match authentication"
+	errLocationMismatch model.Error = "Order location does not match authentication"
+	errUnexpectedSKUCvt model.Error = "SKU caveat is not supported on order endpoints"
+)
+
+var (
+	// EncryptionKey for encrypting secrets.
+	EncryptionKey = os.Getenv("ENCRYPTION_KEY")
+
+	byteEncryptionKey [32]byte
+)
 
 type caveatsCtxKey struct{}
 type merchantCtxKey struct{}
@@ -64,17 +76,6 @@ func (key *Key) GetSecretKey() (*string, error) {
 	return &secretKey, nil
 }
 
-func randomString(n int) (string, error) {
-	b := make([]byte, n)
-	_, err := rand.Read(b)
-	// Note that err == nil only if we read len(b) bytes.
-	if err != nil {
-		return "", err
-	}
-
-	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
 // GenerateSecret creates a random key for merchants
 func GenerateSecret() (secret string, nonce string, err error) {
 	unencryptedSecret, err := randomString(keyLength)
@@ -86,6 +87,39 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
+}
+
+// NewAuthMwr returns a handler that authorises requests via http signature or simple tokens.
+func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
+	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.HS2019,
+			Headers: []string{
+				"(request-target)",
+				"host",
+				"date",
+				"digest",
+				"content-length",
+				"content-type",
+			},
+		},
+		Keystore: ks,
+		Opts:     crypto.Hash(0),
+	}
+
+	// TODO: Keep only VerifyHTTPSignedOnly after migrating Subscriptions to this method.
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Signature") == "" {
+				// Assume legacy simple token auth.
+				ctx := context.WithValue(r.Context(), merchantCtxKey{}, "brave.com")
+				middleware.SimpleTokenAuthorizedOnly(next).ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
+		})
+	}
 }
 
 // LookupVerifier returns the merchant key corresponding to the keyID used for verifying requests
@@ -130,85 +164,67 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 	return ctx, &verifier, nil
 }
 
-// GetCaveats returns any authorized caveats that have been stored in the context
-func GetCaveats(ctx context.Context) map[string]string {
-	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
-	if !ok {
-		return nil
-	}
-	return caveats
-}
-
-// GetMerchant returns any authorized merchant that has been stored in the context
-func GetMerchant(ctx context.Context) (string, error) {
-	merchant, ok := ctx.Value(merchantCtxKey{}).(string)
-	if !ok {
-		return "", errors.New("merchant was missing from context")
-	}
-	return merchant, nil
-}
-
-// ValidateOrderMerchantAndCaveats checks that the current authentication of the request has
-// permissions to this order by cross-checking the merchant and caveats in context
-func (s *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.UUID) error {
-	merchant, err := GetMerchant(r.Context())
+// validateOrderMerchantAndCaveats checks that the current authentication of the request has
+// permissions to this order by cross-checking the merchant and caveats in context.
+func (s *Service) validateOrderMerchantAndCaveats(ctx context.Context, oid uuid.UUID) error {
+	merchant, err := merchantFromCtx(ctx)
 	if err != nil {
 		return err
 	}
-	caveats := GetCaveats(r.Context())
 
-	order, err := s.Datastore.GetOrder(orderID)
+	order, err := s.orderRepo.Get(ctx, s.Datastore.RawDB(), oid)
 	if err != nil {
 		return err
 	}
 
 	if order.MerchantID != merchant {
-		return errors.New("Order merchant does not match authentication")
+		return errMerchantMismatch
 	}
 
-	if caveats != nil {
-		if location, ok := caveats["location"]; ok {
-			if order.Location.Valid && order.Location.String != location {
-				return errors.New("Order location does not match authentication")
-			}
-		}
-
-		if _, ok := caveats["sku"]; ok {
-			return errors.New("SKU caveat is not supported on order endpoints")
-		}
-	}
-	return nil
+	return validateOrderCvt(order, caveatsFromCtx(ctx))
 }
 
-// NewAuthMwr returns a handler that authorises requests via http signature or simple tokens.
-func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
-	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
-		SignatureParams: httpsignature.SignatureParams{
-			Algorithm: httpsignature.HS2019,
-			Headers: []string{
-				"(request-target)",
-				"host",
-				"date",
-				"digest",
-				"content-length",
-				"content-type",
-			},
-		},
-		Keystore: ks,
-		Opts:     crypto.Hash(0),
+func randomString(n int) (string, error) {
+	b := make([]byte, n)
+
+	// Note that err == nil only if we read len(b) bytes.
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
 
-	// TODO: Keep only VerifyHTTPSignedOnly after migrating Subscriptions to this method.
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("Signature") == "" {
-				// Assume legacy simple token auth.
-				ctx := context.WithValue(r.Context(), merchantCtxKey{}, "brave.com")
-				middleware.SimpleTokenAuthorizedOnly(next).ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
 
-			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
-		})
+// merchantFromCtx returns an authorized merchant from ctx.
+func merchantFromCtx(ctx context.Context) (string, error) {
+	merchant, ok := ctx.Value(merchantCtxKey{}).(string)
+	if !ok {
+		return "", errInvalidMerchant
 	}
+
+	return merchant, nil
+}
+
+// caveatsFromCtx returns an authorized caveats from ctx.
+func caveatsFromCtx(ctx context.Context) map[string]string {
+	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
+	if !ok {
+		return nil
+	}
+
+	return caveats
+}
+
+func validateOrderCvt(ord *model.Order, cvt map[string]string) error {
+	if loc, ok := cvt["location"]; ok && ord.Location.Valid {
+		if ord.Location.String != loc {
+			return errLocationMismatch
+		}
+	}
+
+	if _, ok := cvt["sku"]; ok {
+		return errUnexpectedSKUCvt
+	}
+
+	return nil
 }

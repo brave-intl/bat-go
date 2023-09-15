@@ -10,6 +10,22 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
+type MockOrder struct {
+	FnGet func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+}
+
+func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+	if r.FnGet == nil {
+		result := &model.Order{
+			ID: uuid.NewV4(),
+		}
+
+		return result, nil
+	}
+
+	return r.FnGet(ctx, dbi, id)
+}
+
 type MockIssuer struct {
 	FnGetByMerchID func(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error)
 	FnGetByPubKey  func(ctx context.Context, dbi sqlx.QueryerContext, pubKey string) (*model.Issuer, error)

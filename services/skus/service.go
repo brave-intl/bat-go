@@ -84,9 +84,13 @@ const (
 	defaultOverlap = 5
 )
 
+type orderStoreSvc interface {
+	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+}
+
 // Service contains datastore
 type Service struct {
-	orderRepo  orderStore
+	orderRepo  orderStoreSvc
 	issuerRepo issuerStore
 
 	// TODO: Eventually remove it.
@@ -150,7 +154,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment.
-func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service, orderRepo orderStore, issuerRepo issuerStore) (*Service, error) {
+func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service, orderRepo orderStoreSvc, issuerRepo issuerStore) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 	// setup the in app purchase clients
 	initClients(ctx)
@@ -1309,7 +1313,7 @@ type credential interface {
 func (s *Service) verifyCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
 	logger := logging.Logger(ctx, "verifyCredential")
 
-	merchant, err := GetMerchant(ctx)
+	merchant, err := merchantFromCtx(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to get the merchant from the context")
 		return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
@@ -1317,7 +1321,7 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 
 	logger.Debug().Str("merchant", merchant).Msg("got merchant from the context")
 
-	caveats := GetCaveats(ctx)
+	caveats := caveatsFromCtx(ctx)
 
 	if req.GetMerchantID(ctx) != merchant {
 		logger.Warn().

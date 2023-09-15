@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"crypto"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -21,6 +22,8 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/middleware"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
@@ -159,11 +162,11 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 
 	fn2 := func(w http.ResponseWriter, r *http.Request) {
 		// with simple auth legacy mode there are no caveats
-		caveats := GetCaveats(r.Context())
+		caveats := caveatsFromCtx(r.Context())
 		assert.Nil(t, caveats)
 
 		// and the merchant is always brave.com
-		merchant, err := GetMerchant(r.Context())
+		merchant, err := merchantFromCtx(r.Context())
 		assert.NoError(t, err)
 		assert.Equal(t, merchant, "brave.com")
 	}
@@ -184,10 +187,10 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 
 	// Test that merchant signed works and sets caveats / merchant correctly
 	fn3 := func(w http.ResponseWriter, r *http.Request) {
-		caveats := GetCaveats(r.Context())
+		caveats := caveatsFromCtx(r.Context())
 		assert.Equal(t, caveats, expectedCaveats)
 
-		merchant, err := GetMerchant(r.Context())
+		merchant, err := merchantFromCtx(r.Context())
 		assert.NoError(t, err)
 		assert.Equal(t, merchant, expectedMerchant)
 	}
@@ -255,96 +258,210 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 }
 
 func TestValidateOrderMerchantAndCaveats(t *testing.T) {
-	db, mock, _ := sqlmock.New()
-	service := &Service{}
-	service.Datastore = Datastore(
-		&Postgres{
-			Postgres: datastore.Postgres{
-				DB: sqlx.NewDb(db, "postgres"),
+	type tcGiven struct {
+		orderID uuid.UUID
+		merch   string
+		cvt     map[string]string
+		repo    *repository.MockOrder
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_order",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("0fb1d6ba-5d39-4f69-830b-c92c4640c86e")),
+				merch:   "brave.com",
+
+				repo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
 			},
-			orderRepo:       repository.NewOrder(),
-			orderItemRepo:   repository.NewOrderItem(),
-			orderPayHistory: repository.NewOrderPayHistory(),
+			exp: model.ErrOrderNotFound,
 		},
-	)
-	expectedOrderID := uuid.NewV4()
 
-	cases := []validateOrderMerchantAndCaveatsTestCase{
-		{"brave.com", nil, uuid.NewV4(), false, "invalid order should fail"},
-		{"brave.com", nil, expectedOrderID, true, "correct merchant and no caveats should succeed"},
-		{"brave.software", nil, expectedOrderID, false, "incorrect merchant should fail"},
-		{"brave.com", map[string]string{"location": "test.brave.com"}, expectedOrderID, true, "correct merchant and location caveat should succeed"},
-		{"brave.com", map[string]string{"location": "test.brave.software"}, expectedOrderID, false, "incorrect location caveat should fail"},
-		{"brave.com", map[string]string{"sku": "example-sku"}, expectedOrderID, false, "sku caveat is not supported"},
+		{
+			name: "merchant_no_caveats",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+				merch:   "brave.com",
+
+				repo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+							Currency:   "BAT",
+							MerchantID: "brave.com",
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "test.brave.com",
+								},
+							},
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+			},
+		},
+
+		{
+			name: "incorrect_merchant",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+				merch:   "brave.software",
+
+				repo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+							Currency:   "BAT",
+							MerchantID: "brave.com",
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "test.brave.com",
+								},
+							},
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+			},
+			exp: errMerchantMismatch,
+		},
+
+		{
+			name: "merchant_location",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+				merch:   "brave.com",
+				cvt:     map[string]string{"location": "test.brave.com"},
+
+				repo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+							Currency:   "BAT",
+							MerchantID: "brave.com",
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "test.brave.com",
+								},
+							},
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+			},
+		},
+
+		{
+			name: "incorrect_location",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+				merch:   "brave.com",
+				cvt:     map[string]string{"location": "test.brave.software"},
+
+				repo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+							Currency:   "BAT",
+							MerchantID: "brave.com",
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "test.brave.com",
+								},
+							},
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+			},
+			exp: errLocationMismatch,
+		},
+
+		{
+			name: "unexpected_sku",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+				merch:   "brave.com",
+				cvt:     map[string]string{"location": "test.brave.com", "sku": "some_sku"},
+
+				repo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+							Currency:   "BAT",
+							MerchantID: "brave.com",
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "test.brave.com",
+								},
+							},
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+			},
+			exp: errUnexpectedSKUCvt,
+		},
+
+		{
+			name: "empty_order_location",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+				merch:   "brave.com",
+				cvt:     map[string]string{"location": "test.brave.com"},
+
+				repo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
+							Currency:   "BAT",
+							MerchantID: "brave.com",
+							Status:     "paid",
+						}
+
+						return result, nil
+					},
+				},
+			},
+		},
 	}
 
-	for _, testCase := range cases {
-		itemRows := sqlmock.NewRows([]string{})
-		orderRows := sqlmock.NewRows([]string{
-			"id",
-			"created_at",
-			"currency",
-			"updated_at",
-			"total_price",
-			"merchant_id",
-			"location",
-			"status",
-			"allowed_payment_methods",
-			"metadata",
-			"valid_for",
-			"last_paid_at",
-			"expires_at",
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.WithValue(context.Background(), merchantCtxKey{}, tc.given.merch)
+			ctx = context.WithValue(ctx, caveatsCtxKey{}, tc.given.cvt)
+
+			svc := &Service{orderRepo: tc.given.repo}
+
+			err := svc.validateOrderMerchantAndCaveats(ctx, tc.given.orderID)
+			assert.Equal(t, tc.exp, err)
 		})
-		orderRows.AddRow(
-			expectedOrderID.String(),
-			time.Now(),
-			"BAT",
-			time.Now(),
-			"0",
-			"brave.com",
-			"test.brave.com",
-			"paid",
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-		)
-
-		mock.ExpectQuery(`
-^SELECT (.+) FROM orders*
-`).
-			WithArgs(expectedOrderID).
-			WillReturnRows(orderRows)
-		mock.ExpectQuery(`
-^SELECT (.+) FROM order_items*
-`).
-			WithArgs(expectedOrderID).
-			WillReturnRows(itemRows)
-
-		ValidateOrderMerchantAndCaveats(t, service, testCase)
-	}
-}
-
-type validateOrderMerchantAndCaveatsTestCase struct {
-	merchant        string
-	caveats         map[string]string
-	orderID         uuid.UUID
-	expectedSuccess bool
-	explanation     string
-}
-
-func ValidateOrderMerchantAndCaveats(t *testing.T, service *Service, testCase validateOrderMerchantAndCaveatsTestCase) {
-	ctx := context.WithValue(context.Background(), merchantCtxKey{}, testCase.merchant)
-	ctx = context.WithValue(ctx, caveatsCtxKey{}, testCase.caveats)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", "/hello-world", nil)
-	assert.NoError(t, err)
-
-	err = service.ValidateOrderMerchantAndCaveats(req, testCase.orderID)
-	if testCase.expectedSuccess {
-		assert.NoError(t, err, testCase.explanation)
-	} else {
-		assert.Error(t, err, testCase.explanation)
 	}
 }
