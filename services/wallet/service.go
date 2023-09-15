@@ -403,7 +403,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		country         = "JP"
 	)
 
-	err := checkCustodianLinkingMismatch(ctx, service.Datastore, walletID, depositProvider)
+	err := validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
 	if err != nil {
 		if errors.Is(err, errCustodianLinkMismatch) {
 			return "", errCustodianLinkMismatch
@@ -488,7 +488,7 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 		return "", err
 	}
 
-	err = checkCustodianLinkingMismatch(ctx, service.Datastore, walletID, depositProvider)
+	err = validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
 	if err != nil {
 		if errors.Is(err, errCustodianLinkMismatch) {
 			return "", errCustodianLinkMismatch
@@ -535,7 +535,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, &cr)
 	}
 
-	err := checkCustodianLinkingMismatch(ctx, service.Datastore, walletID, depositProvider)
+	err := validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
 	if err != nil {
 		if errors.Is(err, errCustodianLinkMismatch) {
 			return "", errCustodianLinkMismatch
@@ -619,7 +619,7 @@ func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wall
 		return "", fmt.Errorf("failed to parse uphold id: %w", err)
 	}
 
-	err = checkCustodianLinkingMismatch(ctx, service.Datastore, walletID, depositProvider)
+	err = validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
 	if err != nil {
 		if errors.Is(err, errCustodianLinkMismatch) {
 			return "", errCustodianLinkMismatch
@@ -889,7 +889,7 @@ func (c *claimsZP) validateTime(now time.Time) error {
 	return nil
 }
 
-func checkCustodianLinkingMismatch(ctx context.Context, storage Datastore, walletID uuid.UUID, depositProvider string) error {
+func validateCustodianLinking(ctx context.Context, storage Datastore, walletID uuid.UUID, depositProvider string) error {
 	c, err := storage.GetCustodianLinkByWalletID(ctx, walletID)
 	if err != nil && !errors.Is(err, model.ErrNoWalletCustodian) {
 		return err

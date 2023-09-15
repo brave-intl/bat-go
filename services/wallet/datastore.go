@@ -793,10 +793,8 @@ func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID
 			wc.disconnected_at is null and
 			wc.unlinked_at is null
 	`
-
 	result := &CustodianLink{}
-	err := pg.GetContext(ctx, result, q, ID)
-	if err != nil {
+	if err := pg.GetContext(ctx, result, q, ID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, model.ErrNoWalletCustodian
 		}
