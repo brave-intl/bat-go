@@ -142,16 +142,6 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 	return ctx, &verifier, nil
 }
 
-// merchantFromCtx returns an authorized merchant from ctx.
-func merchantFromCtx(ctx context.Context) (string, error) {
-	merchant, ok := ctx.Value(merchantCtxKey{}).(string)
-	if !ok {
-		return "", errInvalidMerchant
-	}
-
-	return merchant, nil
-}
-
 // caveatsFromCtx returns an authorized caveats from ctx.
 func caveatsFromCtx(ctx context.Context) map[string]string {
 	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
@@ -160,6 +150,16 @@ func caveatsFromCtx(ctx context.Context) map[string]string {
 	}
 
 	return caveats
+}
+
+// merchantFromCtx returns an authorized merchant from ctx.
+func merchantFromCtx(ctx context.Context) (string, error) {
+	merchant, ok := ctx.Value(merchantCtxKey{}).(string)
+	if !ok {
+		return "", errInvalidMerchant
+	}
+
+	return merchant, nil
 }
 
 // validateOrderMerchantAndCaveats checks that the current authentication of the request has
