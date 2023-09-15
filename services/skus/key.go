@@ -17,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/middleware"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
