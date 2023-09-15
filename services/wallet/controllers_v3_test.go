@@ -181,7 +181,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 
 	externalAccountID := hex.EncodeToString(h.Sum(nil))
 
-	cl := wallet.BitFlyerLinkingInfo{
+	linkingInfo := wallet.BitFlyerLinkingInfo{
 		DepositID:         idTo.String(),
 		RequestID:         "1",
 		AccountHash:       accountHash.String(),
@@ -189,7 +189,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		Timestamp:         timestamp,
 	}
 
-	tokenString, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
+	tokenString, err := jwt.Signed(sig).Claims(linkingInfo).CompactSerialize()
 	if err != nil {
 		panic(err)
 	}
@@ -218,7 +218,10 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
 		rw             = httptest.NewRecorder()
 	)
+
 	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mockSQLCustodianLink(mock, "bitflyer")
 
 	// begin linking tx
 	mock.ExpectBegin()
@@ -357,6 +360,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		"US",
 		nil,
 	)
+
+	mockSQLCustodianLink(mock, "gemini")
 
 	// begin linking tx
 	mock.ExpectBegin()
@@ -577,6 +582,8 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		nil,
 	)
 
+	mockSQLCustodianLink(mock, "gemini")
+
 	// begin linking tx
 	mock.ExpectBegin()
 
@@ -773,6 +780,8 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		nil,
 	)
 
+	mockSQLCustodianLink(mock, "zebpay")
+
 	// begin linking tx
 	mock.ExpectBegin()
 
@@ -887,6 +896,8 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		[]int{},
 		nil,
 	)
+
+	mockSQLCustodianLink(mock, "gemini")
 
 	// begin linking tx
 	mock.ExpectBegin()
@@ -1010,3 +1021,10 @@ type result struct{}
 
 func (r result) LastInsertId() (int64, error) { return 1, nil }
 func (r result) RowsAffected() (int64, error) { return 1, nil }
+
+func mockSQLCustodianLink(mock sqlmock.Sqlmock, custodian string) {
+	clRow := sqlmock.NewRows([]string{"wallet_id", "custodian", "linking_id", "created_at", "disconnected_at", "linked_at"}).
+		AddRow(uuid.NewV4().String(), custodian, uuid.NewV4().String(), time.Now(), time.Now(), time.Now())
+	mock.ExpectQuery("^select(.+) from wallet_custodian(.+)").
+		WillReturnRows(clRow)
+}
