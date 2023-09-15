@@ -452,6 +452,8 @@ func TestValidateOrderMerchantAndCaveats(t *testing.T) {
 		},
 	}
 
+	// Need a database instance in Datastore.
+	// Not using mocks (as the suppressed return value suggests).
 	dbi, _, err := sqlmock.New()
 	must.Equal(t, nil, err)
 
