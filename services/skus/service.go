@@ -1359,6 +1359,8 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 		return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 	}
 
+	// FIXME we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
+	// to allow for more flexible idempotent behavior
 	switch req.GetType(ctx) {
 	case singleUse:
 		err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
@@ -1371,7 +1373,16 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 			"unknown credential type %s", http.StatusBadRequest)
 	}
 
+	type RedemptionResult struct {
+		ID        string `json:"id"`
+		Duplicate bool   `json:"duplicate"`
+	}
+
 	if err != nil {
+		// for time limited v2 credentials we expose a credential id so the caller can decide whether to allow multiple redemptions
+		if err.Error() == cbr.ErrDupRedeem.Error() && req.GetType(ctx) == timeLimitedV2 {
+			return handlers.RenderContent(ctx, &RedemptionResult{ID: decodedCredential.TokenPreimage, Duplicate: true}, w, http.StatusOK)
+		}
 		// if this is a duplicate redemption these are not verified
 		if err.Error() == cbr.ErrDupRedeem.Error() || err.Error() == cbr.ErrBadRequest.Error() {
 			return handlers.WrapError(err, "invalid credentials", http.StatusForbidden)
@@ -1379,7 +1390,7 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 		return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
 	}
 
-	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+	return handlers.RenderContent(ctx, &RedemptionResult{ID: decodedCredential.TokenPreimage, Duplicate: false}, w, http.StatusOK)
 }
 
 // verifyTimeLimitedV1Credential - given a time limited v1 credential, verify it.
