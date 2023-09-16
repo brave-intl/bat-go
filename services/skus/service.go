@@ -16,13 +16,13 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/v72"
+	stripe "github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
@@ -137,7 +137,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	}
 
 	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"vote":                       voteSchema,
+		"vote": voteSchema,
 		kafkaUnsignedOrderCredsTopic: signingOrderRequestSchema,
 		kafkaSignedOrderCredsTopic:   signingOrderResultSchema,
 	})
@@ -1290,7 +1290,6 @@ type credential interface {
 	GetPresentation(context.Context) string
 }
 
-// TODO refactor this see issue #1502
 // verifyCredential - given a credential, verify it.
 func (s *Service) verifyCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
 	logger := logging.Logger(ctx, "verifyCredential")
@@ -1329,129 +1328,140 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 	logger.Debug().Msg("caveats validated")
 
 	if req.GetType(ctx) == singleUse || req.GetType(ctx) == timeLimitedV2 {
-		var bytes []byte
-		bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
-		if err != nil {
-			return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
-		}
-
-		var decodedCredential cbr.CredentialRedemption
-		err = json.Unmarshal(bytes, &decodedCredential)
-		if err != nil {
-			return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
-		}
-
-		// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
-		issuerID, err := encodeIssuerID(req.GetMerchantID(ctx), req.GetSku(ctx))
-		if err != nil {
-			return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
-		}
-		if issuerID != decodedCredential.Issuer {
-			return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
-		}
-
-		switch req.GetType(ctx) {
-		case singleUse:
-			err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
-				decodedCredential.Signature, decodedCredential.Issuer)
-		case timeLimitedV2:
-			err = s.cbClient.RedeemCredentialV3(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
-				decodedCredential.Signature, decodedCredential.Issuer)
-		default:
-			return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", req.GetType(ctx)),
-				"unknown credential type %s", http.StatusBadRequest)
-		}
-
-		if err != nil {
-			// if this is a duplicate redemption these are not verified
-			if err.Error() == cbr.ErrDupRedeem.Error() || err.Error() == cbr.ErrBadRequest.Error() {
-				return handlers.WrapError(err, "invalid credentials", http.StatusForbidden)
-			}
-			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
-	}
-
-	if req.GetType(ctx) == "time-limited" {
-		// Presentation includes a token and token metadata test test
-		type Presentation struct {
-			IssuedAt  string `json:"issuedAt"`
-			ExpiresAt string `json:"expiresAt"`
-			Token     string `json:"token"`
-		}
-
-		var bytes []byte
-		bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
-		if err != nil {
-			logger.Error().Err(err).
-				Msg("failed to decode the request token presentation")
-			return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
-		}
-		logger.Debug().Str("presentation", string(bytes)).Msg("presentation decoded")
-
-		var presentation Presentation
-		err = json.Unmarshal(bytes, &presentation)
-		if err != nil {
-			logger.Error().Err(err).
-				Msg("failed to unmarshal the request token presentation")
-			return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
-		}
-
-		logger.Debug().Str("presentation", string(bytes)).Msg("presentation unmarshalled")
-
-		// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
-		issuerID, err := encodeIssuerID(req.GetMerchantID(ctx), req.GetSku(ctx))
-		if err != nil {
-			logger.Error().Err(err).
-				Msg("failed to encode the issuer id")
-			return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
-		}
-		logger.Debug().Str("issuer", issuerID).Msg("issuer encoded")
-
-		keys, err := s.GetCredentialSigningKeys(ctx, req.GetMerchantID(ctx))
-		if err != nil {
-			return handlers.WrapError(err, "failed to get merchant signing key", http.StatusInternalServerError)
-		}
-
-		issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
-		if err != nil {
-			logger.Error().Err(err).
-				Msg("failed to parse issued at time of credential")
-			return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
-		}
-		expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
-		if err != nil {
-			logger.Error().Err(err).
-				Msg("failed to parse expires at time of credential")
-			return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
-		}
-
-		for _, key := range keys {
-			timeLimitedSecret := cryptography.NewTimeLimitedSecret(key)
-			verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
-			if err != nil {
-				logger.Error().Err(err).
-					Msg("failed to verify time limited credential")
-				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
-			}
-
-			if verified {
-				// check against expiration time, issued time
-				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
-					logger.Error().
-						Msg("credentials are not valid")
-					return handlers.RenderContent(ctx, "Credentials are not valid", w, http.StatusForbidden)
-				}
-				logger.Debug().Msg("credentials verified")
-				return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
-			}
-		}
-		logger.Error().
-			Msg("credentials could not be verified")
-		return handlers.RenderContent(ctx, "Credentials could not be verified", w, http.StatusForbidden)
+		return s.verifyBlindedTokenCredential(ctx, req, w)
+	} else if req.GetType(ctx) == "time-limited" {
+		return s.verifyTimeLimitedV1Credential(ctx, req, w)
 	}
 	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
+}
+
+// verifyBlindedTokenCredential - given a single use or time limited v2 credential, verify it.
+func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
+	var err error
+	var bytes []byte
+	bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
+	if err != nil {
+		return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+	}
+
+	var decodedCredential cbr.CredentialRedemption
+	err = json.Unmarshal(bytes, &decodedCredential)
+	if err != nil {
+		return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+	}
+
+	// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+	issuerID, err := encodeIssuerID(req.GetMerchantID(ctx), req.GetSku(ctx))
+	if err != nil {
+		return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+	}
+	if issuerID != decodedCredential.Issuer {
+		return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
+	}
+
+	switch req.GetType(ctx) {
+	case singleUse:
+		err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
+			decodedCredential.Signature, decodedCredential.Issuer)
+	case timeLimitedV2:
+		err = s.cbClient.RedeemCredentialV3(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
+			decodedCredential.Signature, decodedCredential.Issuer)
+	default:
+		return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", req.GetType(ctx)),
+			"unknown credential type %s", http.StatusBadRequest)
+	}
+
+	if err != nil {
+		// if this is a duplicate redemption these are not verified
+		if err.Error() == cbr.ErrDupRedeem.Error() || err.Error() == cbr.ErrBadRequest.Error() {
+			return handlers.WrapError(err, "invalid credentials", http.StatusForbidden)
+		}
+		return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+	}
+
+	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+}
+
+// verifyTimeLimitedV1Credential - given a time limited v1 credential, verify it.
+func (s *Service) verifyTimeLimitedV1Credential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
+	logger := logging.Logger(ctx, "verifyTimeLimitedV1Credential")
+	// Presentation includes a token and token metadata test test
+	type Presentation struct {
+		IssuedAt  string `json:"issuedAt"`
+		ExpiresAt string `json:"expiresAt"`
+		Token     string `json:"token"`
+	}
+
+	var bytes []byte
+	var err error
+	bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
+	if err != nil {
+		logger.Error().Err(err).
+			Msg("failed to decode the request token presentation")
+		return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+	}
+	logger.Debug().Str("presentation", string(bytes)).Msg("presentation decoded")
+
+	var presentation Presentation
+	err = json.Unmarshal(bytes, &presentation)
+	if err != nil {
+		logger.Error().Err(err).
+			Msg("failed to unmarshal the request token presentation")
+		return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+	}
+
+	logger.Debug().Str("presentation", string(bytes)).Msg("presentation unmarshalled")
+
+	// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+	issuerID, err := encodeIssuerID(req.GetMerchantID(ctx), req.GetSku(ctx))
+	if err != nil {
+		logger.Error().Err(err).
+			Msg("failed to encode the issuer id")
+		return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+	}
+	logger.Debug().Str("issuer", issuerID).Msg("issuer encoded")
+
+	keys, err := s.GetCredentialSigningKeys(ctx, req.GetMerchantID(ctx))
+	if err != nil {
+		return handlers.WrapError(err, "failed to get merchant signing key", http.StatusInternalServerError)
+	}
+
+	issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
+	if err != nil {
+		logger.Error().Err(err).
+			Msg("failed to parse issued at time of credential")
+		return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
+	}
+	expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
+	if err != nil {
+		logger.Error().Err(err).
+			Msg("failed to parse expires at time of credential")
+		return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
+	}
+
+	for _, key := range keys {
+		timeLimitedSecret := cryptography.NewTimeLimitedSecret(key)
+		verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
+		if err != nil {
+			logger.Error().Err(err).
+				Msg("failed to verify time limited credential")
+			return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
+		}
+
+		if verified {
+			// check against expiration time, issued time
+			if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+				logger.Error().
+					Msg("credentials are not valid")
+				return handlers.WrapError(nil, "Credentials are not valid", http.StatusForbidden)
+			}
+			logger.Debug().Msg("credentials verified")
+			return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+		}
+	}
+	logger.Error().
+		Msg("credentials could not be verified")
+	return handlers.WrapError(nil, "Credentials could not be verified", http.StatusForbidden)
 }
 
 // RunSendSigningRequestJob - send the order credentials signing requests
