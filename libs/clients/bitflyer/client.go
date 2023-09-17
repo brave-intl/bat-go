@@ -43,53 +43,6 @@ func init() {
 	prometheus.MustRegister(bfBalanceGauge)
 }
 
-// WatchBitflyerBalance periodically checks bitflyer inventory balance for BAT
-func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
-	client, err := New()
-	if err != nil {
-		return fmt.Errorf("failed to create bitflyer client: %w", err)
-	}
-
-	_, err = client.RefreshToken(ctx, TokenPayloadFromCtx(ctx))
-	if err != nil {
-		return fmt.Errorf("failed to get bitflyer access token: %w", err)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(duration):
-			go func() {
-				result, err := client.FetchBalance(ctx)
-				if err != nil {
-					logging.FromContext(ctx).Error().Err(err).
-						Msg("bitflyer client error")
-				} else {
-					found := false
-					for _, inv := range result.Inventory {
-						if strings.ToLower(inv.CurrencyCode) == "bat" {
-							found = true
-							if inv.Amount.LessThan(decimal.NewFromFloat(1.0)) {
-								logging.FromContext(ctx).Error().Err(errors.New("account is empty")).
-									Msg("bitflyer account error")
-							} else {
-								tmp, _ := inv.Amount.Float64()
-								bfBalanceGauge.Set(tmp)
-							}
-							break
-						}
-					}
-					if !found {
-						logging.FromContext(ctx).Error().Err(errors.New("currency code BAT not found in response")).
-							Msg("bitflyer response error")
-					}
-				}
-			}()
-		}
-	}
-}
-
 // Quote returns a quote of BAT prices
 type Quote struct {
 	ProductCode  string          `json:"product_code"`
@@ -602,4 +555,72 @@ func (c *HTTPClient) FetchBalance(ctx context.Context) (*InventoryResponse, erro
 	}
 
 	return inventoryResponse, handleBitflyerError(ctx, err, response)
+}
+
+// WatchBitflyerBalance periodically updates the bitflyer account balance metric.
+func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
+	client, err := New()
+	if err != nil {
+		return fmt.Errorf("failed to create bitflyer client: %w", err)
+	}
+
+	_, err = client.RefreshToken(ctx, TokenPayloadFromCtx(ctx))
+	if err != nil {
+		return fmt.Errorf("failed to get bitflyer access token: %w", err)
+	}
+
+	l := logging.Logger(ctx, "bitflyer.WatchBitflyerBalance")
+
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			err := updateAccountBalanceMetric(ctx, client)
+			if err != nil {
+				l.Error().Err(err).Msg("failed to update account balance metric")
+			}
+		}
+	}
+}
+
+var (
+	errCurrencyCodeNotFound = errors.New("currency code BAT not found in response")
+	errAccountEmpty         = errors.New("account is empty")
+)
+
+// updateAccountBalanceMetric will only update the bitflyer account balance metric if the account is not empty.
+func updateAccountBalanceMetric(ctx context.Context, c Client) error {
+	const minAmt = 1.0
+
+	res, err := c.FetchBalance(ctx)
+	if err != nil {
+		return err
+	}
+
+	i, ok := findInventoryIndex(res.Inventory, "bat")
+	if !ok {
+		return errCurrencyCodeNotFound
+	}
+
+	amt, _ := res.Inventory[i].Amount.Float64()
+	if amt < minAmt {
+		return errAccountEmpty
+	}
+
+	bfBalanceGauge.Set(amt)
+
+	return nil
+}
+
+func findInventoryIndex(inventory []Inventory, currencyCode string) (int, bool) {
+	for i := range inventory {
+		if strings.EqualFold(inventory[i].CurrencyCode, currencyCode) {
+			return i, true
+		}
+	}
+	return 0, false
 }
