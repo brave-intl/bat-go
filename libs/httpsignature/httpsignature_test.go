@@ -1,8 +1,10 @@
 package httpsignature
 
 import (
+	"bytes"
 	"crypto"
 	"encoding/hex"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"testing"
@@ -155,6 +157,44 @@ func TestSignRequest(t *testing.T) {
 	if s2.Sig != "q4hNevLfEiHZVCNUCkfxv89YFdpujD3FHfQUQSRnZPmRnakArWlv/KQRsRvmxL9xamS68KePztm1O+CvjIoX1Q==" {
 		t.Error("Incorrect signature generated for HS2019")
 	}
+
+	// body signing test
+	var sp3 SignatureParams
+	sp3.Algorithm = ED25519
+	sp3.KeyID = "primary"
+	sp3.Headers = []string{"digest", "foo"}
+	body := []byte("{\"hello\": \"world\"}\n")
+
+	ps3 := ParameterizedSignator{
+		SignatureParams: sp3,
+		Signator:        privKey,
+		Opts:            crypto.Hash(0),
+	}
+
+	r, err = http.NewRequest("GET", "http://example.org/foo", ioutil.NopCloser(bytes.NewBuffer(body)))
+	if err != nil {
+		t.Error(err)
+	}
+	r.Header.Set("Foo", "bar")
+
+	err = ps3.SignRequest(r)
+	if err != nil {
+		t.Error("Unexpected error while building ED25519 signing string:", err)
+	}
+
+	if r.Header.Get("Digest") != "SHA-256=RK/0qy18MlBSVnWgjwz6lZEWjP/lF5HF9bvEF8FabDg=" {
+		t.Error("Incorrect digest generated for '{\"hello\", \"world\"}\\n'")
+	}
+
+	var s3 signature
+	err = s3.UnmarshalText([]byte(r.Header.Get("Signature")))
+	if err != nil {
+		t.Error(err)
+	}
+
+	if s3.Sig != "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA==" {
+		t.Error("Incorrect signature genearted for ED25519")
+	}
 }
 
 func TestVerify(t *testing.T) {
@@ -224,6 +264,70 @@ func TestVerify(t *testing.T) {
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
 	valid, err = s2.Verify(hmacVerifier, nil, req)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if valid {
+		t.Error("The signature should be invalid")
+	}
+
+	// verify with body
+	var s3 signature
+	s3.Algorithm = ED25519
+	s3.KeyID = "primary"
+	s3.Headers = []string{"digest", "foo"}
+	s3.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
+	body := []byte("{\"hello\": \"world\"}\n")
+
+	r, err = http.NewRequest("GET", "http://example.org/foo", ioutil.NopCloser(bytes.NewBuffer(body)))
+	if err != nil {
+		t.Error(err)
+	}
+
+	r.Header.Set("Foo", "bar")
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s3.Sig+`"`)
+
+	valid, err = s3.Verify(pubKey, crypto.Hash(0), r)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if !valid {
+		t.Error("The signature should be valid")
+	}
+
+	r.Header.Set("Foo", "bar")
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s3.Sig+`"`)
+
+	sp, err := SignatureParamsFromRequest(r)
+	if err != nil {
+		t.Error("Unexpected error while extracting signature parameters")
+	}
+	valid, err = sp.Verify(pubKey, crypto.Hash(0), r)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if !valid {
+		t.Error("The signature should be valid")
+	}
+
+	s3.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s3.Sig+`"`)
+
+	valid, err = s3.Verify(pubKey, crypto.Hash(0), r)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if valid {
+		t.Error("The signature should be invalid")
+	}
+
+	// request with a different body should fail to validate
+	body = []byte("{\"world\": \"hello\"}\n")
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	s3.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s3.Sig+`"`)
+
+	valid, err = s3.Verify(pubKey, crypto.Hash(0), r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
