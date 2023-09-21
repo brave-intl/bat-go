@@ -107,19 +107,47 @@ func (sp *SignatureParams) IsMalformed() bool {
 
 // BuildSigningString builds the signing string according to the SignatureParams s and
 // HTTP request req
-// TODO Add support for digest generation based on req.Body?
 func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err error) {
+	if req.Body != nil {
+		body, err := requestutils.Read(context.Background(), req.Body)
+		if err != nil {
+			return nil, err
+		}
+		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		return sp.buildSigningString(body, &req.Header, req)
+	}
+	return sp.buildSigningString(nil, &req.Header, req)
+}
+
+// BuildSigningStringForResponse builds the signing string according to the SignatureParams s and
+// HTTP response resp
+func (sp *SignatureParams) BuildSigningStringForResponse(resp *http.Response) (out []byte, err error) {
+	if resp.Body != nil {
+		body, err := requestutils.Read(context.Background(), resp.Body)
+		if err != nil {
+			return out, err
+		}
+		resp.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		return sp.buildSigningString(body, &resp.Header, resp.Request)
+	}
+	return sp.buildSigningString(nil, &resp.Header, resp.Request)
+}
+
+func (sp *SignatureParams) buildSigningString(body []byte, headers *http.Header, req *http.Request) (out []byte, err error) {
 	if sp.IsMalformed() {
 		return nil, errors.New("refusing to build signing string with malformed params")
 	}
 
-	headers := sp.Headers
-	if len(headers) == 0 {
-		headers = []string{"date"}
+	signedHeaders := sp.Headers
+	if len(signedHeaders) == 0 {
+		signedHeaders = []string{"date"}
 	}
 
-	for i, header := range headers {
+	for i, header := range signedHeaders {
 		if header == RequestTargetHeader {
+			if req == nil {
+				return nil, fmt.Errorf("request must be present to use the %s pseudo-header", RequestTargetHeader)
+			}
 			if req.URL != nil && len(req.Method) > 0 {
 				out = append(out, []byte(fmt.Sprintf("%s: %s %s", RequestTargetHeader, strings.ToLower(req.Method), req.URL.RequestURI()))...)
 			} else {
@@ -135,28 +163,26 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 				d.Hash = *sp.DigestAlgorithm
 			}
 
-			if req.Body != nil {
-				body, err := requestutils.Read(context.Background(), req.Body)
-				if err != nil {
-					return out, err
-				}
-				req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+			if body != nil {
 				d.Update(body)
 			}
-			req.Header.Add("Digest", d.String())
+			headers.Add("Digest", d.String())
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "digest", d.String()))...)
 		} else if header == HostHeader {
+			if req == nil {
+				return nil, fmt.Errorf("request must be present to use the Host header")
+			}
 			// in some environments it seems that the HostTransfer middleware correctly sets
 			// the Host header to the xforwardedhost value
-			host := req.Header.Get(requestutils.HostHeaderKey)
+			host := headers.Get(requestutils.HostHeaderKey)
 			if host == "" {
 				host = req.Host
 			} else {
-				host = strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
+				host = strings.Join((*headers)[http.CanonicalHeaderKey(header)], ", ")
 			}
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "host", host))...)
 		} else {
-			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
+			val := strings.Join((*headers)[http.CanonicalHeaderKey(header)], ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
 		}
 
