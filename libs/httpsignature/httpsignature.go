@@ -257,20 +257,20 @@ func NewParameterizedSignatorResponseWriter(p ParameterizedSignator, w http.Resp
 
 // Header returns the header map that will be sent by
 // WriteHeader.
-func (psrw ParameterizedSignatorResponseWriter) Header() http.Header {
+func (psrw *ParameterizedSignatorResponseWriter) Header() http.Header {
 	return psrw.w.Header()
 }
 
 // WriteHeader sends an HTTP response header with the provided
 // status code.
-func (psrw ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
+func (psrw *ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
 	psrw.statusCode = statusCode
 }
 
 // Write writes the data to the connection as part of an HTTP reply.
 //
 // For the ResponseWriter, we also sign the response before writing it out
-func (psrw ParameterizedSignatorResponseWriter) Write(body []byte) (int, error) {
+func (psrw *ParameterizedSignatorResponseWriter) Write(body []byte) (int, error) {
 	ss, err := psrw.SignatureParams.buildSigningString(body, psrw.Header(), nil)
 	if err != nil {
 		return -1, err

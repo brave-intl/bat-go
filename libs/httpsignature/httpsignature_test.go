@@ -622,10 +622,15 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	}
 
 	mw := &MockResponseWriter{h: http.Header{}}
-	w := NewParameterizedSignatorResponseWriter(ps, mw)
+	psw := NewParameterizedSignatorResponseWriter(ps, mw)
+	var w http.ResponseWriter
+	w = psw
 
 	w.Header().Set("Foo", "bar")
 	w.WriteHeader(200)
+	if psw.statusCode != 200 {
+		t.Error("Status code did not match")
+	}
 
 	body := []byte("{\"hello\": \"world\"}\n")
 	_, err = w.Write(body)
