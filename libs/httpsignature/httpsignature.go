@@ -419,3 +419,13 @@ func SignatureParamsFromRequest(req *http.Request) (*SignatureParams, error) {
 	}
 	return &s.SignatureParams, nil
 }
+
+// SignatureParamsFromResponse extracts the signature parameters from a signed http response
+func SignatureParamsFromResponse(resp *http.Response) (*SignatureParams, error) {
+	var s signature
+	err := s.UnmarshalText([]byte(resp.Header.Get("Signature")))
+	if err != nil {
+		return nil, err
+	}
+	return &s.SignatureParams, nil
+}

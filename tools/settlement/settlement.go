@@ -16,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
@@ -399,7 +400,7 @@ func ConfirmPreparedTransactions(ctx context.Context, settlementWallet *uphold.W
 // BPTSignedSettlement is a struct describing the signed output format of brave-payment-tools
 type BPTSignedSettlement struct {
 	SignedTxs []struct {
-		uphold.HTTPSignedRequest `json:"signedTx"`
+		httpsignature.HTTPSignedRequest `json:"signedTx"`
 	} `json:"signedTxs"`
 }
 
