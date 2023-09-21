@@ -53,6 +53,13 @@ type ParameterizedSignator struct {
 	Opts     crypto.SignerOpts
 }
 
+// ParameterizedSignatorResponseWriter wraps a response writer to sign the response automatically
+type ParameterizedSignatorResponseWriter struct {
+	ParameterizedSignator
+	w          http.ResponseWriter
+	statusCode int
+}
+
 // Keystore provides a way to lookup a public key based on the keyID a request was signed with
 type Keystore interface {
 	// LookupVerifier based on the keyID
@@ -114,9 +121,9 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 			return nil, err
 		}
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-		return sp.buildSigningString(body, &req.Header, req)
+		return sp.buildSigningString(body, req.Header, req)
 	}
-	return sp.buildSigningString(nil, &req.Header, req)
+	return sp.buildSigningString(nil, req.Header, req)
 }
 
 // BuildSigningStringForResponse builds the signing string according to the SignatureParams s and
@@ -128,12 +135,12 @@ func (sp *SignatureParams) BuildSigningStringForResponse(resp *http.Response) (o
 			return out, err
 		}
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-		return sp.buildSigningString(body, &resp.Header, resp.Request)
+		return sp.buildSigningString(body, resp.Header, resp.Request)
 	}
-	return sp.buildSigningString(nil, &resp.Header, resp.Request)
+	return sp.buildSigningString(nil, resp.Header, resp.Request)
 }
 
-func (sp *SignatureParams) buildSigningString(body []byte, headers *http.Header, req *http.Request) (out []byte, err error) {
+func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, req *http.Request) (out []byte, err error) {
 	if sp.IsMalformed() {
 		return nil, errors.New("refusing to build signing string with malformed params")
 	}
@@ -178,11 +185,11 @@ func (sp *SignatureParams) buildSigningString(body []byte, headers *http.Header,
 			if host == "" {
 				host = req.Host
 			} else {
-				host = strings.Join((*headers)[http.CanonicalHeaderKey(header)], ", ")
+				host = strings.Join(headers[http.CanonicalHeaderKey(header)], ", ")
 			}
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "host", host))...)
 		} else {
-			val := strings.Join((*headers)[http.CanonicalHeaderKey(header)], ", ")
+			val := strings.Join(headers[http.CanonicalHeaderKey(header)], ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
 		}
 
@@ -199,6 +206,19 @@ func (sp *SignatureParams) Sign(signator Signator, opts crypto.SignerOpts, req *
 	if err != nil {
 		return err
 	}
+	return sp.sign(signator, opts, ss, req.Header)
+}
+
+// SignResponse using signator and options opts
+func (sp *SignatureParams) SignResponse(signator Signator, opts crypto.SignerOpts, resp *http.Response) error {
+	ss, err := sp.BuildSigningStringForResponse(resp)
+	if err != nil {
+		return err
+	}
+	return sp.sign(signator, opts, ss, resp.Header)
+}
+
+func (sp *SignatureParams) sign(signator Signator, opts crypto.SignerOpts, ss []byte, headers http.Header) error {
 	sig, err := signator.Sign(rand.Reader, ss, opts)
 	if err != nil {
 		return err
@@ -212,7 +232,7 @@ func (sp *SignatureParams) Sign(signator Signator, opts crypto.SignerOpts, req *
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Signature", string(sHeader))
+	headers.Set("Signature", string(sHeader))
 	return nil
 }
 
@@ -221,15 +241,70 @@ func (p *ParameterizedSignator) SignRequest(req *http.Request) error {
 	return p.SignatureParams.Sign(p.Signator, p.Opts, req)
 }
 
+// SignResponse using signator and options opts in the parameterized signator
+func (p *ParameterizedSignator) SignResponse(resp *http.Response) error {
+	return p.SignatureParams.SignResponse(p.Signator, p.Opts, resp)
+}
+
+// NewParameterizedSignatorResponseWriter wraps the provided response writer and signs the response
+func NewParameterizedSignatorResponseWriter(p ParameterizedSignator, w http.ResponseWriter) *ParameterizedSignatorResponseWriter {
+	return &ParameterizedSignatorResponseWriter{
+		ParameterizedSignator: p,
+		w:          w,
+		statusCode: -1,
+	}
+}
+
+// Header returns the header map that will be sent by
+// WriteHeader.
+func (psrw ParameterizedSignatorResponseWriter) Header() http.Header {
+	return psrw.w.Header()
+}
+
+// WriteHeader sends an HTTP response header with the provided
+// status code.
+func (psrw ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
+	psrw.statusCode = statusCode
+}
+
+// Write writes the data to the connection as part of an HTTP reply.
+//
+// For the ResponseWriter, we also sign the response before writing it out
+func (psrw ParameterizedSignatorResponseWriter) Write(body []byte) (int, error) {
+	ss, err := psrw.SignatureParams.buildSigningString(body, psrw.Header(), nil)
+	if err != nil {
+		return -1, err
+	}
+	err = psrw.SignatureParams.sign(psrw.Signator, psrw.Opts, ss, psrw.Header())
+	if err != nil {
+		return -1, err
+	}
+
+	psrw.w.WriteHeader(psrw.statusCode)
+	return psrw.w.Write(body)
+}
+
 // Verify the HTTP signature s over HTTP request req using verifier with options opts
 func (sp *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
 	signingStr, err := sp.BuildSigningString(req)
 	if err != nil {
 		return false, err
 	}
+	return sp.verify(verifier, opts, signingStr, req.Header)
+}
 
+// VerifyResponse by verify the HTTP signature over HTTP response resp using verifier with options opts
+func (sp *SignatureParams) VerifyResponse(verifier Verifier, opts crypto.SignerOpts, resp *http.Response) (bool, error) {
+	signingStr, err := sp.BuildSigningStringForResponse(resp)
+	if err != nil {
+		return false, err
+	}
+	return sp.verify(verifier, opts, signingStr, resp.Header)
+}
+
+func (sp *SignatureParams) verify(verifier Verifier, opts crypto.SignerOpts, ss []byte, headers http.Header) (bool, error) {
 	var tmp signature
-	err = tmp.UnmarshalText([]byte(req.Header.Get("Signature")))
+	err := tmp.UnmarshalText([]byte(headers.Get("Signature")))
 	if err != nil {
 		return false, err
 	}
@@ -238,7 +313,7 @@ func (sp *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req
 	if err != nil {
 		return false, err
 	}
-	return verifier.Verify(signingStr, sig, opts)
+	return verifier.Verify(ss, sig, opts)
 }
 
 // VerifyRequest using keystore to lookup verifier with options opts

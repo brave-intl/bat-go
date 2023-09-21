@@ -542,3 +542,162 @@ func TestSignatureParamsFromRequest(t *testing.T) {
 		t.Error("signature params should not match!")
 	}
 }
+
+func TestSignResponse(t *testing.T) {
+	var privKey ed25519.PrivateKey
+	privHex := "96aa9ec42242a9a62196281045705196a64e12b15e9160bbb630e38385b82700e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d"
+	privKey, err := hex.DecodeString(privHex)
+	if err != nil {
+		t.Error(err)
+	}
+
+	var sp SignatureParams
+	sp.Algorithm = ED25519
+	sp.KeyID = "primary"
+	sp.Headers = []string{"digest", "foo"}
+	body := []byte("{\"hello\": \"world\"}\n")
+
+	ps := ParameterizedSignator{
+		SignatureParams: sp,
+		Signator:        privKey,
+		Opts:            crypto.Hash(0),
+	}
+
+	resp := &http.Response{Header: http.Header{}}
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	resp.Header.Set("Foo", "bar")
+
+	err = ps.SignResponse(resp)
+	if err != nil {
+		t.Error("Unexpected error while building ED25519 signing string:", err)
+	}
+
+	if resp.Header.Get("Digest") != "SHA-256=RK/0qy18MlBSVnWgjwz6lZEWjP/lF5HF9bvEF8FabDg=" {
+		t.Error("Incorrect digest generated for '{\"hello\", \"world\"}\\n'")
+	}
+
+	var s signature
+	err = s.UnmarshalText([]byte(resp.Header.Get("Signature")))
+	if err != nil {
+		t.Error(err)
+	}
+
+	if s.Sig != "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA==" {
+		t.Error("Incorrect signature genearted for ED25519")
+	}
+}
+
+type MockResponseWriter struct {
+	h http.Header
+}
+
+func (mrw MockResponseWriter) Header() http.Header {
+	return mrw.h
+}
+
+func (mrw MockResponseWriter) WriteHeader(statusCode int) {
+}
+
+func (mrw MockResponseWriter) Write(body []byte) (int, error) {
+	return len(body), nil
+}
+
+func TestParameterizedSignatorResponseWriter(t *testing.T) {
+	var privKey ed25519.PrivateKey
+	privHex := "96aa9ec42242a9a62196281045705196a64e12b15e9160bbb630e38385b82700e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d"
+	privKey, err := hex.DecodeString(privHex)
+	if err != nil {
+		t.Error(err)
+	}
+
+	var sp SignatureParams
+	sp.Algorithm = ED25519
+	sp.KeyID = "primary"
+	sp.Headers = []string{"digest", "foo"}
+
+	ps := ParameterizedSignator{
+		SignatureParams: sp,
+		Signator:        privKey,
+		Opts:            crypto.Hash(0),
+	}
+
+	mw := &MockResponseWriter{h: http.Header{}}
+	w := NewParameterizedSignatorResponseWriter(ps, mw)
+
+	w.Header().Set("Foo", "bar")
+	w.WriteHeader(200)
+
+	body := []byte("{\"hello\": \"world\"}\n")
+	_, err = w.Write(body)
+	if err != nil {
+		t.Error("Unexpected error:", err)
+	}
+
+	if w.Header().Get("Digest") != "SHA-256=RK/0qy18MlBSVnWgjwz6lZEWjP/lF5HF9bvEF8FabDg=" {
+		t.Error("Incorrect digest generated for '{\"hello\", \"world\"}\\n'")
+	}
+
+	var s signature
+	err = s.UnmarshalText([]byte(w.Header().Get("Signature")))
+	if err != nil {
+		t.Error(err)
+	}
+
+	if s.Sig != "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA==" {
+		t.Error("Incorrect signature genearted for ED25519")
+	}
+
+}
+
+func TestVerifyResponse(t *testing.T) {
+	var pubKey Ed25519PubKey
+	pubKey, err := hex.DecodeString("e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d")
+	if err != nil {
+		t.Error(err)
+	}
+
+	var s signature
+	s.Algorithm = ED25519
+	s.KeyID = "primary"
+	s.Headers = []string{"digest", "foo"}
+	s.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
+	body := []byte("{\"hello\": \"world\"}\n")
+
+	resp := &http.Response{Header: http.Header{}}
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	resp.Header.Set("Foo", "bar")
+	resp.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s.Sig+`"`)
+
+	valid, err := s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if !valid {
+		t.Error("The signature should be valid")
+	}
+
+	s.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	resp.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s.Sig+`"`)
+
+	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if valid {
+		t.Error("The signature should be invalid")
+	}
+
+	// request with a different body should fail to validate
+	body = []byte("{\"world\": \"hello\"}\n")
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+	s.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
+	resp.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s.Sig+`"`)
+
+	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if valid {
+		t.Error("The signature should be invalid")
+	}
+}
