@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -35,9 +37,16 @@ func NewNitroVerifier(pcrs map[uint][]byte) NitroVerifier {
 
 // Verify the signature sig for message using the nitro verifier
 func (v NitroVerifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
+	pool := x509.NewCertPool()
+	ok := pool.AppendCertsFromPEM([]byte(nitro.RootAWSNitroCert))
+	if !ok {
+		return false, errors.New("could not create a valid root cert pool")
+	}
+
 	res, err := nitrite.Verify(
 		sig,
 		nitrite.VerifyOptions{
+			Roots:       pool,
 			CurrentTime: v.now(),
 		},
 	)
