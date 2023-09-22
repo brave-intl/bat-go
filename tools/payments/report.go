@@ -180,6 +180,23 @@ func (ar AttestedReport) Submit(ctx context.Context, key ed25519.PrivateKey, cli
 }
 
 // Prepare performs a preparation of transactions for a payout to the settlement client
-func (r PreparedReport) Prepare(ctx context.Context, client SettlementClient) error {
-	return client.PrepareTransactions(ctx, r...)
+func (r PreparedReport) Prepare(ctx context.Context, key ed25519.PrivateKey, client SettlementClient) error {
+	signer := httpsignature.ParameterizedSignator{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.ED25519,
+			KeyID:     hex.EncodeToString([]byte(key.Public().(ed25519.PublicKey))),
+			Headers: []string{
+				"(request-target)",
+				"host",
+				"date",
+				"digest",
+				"content-length",
+				"content-type",
+			},
+		},
+		Signator: key,
+		Opts:     crypto.Hash(0),
+	}
+
+	return client.PrepareTransactions(ctx, signer, r...)
 }
