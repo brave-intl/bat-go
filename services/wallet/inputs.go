@@ -15,9 +15,9 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
@@ -85,7 +85,7 @@ func (ucr *UpholdCreationRequest) Decode(ctx context.Context, v []byte) error {
 		return fmt.Errorf("failed to decode signed creation request: %w", err)
 	}
 
-	var signedTx uphold.HTTPSignedRequest
+	var signedTx httpsignature.HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return fmt.Errorf("failed to decode signed creation request: %w", err)
