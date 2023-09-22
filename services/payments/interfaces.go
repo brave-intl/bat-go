@@ -12,7 +12,7 @@ import (
 
 // idempotentObject is anything that can generate an idempotency key.
 type idempotentObject interface {
-	getIdempotencyKey() *uuid.UUID
+	getIdempotencyKey() uuid.UUID
 	generateIdempotencyKey(uuid.UUID) uuid.UUID
 }
 
@@ -20,7 +20,7 @@ type idempotentObject interface {
 // Drive function.
 type TxStateMachine interface {
 	setPersistenceConfigValues(
-		*uuid.UUID,
+		uuid.UUID,
 		wrappedQldbDriverAPI,
 		wrappedQldbSDKClient,
 		wrappedKMSClient,
@@ -30,7 +30,7 @@ type TxStateMachine interface {
 	setTransaction(*AuthenticatedPaymentState)
 	getState() PaymentStatus
 	getTransaction() *AuthenticatedPaymentState
-	getIdempotencyKey() *uuid.UUID
+	getIdempotencyKey() uuid.UUID
 	getDatastore() wrappedQldbDriverAPI
 	getSDKClient() wrappedQldbSDKClient
 	getKMSSigningClient() wrappedKMSClient

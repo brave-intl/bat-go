@@ -37,11 +37,11 @@ type AuthenticatedPaymentState struct {
 
 type PaymentDetails struct {
 	Amount    *ion.Decimal `json:"amount" valid:"required"`
-	To        string       `json:"to,omitempty" valid:"required"`
-	From      string       `json:"from,omitempty" valid:"required"`
-	Custodian string       `json:"custodian,omitempty" valid:"in(uphold|gemini|bitflyer)"`
+	To        string       `json:"to" valid:"required"`
+	From      string       `json:"from" valid:"required"`
+	Custodian string       `json:"custodian" valid:"in(uphold|gemini|bitflyer)"`
 	PayoutID  string       `json:"payoutId" valid:"required"`
-	Currency  string       `json:"currency"`
+	Currency  string       `json:"currency" valid:"required"`
 }
 
 // PaymentAuthorization represents a single authorization from a payment authorizer indicating that
@@ -361,10 +361,10 @@ func (s *Service) setupLedger(ctx context.Context) error {
 // PrepareTransaction - perform a qldb insertion on the transaction.
 func (s *Service) PrepareTransaction(
 	ctx context.Context,
-	ID *uuid.UUID,
+	id uuid.UUID,
 	transaction *AuthenticatedPaymentState,
 ) (*AuthenticatedPaymentState, error) {
-	stateMachine, err := StateMachineFromTransaction(ID, transaction, s)
+	stateMachine, err := StateMachineFromTransaction(id, transaction, s)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create state machine: %w", err)
 	}
@@ -589,7 +589,7 @@ func (s *Service) AuthorizeTransaction(
 	if err != nil {
 		return fmt.Errorf("failed to update transaction: %w", err)
 	}
-	stateMachine, err := StateMachineFromTransaction(idempotencyKey, writtenTxn, s)
+	stateMachine, err := StateMachineFromTransaction(*idempotencyKey, writtenTxn, s)
 	if err != nil {
 		return fmt.Errorf("failed to create stateMachine: %w", err)
 	}
@@ -692,7 +692,7 @@ func GetTransactionByIdempotencyKey(
 	datastore wrappedQldbDriverAPI,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
-	idempotencyKey *uuid.UUID,
+	idempotencyKey uuid.UUID,
 ) (*AuthenticatedPaymentState, error) {
 	stateInterface, err := datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
 		resp := new(AuthenticatedPaymentState)

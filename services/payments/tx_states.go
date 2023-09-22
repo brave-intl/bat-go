@@ -35,7 +35,7 @@ var Transitions = map[PaymentStatus][]PaymentStatus{
 }
 
 type baseStateMachine struct {
-	idempotencyKey   *uuid.UUID
+	idempotencyKey   uuid.UUID
 	transaction      *AuthenticatedPaymentState
 	datastore        wrappedQldbDriverAPI
 	sdkClient        wrappedQldbSDKClient
@@ -44,7 +44,7 @@ type baseStateMachine struct {
 }
 
 func (s *baseStateMachine) setPersistenceConfigValues(
-	idempotencyKey *uuid.UUID,
+	idempotencyKey uuid.UUID,
 	datastore wrappedQldbDriverAPI,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
@@ -116,7 +116,7 @@ func (s *baseStateMachine) getTransaction() *AuthenticatedPaymentState {
 }
 
 // getTransactionID returns a transaction id for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getIdempotencyKey() *uuid.UUID {
+func (s *baseStateMachine) getIdempotencyKey() uuid.UUID {
 	return s.idempotencyKey
 }
 
@@ -144,7 +144,7 @@ func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUI
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
 func StateMachineFromTransaction(
-	ID *uuid.UUID,
+	id uuid.UUID,
 	transaction *AuthenticatedPaymentState,
 	service *Service,
 ) (TxStateMachine, error) {
@@ -159,7 +159,7 @@ func StateMachineFromTransaction(
 		machine = &GeminiMachine{}
 	}
 	machine.setPersistenceConfigValues(
-		ID,
+		id,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,

@@ -124,7 +124,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	upholdStateMachine.setPersistenceConfigValues(
-		&idempotencyKey,
+		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
@@ -138,7 +138,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	// the object does not yet exist.
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	newTransaction, err := service.PrepareTransaction(ctx, &idempotencyKey, &testTransaction)
+	newTransaction, err := service.PrepareTransaction(ctx, idempotencyKey, &testTransaction)
 	must.Equal(t, nil, err)
 	should.Equal(t, Prepared, newTransaction.Status)
 

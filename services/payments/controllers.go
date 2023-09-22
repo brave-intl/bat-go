@@ -23,7 +23,7 @@ type getConfResponse struct {
 	PublicKey           string
 }
 
-type PrepareRequst struct {
+type PrepareRequest struct {
 	PaymentDetails
 	DryRun *string `json:"dryRun"` // determines dry-run
 }
@@ -73,7 +73,9 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	})
 }
 
-// PrepareHandler gets current relative exchange rates.
+// PrepareHandler attempts to create a new record in QLDB for the transaction. When it completes
+// successfully, the record is in the Prepared state. If the record already exists, preparation
+// will fail..
 func PrepareHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
@@ -105,7 +107,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.PrepareTransaction(ctx, &namespaceUUID, req)
+		resp, err := service.PrepareTransaction(ctx, namespaceUUID, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}
@@ -133,7 +135,6 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		w.Header().Add("X-Nitro-Attestation", base64.StdEncoding.EncodeToString(attestationDocument))
-		// Should be in QLDB in prepared state
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	}
@@ -147,21 +148,21 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "SubmitHandler")
-			req    = &AuthenticatedPaymentState{}
+			authenticatedState    = &AuthenticatedPaymentState{}
 		)
 
 		// read the transactions in the body
-		err := requestutils.ReadJSON(ctx, r.Body, &req)
+		err := requestutils.ReadJSON(ctx, r.Body, &authenticatedState)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(req)
+		_, err = govalidator.ValidateStruct(authenticatedState)
 		if err != nil {
-			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
+			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", authenticatedState)).Msg("failed to validate structure")
 		}
 
-		logger.Debug().Str("transactions", fmt.Sprintf("%+v", req)).Msg("handling submit request")
+		logger.Debug().Str("transactions", fmt.Sprintf("%+v", authenticatedState)).Msg("handling submit request")
 
 		// we have passed the http signature middleware, record who authorized the tx
 		keyID, err := middleware.GetKeyID(ctx)
@@ -170,7 +171,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		}
 
 		// attempt authorization on the transaction
-		err = service.AuthorizeTransaction(ctx, keyID, *req)
+		err = service.AuthorizeTransaction(ctx, keyID, *authenticatedState)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
@@ -179,7 +180,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// TODO: state machine handling for custodian submissions
 
 		// get the current state of the transaction from qldb
-		resp, _, err := service.GetTransactionFromDocumentID(ctx, req.documentID)
+		resp, _, err := service.GetTransactionFromDocumentID(ctx, authenticatedState.documentID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
