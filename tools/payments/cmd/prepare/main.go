@@ -29,6 +29,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -41,6 +42,10 @@ func main() {
 	ctx := context.Background()
 
 	// command line flags
+	key := flag.String(
+		"k", "test/private.pem",
+		"the operator's key file location (ed25519 private key) in PEM format")
+
 	env := flag.String(
 		"e", "https://payments.bsg.brave.software",
 		"the environment to which the tool will interact")
@@ -72,6 +77,7 @@ func main() {
 	if *verbose {
 		// print out the configuration
 		log.Printf("Environment: %s\n", *env)
+		log.Printf("Operator Key File Location: %s\n", *key)
 	}
 
 	// setup the settlement redis client
@@ -92,6 +98,7 @@ func main() {
 		Stream:        paymentscli.PrepareStream,
 		Count:         0,
 	}
+	fmt.Println(wc)
 
 	for _, name := range files {
 		func() {
@@ -108,7 +115,12 @@ func main() {
 
 			wc.Count += len(report)
 
-			if err := report.Prepare(ctx, client); err != nil {
+			priv, err := paymentscli.GetOperatorPrivateKey(*key)
+			if err != nil {
+				log.Fatalf("failed to parse operator key file: %v\n", err)
+			}
+
+			if err := report.Prepare(ctx, priv, client); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 		}()
