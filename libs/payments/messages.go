@@ -25,15 +25,15 @@ func (wc WorkerConfig) MarshalBinary() (data []byte, err error) {
 	return bytes, nil
 }
 
-// prepareWrapper defines the settlement worker prepare message structure
-type prepareWrapper struct {
+// PrepareWrapper defines the settlement worker prepare message structure
+type PrepareWrapper struct {
 	ID        uuid.UUID `json:"id"`
 	Timestamp time.Time `json:"timestamp"`
 	Body      string    `json:"body"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis
-func (pw prepareWrapper) MarshalBinary() (data []byte, err error) {
+func (pw PrepareWrapper) MarshalBinary() (data []byte, err error) {
 	bytes, err := json.Marshal(pw)
 	if err != nil {
 		return nil, fmt.Errorf("event message: error marshalling binary: %w", err)
@@ -41,8 +41,8 @@ func (pw prepareWrapper) MarshalBinary() (data []byte, err error) {
 	return bytes, nil
 }
 
-// submitWrapper defines the settlement worker submit message structure
-type submitWrapper struct {
+// SubmitWrapper defines the settlement worker submit message structure
+type SubmitWrapper struct {
 	ID        uuid.UUID         `json:"id"`
 	Timestamp time.Time         `json:"timestamp"`
 	Headers   map[string]string `json:"headers"`
@@ -50,7 +50,7 @@ type submitWrapper struct {
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis
-func (sw submitWrapper) MarshalBinary() (data []byte, err error) {
+func (sw SubmitWrapper) MarshalBinary() (data []byte, err error) {
 	bytes, err := json.Marshal(sw)
 	if err != nil {
 		return nil, fmt.Errorf("event message: error marshalling binary: %w", err)

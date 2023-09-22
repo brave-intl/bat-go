@@ -13,14 +13,12 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/payments"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
+	redis "github.com/redis/go-redis/v9"
 )
 
 const (
-	preparePrefix = "prepare-"
-	submitPrefix  = "submit-"
-
 	// headers
 	hostHeader   = "Host"
 	digestHeader = "Digest"
@@ -33,12 +31,21 @@ const (
 
 var (
 	payout        = strconv.FormatInt(time.Now().Unix(), 10)
-	PrepareStream = preparePrefix + payout
-	SubmitStream  = submitPrefix + payout
-
-	PrepareConfigStream = preparePrefix + "config"
-	SubmitConfigStream  = submitPrefix + "config"
+	PrepareStream = payments.PreparePrefix + payout
+	SubmitStream  = payments.SubmitPrefix + payout
 )
+
+// SettlementClient describes functionality of the settlement client
+type SettlementClient interface {
+	ConfigureWorker(context.Context, string, *payments.WorkerConfig) error
+	PrepareTransactions(context.Context, ...*payments.PrepareTx) error
+	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...*payments.AttestedTx) error
+}
+
+// NewSettlementClient instantiates a new SettlementClient for use by tooling
+func NewSettlementClient(env string, config map[string]string) (SettlementClient, error) {
+	return newRedisClient(env, config["addr"], config["pass"], config["username"])
+}
 
 // redisClient is an implementation of settlement client using clustered redis client
 type redisClient struct {
@@ -79,13 +86,13 @@ func newRedisClient(env, addr, pass, username string) (*redisClient, error) {
 }
 
 // ConfigureWorker implements settlement client
-func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, config *WorkerConfig) error {
+func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, config *payments.WorkerConfig) error {
 	body, err := json.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("failed to json encode config: %w", err)
 	}
 
-	cfg := &prepareWrapper{
+	cfg := &payments.PrepareWrapper{
 		ID:        uuid.New(),
 		Timestamp: time.Now(),
 		Body:      string(body),
@@ -104,7 +111,7 @@ func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, confi
 }
 
 // PrepareTransactions implements settlement client
-func (rc *redisClient) PrepareTransactions(ctx context.Context, t ...*PrepareTx) error {
+func (rc *redisClient) PrepareTransactions(ctx context.Context, t ...*payments.PrepareTx) error {
 	pipe := rc.redis.Pipeline()
 
 	for _, v := range t {
@@ -114,7 +121,7 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, t ...*PrepareTx)
 		}
 
 		// message wrapper for prepare
-		message := &prepareWrapper{
+		message := &payments.PrepareWrapper{
 			ID:        uuid.New(),
 			Timestamp: time.Now(),
 			Body:      string(body),
@@ -138,7 +145,7 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, t ...*PrepareTx)
 }
 
 // SubmitTransactions implements settlement client
-func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, at ...*AttestedTx) error {
+func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, at ...*payments.AttestedTx) error {
 	pipe := rc.redis.Pipeline()
 
 	for _, v := range at {
@@ -167,8 +174,8 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 			return fmt.Errorf("failed to sign request: %w", err)
 		}
 
-		// populate the submitWrapper for submission
-		message := &submitWrapper{
+		// populate the SubmitWrapper for submission
+		message := &payments.SubmitWrapper{
 			ID:        uuid.New(),
 			Timestamp: time.Now(),
 			Headers: map[string]string{
@@ -196,16 +203,4 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 	}
 
 	return nil
-}
-
-// SettlementClient describes functionality of the settlement client
-type SettlementClient interface {
-	ConfigureWorker(context.Context, string, *WorkerConfig) error
-	PrepareTransactions(context.Context, ...*PrepareTx) error
-	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...*AttestedTx) error
-}
-
-// NewSettlementClient instantiates a new SettlementClient for use by tooling
-func NewSettlementClient(env string, config map[string]string) (SettlementClient, error) {
-	return newRedisClient(env, config["addr"], config["pass"], config["username"])
 }

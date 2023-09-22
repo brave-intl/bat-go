@@ -16,6 +16,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/nitro"
+	"github.com/brave-intl/bat-go/libs/payments"
 	"github.com/shopspring/decimal"
 	nitrodoc "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 )
@@ -26,7 +27,7 @@ var (
 )
 
 // AttestedReport is the report of payouts after being prepared
-type AttestedReport []*AttestedTx
+type AttestedReport []*payments.AttestedTx
 
 // SumBAT sums the total amount of BAT in the report.
 func (ar AttestedReport) SumBAT() decimal.Decimal {
@@ -55,7 +56,7 @@ func (r AttestedReport) EnsureUniqueDest() error {
 }
 
 // PreparedReport is the report of payouts prior to being prepared
-type PreparedReport []*PrepareTx
+type PreparedReport []*payments.PrepareTx
 
 // SumBAT sums the total amount of BAT in the report.
 func (r PreparedReport) SumBAT() decimal.Decimal {
