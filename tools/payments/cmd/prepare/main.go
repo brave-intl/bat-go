@@ -33,7 +33,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brave-intl/bat-go/tools/payments"
+	"github.com/brave-intl/bat-go/libs/payments"
+	paymentscli "github.com/brave-intl/bat-go/tools/payments"
 )
 
 func main() {
@@ -74,7 +75,7 @@ func main() {
 	}
 
 	// setup the settlement redis client
-	client, err := payments.NewSettlementClient(*env, map[string]string{
+	client, err := paymentscli.NewSettlementClient(*env, map[string]string{
 		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, // client specific configurations
 	})
 	if err != nil {
@@ -87,8 +88,8 @@ func main() {
 
 	wc := &payments.WorkerConfig{
 		PayoutID:      *payoutID,
-		ConsumerGroup: payments.PrepareStream + "-cg",
-		Stream:        payments.PrepareStream,
+		ConsumerGroup: paymentscli.PrepareStream + "-cg",
+		Stream:        paymentscli.PrepareStream,
 		Count:         0,
 	}
 
@@ -100,8 +101,8 @@ func main() {
 			}
 			defer f.Close()
 
-			report := payments.PreparedReport{}
-			if err := payments.ReadReport(&report, f); err != nil {
+			report := paymentscli.PreparedReport{}
+			if err := paymentscli.ReadReport(&report, f); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 

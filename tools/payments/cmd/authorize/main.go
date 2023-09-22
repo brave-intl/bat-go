@@ -36,7 +36,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brave-intl/bat-go/tools/payments"
+	"github.com/brave-intl/bat-go/libs/payments"
+	paymentscli "github.com/brave-intl/bat-go/tools/payments"
 )
 
 func main() {
@@ -83,7 +84,7 @@ func main() {
 	}
 
 	// setup the settlement redis client
-	client, err := payments.NewSettlementClient(*env, map[string]string{
+	client, err := paymentscli.NewSettlementClient(*env, map[string]string{
 		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, // client specific configurations
 	})
 	if err != nil {
@@ -96,8 +97,8 @@ func main() {
 
 	wc := &payments.WorkerConfig{
 		PayoutID:      *payoutID,
-		ConsumerGroup: payments.SubmitStream + "-cg",
-		Stream:        payments.SubmitStream,
+		ConsumerGroup: paymentscli.SubmitStream + "-cg",
+		Stream:        paymentscli.SubmitStream,
 		Count:         0,
 	}
 
@@ -109,8 +110,8 @@ func main() {
 			}
 			defer f.Close()
 
-			var report payments.AttestedReport
-			if err := payments.ReadReport(&report, f); err != nil {
+			var report paymentscli.AttestedReport
+			if err := paymentscli.ReadReport(&report, f); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 
@@ -120,7 +121,7 @@ func main() {
 				log.Printf("report stats: %d transactions; %s total bat\n", len(report), report.SumBAT())
 			}
 
-			priv, err := payments.GetOperatorPrivateKey(*key)
+			priv, err := paymentscli.GetOperatorPrivateKey(*key)
 			if err != nil {
 				log.Fatalf("failed to parse operator key file: %v\n", err)
 			}
