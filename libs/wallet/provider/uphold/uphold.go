@@ -384,7 +384,7 @@ func (w *Wallet) SubmitRegistration(ctx context.Context, registrationB64 string)
 		return err
 	}
 
-	var signedTx HTTPSignedRequest
+	var signedTx httpsignature.HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return err
@@ -395,7 +395,7 @@ func (w *Wallet) SubmitRegistration(ctx context.Context, registrationB64 string)
 		return err
 	}
 
-	_, err = signedTx.extract(req)
+	_, err = signedTx.Extract(req)
 	if err != nil {
 		return err
 	}
@@ -421,7 +421,7 @@ func (w *Wallet) PrepareRegistration(label string) (string, error) {
 		return "", err
 	}
 
-	httpSignedReq, err := encapsulate(req)
+	httpSignedReq, err := httpsignature.EncapsulateRequest(req)
 	if err != nil {
 		return "", err
 	}
@@ -549,7 +549,7 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 		return "", err
 	}
 
-	httpSignedReq, err := encapsulate(req)
+	httpSignedReq, err := httpsignature.EncapsulateRequest(req)
 	if err != nil {
 		return "", err
 	}
@@ -629,7 +629,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, err
 	}
 
-	var signedTx HTTPSignedRequest
+	var signedTx httpsignature.HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return nil, err
@@ -656,7 +656,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	}
 
 	var req http.Request
-	sigParams, err := signedTx.extract(&req)
+	sigParams, err := signedTx.Extract(&req)
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +857,7 @@ func (w *Wallet) SubmitTransaction(ctx context.Context, transactionB64 string, c
 	if err != nil {
 		return nil, err
 	}
-	var signedTx HTTPSignedRequest
+	var signedTx httpsignature.HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return nil, err
@@ -873,7 +873,7 @@ func (w *Wallet) SubmitTransaction(ctx context.Context, transactionB64 string, c
 		return nil, err
 	}
 
-	_, err = signedTx.extract(req)
+	_, err = signedTx.Extract(req)
 	if err != nil {
 		return nil, err
 	}
