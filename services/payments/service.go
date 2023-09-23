@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"os"
 	"text/template"
 
@@ -31,8 +32,8 @@ import (
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
-	appsrv "github.com/brave-intl/bat-go/libs/service"
 	. "github.com/brave-intl/bat-go/libs/payments"
+	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
 // Service struct definition of payments service.
@@ -42,14 +43,27 @@ type Service struct {
 	custodians map[string]provider.Custodian
 	awsCfg     aws.Config
 
-	baseCtx          context.Context
-	secretMgr        appsrv.SecretManager
-	keyShares        [][]byte
-	kmsDecryptKeyArn string
-	kmsSigningKeyID  string
-	kmsSigningClient wrappedKMSClient
-	sdkClient        wrappedQldbSDKClient
-	pubKey           []byte
+	baseCtx              context.Context
+	secretMgr            appsrv.SecretManager
+	keyShares            [][]byte
+	kmsDecryptKeyArn     string
+	kmsSigningKeyID      string
+	kmsSigningClient     wrappedKMSClient
+	sdkClient            wrappedQldbSDKClient
+	pubKey               []byte
+	idempotencyNamespace uuid.UUID
+}
+
+// prepareTransaction - perform a qldb insertion on the transaction.
+func (s *Service) prepareTransaction(
+	ctx context.Context,
+	prepareRequest *PrepareRequest,
+) (*PrepareResponse, error) {
+	documentID, err := s.insertPayment(ctx, prepareRequest.PaymentDetails)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert payment: %w", err)
+	}
+	return &PrepareResponse{DocumentID: documentID}, nil
 }
 
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, error) {
@@ -202,9 +216,16 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("no egress addr for payments service")
 	}
 
+	namespaceUUID, err := uuid.Parse(os.Getenv("namespaceUUID"))
+	if err != nil {
+		logger.Error().Msg("namespaceUUID not properly formatted")
+		return nil, nil, errors.New("namespaceUUID not properly formatted")
+	}
+
 	service := &Service{
-		baseCtx: ctx,
-		awsCfg:  awsCfg,
+		baseCtx:              ctx,
+		awsCfg:               awsCfg,
+		idempotencyNamespace: namespaceUUID,
 	}
 
 	if err := service.configureKMSKey(ctx); err != nil {

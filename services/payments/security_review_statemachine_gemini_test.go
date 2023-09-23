@@ -132,7 +132,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	// the object does not yet exist.
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	newTransaction, err := service.PrepareTransaction(ctx, idempotencyKey, &testTransaction)
+	newTransaction, err := service.prepareTransaction(ctx, idempotencyKey, &testTransaction)
 	must.Equal(t, nil, err)
 	should.Equal(t, Prepared, newTransaction.Status)
 

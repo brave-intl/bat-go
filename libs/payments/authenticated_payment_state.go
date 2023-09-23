@@ -28,7 +28,7 @@ type AuthenticatedPaymentState struct {
 	PaymentDetails
 	Status         PaymentStatus
 	Authorizations []PaymentAuthorization `json:"authorizations"`
-	DryRun         *string                `json:"dryRun"` // determines dry-run
+	DryRun         *string                `json:"dryRun"`
 	LastError      *PaymentError
 	DocumentID     string
 }
@@ -78,5 +78,11 @@ func (t *AuthenticatedPaymentState) shouldDryRun() bool {
 		return *t.DryRun == "submit"
 	default:
 		return false
+	}
+}
+
+func AuthenticatedPaymentStateFromPaymentDetails(details PaymentDetails) AuthenticatedPaymentState {
+	return AuthenticatedPaymentState{
+		PaymentDetails: details,
 	}
 }

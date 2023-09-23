@@ -1,17 +1,14 @@
 package payments
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/google/uuid"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -61,19 +58,14 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
 		ctx := r.Context()
-		namespaceUUID, err := uuid.Parse(os.Getenv("namespaceUUID"))
-		if err != nil {
-			return handlers.WrapError(err, "namespaceUUID not properly formatted", http.StatusInternalServerError)
-		}
-		ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
-			req    = new(AuthenticatedPaymentState)
+			req    = new(PrepareRequest)
 		)
 
 		// read the transactions in the body
-		err = requestutils.ReadJSON(ctx, r.Body, &req)
+		err := requestutils.ReadJSON(ctx, r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -88,7 +80,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.PrepareTransaction(ctx, namespaceUUID, req)
+		resp, err := service.prepareTransaction(ctx, req)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}

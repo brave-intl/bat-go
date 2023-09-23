@@ -96,7 +96,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		Data: PaymentState{
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
-			ID:                 &idempotencyKey,
+			ID:                 idempotencyKey,
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
@@ -133,7 +133,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	// the object does not yet exist.
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	newTransaction, err := service.PrepareTransaction(ctx, idempotencyKey, &testTransaction)
+	newTransaction, err := service.prepareTransaction(ctx, &PrepareRequest{
+		PaymentDetails: testTransaction.PaymentDetails,
+	})
 	must.Equal(t, nil, err)
 	should.Equal(t, Prepared, newTransaction.Status)
 

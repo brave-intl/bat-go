@@ -24,62 +24,62 @@ var (
 
 var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status3, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
 	},
 }
 
 var transactionHistorySetFalse = [][]QLDBPaymentTransitionHistoryEntry{
 	// Transitions must always start at 0
 	{
-		{Data: PaymentState{UnsafePaymentState: status1, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status2, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status3, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status4, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status3, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status3, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
 	},
 	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: &generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: &generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
+		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
 	},
 }
 

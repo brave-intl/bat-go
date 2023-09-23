@@ -13,7 +13,7 @@ type PaymentState struct {
 	// which does all of the needed validation of the state
 	UnsafePaymentState []byte     `ion:"data"`
 	Signature          []byte     `ion:"signature"`
-	ID                 *uuid.UUID `ion:"idempotencyKey"`
+	ID                 uuid.UUID `ion:"idempotencyKey"`
 }
 
 func (p *PaymentState) ToAuthenticatedPaymentState() (*AuthenticatedPaymentState, error) {
@@ -28,18 +28,21 @@ func (p *PaymentState) ToAuthenticatedPaymentState() (*AuthenticatedPaymentState
 	return &txn, nil
 }
 
-// GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
-// an error.
-func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
+// GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected
+// value. Otherwise, it returns an error.
+func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (uuid.UUID, error) {
 	authenticatedState, err := p.ToAuthenticatedPaymentState()
 	if err != nil {
-		return nil, err
+		return uuid.New(), err
 	}
 	generatedIdempotencyKey := authenticatedState.GenerateIdempotencyKey(namespace)
-	if generatedIdempotencyKey != *p.ID {
-		return nil, fmt.Errorf("ID does not match transaction fields: have %s, want %s", *p.ID, generatedIdempotencyKey)
+	if generatedIdempotencyKey != p.ID {
+		return uuid.New(), fmt.Errorf(
+			"ID does not match transaction fields: have %s, want %s",
+			p.ID,
+			generatedIdempotencyKey,
+		)
 	}
-
 	return p.ID, nil
 }
 
@@ -50,6 +53,6 @@ func (p *PaymentState) SetIdempotencyKey(namespace uuid.UUID) error {
 		return err
 	}
 	generatedIdempotencyKey := authenticatedPaymentState.GenerateIdempotencyKey(namespace)
-	p.ID = &generatedIdempotencyKey
+	p.ID = generatedIdempotencyKey
 	return nil
 }

@@ -410,7 +410,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	}
 
 	// First write should succeed because Verify returns true
-	_, err = WriteTransaction(
+	_, err = writeTransaction(
 		ctx,
 		service.datastore,
 		service.sdkClient,

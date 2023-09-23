@@ -35,7 +35,7 @@ func (s *baseStateMachine) setPersistenceConfigValues(
 }
 
 func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return WriteTransaction(
+	return writeTransaction(
 		ctx,
 		s.datastore,
 		s.sdkClient,
@@ -119,13 +119,12 @@ func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUI
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
 func StateMachineFromTransaction(
-	id uuid.UUID,
-	transaction *AuthenticatedPaymentState,
 	service *Service,
+	authenticatedState *AuthenticatedPaymentState,
 ) (TxStateMachine, error) {
 	var machine TxStateMachine
 
-	switch transaction.Custodian {
+	switch authenticatedState.PaymentDetails.Custodian {
 	case "uphold":
 		machine = &UpholdMachine{}
 	case "bitflyer":
@@ -134,12 +133,12 @@ func StateMachineFromTransaction(
 		machine = &GeminiMachine{}
 	}
 	machine.setPersistenceConfigValues(
-		id,
+		service.idempotencyNamespace,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
 		service.kmsSigningKeyID,
-		transaction,
+		authenticatedState,
 	)
 	return machine, nil
 }
@@ -168,53 +167,4 @@ func Drive[T TxStateMachine](
 	default:
 		return nil, errors.New("invalid transition state")
 	}
-}
-
-// populateInitialTransaction creates the transaction in the database and calls the Prepare
-// method on it. When creating the initial object in the database for a transaction we must
-// verify that the transaction does not already exist. Once a transaction exists, we alawys
-// refer to it by DocumentID and progress it with Drive.
-func populateInitialTransaction[T TxStateMachine](
-	ctx context.Context,
-	machine T,
-) (*AuthenticatedPaymentState, error) {
-	namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
-	// Make sure the transaction we have has an ID that matches its contents before we check if it
-	// exists
-	generatedID, err := machine.GenerateTransactionID(namespace)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to generate idempotency key for %s: %w",
-			machine.getIdempotencyKey(),
-			err,
-		)
-	}
-
-	if generatedID.String() != machine.getIdempotencyKey().String() {
-		return nil, fmt.Errorf(
-			"provided idempotencyKey does not match the generated key: %s %s",
-			generatedID.String(),
-			machine.getIdempotencyKey().String(),
-		)
-	}
-	// Check if the transaction exists so that we know whether to create it
-	_, err = GetTransactionByIdempotencyKey(
-		ctx,
-		machine.getDatastore(),
-		machine.getSDKClient(),
-		machine.getKMSSigningClient(),
-		machine.getIdempotencyKey(),
-	)
-	if err != nil {
-		// If the transaction doesn't exist in the database, prepare it
-		var notFound *QLDBReocrdNotFoundError
-		if errors.As(err, &notFound) {
-			return machine.Prepare(ctx)
-		}
-		return nil, fmt.Errorf("failed to check for the existence of transaction in QLDB: %w", err)
-	}
-	return nil, fmt.Errorf(
-		"transaction %s already exists in QLDB and cannot be prepared",
-		generatedID,
-	)
 }
