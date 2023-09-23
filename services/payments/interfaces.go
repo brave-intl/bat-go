@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // idempotentObject is anything that can generate an idempotency key.

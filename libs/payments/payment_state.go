@@ -1,28 +1,13 @@
 package payments
 
 import (
-	"context"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/aws/smithy-go"
-	"github.com/brave-intl/bat-go/libs/logging"
-	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/shopspring/decimal"
 	"golang.org/x/exp/slices"
 
-	"github.com/amazon-ion/ion-go/ion"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/google/uuid"
 )
 
@@ -69,7 +54,7 @@ type SubmitRequest struct {
 }
 
 type SubmitResponse struct {
-	Status PaymentStatus `json:"status" valid:"required"`
+	Status    PaymentStatus `json:"status" valid:"required"`
 	LastError *PaymentError `json:"error,omitempty"`
 }
 
@@ -83,7 +68,7 @@ type AuthenticatedPaymentState struct {
 }
 
 type PaymentDetails struct {
-	Amount    *ion.Decimal `json:"amount" valid:"required"`
+	Amount    decimal.Decimal `json:"amount" valid:"required"`
 	To        string       `json:"to" valid:"required"`
 	From      string       `json:"from" valid:"required"`
 	Custodian string       `json:"custodian" valid:"in(uphold|gemini|bitflyer)"`
@@ -105,8 +90,8 @@ type qldbPaymentTransitionHistoryEntryBlockAddress struct {
 	SequenceNo int64  `ion:"sequenceNo"`
 }
 
-// qldbPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry.
-type qldbPaymentTransitionHistoryEntryHash string
+// QLDBPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry.
+type QLDBPaymentTransitionHistoryEntryHash string
 
 // qldbPaymentTransitionHistoryEntrySignature defines signature for
 // qldbPaymentTransitionHistoryEntry.
@@ -116,7 +101,7 @@ type qldbPaymentTransitionHistoryEntrySignature []byte
 type PaymentState struct {
 	// Serialized AuthenticatedPaymentState. Should only ever be access via GetSafePaymentState,
 	// which does all of the needed validation of the state
-	unsafePaymentState []byte     `ion:"data"`
+	UnsafePaymentState []byte     `ion:"data"`
 	Signature          []byte     `ion:"signature"`
 	ID                 *uuid.UUID `ion:"idempotencyKey"`
 }
@@ -129,10 +114,10 @@ type qldbPaymentTransitionHistoryEntryMetadata struct {
 	Version int64     `ion:"version"`
 }
 
-// qldbPaymentTransitionHistoryEntry defines top level entry for a QLDB transaction.
-type qldbPaymentTransitionHistoryEntry struct {
+// QLDBPaymentTransitionHistoryEntry defines top level entry for a QLDB transaction.
+type QLDBPaymentTransitionHistoryEntry struct {
 	BlockAddress qldbPaymentTransitionHistoryEntryBlockAddress `ion:"blockAddress"`
-	Hash         qldbPaymentTransitionHistoryEntryHash         `ion:"hash"`
+	Hash         QLDBPaymentTransitionHistoryEntryHash         `ion:"hash"`
 	Data         PaymentState                                  `ion:"data"`
 	Metadata     qldbPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
@@ -141,9 +126,14 @@ type qldbDocumentIDResult struct {
 	documentID string `ion:"documentId"`
 }
 
-func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*AuthenticatedPaymentState, error) {
+// GetValidTransitions returns valid transitions.
+func (ts PaymentStatus) GetValidTransitions() []PaymentStatus {
+	return Transitions[ts]
+}
+
+func (e *QLDBPaymentTransitionHistoryEntry) toTransaction() (*AuthenticatedPaymentState, error) {
 	var txn AuthenticatedPaymentState
-	err := json.Unmarshal(e.Data.unsafePaymentState, &txn)
+	err := json.Unmarshal(e.Data.UnsafePaymentState, &txn)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
@@ -155,7 +145,7 @@ func (e *qldbPaymentTransitionHistoryEntry) toTransaction() (*AuthenticatedPayme
 
 func (p *PaymentState) toAuthenticatedPaymentState() (*AuthenticatedPaymentState, error) {
 	var txn AuthenticatedPaymentState
-	err := json.Unmarshal(p.unsafePaymentState, &txn)
+	err := json.Unmarshal(p.UnsafePaymentState, &txn)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
@@ -231,39 +221,6 @@ var (
 	submitFailure  = "submit"
 )
 
-// SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex
-// string.
-func (a *AuthenticatedPaymentState) SignTransaction(
-	ctx context.Context,
-	kmsClient wrappedKMSClient,
-	keyID string,
-) (string, string, error) {
-	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
-		KeyId: &keyID,
-	})
-
-	if err != nil {
-		return "", "", fmt.Errorf("Failed to get public key: %w", err)
-	}
-
-	marshaled, err := ion.MarshalBinary(a)
-	if err != nil {
-		return "", "", fmt.Errorf("Ion marshal failed: %w", err)
-	}
-
-	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
-		KeyId:            &keyID,
-		Message:          marshaled,
-		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-	})
-
-	if err != nil {
-		return "", "", fmt.Errorf("Failed to sign transaction: %w", err)
-	}
-
-	return hex.EncodeToString(pubkeyOutput.PublicKey), hex.EncodeToString(signingOutput.Signature), nil
-}
-
 // MarshalJSON - custom marshaling of transaction type.
 func (a *AuthenticatedPaymentState) MarshalJSON() ([]byte, error) {
 	type Alias AuthenticatedPaymentState
@@ -271,7 +228,7 @@ func (a *AuthenticatedPaymentState) MarshalJSON() ([]byte, error) {
 		Amount *decimal.Decimal `json:"amount"`
 		*Alias
 	}{
-		Amount: fromIonDecimal(a.Amount),
+		Amount: &a.Amount,
 		Alias:  (*Alias)(a),
 	})
 }
@@ -291,11 +248,7 @@ func (a *AuthenticatedPaymentState) UnmarshalJSON(data []byte) error {
 	if aux.Amount == nil {
 		return fmt.Errorf("missing required transaction value: Amount")
 	}
-	parsedAmount, err := ion.ParseDecimal(aux.Amount.String())
-	if err != nil {
-		return fmt.Errorf("failed to parse transaction Amount into ion decimal: %w", err)
-	}
-	a.Amount = parsedAmount
+	a.Amount = *aux.Amount
 	return nil
 }
 

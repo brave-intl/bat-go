@@ -33,6 +33,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	appsrv "github.com/brave-intl/bat-go/libs/service"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // Service struct definition of payments service.
@@ -284,7 +285,7 @@ func (s *Service) DecryptBootstrap(
 	return output, nil
 }
 
-// ValueHolder converts a qldbPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder.
+// ValueHolder converts a QLDBPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder.
 func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
 	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)
 	return &qldbTypes.ValueHolder{
@@ -297,7 +298,7 @@ func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes
 // among states and the Merkle tree position of each state.
 func validateTransactionHistory(
 	ctx context.Context,
-	transactionHistory []qldbPaymentTransitionHistoryEntry,
+	transactionHistory []QLDBPaymentTransitionHistoryEntry,
 ) (bool, error) {
 	var (
 		reason                    error
@@ -339,7 +340,7 @@ func validateTransactionHistory(
 func revisionValidInTree(
 	ctx context.Context,
 	client wrappedQldbSDKClient,
-	transaction *qldbPaymentTransitionHistoryEntry,
+	transaction *QLDBPaymentTransitionHistoryEntry,
 ) (bool, error) {
 	ledgerName := "LEDGER_NAME"
 	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &ledgerName})
@@ -372,7 +373,7 @@ func revisionValidInTree(
 
 func verifyHashSequence(
 	digest *qldb.GetDigestOutput,
-	initialHash qldbPaymentTransitionHistoryEntryHash,
+	initialHash QLDBPaymentTransitionHistoryEntryHash,
 	hashes [][32]byte,
 ) (bool, error) {
 	var concatenatedHash [32]byte
@@ -419,7 +420,7 @@ func transactionHistoryIsValid(
 	txn wrappedQldbTxnAPI,
 	kmsClient wrappedKMSClient,
 	documentID string,
-) (bool, *qldbPaymentTransitionHistoryEntry, error) {
+) (bool, *QLDBPaymentTransitionHistoryEntry, error) {
 	// Fetch all historical states for this record
 	result, err := getTransactionHistory(txn, documentID)
 	if err != nil {

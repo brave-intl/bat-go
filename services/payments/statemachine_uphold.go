@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // UpholdMachine is an implementation of TxStateMachine for uphold's use-case.

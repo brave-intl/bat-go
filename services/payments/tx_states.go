@@ -219,11 +219,6 @@ func populateInitialTransaction[T TxStateMachine](
 	)
 }
 
-// GetValidTransitions returns valid transitions.
-func (ts PaymentStatus) GetValidTransitions() []PaymentStatus {
-	return Transitions[ts]
-}
-
 // GetAllValidTransitionSequences returns all valid transition sequences.
 func GetAllValidTransitionSequences() [][]PaymentStatus {
 	return recurseTransitionResolution("prepared", []PaymentStatus{})

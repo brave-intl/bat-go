@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case.
