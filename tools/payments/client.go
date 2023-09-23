@@ -30,9 +30,8 @@ const (
 )
 
 var (
-	payout        = strconv.FormatInt(time.Now().Unix(), 10)
-	PrepareStream = payments.PreparePrefix + payout
-	SubmitStream  = payments.SubmitPrefix + payout
+	payout       = strconv.FormatInt(time.Now().Unix(), 10)
+	SubmitStream = payments.SubmitPrefix + payout
 )
 
 // SettlementClient describes functionality of the settlement client
@@ -137,7 +136,7 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 		// add to stream
 		pipe.XAdd(
 			ctx, &redis.XAddArgs{
-				Stream: PrepareStream,
+				Stream: payments.PreparePrefix + v.PayoutID,
 				Values: map[string]interface{}{
 					"data": message}},
 		)

@@ -3,9 +3,11 @@ package payments
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,10 +15,12 @@ import (
 	"github.com/brave-intl/bat-go/libs/concurrent"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/payments"
 	redis "github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog"
 )
+
+const RetryAfterPrefix = "retry-after-"
 
 var ConsumerSet *concurrent.Set
 
@@ -24,16 +28,30 @@ func init() {
 	ConsumerSet = concurrent.NewSet()
 }
 
-type MessageHandler func(ctx context.Context, redisClient *redis.Client, id string, data []byte) error
+type MessageHandler func(ctx context.Context, id string, data []byte) error
 
-func HandlePrepareMessage(ctx context.Context, redisClient *redis.Client, id string, data []byte) error {
+type RedisService struct {
+	rc *redis.Client
+}
+
+func NewRedisService(rc *redis.Client) *RedisService {
+	return &RedisService{rc}
+}
+
+func (rs *RedisService) HandlePrepareMessage(ctx context.Context, id string, data []byte) error {
 	client, err := client.New("https://nitro-payments.bsg.brave.software", "")
 	if err != nil {
 		return err
 	}
-	resp, err := requestHandler(ctx, client, "POST", "/v1/prepare", data)
+	resp, err := rs.requestHandler(ctx, client, "POST", "/v1/prepare", id, data)
 	if err != nil {
 		return err
+	}
+	if resp == nil {
+		return errors.New("response was nil")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("response was not 200 OK")
 	}
 
 	sr, err := httpsignature.EncapsulateResponse(ctx, resp)
@@ -47,42 +65,65 @@ func HandlePrepareMessage(ctx context.Context, redisClient *redis.Client, id str
 	return nil
 }
 
-func requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, data []byte) (*http.Response, error) {
+func (rs *RedisService) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, id string, data []byte) (*http.Response, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = rs.rc.Get(ctx, RetryAfterPrefix+id).Err()
+	if err == nil {
+		return nil, errors.New("waiting for retry-after")
+	}
+	if err != redis.Nil {
+		return nil, err
+	}
+
 	wrapper := payments.RequestWrapper{}
-	err := json.Unmarshal(data, &wrapper)
+	err = json.Unmarshal(data, &wrapper)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println(string(data))
-
-	var r http.Request
-	_, err = wrapper.Request.Extract(&r)
+	r, err := client.NewRequest(ctx, method, path, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	//r.Method = method
+	_, err = wrapper.Request.Extract(r)
+	if err != nil {
+		return nil, err
+	}
+
 	r.URL = client.BaseURL.ResolveReference(&url.URL{
 		Path: r.URL.RequestURI(),
 	})
 
-	resp, err := client.Do(ctx, &r, nil)
+	delay := 5 * time.Second
+	resp, err := client.Do(ctx, r, nil)
 	if resp != nil {
-		retry := resp.Header.Get("retry-after")
+		retry := resp.Header.Get("x-retry-after")
 		if retry != "" {
-			// TODO handle advised retry-after
-			// maybe just have as part of the client
+			tmp, err := strconv.Atoi(retry)
+			if err != nil {
+				logger.Error().Err(err).Msg("failed to parse x-retry-after header")
+			}
+			delay = time.Duration(tmp) * time.Second
 		}
 	}
+	err = rs.rc.Set(ctx, RetryAfterPrefix+id, "", delay).Err()
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to set retry-after key")
+	}
+
 	return resp, err
 }
 
-func HandlePrepareConfigMessage(ctx context.Context, redisClient *redis.Client, id string, data []byte) error {
-	return handleConfigMessage(HandlePrepareMessage, ctx, redisClient, id, data)
+func (rs *RedisService) HandlePrepareConfigMessage(ctx context.Context, id string, data []byte) error {
+	return rs.handleConfigMessage(rs.HandlePrepareMessage, ctx, id, data)
 }
 
-func handleConfigMessage(handle MessageHandler, ctx context.Context, redisClient *redis.Client, id string, data []byte) error {
+func (rs *RedisService) handleConfigMessage(handle MessageHandler, ctx context.Context, id string, data []byte) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
@@ -96,18 +137,16 @@ func handleConfigMessage(handle MessageHandler, ctx context.Context, redisClient
 		return err
 	}
 
-	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("childGroup", config.ConsumerGroup)
-	})
+	ctx, logger = logging.UpdateContext(ctx, logger.With().Str("childGroup", config.ConsumerGroup).Logger())
 
 	logger.Info().Msg("processed config")
 	go func() {
-		NewConsumer(consumerCtx, redisClient, config.Stream, config.ConsumerGroup, "0", handle)
+		NewConsumer(consumerCtx, rs.rc, config.Stream, config.ConsumerGroup, "0", handle)
 	}()
 
 wait:
 	for {
-		resp, err := redisClient.XInfoGroups(ctx, config.Stream).Result()
+		resp, err := rs.rc.XInfoGroups(ctx, config.Stream).Result()
 		if err != nil {
 			return err
 		}
@@ -129,58 +168,11 @@ wait:
 	return nil
 }
 
-/*
-func main() {
-	ctx := context.Background()
-
-	stream := "prepare-config"
-	consumerGroup := "prepare-config-cg"
-
-	cfg := payments.WorkerConfig{
-		PayoutID:      "test",
-		ConsumerGroup: "prepare-test-cg",
-		Stream:        "prepare-test",
-		Count:         1,
-	}
-
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", "127.0.0.1", "6379"),
-	})
-	_, err := redisClient.XAdd(
-		ctx,
-		&redis.XAddArgs{
-			Stream: stream,
-			Values: map[string]interface{}{
-				"data": cfg,
-			},
-		},
-	).Result()
-	if err != nil {
-		log.Fatal(err)
-	}
-	_, err = redisClient.XAdd(
-		ctx,
-		&redis.XAddArgs{
-			Stream: "prepare-test",
-			Values: map[string]interface{}{
-				// FIXME
-				"data": "{}",
-			},
-		},
-	).Result()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = NewConsumer(ctx, redisClient, stream, consumerGroup, "0", PrepareConfigHandler)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-*/
-
 func NewConsumer(ctx context.Context, redisClient *redis.Client, stream, consumerGroup, consumerID string, handle MessageHandler) error {
 	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return err
+	}
 
 	consumerUID := stream + consumerGroup + consumerID
 	if !ConsumerSet.Add(consumerUID) {
@@ -190,10 +182,7 @@ func NewConsumer(ctx context.Context, redisClient *redis.Client, stream, consume
 	if err != nil {
 		return err
 	}
-
-	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("stream", stream).Str("consumerGroup", consumerGroup).Str("consumerID", consumerID)
-	})
+	ctx, logger = logging.UpdateContext(ctx, logger.With().Str("stream", stream).Str("consumerGroup", consumerGroup).Str("consumerID", consumerID).Logger())
 
 	logger.Info().Msg("consumer started")
 
@@ -229,9 +218,15 @@ func NewConsumer(ctx context.Context, redisClient *redis.Client, stream, consume
 					logger.Error().Msg("data was not a string")
 				}
 
-				err := handle(ctx, redisClient, messageID, []byte(sData))
+				tmp := logger.With().Str("messageID", messageID).Logger()
+				logger = &tmp
+				ctx = logger.WithContext(ctx)
+
+				err := handle(ctx, messageID, []byte(sData))
 				if err != nil {
-					logger.Error().Err(err).Msg("Handler returned an error")
+					if !strings.Contains(err.Error(), "retry-after") {
+						logger.Warn().Err(err).Msg("message handler returned an error")
+					}
 				} else {
 					redisClient.XAck(ctx, stream, consumerGroup, messageID)
 				}

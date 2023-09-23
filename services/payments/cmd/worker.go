@@ -23,7 +23,9 @@ func WorkerRun(command *cobra.Command, args []string) {
 		Addr: fmt.Sprintf("%s:%s", "127.0.0.1", "6379"),
 	})
 
-	err = payments.NewConsumer(ctx, redisClient, stream, consumerGroup, "0", payments.HandlePrepareConfigMessage)
+	service := payments.NewRedisService(redisClient)
+
+	err = payments.NewConsumer(ctx, redisClient, stream, consumerGroup, "0", service.HandlePrepareConfigMessage)
 	if err != nil {
 		logger.Error().Err(err).Msg("consumer exited with error")
 	}

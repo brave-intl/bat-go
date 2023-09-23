@@ -110,12 +110,12 @@ func (ar AttestedReport) IsAttested() (bool, error) {
 		// decode the attestation document base64
 		doc, err := base64.StdEncoding.DecodeString(tx.AttestationDocument)
 		if err != nil {
-			return false, fmt.Errorf("failed to decode attestation document on tx: %s", tx.ID)
+			return false, fmt.Errorf("failed to decode attestation document on tx: %s", tx.DocumentID)
 		}
 		// authenticate the attestation document on the record
 		document, err := nitrodoc.AuthenticateDocument(doc, *cert, true)
 		if err != nil {
-			return false, fmt.Errorf("failed to authenticate attestation document on tx: %s", tx.ID)
+			return false, fmt.Errorf("failed to authenticate attestation document on tx: %s", tx.DocumentID)
 		}
 		// authentically from nitro, now validate the signing bytes match
 		if subtle.ConstantTimeCompare(

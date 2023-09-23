@@ -85,6 +85,11 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	return l.WithContext(ctx), &l
 }
 
+func UpdateContext(ctx context.Context, logger zerolog.Logger) (context.Context, *zerolog.Logger) {
+	ctx = logger.WithContext(ctx)
+	return ctx, &logger
+}
+
 // AddWalletIDToContext adds wallet id to context
 func AddWalletIDToContext(ctx context.Context, walletID uuid.UUID) {
 	l := zerolog.Ctx(ctx)

@@ -29,7 +29,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -92,14 +91,6 @@ func main() {
 		log.Fatal("failed payout id cannot be nil or empty\n")
 	}
 
-	wc := &payments.WorkerConfig{
-		PayoutID:      *payoutID,
-		ConsumerGroup: paymentscli.PrepareStream + "-cg",
-		Stream:        paymentscli.PrepareStream,
-		Count:         0,
-	}
-	fmt.Println(wc)
-
 	for _, name := range files {
 		func() {
 			f, err := os.Open(name)
@@ -113,8 +104,6 @@ func main() {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 
-			wc.Count += len(report)
-
 			priv, err := paymentscli.GetOperatorPrivateKey(*key)
 			if err != nil {
 				log.Fatalf("failed to parse operator key file: %v\n", err)
@@ -123,16 +112,27 @@ func main() {
 			if err := report.Prepare(ctx, priv, client); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
+
+			payoutID := report[0].PayoutID
+
+			wc := &payments.WorkerConfig{
+				PayoutID:      payoutID,
+				ConsumerGroup: payments.PreparePrefix + payoutID + "-cg",
+				Stream:        payments.PreparePrefix + payoutID,
+				Count:         len(report),
+			}
+
+			err = client.ConfigureWorker(ctx, payments.PrepareConfigStream, wc)
+			if err != nil {
+				log.Fatalf("failed to write to prepare config stream: %v\n", err)
+			}
+			if *verbose {
+				log.Printf("prepare transactions loaded for %+v\n", payoutID)
+			}
 		}()
 	}
 
-	err = client.ConfigureWorker(ctx, payments.PrepareConfigStream, wc)
-	if err != nil {
-		log.Fatalf("failed to write to prepare config stream: %v\n", err)
-	}
-
 	if *verbose {
-		log.Printf("prepare transactions loaded for %+v\n", wc)
 		log.Println("prepare command complete")
 	}
 }

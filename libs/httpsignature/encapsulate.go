@@ -22,13 +22,13 @@ type HTTPSignedRequest struct {
 
 // Extract from the encapsulated signed request
 // into the provided HTTP request
-// NOTE it intentionally does not set the URL
 func (sr *HTTPSignedRequest) Extract(r *http.Request) (*SignatureParams, error) {
 	if r == nil {
 		return nil, errors.New("r was nil")
 	}
 
 	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
+	r.ContentLength = int64(len(sr.Body))
 	if r.Header == nil {
 		r.Header = http.Header{}
 	}
@@ -38,7 +38,7 @@ func (sr *HTTPSignedRequest) Extract(r *http.Request) (*SignatureParams, error) 
 			if !found {
 				return nil, errors.New("invalid encapsulated (request-target) pseudo-header value")
 			}
-			r.Method = method
+			r.Method = strings.ToUpper(method)
 			pUri, err := url.ParseRequestURI(uri)
 			if err != nil {
 				return nil, fmt.Errorf("invalid encapsulated (request-target) pseudo-header value: %e", err)

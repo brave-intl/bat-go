@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -22,12 +21,13 @@ func (pt *PrepareTx) GetCustodian() Custodian {
 
 // Tx - this is the tx going to prepare workers from report
 type Tx struct {
-	To        string          `json:"to"`
 	Amount    decimal.Decimal `json:"amount"`
-	ID        string          `json:"idempotencyKey"`
+	To        string          `json:"to"`
+	From      string          `json:"from"`
 	Custodian Custodian       `json:"custodian"`
 	PayoutID  string          `json:"payoutId"`
-	DryRun    *string         `json:"dryRun" ion:"-"`
+	Currency  string          `json:"currency"`
+	DryRun    *string         `json:"dryRun"`
 }
 
 // GetCustodian returns the custodian of the transaction
@@ -73,11 +73,6 @@ func (pt *PrepareTx) UnmarshalJSON(data []byte) error {
 	pt.Custodian = Custodian(aux.Custodian)
 	pt.PayoutID = aux.BatchID
 
-	// uuidV5 with settlement namespace to get the idempotent key for this publisher/transactionId
-	// transactionId is the settlement batch identifier, and publisher is the identifier of the recipient
-	pt.ID = uuid.NewSHA1(
-		idempotencyNamespace, []byte(aux.BatchID+aux.Publisher)).String()
-
 	return nil
 }
 
@@ -102,7 +97,6 @@ func (at *AttestedTx) UnmarshalJSON(data []byte) error {
 	at.Amount = aux.Amount
 	at.To = aux.To
 	at.Custodian = Custodian(aux.Custodian)
-	at.ID = aux.ID
 	at.Version = aux.Version
 	at.State = aux.State
 	at.DocumentID = aux.DocumentID
