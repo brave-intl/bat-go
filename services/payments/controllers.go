@@ -23,27 +23,6 @@ type getConfResponse struct {
 	PublicKey           string
 }
 
-type PrepareRequest struct {
-	PaymentDetails
-	DryRun *string `json:"dryRun"` // determines dry-run
-}
-
-// PrepareResponse is sent to the client in response to a PrepareRequest. It must include
-// an Attestation in the header of the response.
-type PrepareResponse struct {
-	PaymentDetails
-	DocumentID string `json:"documentId,omitempty"`
-}
-
-type SubmitRequest struct {
-	DocumentID string `json:"documentId,omitempty"`
-}
-
-type SubmitResponse struct {
-	Status PaymentStatus `json:"status" valid:"required"`
-	LastError *PaymentError `json:"error,omitempty"`
-}
-
 // GetConfigurationHandler gets important payments configuration information, attested by nitro.
 func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {

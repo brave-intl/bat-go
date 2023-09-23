@@ -6,33 +6,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	. "github.com/brave-intl/bat-go/libs/payment_state"
 )
-
-// PaymentStatus is an integer representing transaction status.
-type PaymentStatus string
-
-// TxStateMachine describes types with the appropriate methods to be Driven as a state machine
-const (
-	// Prepared represents a record that has been prepared for authorization.
-	Prepared PaymentStatus = "prepared"
-	// Authorized represents a record that has been authorized.
-	Authorized PaymentStatus = "authorized"
-	// Pending represents a record that is being or has been submitted to a processor.
-	Pending PaymentStatus = "pending"
-	// Paid represents a record that has entered a finalized success state with a processor.
-	Paid PaymentStatus = "paid"
-	// Failed represents a record that has failed processing permanently.
-	Failed PaymentStatus = "failed"
-)
-
-// Transitions represents the valid forward-transitions for each given state.
-var Transitions = map[PaymentStatus][]PaymentStatus{
-	Prepared:   {Authorized, Failed},
-	Authorized: {Pending, Failed},
-	Pending:    {Paid, Failed},
-	Paid:       {},
-	Failed:     {},
-}
 
 type baseStateMachine struct {
 	idempotencyKey   uuid.UUID
