@@ -2,13 +2,13 @@ package payments
 
 import (
 	"context"
+	"github.com/shopspring/decimal"
 	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -16,6 +16,7 @@ import (
 	"github.com/jarcoal/httpmock"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 var (
@@ -78,7 +79,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	testTransaction := AuthenticatedPaymentState{
 		Status: Prepared,
 		PaymentDetails: PaymentDetails{
-			Amount:    ion.MustParseDecimal("1.1"),
+			Amount:    decimal.NewFromFloat(1.1),
 			Custodian: "bitflyer",
 		},
 		Authorizations: []PaymentAuthorization{{}, {}, {}},
@@ -86,18 +87,18 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	marshaledData, _ := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
-	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
-		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
 		Data: PaymentState{
-			unsafePaymentState: marshaledData,
+			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
 			ID:                 &idempotencyKey,
 		},
-		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
@@ -139,7 +140,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	// Should transition transaction into the Authorized state
 	testTransaction.Status = Prepared
 	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.unsafePaymentState = marshaledData
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
@@ -148,7 +149,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	// Should transition transaction into the Pending state
 	testTransaction.Status = Authorized
 	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.unsafePaymentState = marshaledData
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
@@ -158,7 +159,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	// Should transition transaction into the Paid state
 	testTransaction.Status = Pending
 	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.unsafePaymentState = marshaledData
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)

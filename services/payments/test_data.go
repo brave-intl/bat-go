@@ -1,14 +1,14 @@
 package payments
 
 import (
-	"github.com/amazon-ion/ion-go/ion"
-	"github.com/google/uuid"
 	. "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 var (
 	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	amount           = ion.MustParseDecimal("1.1")
+	amount, _        = decimal.NewFromString("1.1")
 	txn0             = AuthenticatedPaymentState{Status: Prepared, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn1             = AuthenticatedPaymentState{Status: Authorized, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn2             = AuthenticatedPaymentState{Status: Pending, PaymentDetails: PaymentDetails{Amount: amount}}

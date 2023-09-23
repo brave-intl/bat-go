@@ -49,12 +49,12 @@ func (s *baseStateMachine) writeNextState(
 	ctx context.Context,
 	nextState PaymentStatus,
 ) (*AuthenticatedPaymentState, error) {
-	if !s.transaction.nextStateValid(nextState) {
+	if !s.transaction.NextStateValid(nextState) {
 		return nil, fmt.Errorf(
 			"invalid state transition from %s to %s for transaction %s",
 			s.transaction.Status,
 			nextState,
-			s.transaction.documentID,
+			s.transaction.DocumentID,
 		)
 	}
 	s.transaction.Status = nextState
@@ -113,7 +113,7 @@ func (s *baseStateMachine) getKMSSigningClient() wrappedKMSClient {
 // GenerateTransactionID returns the generated transaction id for a state machine's transaction,
 // implementing TxStateMachine.
 func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
-	paymentStateID := s.transaction.generateIdempotencyKey(namespace)
+	paymentStateID := s.transaction.GenerateIdempotencyKey(namespace)
 	return &paymentStateID, nil
 }
 

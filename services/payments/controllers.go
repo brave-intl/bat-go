@@ -16,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/requestutils"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 type getConfResponse struct {
@@ -159,7 +160,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// TODO: state machine handling for custodian submissions
 
 		// get the current state of the transaction from qldb
-		resp, _, err := service.GetTransactionFromDocumentID(ctx, authenticatedState.documentID)
+		resp, _, err := service.GetTransactionFromDocumentID(ctx, authenticatedState.DocumentID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}

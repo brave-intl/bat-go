@@ -23,7 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
-	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/hashicorp/vault/shamir"
@@ -285,14 +284,6 @@ func (s *Service) DecryptBootstrap(
 	return output, nil
 }
 
-// ValueHolder converts a QLDBPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder.
-func (b *qldbPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
-	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)
-	return &qldbTypes.ValueHolder{
-		IonText: &stringValue,
-	}
-}
-
 // validateTransactionHistory returns whether a slice of entries representing the entire state
 // history for a given id include exclusively valid transitions. It also verifies IdempotencyKeys
 // among states and the Merkle tree position of each state.
@@ -309,7 +300,7 @@ func validateTransactionHistory(
 	// times per transaction in the next loop.
 	for _, marshaledTransaction := range transactionHistory {
 		var transaction AuthenticatedPaymentState
-		err = json.Unmarshal(marshaledTransaction.Data.unsafePaymentState, &transaction)
+		err = json.Unmarshal(marshaledTransaction.Data.UnsafePaymentState, &transaction)
 		if err != nil {
 			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
 		}
@@ -328,7 +319,7 @@ func validateTransactionHistory(
 		previousTransitionData := unmarshaledTransactionSet[i-1]
 		// New transaction state should be present in the list of valid next states for the
 		// "previous" (current) state.
-		if !previousTransitionData.nextStateValid(transaction.Status) {
+		if !previousTransitionData.NextStateValid(transaction.Status) {
 			return false, &InvalidTransitionState{}
 		}
 	}
@@ -475,25 +466,4 @@ func isQLDBReady(ctx context.Context) bool {
 		Str("qldbArn", qldbArn).
 		Msg("service is not configured to access qldb")
 	return false
-}
-
-func (t *AuthenticatedPaymentState) shouldDryRun() bool {
-	if t.DryRun == nil {
-		return false
-	}
-
-	switch t.Status {
-	case Prepared:
-		return *t.DryRun == "prepare"
-	case Authorized:
-		return *t.DryRun == "submit"
-	case Pending:
-		return *t.DryRun == "submit"
-	case Paid:
-		return *t.DryRun == "submit"
-	case Failed:
-		return *t.DryRun == "submit"
-	default:
-		return false
-	}
 }

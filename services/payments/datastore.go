@@ -6,13 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
-	"github.com/shopspring/decimal"
-	"golang.org/x/exp/slices"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -27,12 +24,17 @@ import (
 	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
+type qldbDocumentIDResult struct {
+	documentID string `ion:"documentId"`
+}
+
 // SignTransaction - perform KMS signing of the transaction, return publicKey and signature in hex
 // string.
-func (s *Service) SignTransaction(
+func SignTransaction(
 	ctx context.Context,
 	kmsClient wrappedKMSClient,
 	keyID string,
+	state AuthenticatedPaymentState,
 ) (string, string, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyID,
@@ -42,7 +44,8 @@ func (s *Service) SignTransaction(
 		return "", "", fmt.Errorf("Failed to get public key: %w", err)
 	}
 
-	marshaled, err := ion.MarshalBinary(a)
+	// @TODO WRONG PLACE FOR THIS
+	marshaled, err := ion.MarshalBinary(state)
 	if err != nil {
 		return "", "", fmt.Errorf("Ion marshal failed: %w", err)
 	}
@@ -251,7 +254,7 @@ func (s Service) InsertTransaction(
 		resp := AuthenticatedPaymentState{}
 
 		namespace := ctx.Value(serviceNamespaceContextKey{}).(uuid.UUID)
-		id := state.generateIdempotencyKey(namespace)
+		id := state.GenerateIdempotencyKey(namespace)
 
 		// Check if a document with this idempotencyKey exists
 		result, err := txn.Execute("SELECT * FROM transactions WHERE idempotencyKey = ?", id)
@@ -274,7 +277,7 @@ func (s Service) InsertTransaction(
 			if err != nil {
 				return nil, err
 			}
-			resp.documentID = temp.documentID
+			resp.DocumentID = temp.documentID
 		}
 
 		return resp, fmt.Errorf("failed to insert transaction because id already exists: %s", id)
@@ -327,18 +330,18 @@ func (s *Service) AuthorizeTransaction(
 	keyID string,
 	transaction AuthenticatedPaymentState,
 ) error {
-	fetchedTxn, idempotencyKey, err := s.GetTransactionFromDocumentID(ctx, transaction.documentID)
+	fetchedTxn, idempotencyKey, err := s.GetTransactionFromDocumentID(ctx, transaction.DocumentID)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to get transaction with idempotencyKey %s by document ID %s: %w",
 			idempotencyKey,
-			transaction.documentID,
+			transaction.DocumentID,
 			err,
 		)
 	}
 	auth := PaymentAuthorization{
 		KeyID:      keyID,
-		DocumentID: transaction.documentID,
+		DocumentID: transaction.DocumentID,
 	}
 	keyHasNotYetSigned := true
 	for _, authorization := range fetchedTxn.Authorizations {
@@ -347,7 +350,7 @@ func (s *Service) AuthorizeTransaction(
 		}
 	}
 	if !keyHasNotYetSigned {
-		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.documentID)
+		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)
 	}
 	fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
 	writtenTxn, err := WriteTransaction(
@@ -418,11 +421,11 @@ func (s *Service) GetTransactionFromDocumentID(
 		return nil, nil, fmt.Errorf("failed to get transactions: %w", err)
 	}
 	paymentState := paymentStateInterface.(*PaymentState)
-	authenticatedState, err := paymentState.toAuthenticatedPaymentState()
+	authenticatedState, err := paymentState.ToAuthenticatedPaymentState()
 	if err != nil {
 		return nil, nil, err
 	}
-	authenticatedState.documentID = documentID
+	authenticatedState.DocumentID = documentID
 	return authenticatedState, paymentState.ID, nil
 }
 
@@ -537,7 +540,7 @@ func WriteTransaction(
 		func(txn qldbdriver.Transaction) (interface{}, error) {
 			// This call will do all necessary record and history validation if they exist for this
 			// record
-			_, err := getQLDBObject(ctx, txn, sdkClient, kmsSigningClient, transaction.documentID)
+			_, err := getQLDBObject(ctx, txn, sdkClient, kmsSigningClient, transaction.DocumentID)
 			var notFound *QLDBReocrdNotFoundError
 			if err != nil {
 				if errors.As(err, &notFound) {
@@ -552,10 +555,12 @@ func WriteTransaction(
 			}
 
 			/*publicKey*/
-			_, signature, err := transaction.SignTransaction(
+			_, signature, err := SignTransaction(
 				ctx,
 				kmsSigningClient,
 				kmsSigningKeyID,
+				// @TODO FIX THIS
+				AuthenticatedPaymentState{},
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to sign transaction: %w", err)
@@ -565,7 +570,7 @@ func WriteTransaction(
 				"UPDATE transactions BY d_id SET data = ?, signature = ? WHERE d_id = ?",
 				result,
 				signature,
-				transaction.documentID,
+				transaction.DocumentID,
 			)
 		},
 	)

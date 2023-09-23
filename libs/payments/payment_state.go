@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 	"golang.org/x/exp/slices"
 
+	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/google/uuid"
 )
 
@@ -64,16 +65,16 @@ type AuthenticatedPaymentState struct {
 	Authorizations []PaymentAuthorization `json:"authorizations"`
 	DryRun         *string                `json:"dryRun"` // determines dry-run
 	LastError      *PaymentError
-	documentID     string
+	DocumentID     string
 }
 
 type PaymentDetails struct {
 	Amount    decimal.Decimal `json:"amount" valid:"required"`
-	To        string       `json:"to" valid:"required"`
-	From      string       `json:"from" valid:"required"`
-	Custodian string       `json:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	PayoutID  string       `json:"payoutId" valid:"required"`
-	Currency  string       `json:"currency" valid:"required"`
+	To        string          `json:"to" valid:"required"`
+	From      string          `json:"from" valid:"required"`
+	Custodian string          `json:"custodian" valid:"in(uphold|gemini|bitflyer)"`
+	PayoutID  string          `json:"payoutId" valid:"required"`
+	Currency  string          `json:"currency" valid:"required"`
 }
 
 // PaymentAuthorization represents a single authorization from a payment authorizer indicating that
@@ -83,9 +84,9 @@ type PaymentAuthorization struct {
 	DocumentID string `json:"documentId" valid:"required"`
 }
 
-// qldbPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for
+// QLDBPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for
 // qldbPaymentTransitionHistoryEntry.
-type qldbPaymentTransitionHistoryEntryBlockAddress struct {
+type QLDBPaymentTransitionHistoryEntryBlockAddress struct {
 	StrandID   string `ion:"strandId"`
 	SequenceNo int64  `ion:"sequenceNo"`
 }
@@ -106,8 +107,8 @@ type PaymentState struct {
 	ID                 *uuid.UUID `ion:"idempotencyKey"`
 }
 
-// qldbPaymentTransitionHistoryEntryMetadata defines metadata for qldbPaymentTransitionHistoryEntry
-type qldbPaymentTransitionHistoryEntryMetadata struct {
+// QLDBPaymentTransitionHistoryEntryMetadata defines metadata for qldbPaymentTransitionHistoryEntry
+type QLDBPaymentTransitionHistoryEntryMetadata struct {
 	ID      string    `ion:"id"`
 	TxID    string    `ion:"txId"`
 	TxTime  time.Time `ion:"txTime"`
@@ -116,19 +117,23 @@ type qldbPaymentTransitionHistoryEntryMetadata struct {
 
 // QLDBPaymentTransitionHistoryEntry defines top level entry for a QLDB transaction.
 type QLDBPaymentTransitionHistoryEntry struct {
-	BlockAddress qldbPaymentTransitionHistoryEntryBlockAddress `ion:"blockAddress"`
+	BlockAddress QLDBPaymentTransitionHistoryEntryBlockAddress `ion:"blockAddress"`
 	Hash         QLDBPaymentTransitionHistoryEntryHash         `ion:"hash"`
 	Data         PaymentState                                  `ion:"data"`
-	Metadata     qldbPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
-}
-
-type qldbDocumentIDResult struct {
-	documentID string `ion:"documentId"`
+	Metadata     QLDBPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
 
 // GetValidTransitions returns valid transitions.
 func (ts PaymentStatus) GetValidTransitions() []PaymentStatus {
 	return Transitions[ts]
+}
+
+// ValueHolder converts a QLDBPaymentTransitionHistoryEntry into a QLDB SDK ValueHolder.
+func (b *QLDBPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes.ValueHolder {
+	stringValue := fmt.Sprintf("{strandId:\"%s\",sequenceNo:%d}", b.StrandID, b.SequenceNo)
+	return &qldbTypes.ValueHolder{
+		IonText: &stringValue,
+	}
 }
 
 func (e *QLDBPaymentTransitionHistoryEntry) toTransaction() (*AuthenticatedPaymentState, error) {
@@ -143,7 +148,7 @@ func (e *QLDBPaymentTransitionHistoryEntry) toTransaction() (*AuthenticatedPayme
 	return &txn, nil
 }
 
-func (p *PaymentState) toAuthenticatedPaymentState() (*AuthenticatedPaymentState, error) {
+func (p *PaymentState) ToAuthenticatedPaymentState() (*AuthenticatedPaymentState, error) {
 	var txn AuthenticatedPaymentState
 	err := json.Unmarshal(p.UnsafePaymentState, &txn)
 	if err != nil {
@@ -193,11 +198,11 @@ func ProcessingErrorFromError(cause error, isTemporary bool) error {
 // GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected value. Otherwise, it returns
 // an error.
 func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, error) {
-	authenticatedState, err := p.toAuthenticatedPaymentState()
+	authenticatedState, err := p.ToAuthenticatedPaymentState()
 	if err != nil {
 		return nil, err
 	}
-	generatedIdempotencyKey := authenticatedState.generateIdempotencyKey(namespace)
+	generatedIdempotencyKey := authenticatedState.GenerateIdempotencyKey(namespace)
 	if generatedIdempotencyKey != *p.ID {
 		return nil, fmt.Errorf("ID does not match transaction fields: have %s, want %s", *p.ID, generatedIdempotencyKey)
 	}
@@ -207,11 +212,11 @@ func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (*uuid.UUID, 
 
 // SetIdempotencyKey assigns a UUID v5 value to PaymentState.ID.
 func (p *PaymentState) SetIdempotencyKey(namespace uuid.UUID) error {
-	authenticatedPaymentState, err := p.toAuthenticatedPaymentState()
+	authenticatedPaymentState, err := p.ToAuthenticatedPaymentState()
 	if err != nil {
 		return err
 	}
-	generatedIdempotencyKey := authenticatedPaymentState.generateIdempotencyKey(namespace)
+	generatedIdempotencyKey := authenticatedPaymentState.GenerateIdempotencyKey(namespace)
 	p.ID = &generatedIdempotencyKey
 	return nil
 }
@@ -252,7 +257,7 @@ func (a *AuthenticatedPaymentState) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (p *AuthenticatedPaymentState) generateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
+func (p *AuthenticatedPaymentState) GenerateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
 	return uuid.NewSHA1(
 		namespace,
 		[]byte(fmt.Sprintf(
@@ -271,7 +276,7 @@ func (t *PaymentState) getIdempotencyKey() *uuid.UUID {
 	return t.ID
 }
 
-func (t *AuthenticatedPaymentState) nextStateValid(nextState PaymentStatus) bool {
+func (t *AuthenticatedPaymentState) NextStateValid(nextState PaymentStatus) bool {
 	if t.Status == nextState {
 		return true
 	}
@@ -281,4 +286,26 @@ func (t *AuthenticatedPaymentState) nextStateValid(nextState PaymentStatus) bool
 		return false
 	}
 	return true
+}
+
+
+func (t *AuthenticatedPaymentState) shouldDryRun() bool {
+	if t.DryRun == nil {
+		return false
+	}
+
+	switch t.Status {
+	case Prepared:
+		return *t.DryRun == "prepare"
+	case Authorized:
+		return *t.DryRun == "submit"
+	case Pending:
+		return *t.DryRun == "submit"
+	case Paid:
+		return *t.DryRun == "submit"
+	case Failed:
+		return *t.DryRun == "submit"
+	default:
+		return false
+	}
 }

@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"github.com/shopspring/decimal"
 	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/amazon-ion/ion-go/ion"
+	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/google/uuid"
@@ -108,23 +109,23 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	testTransaction := AuthenticatedPaymentState{
 		Status: Prepared,
 		PaymentDetails: PaymentDetails{
-			Amount: ion.MustParseDecimal("1.1"),
+			Amount: decimal.NewFromFloat(1.1),
 		},
 	}
 	marshaledData, err := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
-	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
-		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
 		Data: PaymentState{
-			unsafePaymentState: marshaledData,
+			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
 			ID:                 &idempotencyKey,
 		},
-		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
@@ -177,34 +178,34 @@ func TestValidateRevision(t *testing.T) {
 
 	var (
 		mockSDKClient = new(mockSDKClient)
-		trueObject    = qldbPaymentTransitionHistoryEntry{
-			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+		trueObject    = QLDBPaymentTransitionHistoryEntry{
+			BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 				StrandID:   "strand1",
 				SequenceNo: 10,
 			},
 			Hash: "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY=",
 			Data: PaymentState{
 				Signature:          []byte{},
-				unsafePaymentState: []byte{},
+				UnsafePaymentState: []byte{},
 			},
-			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid1",
 				Version: 10,
 				TxTime:  time.Now(),
 				TxID:    "",
 			},
 		}
-		falseObject = qldbPaymentTransitionHistoryEntry{
-			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+		falseObject = QLDBPaymentTransitionHistoryEntry{
+			BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 				StrandID:   "strand2",
 				SequenceNo: 10,
 			},
 			Hash: "dGVzdGVzdGVzdAo=",
 			Data: PaymentState{
 				Signature:          []byte{},
-				unsafePaymentState: []byte{},
+				UnsafePaymentState: []byte{},
 			},
-			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid2",
 				Version: 10,
 				TxTime:  time.Now(),
@@ -294,8 +295,8 @@ func TestVerifyHashSequence(t *testing.T) {
 	testProofIonText := [][32]byte{hash1, hash34}
 
 	var (
-		trueInitialHash  qldbPaymentTransitionHistoryEntryHash = "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="
-		falseInitialHash qldbPaymentTransitionHistoryEntryHash = "dGVzdGVzdGVzdAo="
+		trueInitialHash  QLDBPaymentTransitionHistoryEntryHash = "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="
+		falseInitialHash QLDBPaymentTransitionHistoryEntryHash = "dGVzdGVzdGVzdAo="
 	)
 
 	testDigestOutput := qldb.GetDigestOutput{
@@ -354,22 +355,22 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	testTransaction := AuthenticatedPaymentState{
 		Status: Prepared,
 		PaymentDetails: PaymentDetails{
-			Amount: ion.MustParseDecimal("1.1"),
+			Amount: decimal.NewFromFloat(1.1),
 		},
 	}
 	marshaledData, err := testTransaction.MarshalJSON()
 	must.Equal(t, nil, err)
-	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
-		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
 		Data: PaymentState{
-			unsafePaymentState: marshaledData,
+			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
 		},
-		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
