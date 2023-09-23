@@ -83,7 +83,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 		Authorizations: []PaymentAuthorization{{}, {}, {}},
 	}
 
-	marshaledData, _ := testTransaction.MarshalJSON()
+	marshaledData, _ := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
@@ -138,7 +138,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Authorized state
 	testTransaction.Status = Prepared
-	marshaledData, _ = testTransaction.MarshalJSON()
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	geminiStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
@@ -147,7 +147,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Pending state
 	testTransaction.Status = Authorized
-	marshaledData, _ = testTransaction.MarshalJSON()
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	geminiStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)
@@ -157,7 +157,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 
 	// Should transition transaction into the Paid state
 	testTransaction.Status = Pending
-	marshaledData, _ = testTransaction.MarshalJSON()
+	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	geminiStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &geminiStateMachine)

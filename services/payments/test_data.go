@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"encoding/json"
 	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -14,11 +15,11 @@ var (
 	txn2             = AuthenticatedPaymentState{Status: Pending, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn3             = AuthenticatedPaymentState{Status: Paid, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn4             = AuthenticatedPaymentState{Status: Failed, PaymentDetails: PaymentDetails{Amount: amount}}
-	status0, _       = txn0.MarshalJSON()
-	status1, _       = txn1.MarshalJSON()
-	status2, _       = txn2.MarshalJSON()
-	status3, _       = txn3.MarshalJSON()
-	status4, _       = txn4.MarshalJSON()
+	status0, _       = json.Marshal(txn0)
+	status1, _       = json.Marshal(txn1)
+	status2, _       = json.Marshal(txn2)
+	status3, _       = json.Marshal(txn3)
+	status4, _       = json.Marshal(txn4)
 )
 
 var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{

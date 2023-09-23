@@ -112,7 +112,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 			Amount: decimal.NewFromFloat(1.1),
 		},
 	}
-	marshaledData, err := testTransaction.MarshalJSON()
+	marshaledData, err := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
@@ -320,7 +320,7 @@ valid transition sequences. The purpose of this test is to alert us if outside c
 impact the set of valid transitions.
 */
 func TestRecurseTransitionResolution(t *testing.T) {
-	allValidTransitionSequences := recurseTransitionResolution("prepared", []PaymentStatus{})
+	allValidTransitionSequences := RecurseTransitionResolution("prepared", []PaymentStatus{})
 	knownValidTransitionSequences := [][]PaymentStatus{
 		{Prepared, Authorized, Pending, Paid},
 		{Prepared, Authorized, Pending, Failed},
@@ -358,7 +358,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 			Amount: decimal.NewFromFloat(1.1),
 		},
 	}
-	marshaledData, err := testTransaction.MarshalJSON()
+	marshaledData, err := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{

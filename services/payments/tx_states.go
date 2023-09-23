@@ -218,32 +218,3 @@ func populateInitialTransaction[T TxStateMachine](
 		generatedID,
 	)
 }
-
-// GetAllValidTransitionSequences returns all valid transition sequences.
-func GetAllValidTransitionSequences() [][]PaymentStatus {
-	return recurseTransitionResolution("prepared", []PaymentStatus{})
-}
-
-// recurseTransitionResolution returns the list of valid transition paths that are
-// possible for a given state.
-func recurseTransitionResolution(
-	state PaymentStatus,
-	currentTree []PaymentStatus,
-) [][]PaymentStatus {
-	var (
-		result      [][]PaymentStatus
-		updatedTree = append(currentTree, state)
-	)
-	possibleStates := state.GetValidTransitions()
-	if len(possibleStates) == 0 {
-		tempTree := make([]PaymentStatus, len(updatedTree))
-		copy(tempTree, updatedTree)
-		result = append(result, tempTree)
-		return result
-	}
-	for _, possibleState := range possibleStates {
-		recursed := recurseTransitionResolution(possibleState, updatedTree)
-		result = append(result, recursed...)
-	}
-	return result
-}

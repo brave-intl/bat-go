@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,8 +16,8 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
-	"github.com/brave-intl/bat-go/libs/requestutils"
 	. "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
 type getConfResponse struct {
@@ -102,7 +103,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to create random nonce", http.StatusInternalServerError)
 		}
 
-		tx, err := resp.MarshalJSON()
+		tx, err := json.Marshal(resp)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to create transaction json blob")
 			return handlers.WrapError(err, "failed to create transaction json blob", http.StatusInternalServerError)
