@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	. "github.com/brave-intl/bat-go/libs/payment_state"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 type baseStateMachine struct {
