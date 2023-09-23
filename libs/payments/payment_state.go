@@ -56,3 +56,18 @@ func (p *PaymentState) SetIdempotencyKey(namespace uuid.UUID) error {
 	p.ID = generatedIdempotencyKey
 	return nil
 }
+
+func PaymentStateFromDetails(details PaymentDetails, namespace uuid.UUID) (*PaymentState, error) {
+	authenticatedState := AuthenticatedPaymentState{
+		PaymentDetails: details,
+		Status: Prepared,
+	}
+	authenticatedStateString, err := json.Marshal(authenticatedState)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal authenticated state: %w", err)
+	}
+	return &PaymentState{
+		UnsafePaymentState: authenticatedStateString,
+		ID: authenticatedState.GenerateIdempotencyKey(namespace),
+	}, nil
+}

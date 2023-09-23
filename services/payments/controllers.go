@@ -80,9 +80,14 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.prepareTransaction(ctx, req)
+
+		documentID, err := service.insertPayment(ctx, req.PaymentDetails)
 		if err != nil {
-			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to insert payment", http.StatusInternalServerError)
+		}
+		resp := PrepareResponse{
+			PaymentDetails: req.PaymentDetails,
+			DocumentID: documentID,
 		}
 
 		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
@@ -120,8 +125,8 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 
 		var (
-			logger = logging.Logger(ctx, "SubmitHandler")
-			authenticatedState    = &AuthenticatedPaymentState{}
+			logger             = logging.Logger(ctx, "SubmitHandler")
+			authenticatedState = &AuthenticatedPaymentState{}
 		)
 
 		// read the transactions in the body

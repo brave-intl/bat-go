@@ -54,18 +54,6 @@ type Service struct {
 	idempotencyNamespace uuid.UUID
 }
 
-// prepareTransaction - perform a qldb insertion on the transaction.
-func (s *Service) prepareTransaction(
-	ctx context.Context,
-	prepareRequest *PrepareRequest,
-) (*PrepareResponse, error) {
-	documentID, err := s.insertPayment(ctx, prepareRequest.PaymentDetails)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert payment: %w", err)
-	}
-	return &PrepareResponse{DocumentID: documentID}, nil
-}
-
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, error) {
 	// perform enclave attestation
 	nonce := make([]byte, 64)

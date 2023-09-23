@@ -39,13 +39,13 @@ const (
 	tableAlreadyCreatedCode = "412"
 )
 
-// signAuthenticatedPaymentState - perform KMS signing of the transaction, return publicKey and
+// signPaymentState - perform KMS signing of the transaction, return publicKey and
 // signature in hex string.
-func signAuthenticatedPaymentState(
+func signPaymentState(
 	ctx context.Context,
 	kmsClient wrappedKMSClient,
 	keyID string,
-	state AuthenticatedPaymentState,
+	state PaymentState,
 ) (string, string, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyID,
@@ -55,14 +55,9 @@ func signAuthenticatedPaymentState(
 		return "", "", fmt.Errorf("Failed to get public key: %w", err)
 	}
 
-	marshaled, err := ion.MarshalBinary(state)
-	if err != nil {
-		return "", "", fmt.Errorf("Ion marshal failed: %w", err)
-	}
-
 	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
 		KeyId:            &keyID,
-		Message:          marshaled,
+		Message:          state.UnsafePaymentState,
 		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 	})
 
@@ -221,22 +216,30 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 	return driver, nil
 }
 
-// insertPayment - perform a qldb insertion on the transactions.
+// insertPayment - perform a qldb insertion on a given transaction after doing all validation.
+// Returns the documentID for the record that was inserted.
 func (s Service) insertPayment(
 	ctx context.Context,
 	details PaymentDetails,
 ) (string, error) {
-	authenticatedState := AuthenticatedPaymentState{
-		PaymentDetails: details,
-		Status: StatePrepared,
-	}
-	authenticatedStateString, err := json.Marshal(authenticatedState)
+	unsignedPaymentState, err := PaymentStateFromDetails(details, s.idempotencyNamespace)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal authenticated state: %w", err)
+		return "", err
 	}
+	_, signature, err := signPaymentState(
+		ctx,
+		s.kmsSigningClient,
+		s.kmsDecryptKeyArn,
+		*unsignedPaymentState,
+	)
+	if err != nil {
+		return "", err
+	}
+
 	paymentState := PaymentState{
-		UnsafePaymentState: authenticatedStateString,
-		ID: authenticatedState.GenerateIdempotencyKey(s.idempotencyNamespace),
+		UnsafePaymentState: unsignedPaymentState.UnsafePaymentState,
+		ID: unsignedPaymentState.ID,
+		Signature: []byte(signature),
 	}
 
 	insertedDocumentID, err := s.datastore.Execute(
@@ -526,7 +529,7 @@ func writeTransaction(
 			}
 
 			/*publicKey*/
-			_, signature, err := signAuthenticatedPaymentState(
+			_, signature, err := signPaymentState(
 				ctx,
 				kmsSigningClient,
 				kmsSigningKeyID,
