@@ -4,21 +4,17 @@ import (
 	"context"
 	"crypto"
 	"crypto/ed25519"
-	"crypto/subtle"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/payments"
 	"github.com/shopspring/decimal"
-	nitrodoc "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 )
 
 var (
@@ -27,13 +23,14 @@ var (
 )
 
 // AttestedReport is the report of payouts after being prepared
-type AttestedReport []*payments.AttestedTx
+type AttestedReport []*payments.PrepareResponse
 
 // SumBAT sums the total amount of BAT in the report.
 func (ar AttestedReport) SumBAT() decimal.Decimal {
 	total := decimal.Zero
 	for _, v := range ar {
-		total = total.Add(v.GetAmount())
+		// FIXME assumes BAT
+		total = total.Add(v.Amount)
 	}
 	return total
 }
@@ -55,14 +52,24 @@ func (r AttestedReport) EnsureUniqueDest() error {
 	return nil
 }
 
+func (r AttestedReport) Validate() error {
+	for _, reportEntry := range r {
+		if _, err := govalidator.ValidateStruct(reportEntry); err != nil {
+			return fmt.Errorf("failed to validate reportEntry: %w", err)
+		}
+	}
+	return r.EnsureUniqueDest()
+}
+
 // PreparedReport is the report of payouts prior to being prepared
-type PreparedReport []*payments.PrepareTx
+type PreparedReport []*payments.PaymentDetails
 
 // SumBAT sums the total amount of BAT in the report.
 func (r PreparedReport) SumBAT() decimal.Decimal {
 	total := decimal.Zero
 	for _, v := range r {
-		total = total.Add(v.GetAmount())
+		// FIXME assumes BAT
+		total = total.Add(v.Amount)
 	}
 	return total
 }
@@ -84,6 +91,15 @@ func (r PreparedReport) EnsureUniqueDest() error {
 	return nil
 }
 
+func (r PreparedReport) Validate() error {
+	for _, reportEntry := range r {
+		if _, err := govalidator.ValidateStruct(reportEntry); err != nil {
+			return fmt.Errorf("failed to validate reportEntry: %w", err)
+		}
+	}
+	return r.EnsureUniqueDest()
+}
+
 // ReadReport reads a report from the reader
 func ReadReport(report any, reader io.Reader) error {
 	if err := json.NewDecoder(reader).Decode(report); err != nil {
@@ -95,37 +111,6 @@ func ReadReport(report any, reader io.Reader) error {
 // rootAWSNitroCert is the root certificate for the nitro enclaves in aws,
 // retrieved from https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
 var rootAWSNitroCert = nitro.RootAWSNitroCert
-
-// IsAttested allows the caller to validate if the transactions within the report are attested
-func (ar AttestedReport) IsAttested() (bool, error) {
-	// parse the root certificate
-	block, _ := pem.Decode([]byte(rootAWSNitroCert))
-
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse certificate: %w", err)
-	}
-
-	for _, tx := range ar {
-		// decode the attestation document base64
-		doc, err := base64.StdEncoding.DecodeString(tx.AttestationDocument)
-		if err != nil {
-			return false, fmt.Errorf("failed to decode attestation document on tx: %s", tx.DocumentID)
-		}
-		// authenticate the attestation document on the record
-		document, err := nitrodoc.AuthenticateDocument(doc, *cert, true)
-		if err != nil {
-			return false, fmt.Errorf("failed to authenticate attestation document on tx: %s", tx.DocumentID)
-		}
-		// authentically from nitro, now validate the signing bytes match
-		if subtle.ConstantTimeCompare(
-			[]byte(tx.DocumentID),
-			document.User_Data) < 1 {
-			return false, fmt.Errorf("attested userdata does not match document id: %s", tx.DocumentID)
-		}
-	}
-	return true, nil
-}
 
 // Compare takes a prepared and attested report and validates that both contain the same number of transactions,
 // that there is only a single deposit destination per transaction and that the total sum of BAT is the
@@ -176,7 +161,12 @@ func (ar AttestedReport) Submit(ctx context.Context, key ed25519.PrivateKey, cli
 		Opts:     crypto.Hash(0),
 	}
 
-	return client.SubmitTransactions(ctx, signer, ar...)
+	reqs := make([]payments.SubmitRequest, len(ar))
+	for i, resp := range ar {
+		reqs[i].DocumentID = resp.DocumentID
+	}
+
+	return client.SubmitTransactions(ctx, signer, reqs...)
 }
 
 // Prepare performs a preparation of transactions for a payout to the settlement client
@@ -198,5 +188,10 @@ func (r PreparedReport) Prepare(ctx context.Context, key ed25519.PrivateKey, cli
 		Opts:     crypto.Hash(0),
 	}
 
-	return client.PrepareTransactions(ctx, signer, r...)
+	reqs := make([]payments.PrepareRequest, len(r))
+	for i, paymentDetails := range r {
+		reqs[i].PaymentDetails = *paymentDetails
+	}
+
+	return client.PrepareTransactions(ctx, signer, reqs...)
 }
