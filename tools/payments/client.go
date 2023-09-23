@@ -37,8 +37,8 @@ var (
 // SettlementClient describes functionality of the settlement client
 type SettlementClient interface {
 	ConfigureWorker(context.Context, string, *payments.WorkerConfig) error
-	PrepareTransactions(context.Context, httpsignature.ParameterizedSignator, ...*payments.PrepareTx) error
-	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...*payments.AttestedTx) error
+	PrepareTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.PrepareRequest) error
+	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.SubmitRequest) error
 }
 
 // NewSettlementClient instantiates a new SettlementClient for use by tooling
@@ -99,7 +99,7 @@ func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, confi
 }
 
 // PrepareTransactions implements settlement client
-func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, t ...*payments.PrepareTx) error {
+func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, t ...payments.PrepareRequest) error {
 	pipe := rc.redis.Pipeline()
 
 	for _, v := range t {
@@ -151,7 +151,7 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 }
 
 // SubmitTransactions implements settlement client
-func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, at ...*payments.AttestedTx) error {
+func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, at ...payments.SubmitRequest) error {
 	pipe := rc.redis.Pipeline()
 
 	for _, v := range at {

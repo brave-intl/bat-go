@@ -52,6 +52,8 @@ func main() {
 		log.Printf("Operator Key File Location: %s\n", *key)
 	}
 
+	// FIXME verify attesation as we pull responses off the stream
+
 	attestedReportFile, err := os.Open(*attestedReportFilename)
 	if err != nil {
 		log.Fatalf("failed to open attested report file: %v\n", err)
@@ -81,15 +83,6 @@ func main() {
 			len(attestedReport), attestedReport.SumBAT())
 		log.Printf("prepared report stats: %d transactions; %s total bat\n",
 			len(preparedReport), preparedReport.SumBAT())
-	}
-
-	// check that the report is actually nitro attested
-	ok, err := attestedReport.IsAttested()
-	if err != nil {
-		log.Fatalf("error encountered attempting to attest: %s.\n", err)
-	}
-	if !ok {
-		log.Fatalf("transactions in attested report provided are not attested.\n")
 	}
 
 	// compare performs automated checks to validate reports

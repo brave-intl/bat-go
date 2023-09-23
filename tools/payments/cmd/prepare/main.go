@@ -103,6 +103,9 @@ func main() {
 			if err := paymentscli.ReadReport(&report, f); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
+			if err := report.Validate(); err != nil {
+				log.Fatalf("failed to validate report: %v\n", err)
+			}
 
 			priv, err := paymentscli.GetOperatorPrivateKey(*key)
 			if err != nil {
