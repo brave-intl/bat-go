@@ -192,7 +192,7 @@ func NewConsumer(ctx context.Context, redisClient *redis.Client, stream, consume
 		return err
 	}
 
-	readAndHandle := func(id string) {
+	readAndHandle := func(id string) int {
 		entries, err := redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    consumerGroup,
 			Consumer: consumerID,
@@ -232,16 +232,19 @@ func NewConsumer(ctx context.Context, redisClient *redis.Client, stream, consume
 				}
 			}
 		}
+
+		return len(entries)
 	}
 	ticker := time.NewTicker(100 * time.Millisecond)
 	for {
 		select {
 		case <-ticker.C:
-			// read and handle new messages
-			readAndHandle(">")
-
-			// read and handle pending messages
-			readAndHandle("0")
+			// first read and handle new messages
+			n := readAndHandle(">")
+			if n == 0 {
+				// then read and handle pending messages once there are no more new messages
+				readAndHandle("0")
+			}
 		case <-ctx.Done():
 			logger.Info().Msg("shutting down consumer")
 			return nil
