@@ -34,13 +34,14 @@ func (s *baseStateMachine) setPersistenceConfigValues(
 	s.transaction = transaction
 }
 
-func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*PaymentState, error) {
 	return writeTransaction(
 		ctx,
 		s.datastore,
 		s.sdkClient,
 		s.kmsSigningClient,
 		s.kmsSigningKeyID,
+		s.idempotencyKey,
 		s.transaction,
 	)
 }
@@ -58,12 +59,16 @@ func (s *baseStateMachine) writeNextState(
 		)
 	}
 	s.transaction.Status = nextState
-	entry, err := s.wrappedWrite(ctx)
+	paymentState, err := s.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
-	s.transaction = entry
-	return entry, nil
+	authenticatedState, err := paymentState.ToAuthenticatedPaymentState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get authenticated state from payment state: %w", err)
+	}
+	s.transaction = authenticatedState
+	return authenticatedState, nil
 }
 
 // Prepare implements TxStateMachine for the baseStateMachine.
