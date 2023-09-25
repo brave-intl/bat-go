@@ -389,7 +389,7 @@ func (s *Service) GetTransactionFromDocumentID(
 		return nil, uuid.Nil, fmt.Errorf("failed to get transactions: %w", err)
 	}
 	paymentState := paymentStateInterface.(*PaymentState)
-	authenticatedState, err := paymentState.ToStructuredUnsafePaymentState()
+	authenticatedState, err := s.PaymentStateToAuthenticatedPaymentState(ctx, *paymentState)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}

@@ -126,26 +126,32 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger             = logging.Logger(ctx, "SubmitHandler")
-			authenticatedState = &AuthenticatedPaymentState{}
+			submitRequest = &SubmitRequest{}
 		)
 
 		// read the transactions in the body
-		err := requestutils.ReadJSON(ctx, r.Body, &authenticatedState)
+		err := requestutils.ReadJSON(ctx, r.Body, &submitRequest)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(authenticatedState)
+		_, err = govalidator.ValidateStruct(submitRequest)
 		if err != nil {
-			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", authenticatedState)).Msg("failed to validate structure")
+			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", submitRequest)).Msg("failed to validate structure")
 		}
 
-		logger.Debug().Str("transactions", fmt.Sprintf("%+v", authenticatedState)).Msg("handling submit request")
+		logger.Debug().Str("transactions", fmt.Sprintf("%+v", submitRequest)).Msg("handling submit request")
 
 		// we have passed the http signature middleware, record who authorized the tx
 		keyID, err := middleware.GetKeyID(ctx)
 		if err != nil {
 			return handlers.WrapValidationError(err)
+		}
+
+		// get the current state of the transaction from qldb
+		authenticatedState, _, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
 		// attempt authorization on the transaction
