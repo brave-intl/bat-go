@@ -389,7 +389,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockRes := new(mockResult)
 	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
 	mockDriver := new(mockDriver)
-	mockDriver.On("Execute", ctx, mock.Anything).Return(&mockTransitionHistory.Data, nil)
+	mockDriver.On("Execute", ctx, mock.Anything).Return(&testTransaction, nil)
 	mockKMS.On("Sign", ctx, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)

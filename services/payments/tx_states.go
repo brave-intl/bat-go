@@ -34,7 +34,7 @@ func (s *baseStateMachine) setPersistenceConfigValues(
 	s.transaction = transaction
 }
 
-func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*PaymentState, error) {
+func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	return writeTransaction(
 		ctx,
 		s.datastore,
@@ -59,13 +59,9 @@ func (s *baseStateMachine) writeNextState(
 		)
 	}
 	s.transaction.Status = nextState
-	paymentState, err := s.wrappedWrite(ctx)
+	authenticatedState, err := s.wrappedWrite(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
-	}
-	authenticatedState, err := paymentState.ToStructuredUnsafePaymentState()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get authenticated state from payment state: %w", err)
 	}
 	s.transaction = authenticatedState
 	return authenticatedState, nil

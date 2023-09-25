@@ -320,7 +320,7 @@ func (s *Service) AuthorizeTransaction(
 		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)
 	}
 	fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
-	writtenTxn, err := writeTransaction(
+	authenticatedState, err := writeTransaction(
 		ctx,
 		s.datastore,
 		s.sdkClient,
@@ -331,10 +331,6 @@ func (s *Service) AuthorizeTransaction(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update transaction: %w", err)
-	}
-	authenticatedState, err := writtenTxn.ToStructuredUnsafePaymentState()
-	if err != nil {
-		return fmt.Errorf("failed to get authenticated state from payment state: %w", err)
 	}
 	stateMachine, err := StateMachineFromTransaction(s, authenticatedState)
 	if err != nil {
@@ -483,9 +479,9 @@ func writeTransaction(
 	kmsSigningClient wrappedKMSClient,
 	kmsSigningKeyID string,
 	idempotencyKey uuid.UUID,
-	transaction *AuthenticatedPaymentState,
-) (*PaymentState, error) {
-	newPaymentStateInterface, err := datastore.Execute(
+	authenticatedState *AuthenticatedPaymentState,
+) (*AuthenticatedPaymentState, error) {
+	newAuthenticatedStateInterface, err := datastore.Execute(
 		ctx,
 		func(txn qldbdriver.Transaction) (interface{}, error) {
 			// This call will do all necessary record and history validation if they exist for this
@@ -496,7 +492,7 @@ func writeTransaction(
 				sdkClient,
 				kmsSigningClient,
 				kmsSigningKeyID,
-				transaction.DocumentID,
+				authenticatedState.DocumentID,
 			)
 			var notFound *QLDBReocrdNotFoundError
 			if err != nil {
@@ -515,7 +511,7 @@ func writeTransaction(
 				)
 			}
 
-			marshaledState, err := json.Marshal(transaction)
+			marshaledState, err := json.Marshal(authenticatedState)
 			if err != nil {
 				return nil, err
 			}
@@ -538,18 +534,18 @@ func writeTransaction(
 				"UPDATE transactions BY d_id SET data = ?, signature = ? WHERE d_id = ?",
 				paymentState.UnsafePaymentState,
 				paymentState.Signature,
-				transaction.DocumentID,
+				authenticatedState.DocumentID,
 			)
 			if err != nil {
 				return nil, err
 			}
-			return paymentState, nil
+			return authenticatedState, nil
 		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("QLDB write execution failed: %w", err)
 	}
-	return newPaymentStateInterface.(*PaymentState), nil
+	return newAuthenticatedStateInterface.(*AuthenticatedPaymentState), nil
 }
 
 // getTransactionHistory returns a slice of entries representing the entire state history
