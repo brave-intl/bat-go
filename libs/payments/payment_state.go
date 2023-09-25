@@ -33,11 +33,11 @@ func (p *PaymentState) ToAuthenticatedPaymentState() (*AuthenticatedPaymentState
 func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (uuid.UUID, error) {
 	authenticatedState, err := p.ToAuthenticatedPaymentState()
 	if err != nil {
-		return uuid.New(), err
+		return uuid.Nil, err
 	}
 	generatedIdempotencyKey := authenticatedState.GenerateIdempotencyKey(namespace)
 	if generatedIdempotencyKey != p.ID {
-		return uuid.New(), fmt.Errorf(
+		return uuid.Nil, fmt.Errorf(
 			"ID does not match transaction fields: have %s, want %s",
 			p.ID,
 			generatedIdempotencyKey,

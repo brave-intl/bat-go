@@ -3,9 +3,9 @@ package payments
 import (
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/exp/slices"
-	"github.com/google/uuid"
 )
 
 type PaymentDetails struct {
@@ -68,13 +68,7 @@ func (t *AuthenticatedPaymentState) shouldDryRun() bool {
 	switch t.Status {
 	case Prepared:
 		return *t.DryRun == "prepare"
-	case Authorized:
-		return *t.DryRun == "submit"
-	case Pending:
-		return *t.DryRun == "submit"
-	case Paid:
-		return *t.DryRun == "submit"
-	case Failed:
+	case Authorized, Pending, Paid, Failed:
 		return *t.DryRun == "submit"
 	default:
 		return false

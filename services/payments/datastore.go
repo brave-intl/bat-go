@@ -422,12 +422,12 @@ func (s *Service) GetTransactionFromDocumentID(
 		},
 	)
 	if err != nil {
-		return nil, uuid.New(), fmt.Errorf("failed to get transactions: %w", err)
+		return nil, uuid.Nil, fmt.Errorf("failed to get transactions: %w", err)
 	}
 	paymentState := paymentStateInterface.(*PaymentState)
 	authenticatedState, err := paymentState.ToAuthenticatedPaymentState()
 	if err != nil {
-		return nil, uuid.New(), err
+		return nil, uuid.Nil, err
 	}
 	authenticatedState.DocumentID = documentID
 	return authenticatedState, paymentState.ID, nil
