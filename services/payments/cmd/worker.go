@@ -10,22 +10,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// WorkerRun - FIXME
+// WorkerRun is the endpoint for running the payment worker
 func WorkerRun(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
 	rootcmd.Must(err)
 
 	// FIXME
-	stream := "prepare-config"
-	consumerGroup := "prepare-config-cg"
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%s", "127.0.0.1", "6379"),
 	})
 
-	service := payments.NewRedisService(redisClient)
+	worker := payments.NewWorker(redisClient)
 
-	err = payments.NewConsumer(ctx, redisClient, stream, consumerGroup, "0", service.HandlePrepareConfigMessage)
+	err = worker.StartPrepareConfigConsumer(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("consumer exited with error")
 	}

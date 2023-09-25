@@ -8,42 +8,34 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	client "github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/concurrent"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/payments"
+	"github.com/brave-intl/bat-go/libs/redisconsumer"
 	redis "github.com/redis/go-redis/v9"
 )
 
-const RetryAfterPrefix = "retry-after-"
-
-var ConsumerSet *concurrent.Set
-
-func init() {
-	ConsumerSet = concurrent.NewSet()
+// Worker for payments
+type Worker struct {
+	rc redisconsumer.StreamClient
 }
 
-type MessageHandler func(ctx context.Context, id string, data []byte) error
-
-type RedisService struct {
-	rc *redis.Client
+// NewWorker from redis client
+func NewWorker(rc *redis.Client) *Worker {
+	return &Worker{rc: redisconsumer.NewStreamClient(rc)}
 }
 
-func NewRedisService(rc *redis.Client) *RedisService {
-	return &RedisService{rc}
-}
-
-func (rs *RedisService) HandlePrepareMessage(ctx context.Context, id string, data []byte) error {
+// HandlePrepareMessage by sending it to the payments service
+func (w *Worker) HandlePrepareMessage(ctx context.Context, id string, data []byte) error {
 	client, err := client.New("https://nitro-payments.bsg.brave.software", "")
 	if err != nil {
 		return err
 	}
-	resp, err := rs.requestHandler(ctx, client, "POST", "/v1/prepare", id, data)
+	resp, err := w.requestHandler(ctx, client, "POST", "/v1/prepare", id, data)
 	if err != nil {
 		return err
 	}
@@ -65,18 +57,19 @@ func (rs *RedisService) HandlePrepareMessage(ctx context.Context, id string, dat
 	return nil
 }
 
-func (rs *RedisService) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, id string, data []byte) (*http.Response, error) {
+// requestHandler is a generic handler for sending encapsulated http requests
+func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, id string, data []byte) (*http.Response, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	err = rs.rc.Get(ctx, RetryAfterPrefix+id).Err()
-	if err == nil {
-		return nil, errors.New("waiting for retry-after")
-	}
-	if err != redis.Nil {
+	isRetryBlocked, err := w.rc.GetMessageRetryAfter(ctx, id)
+	if err != nil {
 		return nil, err
+	}
+	if isRetryBlocked {
+		return nil, errors.New("waiting for retry-after")
 	}
 
 	wrapper := payments.RequestWrapper{}
@@ -111,7 +104,7 @@ func (rs *RedisService) requestHandler(ctx context.Context, client *client.Simpl
 			delay = time.Duration(tmp) * time.Second
 		}
 	}
-	err = rs.rc.Set(ctx, RetryAfterPrefix+id, "", delay).Err()
+	err = w.rc.SetMessageRetryAfter(ctx, id, delay)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to set retry-after key")
 	}
@@ -119,11 +112,13 @@ func (rs *RedisService) requestHandler(ctx context.Context, client *client.Simpl
 	return resp, err
 }
 
-func (rs *RedisService) HandlePrepareConfigMessage(ctx context.Context, id string, data []byte) error {
-	return rs.handleConfigMessage(rs.HandlePrepareMessage, ctx, id, data)
+// HandlePrepareConfigMessage creates a new prepare consumer, waiting for all messages to be consumed
+func (w *Worker) HandlePrepareConfigMessage(ctx context.Context, id string, data []byte) error {
+	return w.handleConfigMessage(w.HandlePrepareMessage, ctx, id, data)
 }
 
-func (rs *RedisService) handleConfigMessage(handle MessageHandler, ctx context.Context, id string, data []byte) error {
+// handleConfigMessage is a generic handler which creates a consumer, waiting for all messages to be consumed
+func (w *Worker) handleConfigMessage(handle redisconsumer.MessageHandler, ctx context.Context, id string, data []byte) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
@@ -141,25 +136,21 @@ func (rs *RedisService) handleConfigMessage(handle MessageHandler, ctx context.C
 
 	logger.Info().Msg("processed config")
 	go func() {
-		NewConsumer(consumerCtx, rs.rc, config.Stream, config.ConsumerGroup, "0", handle)
+		redisconsumer.StartConsumer(consumerCtx, w.rc, config.Stream, config.ConsumerGroup, "0", handle)
 	}()
 
 wait:
 	for {
-		resp, err := rs.rc.XInfoGroups(ctx, config.Stream).Result()
+		lag, pending, err := w.rc.UnacknowledgedCounts(ctx, config.Stream, config.ConsumerGroup)
 		if err != nil {
-			return err
+			logger.Error().Err(err).Msg("failed to get unacknowledged count")
 		}
-		for _, group := range resp {
-			if group.Name == config.ConsumerGroup {
-				if group.Lag+group.Pending == 0 {
-					break wait
-				}
-				logger.Info().Int64("lag", group.Lag).Int64("pending", group.Pending).Msg("waiting")
+		if lag+pending == 0 {
+			break wait
+		}
+		logger.Info().Int64("lag", lag).Int64("pending", pending).Msg("waiting")
 
-				time.Sleep(10 * time.Second)
-			}
-		}
+		time.Sleep(10 * time.Second)
 	}
 
 	logger.Info().Msg("all messages handled")
@@ -168,86 +159,7 @@ wait:
 	return nil
 }
 
-func NewConsumer(ctx context.Context, redisClient *redis.Client, stream, consumerGroup, consumerID string, handle MessageHandler) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		return err
-	}
-
-	consumerUID := stream + consumerGroup + consumerID
-	if !ConsumerSet.Add(consumerUID) {
-		// Another identical consumer is already running
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	ctx, logger = logging.UpdateContext(ctx, logger.With().Str("stream", stream).Str("consumerGroup", consumerGroup).Str("consumerID", consumerID).Logger())
-
-	logger.Info().Msg("consumer started")
-
-	err = redisClient.XGroupCreateMkStream(ctx, stream, consumerGroup, "0").Err()
-	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
-		logger.Error().Err(err).Msg("XGROUP CREATE MKSTREAM failed")
-		return err
-	}
-
-	readAndHandle := func(id string) int {
-		entries, err := redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    consumerGroup,
-			Consumer: consumerID,
-			Streams:  []string{stream, id},
-			Count:    5,
-			Block:    100 * time.Millisecond,
-			NoAck:    false,
-		}).Result()
-		if err != nil && !strings.Contains(err.Error(), "redis: nil") {
-			logger.Error().Err(err).Msg("XREADGROUP failed")
-		}
-
-		if len(entries) > 0 {
-			for i := 0; i < len(entries[0].Messages); i++ {
-				messageID := entries[0].Messages[i].ID
-				values := entries[0].Messages[i].Values
-				data, exists := values["data"]
-				if !exists {
-					logger.Error().Msg("data did not exist in message")
-				}
-				sData, ok := data.(string)
-				if !ok {
-					logger.Error().Msg("data was not a string")
-				}
-
-				tmp := logger.With().Str("messageID", messageID).Logger()
-				logger = &tmp
-				ctx = logger.WithContext(ctx)
-
-				err := handle(ctx, messageID, []byte(sData))
-				if err != nil {
-					if !strings.Contains(err.Error(), "retry-after") {
-						logger.Warn().Err(err).Msg("message handler returned an error")
-					}
-				} else {
-					redisClient.XAck(ctx, stream, consumerGroup, messageID)
-				}
-			}
-		}
-
-		return len(entries)
-	}
-	ticker := time.NewTicker(100 * time.Millisecond)
-	for {
-		select {
-		case <-ticker.C:
-			// first read and handle new messages
-			n := readAndHandle(">")
-			if n == 0 {
-				// then read and handle pending messages once there are no more new messages
-				readAndHandle("0")
-			}
-		case <-ctx.Done():
-			logger.Info().Msg("shutting down consumer")
-			return nil
-		}
-	}
+// StartPrepareConfigConsumer is a convenience function for starting the prepare config consumer
+func (w *Worker) StartPrepareConfigConsumer(ctx context.Context) error {
+	return redisconsumer.StartConsumer(ctx, w.rc, payments.PrepareConfigStream, payments.PrepareConfigConsumerGroup, "0", w.HandlePrepareConfigMessage)
 }
