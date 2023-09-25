@@ -123,7 +123,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 		Data: PaymentState{
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
-			ID:                 &idempotencyKey,
+			ID:                 idempotencyKey,
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
@@ -388,7 +388,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockRes := new(mockResult)
 	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
 	mockDriver := new(mockDriver)
-	mockDriver.On("Execute", ctx, mock.Anything).Return(&mockTransitionHistory, nil)
+	mockDriver.On("Execute", ctx, mock.Anything).Return(&mockTransitionHistory.Data, nil)
 	mockKMS.On("Sign", ctx, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
@@ -408,6 +408,8 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		kmsSigningKeyID:  "123",
 		kmsSigningClient: mockKMS,
 	}
+	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
+	must.Equal(t, nil, err)
 
 	// First write should succeed because Verify returns true
 	_, err = writeTransaction(
@@ -416,6 +418,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		service.sdkClient,
 		service.kmsSigningClient,
 		service.kmsSigningKeyID,
+		idempotencyKey,
 		&testTransaction,
 	)
 	should.NoError(t, err)
