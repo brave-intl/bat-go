@@ -63,7 +63,7 @@ func (s *baseStateMachine) writeNextState(
 	if err != nil {
 		return nil, fmt.Errorf("failed to write transaction: %w", err)
 	}
-	authenticatedState, err := paymentState.ToAuthenticatedPaymentState()
+	authenticatedState, err := paymentState.ToStructuredUnsafePaymentState()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get authenticated state from payment state: %w", err)
 	}

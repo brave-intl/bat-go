@@ -16,22 +16,25 @@ type PaymentState struct {
 	ID                 uuid.UUID `ion:"idempotencyKey"`
 }
 
-func (p *PaymentState) ToAuthenticatedPaymentState() (*AuthenticatedPaymentState, error) {
-	var txn AuthenticatedPaymentState
-	err := json.Unmarshal(p.UnsafePaymentState, &txn)
+// ToStructuredUnsafePaymentState only unmarshals an ToStructuredUnsafePaymentState from the
+// UnsafePaymentState field in a PaymentState. It does NOT do the requisite validation and should
+// not be used except to get the fields needed to do that validation.
+func (p *PaymentState) ToStructuredUnsafePaymentState() (*AuthenticatedPaymentState, error) {
+	var unauthenticatedState AuthenticatedPaymentState
+	err := json.Unmarshal(p.UnsafePaymentState, &unauthenticatedState)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
 			err,
 		)
 	}
-	return &txn, nil
+	return &unauthenticatedState, nil
 }
 
 // GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected
 // value. Otherwise, it returns an error.
 func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (uuid.UUID, error) {
-	authenticatedState, err := p.ToAuthenticatedPaymentState()
+	authenticatedState, err := p.ToStructuredUnsafePaymentState()
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -48,7 +51,7 @@ func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (uuid.UUID, e
 
 // SetIdempotencyKey assigns a UUID v5 value to PaymentState.ID.
 func (p *PaymentState) SetIdempotencyKey(namespace uuid.UUID) error {
-	authenticatedPaymentState, err := p.ToAuthenticatedPaymentState()
+	authenticatedPaymentState, err := p.ToStructuredUnsafePaymentState()
 	if err != nil {
 		return err
 	}

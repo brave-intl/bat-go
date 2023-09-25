@@ -2,7 +2,6 @@ package payments
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,8 +13,6 @@ import (
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
@@ -38,35 +35,6 @@ const (
 	StateSubmitted          = "submitted"
 	tableAlreadyCreatedCode = "412"
 )
-
-// signPaymentState - perform KMS signing of the transaction, return publicKey and
-// signature in hex string.
-func signPaymentState(
-	ctx context.Context,
-	kmsClient wrappedKMSClient,
-	keyID string,
-	state PaymentState,
-) (string, string, error) {
-	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
-		KeyId: &keyID,
-	})
-
-	if err != nil {
-		return "", "", fmt.Errorf("Failed to get public key: %w", err)
-	}
-
-	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
-		KeyId:            &keyID,
-		Message:          state.UnsafePaymentState,
-		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-	})
-
-	if err != nil {
-		return "", "", fmt.Errorf("Failed to sign transaction: %w", err)
-	}
-
-	return hex.EncodeToString(pubkeyOutput.PublicKey), hex.EncodeToString(signingOutput.Signature), nil
-}
 
 func (s *Service) configureDatastore(ctx context.Context) error {
 	driver, err := newQLDBDatastore(ctx)
@@ -364,7 +332,7 @@ func (s *Service) AuthorizeTransaction(
 	if err != nil {
 		return fmt.Errorf("failed to update transaction: %w", err)
 	}
-	authenticatedState, err := writtenTxn.ToAuthenticatedPaymentState()
+	authenticatedState, err := writtenTxn.ToStructuredUnsafePaymentState()
 	if err != nil {
 		return fmt.Errorf("failed to get authenticated state from payment state: %w", err)
 	}
@@ -425,7 +393,7 @@ func (s *Service) GetTransactionFromDocumentID(
 		return nil, uuid.Nil, fmt.Errorf("failed to get transactions: %w", err)
 	}
 	paymentState := paymentStateInterface.(*PaymentState)
-	authenticatedState, err := paymentState.ToAuthenticatedPaymentState()
+	authenticatedState, err := paymentState.ToStructuredUnsafePaymentState()
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
@@ -479,12 +447,14 @@ func getLatestPaymentHistoryEntry(
 	qldbTransactionDriver wrappedQldbTxnAPI,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
+	kmsSigningKeyID string,
 	documentID string,
 ) (*QLDBPaymentTransitionHistoryEntry, error) {
-	valid, result, err := transactionHistoryIsValid(
+	valid, result, err := paymentStateIsValid(
 		ctx,
 		qldbTransactionDriver,
 		kmsSigningClient,
+		kmsSigningKeyID,
 		documentID,
 	)
 	if err != nil || !valid {
@@ -525,6 +495,7 @@ func writeTransaction(
 				txn,
 				sdkClient,
 				kmsSigningClient,
+				kmsSigningKeyID,
 				transaction.DocumentID,
 			)
 			var notFound *QLDBReocrdNotFoundError

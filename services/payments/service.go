@@ -24,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
+	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/hashicorp/vault/shamir"
@@ -293,48 +294,6 @@ func (s *Service) DecryptBootstrap(
 	return output, nil
 }
 
-// validateTransactionHistory returns whether a slice of entries representing the entire state
-// history for a given id include exclusively valid transitions. It also verifies IdempotencyKeys
-// among states and the Merkle tree position of each state.
-func validateTransactionHistory(
-	ctx context.Context,
-	transactionHistory []QLDBPaymentTransitionHistoryEntry,
-) (bool, error) {
-	var (
-		reason                    error
-		err                       error
-		unmarshaledTransactionSet []AuthenticatedPaymentState
-	)
-	// Unmarshal the transactions in advance so that we don't have to do it multiple
-	// times per transaction in the next loop.
-	for _, marshaledTransaction := range transactionHistory {
-		var transaction AuthenticatedPaymentState
-		err = json.Unmarshal(marshaledTransaction.Data.UnsafePaymentState, &transaction)
-		if err != nil {
-			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
-		}
-		unmarshaledTransactionSet = append(unmarshaledTransactionSet, transaction)
-	}
-	for i, transaction := range unmarshaledTransactionSet {
-		// Transitions must always start at 0
-		if i == 0 {
-			if transaction.Status != Prepared {
-				return false, &InvalidTransitionState{}
-			}
-			continue
-		}
-
-		// Now that the data itself is verified, proceed to check transition States.
-		previousTransitionData := unmarshaledTransactionSet[i-1]
-		// New transaction state should be present in the list of valid next states for the
-		// "previous" (current) state.
-		if !previousTransitionData.NextStateValid(transaction.Status) {
-			return false, &InvalidTransitionState{}
-		}
-	}
-	return true, reason
-}
-
 // revisionValidInTree verifies a document revision in QLDB using a digest and the Merkle
 // hashes to re-derive the digest.
 func revisionValidInTree(
@@ -415,10 +374,60 @@ func verifyHashSequence(
 	return false, nil
 }
 
-func transactionHistoryIsValid(
+func (s *Service) PaymentStateToAuthenticatedPaymentState(
+	ctx context.Context,
+	paymentState PaymentState,
+) (*AuthenticatedPaymentState, error) {
+	structuredUnsafePaymentState, err := paymentState.ToStructuredUnsafePaymentState()
+	// Before verifying the entire state history, verify the signature of the provided PaymentState.
+	verifyOutput, err := s.kmsSigningClient.Verify(ctx, &kms.VerifyInput{
+		KeyId:            &s.kmsSigningKeyID,
+		Message:          paymentState.UnsafePaymentState,
+		Signature:        paymentState.Signature,
+		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify state signature: %e", err)
+	}
+	if !verifyOutput.SignatureValid {
+		return nil, fmt.Errorf(
+			"signature for state was not valid: %s",
+			structuredUnsafePaymentState.DocumentID,
+		)
+	}
+	// implicitly validates the state history of the provided PaymentState. This will not validate
+	// the provided payment itself, so we'll ignore the result and verify the provided PaymentState
+	// separately (above).
+	_, err = s.datastore.Execute(
+		ctx,
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+			_, err := getLatestPaymentHistoryEntry(
+				ctx,
+				txn,
+				s.sdkClient,
+				s.kmsSigningClient,
+				s.kmsSigningKeyID,
+				structuredUnsafePaymentState.DocumentID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return nil, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// At this point, the PaymentStateToAuthenticatedPaymentState is authenticated and safe to use.
+	return structuredUnsafePaymentState, nil
+}
+
+func paymentStateIsValid(
 	ctx context.Context,
 	txn wrappedQldbTxnAPI,
 	kmsClient wrappedKMSClient,
+	kmsSigningKeyID string,
 	documentID string,
 ) (bool, *QLDBPaymentTransitionHistoryEntry, error) {
 	// Fetch all historical states for this record
@@ -430,20 +439,125 @@ func transactionHistoryIsValid(
 		return false, nil, &QLDBTransitionHistoryNotFoundError{}
 	}
 	// Ensure that all state changes in record history were valid
-	stateTransitionsAreValid, err := validateTransactionHistory(
-		ctx,
-		result,
-	)
+	stateTransitionsAreValid, err := validatePaymentStateHistory(ctx, result)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to validate history: %w", err)
 	}
-	if stateTransitionsAreValid {
+	signaturesAreValid, err := validatePaymentStateSignatures(
+		ctx,
+		kmsClient,
+		kmsSigningKeyID,
+		result,
+	)
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to validate signatures: %w", err)
+	}
+	if stateTransitionsAreValid && signaturesAreValid {
 		// We only want the latest state of this record once its
 		// history is verified and we have confirmed that the new state is valid
 		return true, &result[0], nil
 	}
 	return false, &result[0], fmt.Errorf("invalid transaction history: %w", err)
 }
+
+// validatePaymentStateHistory returns whether a slice of entries representing the entire state
+// history for a given id include exclusively valid state transitions.
+func validatePaymentStateHistory(
+	ctx context.Context,
+	transactionHistory []QLDBPaymentTransitionHistoryEntry,
+) (bool, error) {
+	var (
+		reason                    error
+		err                       error
+		unmarshaledTransactionSet []AuthenticatedPaymentState
+	)
+	// Unmarshal the transactions in advance so that we don't have to do it multiple
+	// times per transaction in the next loop.
+	for _, marshaledTransaction := range transactionHistory {
+		var transaction AuthenticatedPaymentState
+		err = json.Unmarshal(marshaledTransaction.Data.UnsafePaymentState, &transaction)
+		if err != nil {
+			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
+		}
+		unmarshaledTransactionSet = append(unmarshaledTransactionSet, transaction)
+	}
+	for i, transaction := range unmarshaledTransactionSet {
+		// Transitions must always start at 0
+		if i == 0 {
+			if transaction.Status != Prepared {
+				return false, &InvalidTransitionState{}
+			}
+			continue
+		}
+
+		// Now that the data itself is verified, proceed to check transition States.
+		previousTransitionData := unmarshaledTransactionSet[i-1]
+		// New transaction state should be present in the list of valid next states for the
+		// "previous" (current) state.
+		if !previousTransitionData.NextStateValid(transaction.Status) {
+			return false, &InvalidTransitionState{
+				From: string(previousTransitionData.Status),
+				To: string(transaction.Status),
+			}
+		}
+	}
+	return true, reason
+}
+
+// validatePaymentStateSignatures returns whether a slice of entries representing the entire state
+// history for a given id include exclusively valid signatures.
+func validatePaymentStateSignatures(
+	ctx context.Context,
+	kmsClient wrappedKMSClient,
+	kmsSigningKeyID string,
+	transactionHistory []QLDBPaymentTransitionHistoryEntry,
+) (bool, error) {
+	for _, marshaledTransaction := range transactionHistory {
+		verifyOutput, err := kmsClient.Verify(ctx, &kms.VerifyInput{
+			KeyId:            &kmsSigningKeyID,
+			Message:          marshaledTransaction.Data.UnsafePaymentState,
+			Signature:        marshaledTransaction.Data.Signature,
+			SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to verify state signature: %e", err)
+		}
+		if !verifyOutput.SignatureValid {
+			return false, fmt.Errorf("signature for state was not valid: %s", marshaledTransaction.Metadata.ID)
+		}
+	}
+	return true, nil
+}
+
+// signPaymentState - perform KMS signing of the transaction, return publicKey and
+// signature in hex string.
+func signPaymentState(
+	ctx context.Context,
+	kmsClient wrappedKMSClient,
+	keyID string,
+	state PaymentState,
+) (string, string, error) {
+	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
+		KeyId: &keyID,
+	})
+
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to get public key: %w", err)
+	}
+
+	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
+		KeyId:            &keyID,
+		Message:          state.UnsafePaymentState,
+		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
+	})
+
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to sign transaction: %w", err)
+	}
+
+	return hex.EncodeToString(pubkeyOutput.PublicKey), hex.EncodeToString(signingOutput.Signature), nil
+}
+
 func sortHashes(a, b []byte) ([][]byte, error) {
 	if len(a) != len(b) {
 		return nil, errors.New("provided hashes do not have matching length")

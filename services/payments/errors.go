@@ -1,5 +1,7 @@
 package payments
 
+import "fmt"
+
 // QLDBReocrdNotFoundError indicates that a record does not exist in QLDB.
 type QLDBReocrdNotFoundError struct{}
 
@@ -8,10 +10,13 @@ func (e *QLDBReocrdNotFoundError) Error() string {
 }
 
 // InvalidTransitionState indicates that a record does not exist in QLDB.
-type InvalidTransitionState struct{}
+type InvalidTransitionState struct{
+	From string
+	To string
+}
 
 func (e *InvalidTransitionState) Error() string {
-	return "invalid transition state"
+	return fmt.Sprintf("invalid state transition from %s to %s.", e.From, e.To)
 }
 
 // QLDBTransitionHistoryNotFoundError indicates that an transition history does not exist.

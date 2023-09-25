@@ -4,15 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"github.com/shopspring/decimal"
 	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
 
-	. "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/shopspring/decimal"
+
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/google/uuid"
 
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
@@ -148,14 +149,14 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		valid, err := validateTransactionHistory(ctx, transactionHistorySet)
+		valid, err := validatePaymentStateHistory(ctx, transactionHistorySet)
 		must.Equal(t, nil, err)
 		should.True(t, valid)
 	}
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		valid, _ := validateTransactionHistory(ctx, transactionHistorySet)
+		valid, _ := validatePaymentStateHistory(ctx, transactionHistorySet)
 		should.False(t, valid)
 	}
 }
