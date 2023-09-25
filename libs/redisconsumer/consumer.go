@@ -29,6 +29,8 @@ type MessageHandler func(ctx context.Context, id string, data []byte) error
 type StreamClient interface {
 	// CreateStream if it does not already exist
 	CreateStream(ctx context.Context, stream, consumerGroup string) error
+	// AddMessges to the specified stream
+	AddMessages(ctx context.Context, stream string, message ...interface{}) error
 	// ReadAndHandle any messages for the specified consumer, including any retries
 	ReadAndHandle(ctx context.Context, stream, consumerGroup, consumerID string, handle MessageHandler)
 	// UnacknowledgedCount returns the count of messages which are either unread or pending
@@ -59,6 +61,22 @@ func (redisClient *RedisClient) CreateStream(ctx context.Context, stream, consum
 		return err
 	}
 	return nil
+}
+
+// AddMessage to the specified redis stream
+func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, message ...interface{}) error {
+	pipe := ((*redis.Client)(redisClient)).Pipeline()
+
+	for _, v := range message {
+		pipe.XAdd(
+			ctx, &redis.XAddArgs{
+				Stream: stream,
+				Values: map[string]interface{}{
+					"data": v}},
+		)
+	}
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // ReadAndHandle any messages for the specified consumer, including any retries

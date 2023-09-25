@@ -80,7 +80,7 @@ func main() {
 	}
 
 	// setup the settlement redis client
-	client, err := paymentscli.NewSettlementClient(*env, map[string]string{
+	ctx, client, err := paymentscli.NewSettlementClient(ctx, *env, map[string]string{
 		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, // client specific configurations
 	})
 	if err != nil {

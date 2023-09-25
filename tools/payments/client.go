@@ -12,8 +12,11 @@ import (
 	"strconv"
 	"time"
 
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/payments"
+	"github.com/brave-intl/bat-go/libs/redisconsumer"
 	"github.com/google/uuid"
 	redis "github.com/redis/go-redis/v9"
 )
@@ -42,14 +45,16 @@ type SettlementClient interface {
 }
 
 // NewSettlementClient instantiates a new SettlementClient for use by tooling
-func NewSettlementClient(env string, config map[string]string) (SettlementClient, error) {
-	return newRedisClient(env, config["addr"], config["pass"], config["username"])
+func NewSettlementClient(ctx context.Context, env string, config map[string]string) (context.Context, SettlementClient, error) {
+	ctx, _ = logging.SetupLogger(ctx)
+	client, err := newRedisClient(env, config["addr"], config["pass"], config["username"])
+	return ctx, client, err
 }
 
 // redisClient is an implementation of settlement client using clustered redis client
 type redisClient struct {
 	env   string
-	redis *redis.Client
+	redis *redisconsumer.RedisClient
 }
 
 func newRedisClient(env, addr, pass, username string) (*redisClient, error) {
@@ -71,7 +76,7 @@ func newRedisClient(env, addr, pass, username string) (*redisClient, error) {
 
 	rc := &redisClient{
 		env: env,
-		redis: redis.NewClient(
+		redis: (*redisconsumer.RedisClient)(redis.NewClient(
 			&redis.Options{
 				Addr: addr, Password: pass, Username: username,
 				DialTimeout:     15 * time.Second,
@@ -79,19 +84,14 @@ func newRedisClient(env, addr, pass, username string) (*redisClient, error) {
 				MaxRetries:      5,
 				MinRetryBackoff: 5 * time.Millisecond,
 				MaxRetryBackoff: 500 * time.Millisecond,
-			}),
+			})),
 	}
 	return rc, nil
 }
 
 // ConfigureWorker implements settlement client
 func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, config *payments.WorkerConfig) error {
-	_, err := rc.redis.XAdd(
-		ctx, &redis.XAddArgs{
-			Stream: stream,
-			Values: map[string]interface{}{
-				"data": config}},
-	).Result()
+	err := rc.redis.AddMessages(ctx, stream, config)
 	if err != nil {
 		return fmt.Errorf("failed to push config to workers: %w", err)
 	}
@@ -100,8 +100,12 @@ func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, confi
 
 // PrepareTransactions implements settlement client
 func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, t ...payments.PrepareRequest) error {
-	pipe := rc.redis.Pipeline()
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return err
+	}
 
+	prepareGroups := make(map[string][]interface{})
 	for _, v := range t {
 		buf := bytes.NewBuffer([]byte{})
 		err := json.NewEncoder(buf).Encode(v)
@@ -127,24 +131,20 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 		}
 
 		// message wrapper for prepare
-		message := &payments.RequestWrapper{
+		prepareGroups[v.PayoutID] = append(prepareGroups[v.PayoutID], payments.RequestWrapper{
 			ID:        uuid.New(),
 			Timestamp: time.Now(),
 			Request:   er,
-		}
-
-		// add to stream
-		pipe.XAdd(
-			ctx, &redis.XAddArgs{
-				Stream: payments.PreparePrefix + v.PayoutID,
-				Values: map[string]interface{}{
-					"data": message}},
-		)
+		})
 	}
 
-	_, err := pipe.Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to exec prepare transaction commands: %w", err)
+	for payoutID, messages := range prepareGroups {
+		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("prepared transactions")
+		stream := payments.PreparePrefix + payoutID
+		err := rc.redis.AddMessages(ctx, stream, messages...)
+		if err != nil {
+			return fmt.Errorf("failed to exec prepare transaction commands: %w", err)
+		}
 	}
 
 	return nil
@@ -152,8 +152,12 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 
 // SubmitTransactions implements settlement client
 func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignature.ParameterizedSignator, at ...payments.SubmitRequest) error {
-	pipe := rc.redis.Pipeline()
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return err
+	}
 
+	submitGroups := make(map[string][]payments.RequestWrapper)
 	for _, v := range at {
 
 		buf := bytes.NewBuffer([]byte{})
@@ -185,24 +189,24 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 			return fmt.Errorf("failed to encapsulate request: %w", err)
 		}
 
-		// populate the SubmitWrapper for submission
-		message := &payments.RequestWrapper{
+		if _, exists := submitGroups[v.PayoutID]; !exists {
+			submitGroups[v.PayoutID] = []payments.RequestWrapper{}
+		}
+		// message wrapper for submit
+		submitGroups[v.PayoutID] = append(submitGroups[v.PayoutID], payments.RequestWrapper{
 			ID:        uuid.New(),
 			Timestamp: time.Now(),
 			Request:   er,
-		}
-
-		pipe.XAdd(
-			ctx, &redis.XAddArgs{
-				Stream: SubmitStream,
-				Values: map[string]interface{}{
-					"data": message}},
-		)
+		})
 	}
 
-	_, err := pipe.Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to exec submit transaction commands: %w", err)
+	for payoutID, messages := range submitGroups {
+		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("submitted transactions")
+		stream := payments.SubmitPrefix + payoutID
+		err := rc.redis.AddMessages(ctx, stream, messages)
+		if err != nil {
+			return fmt.Errorf("failed to exec submit transaction commands: %w", err)
+		}
 	}
 
 	return nil
