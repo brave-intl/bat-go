@@ -54,11 +54,7 @@ func (t *AuthenticatedPaymentState) NextStateValid(nextState PaymentStatus) bool
 	}
 	// New transaction state should be present in the list of valid next states for the current
 	// state.
-	if !slices.Contains(t.Status.GetValidTransitions(), nextState) {
-		return false
-	}
-	return true
-}
+	return !slices.Contains(t.Status.GetValidTransitions(), nextState)
 
 func (t *AuthenticatedPaymentState) shouldDryRun() bool {
 	if t.DryRun == nil {
