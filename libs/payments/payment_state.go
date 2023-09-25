@@ -60,7 +60,7 @@ func (p *PaymentState) SetIdempotencyKey(namespace uuid.UUID) error {
 	return nil
 }
 
-func PaymentStateFromDetails(details PaymentDetails, namespace uuid.UUID) (*PaymentState, error) {
+func UnsignedPaymentStateFromDetails(details PaymentDetails, namespace uuid.UUID) (*PaymentState, error) {
 	authenticatedState := AuthenticatedPaymentState{
 		PaymentDetails: details,
 		Status: Prepared,

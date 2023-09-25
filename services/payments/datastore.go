@@ -190,7 +190,7 @@ func (s Service) insertPayment(
 	ctx context.Context,
 	details PaymentDetails,
 ) (string, error) {
-	unsignedPaymentState, err := PaymentStateFromDetails(details, s.idempotencyNamespace)
+	unsignedPaymentState, err := UnsignedPaymentStateFromDetails(details, s.idempotencyNamespace)
 	if err != nil {
 		return "", err
 	}
