@@ -127,6 +127,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		var (
 			logger             = logging.Logger(ctx, "SubmitHandler")
 			submitRequest = &SubmitRequest{}
+		submitResponse = SubmitResponse{}
 		)
 
 		// read the transactions in the body
@@ -151,24 +152,28 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// get the current state of the transaction from qldb
 		authenticatedState, _, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
 		if err != nil {
-			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
+			//return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
+			submitResponse.LastError = &PaymentError{
+				OriginalError: err,
+			}
+			return handlers.RenderContent(r.Context(), submitResponse, w, http.StatusOK)
 		}
 
 		// attempt authorization on the transaction
 		err = service.AuthorizeTransaction(ctx, keyID, *authenticatedState)
 		if err != nil {
-			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
+			//return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
+			submitResponse.LastError = &PaymentError{
+				OriginalError: err,
+			}
+			return handlers.RenderContent(r.Context(), submitResponse, w, http.StatusOK)
 		}
+
+		submitResponse.Status = authenticatedState.Status
 
 		// TODO: check if business logic was met from authorizers table in qldb for this transaction
 		// TODO: state machine handling for custodian submissions
 
-		// get the current state of the transaction from qldb
-		resp, _, err := service.GetTransactionFromDocumentID(ctx, authenticatedState.DocumentID)
-		if err != nil {
-			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
+		return handlers.RenderContent(r.Context(), submitResponse, w, http.StatusOK)
 	}
 }
