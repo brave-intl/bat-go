@@ -3,14 +3,15 @@ package payments
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"crypto"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/middleware"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	. "github.com/brave-intl/bat-go/libs/payments"
@@ -56,6 +57,20 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 // will fail..
 func PrepareHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		nitroKey := httpsignature.NitroSigner{}
+
+		var sp httpsignature.SignatureParams
+		sp.Algorithm = httpsignature.AWSNITRO
+		sp.KeyID = "primary"
+		sp.Headers = []string{"digest"}
+
+		ps := httpsignature.ParameterizedSignator{
+			SignatureParams: sp,
+			Signator:        nitroKey,
+			Opts:            crypto.Hash(0),
+		}
+		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
+
 		// get context from request
 		ctx := r.Context()
 
@@ -87,7 +102,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 		resp := PrepareResponse{
 			PaymentDetails: req.PaymentDetails,
-			DocumentID: documentID,
+			DocumentID:     documentID,
 		}
 
 		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
@@ -100,20 +115,6 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to create random nonce", http.StatusInternalServerError)
 		}
 
-		tx, err := json.Marshal(resp)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create transaction json blob")
-			return handlers.WrapError(err, "failed to create transaction json blob", http.StatusInternalServerError)
-		}
-
-		attestationDocument, err := nitro.Attest(ctx, nonce, tx, []byte{})
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to get attestation from nitro")
-			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
-		}
-
-		w.Header().Add("X-Nitro-Attestation", base64.StdEncoding.EncodeToString(attestationDocument))
-
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	}
 }
@@ -121,13 +122,26 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 // SubmitHandler performs submission of transactions to custodian.
 func SubmitHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		nitroKey := httpsignature.NitroSigner{}
+
+		var sp httpsignature.SignatureParams
+		sp.Algorithm = httpsignature.AWSNITRO
+		sp.KeyID = "primary"
+		sp.Headers = []string{"digest"}
+
+		ps := httpsignature.ParameterizedSignator{
+			SignatureParams: sp,
+			Signator:        nitroKey,
+			Opts:            crypto.Hash(0),
+		}
+		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
 		// get context from request
 		ctx := r.Context()
 
 		var (
-			logger             = logging.Logger(ctx, "SubmitHandler")
-			submitRequest = &SubmitRequest{}
-		submitResponse = SubmitResponse{}
+			logger         = logging.Logger(ctx, "SubmitHandler")
+			submitRequest  = &SubmitRequest{}
+			submitResponse = SubmitResponse{}
 		)
 
 		// read the transactions in the body

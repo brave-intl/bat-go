@@ -33,12 +33,12 @@ func (p *PaymentState) ToStructuredUnsafePaymentState() (*AuthenticatedPaymentSt
 
 // GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected
 // value. Otherwise, it returns an error.
-func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (uuid.UUID, error) {
+func (p *PaymentState) GenerateIdempotencyKey() (uuid.UUID, error) {
 	authenticatedState, err := p.ToStructuredUnsafePaymentState()
 	if err != nil {
 		return uuid.Nil, err
 	}
-	generatedIdempotencyKey := authenticatedState.GenerateIdempotencyKey(namespace)
+	generatedIdempotencyKey := authenticatedState.GenerateIdempotencyKey()
 	if generatedIdempotencyKey != p.ID {
 		return uuid.Nil, fmt.Errorf(
 			"ID does not match transaction fields: have %s, want %s",
@@ -50,17 +50,17 @@ func (p *PaymentState) GenerateIdempotencyKey(namespace uuid.UUID) (uuid.UUID, e
 }
 
 // SetIdempotencyKey assigns a UUID v5 value to PaymentState.ID.
-func (p *PaymentState) SetIdempotencyKey(namespace uuid.UUID) error {
+func (p *PaymentState) SetIdempotencyKey() error {
 	authenticatedPaymentState, err := p.ToStructuredUnsafePaymentState()
 	if err != nil {
 		return err
 	}
-	generatedIdempotencyKey := authenticatedPaymentState.GenerateIdempotencyKey(namespace)
+	generatedIdempotencyKey := authenticatedPaymentState.GenerateIdempotencyKey()
 	p.ID = generatedIdempotencyKey
 	return nil
 }
 
-func UnsignedPaymentStateFromDetails(details PaymentDetails, namespace uuid.UUID) (*PaymentState, error) {
+func UnsignedPaymentStateFromDetails(details PaymentDetails) (*PaymentState, error) {
 	authenticatedState := AuthenticatedPaymentState{
 		PaymentDetails: details,
 		Status: Prepared,
@@ -71,6 +71,6 @@ func UnsignedPaymentStateFromDetails(details PaymentDetails, namespace uuid.UUID
 	}
 	return &PaymentState{
 		UnsafePaymentState: authenticatedStateString,
-		ID: authenticatedState.GenerateIdempotencyKey(namespace),
+		ID: authenticatedState.GenerateIdempotencyKey(),
 	}, nil
 }

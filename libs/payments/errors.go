@@ -36,3 +36,13 @@ func ProcessingErrorFromError(cause error, isTemporary bool) error {
 		Temporary:      isTemporary,
 	}
 }
+
+// InvalidTransitionState indicates that a record does not exist in QLDB.
+type InvalidTransitionState struct{
+	From string
+	To string
+}
+
+func (e *InvalidTransitionState) Error() string {
+	return fmt.Sprintf("invalid state transition from %s to %s.", e.From, e.To)
+}

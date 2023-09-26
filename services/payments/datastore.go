@@ -190,7 +190,7 @@ func (s Service) insertPayment(
 	ctx context.Context,
 	details PaymentDetails,
 ) (string, error) {
-	unsignedPaymentState, err := UnsignedPaymentStateFromDetails(details, s.idempotencyNamespace)
+	paymentStateForSigning, err := UnsignedPaymentStateFromDetails(details)
 	if err != nil {
 		return "", err
 	}
@@ -198,17 +198,13 @@ func (s Service) insertPayment(
 		ctx,
 		s.kmsSigningClient,
 		s.kmsDecryptKeyArn,
-		*unsignedPaymentState,
+		*paymentStateForSigning,
 	)
 	if err != nil {
 		return "", err
 	}
 
-	paymentState := PaymentState{
-		UnsafePaymentState: unsignedPaymentState.UnsafePaymentState,
-		ID: unsignedPaymentState.ID,
-		Signature: []byte(signature),
-	}
+	paymentStateForSigning.Signature = []byte(signature)
 
 	insertedDocumentID, err := s.datastore.Execute(
 		context.Background(),
@@ -217,20 +213,27 @@ func (s Service) insertPayment(
 			// the insertion.
 			existingPaymentState, err := txn.Execute(
 				"SELECT * FROM transactions WHERE idempotencyKey = ?",
-				paymentState.ID,
+				paymentStateForSigning.ID,
 			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to insert tx: %s due to: %w", paymentState.ID, err)
+				return nil, fmt.Errorf(
+					"failed to insert tx: %s due to: %w",
+					paymentStateForSigning.ID,
+					err,
+				)
 			}
 
 			// Check if there are any results. There should not be. If there are, we should not
 			// insert.
 			if !existingPaymentState.Next(txn) {
-				documentIDResultBinary, err := txn.Execute("INSERT INTO transactions ?", paymentState)
+				documentIDResultBinary, err := txn.Execute(
+					"INSERT INTO transactions ?",
+					paymentStateForSigning,
+				)
 				if err != nil {
 					return nil, fmt.Errorf(
 						"failed to insert tx: %s due to: %w",
-						paymentState.ID,
+						paymentStateForSigning.ID,
 						err,
 					)
 				}
@@ -245,7 +248,7 @@ func (s Service) insertPayment(
 
 			return nil, fmt.Errorf(
 				"failed to insert transaction because id already exists: %s",
-				paymentState.ID,
+				paymentStateForSigning.ID,
 			)
 		},
 	)
@@ -254,40 +257,6 @@ func (s Service) insertPayment(
 	}
 	return insertedDocumentID.(string), nil
 }
-
-// UpdateTransactionsState - Change transaction state.
-//func (s Service) UpdateTransactionsState(
-//	ctx context.Context,
-//	state string,
-//	transactions ...AuthenticatedPaymentState,
-//) error {
-//	_, err := s.datastore.Execute(
-//		context.Background(),
-//		func(txn qldbdriver.Transaction) (interface{}, error) {
-//			// for all of the transactions load up a check to see if this transaction has already
-//			// existed or not, then perform the insertion of the records.
-//			for _, transaction := range transactions {
-//				// update the transaction state, ignoring the returned document ID
-//				_, err := txn.Execute(
-//					"UPDATE transactions BY d_id SET state = ? WHERE d_id = ?",
-//					state,
-//					transaction.documentID,
-//				)
-//				if err != nil {
-//					return nil, fmt.Errorf(
-//						"failed to update state for document: %s due to: %w",
-//						transaction.documentID,
-//						err,
-//					)
-//				}
-//			}
-//			return nil, nil
-//		})
-//	if err != nil {
-//		return fmt.Errorf("failed to update transactions: %w", err)
-//	}
-//	return nil
-//}
 
 // AuthorizeTransaction - Add an Authorization for the Transaction and attempt to Drive
 // the Transaction forward. NOTE: This function assumes that the http signature has been
@@ -326,7 +295,6 @@ func (s *Service) AuthorizeTransaction(
 		s.sdkClient,
 		s.kmsSigningClient,
 		s.kmsSigningKeyID,
-		idempotencyKey,
 		fetchedTxn,
 	)
 	if err != nil {
@@ -389,85 +357,16 @@ func (s *Service) GetTransactionFromDocumentID(
 		return nil, uuid.Nil, fmt.Errorf("failed to get transactions: %w", err)
 	}
 	paymentState := paymentStateInterface.(*PaymentState)
-	authenticatedState, err := s.PaymentStateToAuthenticatedPaymentState(ctx, *paymentState)
+	authenticatedState, err := s.PaymentStateToAuthenticatedPaymentState(
+		ctx,
+		*paymentState,
+		documentID,
+	)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
 	authenticatedState.DocumentID = documentID
 	return authenticatedState, paymentState.ID, nil
-}
-
-// getTransactionByIdempotencyKey returns the latest version of a record from QLDB if it exists, after doing all requisite validation.
-func getTransactionByIdempotencyKey(
-	ctx context.Context,
-	datastore wrappedQldbDriverAPI,
-	sdkClient wrappedQldbSDKClient,
-	kmsSigningClient wrappedKMSClient,
-	idempotencyKey uuid.UUID,
-) (*AuthenticatedPaymentState, error) {
-	stateInterface, err := datastore.Execute(ctx, func(txn qldbdriver.Transaction) (interface{}, error) {
-		resp := new(AuthenticatedPaymentState)
-
-		// Check if a document with this idempotencyKey exists
-		result, err := txn.Execute(
-			"SELECT data.*, d_id FROM transactions BY d_id WHERE idempotencyKey = ?",
-			idempotencyKey,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get by id: %s due to: %w", idempotencyKey, err)
-		}
-		if result.Next(txn) {
-			// unmarshal enriched version
-			err := ion.Unmarshal(result.GetCurrentData(), resp)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal tx: %s due to: %w", idempotencyKey, err)
-			}
-		}
-
-		return resp, nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to query QLDB: %w", err)
-	}
-	assertedState, ok := stateInterface.(*AuthenticatedPaymentState)
-	if !ok {
-		return nil, fmt.Errorf("database response was the wrong type: %#v", stateInterface)
-	}
-	return assertedState, nil
-}
-
-// getLatestPaymentHistoryEntry returns the latest version of an entry for a given ID after doing
-// all requisite validation.
-func getLatestPaymentHistoryEntry(
-	ctx context.Context,
-	qldbTransactionDriver wrappedQldbTxnAPI,
-	sdkClient wrappedQldbSDKClient,
-	kmsSigningClient wrappedKMSClient,
-	kmsSigningKeyID string,
-	documentID string,
-) (*QLDBPaymentTransitionHistoryEntry, error) {
-	valid, result, err := paymentStateIsValid(
-		ctx,
-		qldbTransactionDriver,
-		kmsSigningClient,
-		kmsSigningKeyID,
-		documentID,
-	)
-	if err != nil || !valid {
-		return nil, fmt.Errorf("failed to validate transition history: %w", err)
-	}
-	// If no record was found, return nothing
-	if result == nil {
-		return nil, &QLDBReocrdNotFoundError{}
-	}
-	merkleValid, err := revisionValidInTree(ctx, sdkClient, result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
-	}
-	if !merkleValid {
-		return nil, fmt.Errorf("invalid Merkle tree for record: %#v", result)
-	}
-	return result, nil
 }
 
 // writeTransaction persists an object in a transaction after verifying that its change
@@ -478,45 +377,19 @@ func writeTransaction(
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
 	kmsSigningKeyID string,
-	idempotencyKey uuid.UUID,
 	authenticatedState *AuthenticatedPaymentState,
 ) (*AuthenticatedPaymentState, error) {
 	newAuthenticatedStateInterface, err := datastore.Execute(
 		ctx,
 		func(txn qldbdriver.Transaction) (interface{}, error) {
-			// This call will do all necessary record and history validation if they exist for this
-			// record
-			qldbHistoryEntryResult, err := getLatestPaymentHistoryEntry(
-				ctx,
-				txn,
-				sdkClient,
-				kmsSigningClient,
-				kmsSigningKeyID,
-				authenticatedState.DocumentID,
-			)
-			var notFound *QLDBReocrdNotFoundError
-			if err != nil {
-				if errors.As(err, &notFound) {
-					return nil, fmt.Errorf("document does not exist: %w", err)
-				}
-				return nil, fmt.Errorf("failed to query QLDB: %w", err)
-			}
-			paymentState := qldbHistoryEntryResult.Data
-
-			if idempotencyKey != paymentState.ID {
-				return nil, fmt.Errorf(
-					"provided idempotency key does not match that of the associated document in QLDB: %s, %s",
-					idempotencyKey,
-					qldbHistoryEntryResult.Data.ID,
-				)
-			}
-
 			marshaledState, err := json.Marshal(authenticatedState)
 			if err != nil {
 				return nil, err
 			}
 
-			paymentState.UnsafePaymentState = marshaledState
+			paymentState := PaymentState{
+				UnsafePaymentState: marshaledState,
+			}
 
 			// ignore public key
 			_, signature, err := signPaymentState(

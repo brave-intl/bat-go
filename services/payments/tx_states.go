@@ -10,7 +10,6 @@ import (
 )
 
 type baseStateMachine struct {
-	idempotencyKey   uuid.UUID
 	transaction      *AuthenticatedPaymentState
 	datastore        wrappedQldbDriverAPI
 	sdkClient        wrappedQldbSDKClient
@@ -19,14 +18,12 @@ type baseStateMachine struct {
 }
 
 func (s *baseStateMachine) setPersistenceConfigValues(
-	idempotencyKey uuid.UUID,
 	datastore wrappedQldbDriverAPI,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
 	kmsSigningKeyID string,
 	transaction *AuthenticatedPaymentState,
 ) {
-	s.idempotencyKey = idempotencyKey
 	s.datastore = datastore
 	s.sdkClient = sdkClient
 	s.kmsSigningClient = kmsSigningClient
@@ -41,7 +38,6 @@ func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*AuthenticatedPaym
 		s.sdkClient,
 		s.kmsSigningClient,
 		s.kmsSigningKeyID,
-		s.idempotencyKey,
 		s.transaction,
 	)
 }
@@ -91,11 +87,6 @@ func (s *baseStateMachine) getTransaction() *AuthenticatedPaymentState {
 	return s.transaction
 }
 
-// getTransactionID returns a transaction id for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getIdempotencyKey() uuid.UUID {
-	return s.idempotencyKey
-}
-
 // getDatastore returns a transaction id for a state machine, implementing TxStateMachine.
 func (s *baseStateMachine) getDatastore() wrappedQldbDriverAPI {
 	return s.datastore
@@ -113,8 +104,8 @@ func (s *baseStateMachine) getKMSSigningClient() wrappedKMSClient {
 
 // GenerateTransactionID returns the generated transaction id for a state machine's transaction,
 // implementing TxStateMachine.
-func (s *baseStateMachine) GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error) {
-	paymentStateID := s.transaction.GenerateIdempotencyKey(namespace)
+func (s *baseStateMachine) GenerateTransactionID() (*uuid.UUID, error) {
+	paymentStateID := s.transaction.GenerateIdempotencyKey()
 	return &paymentStateID, nil
 }
 
@@ -134,7 +125,6 @@ func StateMachineFromTransaction(
 		machine = &GeminiMachine{}
 	}
 	machine.setPersistenceConfigValues(
-		service.idempotencyNamespace,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,

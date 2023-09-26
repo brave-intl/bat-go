@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"text/template"
 
@@ -44,15 +43,14 @@ type Service struct {
 	custodians map[string]provider.Custodian
 	awsCfg     aws.Config
 
-	baseCtx              context.Context
-	secretMgr            appsrv.SecretManager
-	keyShares            [][]byte
-	kmsDecryptKeyArn     string
-	kmsSigningKeyID      string
-	kmsSigningClient     wrappedKMSClient
-	sdkClient            wrappedQldbSDKClient
-	pubKey               []byte
-	idempotencyNamespace uuid.UUID
+	baseCtx          context.Context
+	secretMgr        appsrv.SecretManager
+	keyShares        [][]byte
+	kmsDecryptKeyArn string
+	kmsSigningKeyID  string
+	kmsSigningClient wrappedKMSClient
+	sdkClient        wrappedQldbSDKClient
+	pubKey           []byte
 }
 
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, error) {
@@ -205,16 +203,9 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("no egress addr for payments service")
 	}
 
-	namespaceUUID, err := uuid.Parse(os.Getenv("namespaceUUID"))
-	if err != nil {
-		logger.Error().Msg("namespaceUUID not properly formatted")
-		return nil, nil, errors.New("namespaceUUID not properly formatted")
-	}
-
 	service := &Service{
-		baseCtx:              ctx,
-		awsCfg:               awsCfg,
-		idempotencyNamespace: namespaceUUID,
+		baseCtx: ctx,
+		awsCfg:  awsCfg,
 	}
 
 	if err := service.configureKMSKey(ctx); err != nil {
@@ -377,156 +368,55 @@ func verifyHashSequence(
 func (s *Service) PaymentStateToAuthenticatedPaymentState(
 	ctx context.Context,
 	paymentState PaymentState,
+	documentID string,
 ) (*AuthenticatedPaymentState, error) {
-	structuredUnsafePaymentState, err := paymentState.ToStructuredUnsafePaymentState()
-	// Before verifying the entire state history, verify the signature of the provided PaymentState.
-	verifyOutput, err := s.kmsSigningClient.Verify(ctx, &kms.VerifyInput{
-		KeyId:            &s.kmsSigningKeyID,
-		Message:          paymentState.UnsafePaymentState,
-		Signature:        paymentState.Signature,
-		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify state signature: %e", err)
-	}
-	if !verifyOutput.SignatureValid {
-		return nil, fmt.Errorf(
-			"signature for state was not valid: %s",
-			structuredUnsafePaymentState.DocumentID,
-		)
-	}
 	// implicitly validates the state history of the provided PaymentState. This will not validate
 	// the provided payment itself, so we'll ignore the result and verify the provided PaymentState
 	// separately (above).
-	_, err = s.datastore.Execute(
+	authenticatedStateInterface, err := s.datastore.Execute(
 		ctx,
 		func(txn qldbdriver.Transaction) (interface{}, error) {
-			_, err := getLatestPaymentHistoryEntry(
+			stateHistory, err := getTransactionHistory(txn, documentID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get transaction history: %w", err)
+			}
+			if len(stateHistory) < 1 {
+				return nil, &QLDBTransitionHistoryNotFoundError{}
+			}
+
+			authenticatedState, latestHistoryItem, err := AuthenticatedStateFromQLDBHistory(
 				ctx,
-				txn,
-				s.sdkClient,
 				s.kmsSigningClient,
 				s.kmsSigningKeyID,
-				structuredUnsafePaymentState.DocumentID,
+				stateHistory,
+				paymentState,
 			)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to validate transition history: %w", err)
 			}
-			return nil, nil
+			merkleValid, err := revisionValidInTree(ctx, s.sdkClient, latestHistoryItem)
+			if err != nil {
+				return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
+			}
+			if !merkleValid {
+				return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
+			}
+			return authenticatedState, nil
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
+	authenticatedState, ok := authenticatedStateInterface.(*AuthenticatedPaymentState)
+	if !ok {
+		return nil, fmt.Errorf(
+			"validated response was of the wrong type: %v",
+			authenticatedStateInterface,
+		)
+	}
 
 	// At this point, the PaymentStateToAuthenticatedPaymentState is authenticated and safe to use.
-	return structuredUnsafePaymentState, nil
-}
-
-func paymentStateIsValid(
-	ctx context.Context,
-	txn wrappedQldbTxnAPI,
-	kmsClient wrappedKMSClient,
-	kmsSigningKeyID string,
-	documentID string,
-) (bool, *QLDBPaymentTransitionHistoryEntry, error) {
-	// Fetch all historical states for this record
-	result, err := getTransactionHistory(txn, documentID)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to get transaction history: %w", err)
-	}
-	if len(result) < 1 {
-		return false, nil, &QLDBTransitionHistoryNotFoundError{}
-	}
-	// Ensure that all state changes in record history were valid
-	stateTransitionsAreValid, err := validatePaymentStateHistory(ctx, result)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to validate history: %w", err)
-	}
-	signaturesAreValid, err := validatePaymentStateSignatures(
-		ctx,
-		kmsClient,
-		kmsSigningKeyID,
-		result,
-	)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to validate signatures: %w", err)
-	}
-	if stateTransitionsAreValid && signaturesAreValid {
-		// We only want the latest state of this record once its
-		// history is verified and we have confirmed that the new state is valid
-		return true, &result[0], nil
-	}
-	return false, &result[0], fmt.Errorf("invalid transaction history: %w", err)
-}
-
-// validatePaymentStateHistory returns whether a slice of entries representing the entire state
-// history for a given id include exclusively valid state transitions.
-func validatePaymentStateHistory(
-	ctx context.Context,
-	transactionHistory []QLDBPaymentTransitionHistoryEntry,
-) (bool, error) {
-	var (
-		reason                    error
-		err                       error
-		unmarshaledTransactionSet []AuthenticatedPaymentState
-	)
-	// Unmarshal the transactions in advance so that we don't have to do it multiple
-	// times per transaction in the next loop.
-	for _, marshaledTransaction := range transactionHistory {
-		var transaction AuthenticatedPaymentState
-		err = json.Unmarshal(marshaledTransaction.Data.UnsafePaymentState, &transaction)
-		if err != nil {
-			return false, fmt.Errorf("failed to unmarshal transaction data: %w", err)
-		}
-		unmarshaledTransactionSet = append(unmarshaledTransactionSet, transaction)
-	}
-	for i, transaction := range unmarshaledTransactionSet {
-		// Transitions must always start at 0
-		if i == 0 {
-			if transaction.Status != Prepared {
-				return false, &InvalidTransitionState{}
-			}
-			continue
-		}
-
-		// Now that the data itself is verified, proceed to check transition States.
-		previousTransitionData := unmarshaledTransactionSet[i-1]
-		// New transaction state should be present in the list of valid next states for the
-		// "previous" (current) state.
-		if !previousTransitionData.NextStateValid(transaction.Status) {
-			return false, &InvalidTransitionState{
-				From: string(previousTransitionData.Status),
-				To: string(transaction.Status),
-			}
-		}
-	}
-	return true, reason
-}
-
-// validatePaymentStateSignatures returns whether a slice of entries representing the entire state
-// history for a given id include exclusively valid signatures.
-func validatePaymentStateSignatures(
-	ctx context.Context,
-	kmsClient wrappedKMSClient,
-	kmsSigningKeyID string,
-	transactionHistory []QLDBPaymentTransitionHistoryEntry,
-) (bool, error) {
-	for _, marshaledTransaction := range transactionHistory {
-		verifyOutput, err := kmsClient.Verify(ctx, &kms.VerifyInput{
-			KeyId:            &kmsSigningKeyID,
-			Message:          marshaledTransaction.Data.UnsafePaymentState,
-			Signature:        marshaledTransaction.Data.Signature,
-			SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-		})
-		if err != nil {
-			return false, fmt.Errorf("failed to verify state signature: %e", err)
-		}
-		if !verifyOutput.SignatureValid {
-			return false, fmt.Errorf("signature for state was not valid: %s", marshaledTransaction.Metadata.ID)
-		}
-	}
-	return true, nil
+	return authenticatedState, nil
 }
 
 // signPaymentState - perform KMS signing of the transaction, return publicKey and

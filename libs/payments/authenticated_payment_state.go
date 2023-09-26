@@ -33,9 +33,10 @@ type AuthenticatedPaymentState struct {
 	DocumentID     string
 }
 
-func (p *AuthenticatedPaymentState) GenerateIdempotencyKey(namespace uuid.UUID) uuid.UUID {
+func (p *AuthenticatedPaymentState) GenerateIdempotencyKey() uuid.UUID {
+	idempotencyNamespace := uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c")
 	return uuid.NewSHA1(
-		namespace,
+		idempotencyNamespace,
 		[]byte(fmt.Sprintf(
 			"%s%s%s%s%s%s",
 			p.To,

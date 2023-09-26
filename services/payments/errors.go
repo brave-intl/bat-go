@@ -1,22 +1,10 @@
 package payments
 
-import "fmt"
-
 // QLDBReocrdNotFoundError indicates that a record does not exist in QLDB.
 type QLDBReocrdNotFoundError struct{}
 
 func (e *QLDBReocrdNotFoundError) Error() string {
 	return "QLDB record not found"
-}
-
-// InvalidTransitionState indicates that a record does not exist in QLDB.
-type InvalidTransitionState struct{
-	From string
-	To string
-}
-
-func (e *InvalidTransitionState) Error() string {
-	return fmt.Sprintf("invalid state transition from %s to %s.", e.From, e.To)
 }
 
 // QLDBTransitionHistoryNotFoundError indicates that an transition history does not exist.
