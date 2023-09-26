@@ -4,16 +4,11 @@ import (
 	"testing"
 
 	. "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
-	must "github.com/stretchr/testify/require"
 )
 
 func TestIdempotencyKeyGeneration(t *testing.T) {
-	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
-	must.Equal(t, nil, err)
-
 	transaction := AuthenticatedPaymentState{
 		PaymentDetails: PaymentDetails{
 			Amount:    decimal.NewFromFloat(12.234),
@@ -27,7 +22,7 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 	}
 	should.Equal(
 		t,
-		transaction.GenerateIdempotencyKey(namespaceUUID).String(),
+		transaction.GenerateIdempotencyKey().String(),
 		"5f07afb9-aac0-5dba-9378-5c3fc34b6ff2",
 	)
 }

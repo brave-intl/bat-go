@@ -125,7 +125,7 @@ func StateMachineFromTransaction(
 	case "bitflyer":
 		// Set Bitflyer-specific properties
 		machine = &BitflyerMachine{
-			client: httpClient,
+			client: *http.DefaultClient,
 			bitflyerHost: os.Getenv("BITFLYER_SERVER"),
 		}
 	case "gemini":
