@@ -121,7 +121,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	bitflyerStateMachine.setPersistenceConfigValues(
-		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
