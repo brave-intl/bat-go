@@ -23,7 +23,7 @@ func init() {
 }
 
 // MessageHandler is a function for handling stream messages
-type MessageHandler func(ctx context.Context, id string, data []byte) error
+type MessageHandler func(ctx context.Context, stream, id string, data []byte) error
 
 // StreamClient is the generic type inferface for a client of redis streams
 type StreamClient interface {
@@ -35,6 +35,8 @@ type StreamClient interface {
 	ReadAndHandle(ctx context.Context, stream, consumerGroup, consumerID string, handle MessageHandler)
 	// UnacknowledgedCount returns the count of messages which are either unread or pending
 	UnacknowledgedCounts(ctx context.Context, stream, consumerGroup string) (lag int64, pending int64, err error)
+	// GetStreamLength returns the stream length
+	GetStreamLength(ctx context.Context, stream string) (int64, error)
 	// GetMessageRetryAfter returning true if a retry-after existing for message id
 	GetMessageRetryAfter(ctx context.Context, id string) (bool, error)
 	// SetMessageRetryAfter for message id, expiring after delay
@@ -116,7 +118,7 @@ func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consu
 				logger = &tmp
 				ctx = logger.WithContext(ctx)
 
-				err := handle(ctx, messageID, []byte(sData))
+				err := handle(ctx, stream, messageID, []byte(sData))
 				if err != nil {
 					if !strings.Contains(err.Error(), "retry-after") {
 						logger.Warn().Err(err).Msg("message handler returned an error")
@@ -140,6 +142,11 @@ func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consu
 // UnacknowledgedCounts returns the count of messages which are either unread or pending
 // NOTE: this is only accurate if no messages were deleted
 func (redisClient *RedisClient) UnacknowledgedCounts(ctx context.Context, stream, consumerGroup string) (lag int64, pending int64, err error) {
+	err = redisClient.CreateStream(ctx, stream, consumerGroup)
+	if err != nil {
+		return -1, -1, err
+	}
+
 	resp, err := redisClient.XInfoGroups(ctx, stream).Result()
 	if err != nil {
 		return -1, -1, err
@@ -150,6 +157,11 @@ func (redisClient *RedisClient) UnacknowledgedCounts(ctx context.Context, stream
 		}
 	}
 	return -1, -1, errors.New("unable to find specified group")
+}
+
+// GetStreamLength returns the stream length
+func (redisClient *RedisClient) GetStreamLength(ctx context.Context, stream string) (int64, error) {
+	return redisClient.XLen(ctx, stream).Result()
 }
 
 // GetMessageRetryAfter returning true if a retry-after existing for message id

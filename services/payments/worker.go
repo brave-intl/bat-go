@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/redisconsumer"
+	"github.com/google/uuid"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -30,62 +30,43 @@ func NewWorker(rc *redis.Client) *Worker {
 }
 
 // HandlePrepareMessage by sending it to the payments service
-func (w *Worker) HandlePrepareMessage(ctx context.Context, id string, data []byte) error {
+func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, data []byte) error {
 	client, err := client.New("https://nitro-payments.bsg.brave.software", "")
 	if err != nil {
 		return err
 	}
-	resp, err := w.requestHandler(ctx, client, "POST", "/v1/prepare", id, data)
-	if err != nil {
-		return err
-	}
-	if resp == nil {
-		return errors.New("response was nil")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return errors.New("response was not 200 OK")
-	}
-
-	sr, err := httpsignature.EncapsulateResponse(ctx, resp)
-	if err != nil {
-		return err
-	}
-
-	// TODO xadd to our responses topic
-	fmt.Println(sr)
-
-	return nil
+	return w.requestHandler(ctx, client, "POST", "/v1/prepare", stream, id, data)
 }
 
-// requestHandler is a generic handler for sending encapsulated http requests
-func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, id string, data []byte) (*http.Response, error) {
+// requestHandler is a generic handler for sending encapsulated http requests and storing the results
+func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, stream, id string, data []byte) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	isRetryBlocked, err := w.rc.GetMessageRetryAfter(ctx, id)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if isRetryBlocked {
-		return nil, errors.New("waiting for retry-after")
+		return errors.New("waiting for retry-after")
 	}
 
-	wrapper := payments.RequestWrapper{}
-	err = json.Unmarshal(data, &wrapper)
+	reqWrapper := payments.RequestWrapper{}
+	err = json.Unmarshal(data, &reqWrapper)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	r, err := client.NewRequest(ctx, method, path, nil, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	_, err = wrapper.Request.Extract(r)
+	_, err = reqWrapper.Request.Extract(r)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	r.URL = client.BaseURL.ResolveReference(&url.URL{
@@ -104,16 +85,37 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 			delay = time.Duration(tmp) * time.Second
 		}
 	}
-	err = w.rc.SetMessageRetryAfter(ctx, id, delay)
-	if err != nil {
+
+	if err := w.rc.SetMessageRetryAfter(ctx, id, delay); err != nil {
 		logger.Error().Err(err).Msg("failed to set retry-after key")
 	}
 
-	return resp, err
+	if err != nil {
+		return err
+	}
+	if resp == nil {
+		return errors.New("response was nil")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("response was not 200 OK")
+	}
+
+	sr, err := httpsignature.EncapsulateResponse(ctx, resp)
+	if err != nil {
+		return err
+	}
+
+	respWrapper := &payments.ResponseWrapper{
+		ID:        uuid.New(),
+		Timestamp: time.Now(),
+		Response:  sr,
+	}
+
+	return w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, &respWrapper)
 }
 
 // HandlePrepareConfigMessage creates a new prepare consumer, waiting for all messages to be consumed
-func (w *Worker) HandlePrepareConfigMessage(ctx context.Context, id string, data []byte) error {
+func (w *Worker) HandlePrepareConfigMessage(ctx context.Context, stream, id string, data []byte) error {
 	return w.handleConfigMessage(w.HandlePrepareMessage, ctx, id, data)
 }
 
@@ -139,14 +141,13 @@ func (w *Worker) handleConfigMessage(handle redisconsumer.MessageHandler, ctx co
 		redisconsumer.StartConsumer(consumerCtx, w.rc, config.Stream, config.ConsumerGroup, "0", handle)
 	}()
 
-wait:
 	for {
 		lag, pending, err := w.rc.UnacknowledgedCounts(ctx, config.Stream, config.ConsumerGroup)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get unacknowledged count")
 		}
 		if lag+pending == 0 {
-			break wait
+			break
 		}
 		logger.Info().Int64("lag", lag).Int64("pending", pending).Msg("waiting")
 

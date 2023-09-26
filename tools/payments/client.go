@@ -3,12 +3,15 @@ package payments
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/redisconsumer"
+	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/google/uuid"
 	redis "github.com/redis/go-redis/v9"
 )
@@ -42,22 +46,39 @@ type SettlementClient interface {
 	ConfigureWorker(context.Context, string, *payments.WorkerConfig) error
 	PrepareTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.PrepareRequest) error
 	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.SubmitRequest) error
+	//HandlePrepareResponse(ctx context.Context, stream, id string, data []byte) error
+	//GetStreamClient() redisconsumer.StreamClient
+	WaitForResponses(ctx context.Context, payoutID string, numTransactions int) error
 }
 
 // NewSettlementClient instantiates a new SettlementClient for use by tooling
 func NewSettlementClient(ctx context.Context, env string, config map[string]string) (context.Context, SettlementClient, error) {
 	ctx, _ = logging.SetupLogger(ctx)
-	client, err := newRedisClient(env, config["addr"], config["pass"], config["username"])
+
+	var sp httpsignature.SignatureParams
+	sp.Algorithm = httpsignature.AWSNITRO
+	sp.KeyID = "primary"
+	sp.Headers = []string{"digest"}
+
+	// FIXME
+	pcrs := map[uint][]byte{
+		3: []byte{0},
+	}
+	verifier := httpsignature.NewNitroVerifier(pcrs)
+
+	client, err := newRedisClient(env, config["addr"], config["pass"], config["username"], sp, verifier)
 	return ctx, client, err
 }
 
 // redisClient is an implementation of settlement client using clustered redis client
 type redisClient struct {
-	env   string
-	redis *redisconsumer.RedisClient
+	env      string
+	redis    *redisconsumer.RedisClient
+	sp       httpsignature.SignatureParams
+	verifier httpsignature.Verifier
 }
 
-func newRedisClient(env, addr, pass, username string) (*redisClient, error) {
+func newRedisClient(env, addr, pass, username string, sp httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		ClientAuth: 0,
@@ -85,6 +106,8 @@ func newRedisClient(env, addr, pass, username string) (*redisClient, error) {
 				MinRetryBackoff: 5 * time.Millisecond,
 				MaxRetryBackoff: 500 * time.Millisecond,
 			})),
+		sp:       sp,
+		verifier: verifier,
 	}
 	return rc, nil
 }
@@ -209,5 +232,83 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 		}
 	}
 
+	return nil
+}
+
+func (rc *redisClient) HandlePrepareResponse(ctx context.Context, stream, id string, data []byte) error {
+	respWrapper := payments.ResponseWrapper{}
+	err := json.Unmarshal(data, &respWrapper)
+	if err != nil {
+		return err
+	}
+
+	resp := http.Response{}
+	_, err = respWrapper.Response.Extract(&resp)
+	if err != nil {
+		return err
+	}
+
+	valid, err := rc.sp.VerifyResponse(rc.verifier, crypto.Hash(0), &resp)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return errors.New("http signature was not valid, nitro attestation failed")
+	}
+
+	bodyBytes, err := requestutils.Read(ctx, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(stream+".log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write(bodyBytes); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (rc *redisClient) WaitForResponses(ctx context.Context, payoutID string, numTransactions int) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return err
+	}
+
+	stream := payments.PreparePrefix + payoutID + payments.ResponseSuffix
+	// FIXME use public key as consumer group
+	consumerGroup := stream + "-cli"
+	consumerID := "0"
+
+	consumerCtx, cancelFunc := context.WithCancel(ctx)
+	go func() {
+		redisconsumer.StartConsumer(consumerCtx, rc.redis, stream, consumerGroup, consumerID, rc.HandlePrepareResponse)
+	}()
+
+wait:
+	for {
+		count, err := rc.redis.GetStreamLength(ctx, stream)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get stream length")
+		}
+		logger.Info().Int64("count", count).Int("total", numTransactions).Msg("waiting for responses")
+		if count >= int64(numTransactions) {
+			lag, pending, err := rc.redis.UnacknowledgedCounts(ctx, stream, consumerGroup)
+			if err != nil {
+				logger.Error().Err(err).Msg("failed to get unacknowledged count")
+			}
+			if lag+pending == 0 {
+				break wait
+			}
+			logger.Info().Int64("lag", lag).Int64("pending", pending).Msg("waiting for responses to be processed")
+
+		}
+		time.Sleep(10 * time.Second)
+	}
+	cancelFunc()
 	return nil
 }

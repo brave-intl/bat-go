@@ -68,6 +68,10 @@ func main() {
 		"p", "",
 		"payout id")
 
+	resubmit := flag.Bool(
+		"resubmit", false,
+		"resubmit to prepare stream")
+
 	flag.Parse()
 
 	// get the list of report files for prepare
@@ -91,6 +95,17 @@ func main() {
 		log.Fatal("failed payout id cannot be nil or empty\n")
 	}
 
+	firstRun := true
+	// FIXME
+	responseFile := payments.PreparePrefix + *payoutID + payments.ResponseSuffix + ".log"
+	if _, err := os.Stat(responseFile); err == nil {
+		firstRun = false
+		if !*resubmit {
+			log.Println("not first run, skipping add to prepare stream")
+		}
+	}
+
+	totalTransactions := 0
 	for _, name := range files {
 		func() {
 			f, err := os.Open(name)
@@ -107,6 +122,11 @@ func main() {
 				log.Fatalf("failed to validate report: %v\n", err)
 			}
 
+			totalTransactions += len(report)
+			if !firstRun && !*resubmit {
+				return
+			}
+
 			priv, err := paymentscli.GetOperatorPrivateKey(*key)
 			if err != nil {
 				log.Fatalf("failed to parse operator key file: %v\n", err)
@@ -116,12 +136,14 @@ func main() {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 
-			payoutID := report[0].PayoutID
+			if report[0].PayoutID != *payoutID {
+				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
+			}
 
 			wc := &payments.WorkerConfig{
-				PayoutID:      payoutID,
-				ConsumerGroup: payments.PreparePrefix + payoutID + "-cg",
-				Stream:        payments.PreparePrefix + payoutID,
+				PayoutID:      *payoutID,
+				ConsumerGroup: payments.PreparePrefix + *payoutID + "-cg",
+				Stream:        payments.PreparePrefix + *payoutID,
 				Count:         len(report),
 			}
 
@@ -133,6 +155,13 @@ func main() {
 				log.Printf("prepare transactions loaded for %+v\n", payoutID)
 			}
 		}()
+	}
+
+	os.Create(responseFile)
+
+	err = client.WaitForResponses(ctx, *payoutID, totalTransactions)
+	if err != nil {
+		log.Fatalf("failed to wait for prepare responses: %v\n", err)
 	}
 
 	if *verbose {

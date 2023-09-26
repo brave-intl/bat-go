@@ -41,3 +41,19 @@ func (sw RequestWrapper) MarshalBinary() (data []byte, err error) {
 	}
 	return bytes, nil
 }
+
+// ResponseWrapper defines the settlement worker submit message structure
+type ResponseWrapper struct {
+	ID        uuid.UUID                         `json:"id"`
+	Timestamp time.Time                         `json:"timestamp"`
+	Response  *httpsignature.HTTPSignedResponse `json:"request"`
+}
+
+// MarshalBinary implements encoding.BinaryMarshaler required for go-redis
+func (sw ResponseWrapper) MarshalBinary() (data []byte, err error) {
+	bytes, err := json.Marshal(sw)
+	if err != nil {
+		return nil, fmt.Errorf("event message: error marshalling binary: %w", err)
+	}
+	return bytes, nil
+}
