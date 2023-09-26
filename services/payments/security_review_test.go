@@ -149,15 +149,30 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		valid, err := validatePaymentStateHistory(ctx, transactionHistorySet)
-		must.Equal(t, nil, err)
-		should.True(t, valid)
+		authenticatedState, latestHistoryItem, err := AuthenticatedStateFromQLDBHistory(
+			ctx,
+			mockKMS,
+			"",
+			transactionHistorySet,
+			mockTransitionHistory.Data,
+		)
+		must.Nil(t, err)
+		must.NotNil(t, authenticatedState)
+		must.NotNil(t, latestHistoryItem)
 	}
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		valid, _ := validatePaymentStateHistory(ctx, transactionHistorySet)
-		should.False(t, valid)
+		authenticatedState, latestHistoryItem, _ := AuthenticatedStateFromQLDBHistory(
+			ctx,
+			mockKMS,
+			"",
+			transactionHistorySet,
+			mockTransitionHistory.Data,
+		)
+		must.Nil(t, err)
+		must.Nil(t, authenticatedState)
+		must.Nil(t, latestHistoryItem)
 	}
 }
 
@@ -409,8 +424,6 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		kmsSigningKeyID:  "123",
 		kmsSigningClient: mockKMS,
 	}
-	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	must.Equal(t, nil, err)
 
 	// First write should succeed because Verify returns true
 	_, err = writeTransaction(
@@ -419,7 +432,6 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		service.sdkClient,
 		service.kmsSigningClient,
 		service.kmsSigningKeyID,
-		idempotencyKey,
 		&testTransaction,
 	)
 	should.NoError(t, err)

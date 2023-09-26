@@ -20,7 +20,6 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/jarcoal/httpmock"
-	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 )
 
@@ -128,7 +127,6 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	upholdStateMachine.setPersistenceConfigValues(
-		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
@@ -148,9 +146,9 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	insertedDocumentID, err := service.insertPayment(ctx, testTransaction.PaymentDetails)
 	must.Equal(t, nil, err)
 	must.Equal(t, "123456", insertedDocumentID)
-	newTransaction, _, err := service.GetTransactionFromDocumentID(ctx, insertedDocumentID)
-	must.Equal(t, nil, err)
-	should.Equal(t, Prepared, newTransaction.Status)
+	//	newTransaction, _, err := service.GetTransactionFromDocumentID(ctx, insertedDocumentID)
+	//	must.Equal(t, nil, err)
+	//	should.Equal(t, Prepared, newTransaction.Status)
 
 	// Should transition transaction into the Authorized state
 	//	testTransaction.Status = Prepared

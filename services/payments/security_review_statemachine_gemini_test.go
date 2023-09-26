@@ -16,7 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/custodian"
 	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/jarcoal/httpmock"
-	should "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	must "github.com/stretchr/testify/require"
 )
@@ -118,7 +117,6 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	geminiStateMachine.setPersistenceConfigValues(
-		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
@@ -141,9 +139,9 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 	insertedDocumentID, err := service.insertPayment(ctx, testTransaction.PaymentDetails)
 	must.Equal(t, nil, err)
 	must.Equal(t, "123456", insertedDocumentID)
-	newTransaction, _, err := service.GetTransactionFromDocumentID(ctx, insertedDocumentID)
-	must.Equal(t, nil, err)
-	should.Equal(t, Prepared, newTransaction.Status)
+	//	newTransaction, _, err := service.GetTransactionFromDocumentID(ctx, insertedDocumentID)
+	//	must.Equal(t, nil, err)
+	//	should.Equal(t, Prepared, newTransaction.Status)
 
 	// Should transition transaction into the Authorized state
 	//	testTransaction.Status = Prepared

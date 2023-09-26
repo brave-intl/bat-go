@@ -426,14 +426,14 @@ func signPaymentState(
 	kmsClient wrappedKMSClient,
 	keyID string,
 	state PaymentState,
-) (string, string, error) {
-	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
-		KeyId: &keyID,
-	})
-
-	if err != nil {
-		return "", "", fmt.Errorf("Failed to get public key: %w", err)
-	}
+) (/*string,*/ string, error) {
+	//	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
+	//		KeyId: &keyID,
+	//	})
+	//
+	//	if err != nil {
+	//		return "", "", fmt.Errorf("Failed to get public key: %w", err)
+	//	}
 
 	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
 		KeyId:            &keyID,
@@ -442,10 +442,10 @@ func signPaymentState(
 	})
 
 	if err != nil {
-		return "", "", fmt.Errorf("Failed to sign transaction: %w", err)
+		return "", fmt.Errorf("Failed to sign transaction: %w", err)
 	}
 
-	return hex.EncodeToString(pubkeyOutput.PublicKey), hex.EncodeToString(signingOutput.Signature), nil
+	return /*hex.EncodeToString(pubkeyOutput.PublicKey),*/ hex.EncodeToString(signingOutput.Signature), nil
 }
 
 func sortHashes(a, b []byte) ([][]byte, error) {
