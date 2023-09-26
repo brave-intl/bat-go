@@ -9,7 +9,7 @@ import (
 
 var (
 	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	amount, _        = decimal.NewFromString("1.1")
+	amount           = decimal.NewFromFloat(1.1)
 	txn0             = AuthenticatedPaymentState{Status: Prepared, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn1             = AuthenticatedPaymentState{Status: Authorized, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn2             = AuthenticatedPaymentState{Status: Pending, PaymentDetails: PaymentDetails{Amount: amount}}

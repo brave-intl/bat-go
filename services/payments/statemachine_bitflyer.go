@@ -10,26 +10,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/amazon-ion/ion-go/ion"
+	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/shopspring/decimal"
-	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case.
 // Including the baseStateMachine provides a default implementation of TxStateMachine,
 type BitflyerMachine struct {
 	baseStateMachine
-	client http.Client
-	authToken tokenResponse
-	bitflyerHost string
-	priceQuote quote
+	client        http.Client
+	authToken     tokenResponse
+	bitflyerHost  string
+	priceQuote    quote
 	backoffFactor time.Duration
 }
 
 type bitflyerResult struct {
-	Transaction *Transaction
-	Error error
+	AuthenticatedPaymentState *AuthenticatedPaymentState
+	Error                     error
 }
 
 // quote returns a quote of BAT prices
@@ -49,19 +48,19 @@ type quoteQuery struct {
 
 // bitflyerTransactionPayload holds a single withdrawal request
 type bitflyerTransactionPayload struct {
-	CurrencyCode string       `json:"currency_code"`
-	Amount       *ion.Decimal `json:"amount"`
-	DryRun       *bool        `json:"dry_run,omitempty"`
-	DepositID    string       `json:"deposit_id"`
-	TransferID   string       `json:"transfer_id"`
-	SourceFrom   string       `json:"source_from"`
+	CurrencyCode string          `json:"currency_code"`
+	Amount       decimal.Decimal `json:"amount"`
+	DryRun       *bool           `json:"dry_run,omitempty"`
+	DepositID    string          `json:"deposit_id"`
+	TransferID   string          `json:"transfer_id"`
+	SourceFrom   string          `json:"source_from"`
 }
 
 // bitflyerBulkTransactionPayload holds all WithdrawToDepositIDPayload(s) for a single bulk request
 type bitflyerBulkTransactionPayload struct {
-	DryRun       bool                         `json:"dry_run"`
-	Withdrawals  []bitflyerTransactionPayload `json:"withdrawals"`
-	PriceToken   string                       `json:"price_token"`
+	DryRun      bool                         `json:"dry_run"`
+	Withdrawals []bitflyerTransactionPayload `json:"withdrawals"`
+	PriceToken  string                       `json:"price_token"`
 }
 
 // checkStatusPayload holds the transfer id to check
@@ -129,7 +128,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 	}
 
 	// Do nothing if the state is already final
-	if bm.transaction.State == Paid || bm.transaction.State == Failed {
+	if bm.transaction.Status == Paid || bm.transaction.Status == Failed {
 		return bm.transaction, nil
 	}
 
@@ -145,13 +144,13 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 		// Do bitflyer stuff
 	}*/
 	var (
-		entry *Transaction
+		entry *AuthenticatedPaymentState
 	)
-	batchOfOneTransaction := transactionToBitflyerBulkTransaction(
+	batchOfOneTransaction := authenticatedStateToBitflyerBulkTransaction(
 		bm.transaction,
 		bm.priceQuote.PriceToken,
 	)
-	if bm.transaction.State == Pending {
+	if bm.transaction.Status == Pending {
 		// We don't want to check status too fast
 		time.Sleep(bm.backoffFactor * time.Millisecond)
 		// Get status of transaction and update the state accordingly
@@ -254,7 +253,7 @@ func (bm *BitflyerMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState
 
 func (bm *BitflyerMachine) fetchQuote(
 	ctx context.Context,
-) (error) {
+) error {
 	if !bm.priceQuote.ExpiresAt.IsZero() && time.Now().Before(bm.priceQuote.ExpiresAt) {
 		return nil
 	}
@@ -267,7 +266,7 @@ func (bm *BitflyerMachine) fetchQuote(
 		return fmt.Errorf("failed to parse payload into JSON: %w", err)
 	}
 
-	req, err := bm.buildRequest(ctx, bm.bitflyerHost + "/api/link/v1/getprice", "GET", payloadString)
+	req, err := bm.buildRequest(ctx, bm.bitflyerHost+"/api/link/v1/getprice", "GET", payloadString)
 	if err != nil {
 		return fmt.Errorf("failed to create price quote request: %w", err)
 	}
@@ -305,7 +304,7 @@ func (bm *BitflyerMachine) uploadBulkPayout(
 	}
 	req, err := bm.buildRequest(
 		ctx,
-		bm.bitflyerHost + "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request",
+		bm.bitflyerHost+"/api/link/v1/coin/withdraw-to-deposit-id/bulk-request",
 		http.MethodPost,
 		payloadString,
 	)
@@ -337,7 +336,7 @@ func (bm *BitflyerMachine) checkPayoutStatus(
 	}
 	req, err := bm.buildRequest(
 		ctx,
-		bm.bitflyerHost + "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
+		bm.bitflyerHost+"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
 		http.MethodPost,
 		payloadString,
 	)
@@ -362,7 +361,7 @@ func (bm *BitflyerMachine) checkPayoutStatus(
 func (bm *BitflyerMachine) refreshToken(
 	ctx context.Context,
 	payload tokenPayload,
-) (error) {
+) error {
 	// Only refresh the token if the existing token is defined and has expired
 	if time.Now().Before(bm.authToken.ExpiresAt) {
 		return nil
@@ -374,7 +373,7 @@ func (bm *BitflyerMachine) refreshToken(
 	}
 	req, err := bm.buildRequest(
 		ctx,
-		bm.bitflyerHost + "/api/link/v1/token",
+		bm.bitflyerHost+"/api/link/v1/token",
 		http.MethodPost,
 		payloadString,
 	)
@@ -414,28 +413,28 @@ func (bm *BitflyerMachine) buildRequest(
 		return nil, err
 	}
 	// If this is the first token refresh call, Bearer will be empty
-	req.Header.Set("authorization", "Bearer "+ bm.authToken.AccessToken)
+	req.Header.Set("authorization", "Bearer "+bm.authToken.AccessToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	return req, nil
 }
 
-func transactionToBitflyerBulkTransaction(
-	transaction *Transaction,
+func authenticatedStateToBitflyerBulkTransaction(
+	authenticatedState *AuthenticatedPaymentState,
 	priceToken string,
 ) bitflyerBulkTransactionPayload {
 	dryRun := false
 	bitflyerTransactions := bitflyerTransactionPayload{
-		Amount: transaction.Amount,
-		DepositID: transaction.To,
-		TransferID: transaction.PayoutID,
-		SourceFrom: transaction.From,
-		DryRun: &dryRun,
+		Amount:     authenticatedState.Amount,
+		DepositID:  authenticatedState.To,
+		TransferID: authenticatedState.PayoutID,
+		SourceFrom: authenticatedState.From,
+		DryRun:     &dryRun,
 	}
 	aggregateTransaction := bitflyerBulkTransactionPayload{
-		Withdrawals:      []bitflyerTransactionPayload{bitflyerTransactions},
-		PriceToken: priceToken,
-		DryRun: false,
+		Withdrawals: []bitflyerTransactionPayload{bitflyerTransactions},
+		PriceToken:  priceToken,
+		DryRun:      false,
 	}
 
 	return aggregateTransaction

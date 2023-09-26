@@ -150,7 +150,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	bitflyerStateMachine.setPersistenceConfigValues(
-		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
@@ -177,9 +176,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	should.Equal(t, Prepared, newTransaction.Status)
 
 	// Should transition transaction into the Authorized state
-	testTransaction.State = Prepared
-	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.Data = marshaledData
+	testTransaction.Status = Prepared
+	marshaledData, _ = json.Marshal(testTransaction)
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	newTransaction, err = Drive(ctx, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
@@ -188,12 +187,12 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	fmt.Printf("Calls to token refresh: %v\n", info[tokenInfoKey])
 	// Ensure that our Bitflyer calls are going through the mock and not anything else.
 	//must.Equal(t, info[tokenInfoKey], 1)
-	should.Equal(t, Authorized, newTransaction.State)
+	should.Equal(t, Authorized, newTransaction.Status)
 
 	// Should transition transaction into the Pending state
-	testTransaction.State = Authorized
-	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.Data = marshaledData
+	testTransaction.Status = Authorized
+	marshaledData, _ = json.Marshal(testTransaction)
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	timeout, cancel := context.WithTimeout(ctx, 1 * time.Millisecond)
 	defer cancel()
@@ -202,7 +201,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	newTransaction, err = Drive(timeout, &bitflyerStateMachine)
 	// The only tolerable error is a timeout, and that's what we expect here
 	must.True(t, errors.Is(err, context.DeadlineExceeded))
-	should.Equal(t, Pending, newTransaction.State)
+	should.Equal(t, Pending, newTransaction.Status)
 
 	// Should transition transaction into the Paid state
 	// Mock transaction status check that will succeed, overriding the one about that will stay
@@ -217,9 +216,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		),
 		httpmock.NewStringResponder(200, string(jsonCheckStatusResponse)),
 	)
-	testTransaction.State = Pending
-	marshaledData, _ = testTransaction.MarshalJSON()
-	mockTransitionHistory.Data.Data = marshaledData
+	testTransaction.Status = Pending
+	marshaledData, _ = json.Marshal(testTransaction)
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
 	// is 5 minutes and we don't want the test to run that long even if it's broken.
@@ -227,7 +226,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	defer cancel()
 	newTransaction, err = Drive(timeout, &bitflyerStateMachine)
 	must.Equal(t, nil, err)
-	should.Equal(t, Paid, newTransaction.State)
+	should.Equal(t, Paid, newTransaction.Status)
 }
 
 // TestBitflyerStateMachine500FailureToPaidTransition tests for a failure to progress status
@@ -255,8 +254,8 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 		datastore: mockDriver,
 		baseCtx:   context.Background(),
 	}
-	id := uuid.New()
-	transaction := Transaction{State: Prepared, ID: &id}
+	id := ""
+	transaction := AuthenticatedPaymentState{Status: Prepared, DocumentID: id}
 	bitflyerStateMachine := BitflyerMachine{}
 	bitflyerStateMachine.setPersistenceConfigValues(
 		service.datastore,
@@ -299,8 +298,8 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 		datastore: mockDriver,
 		baseCtx:   context.Background(),
 	}
-	id := uuid.New()
-	transaction := Transaction{State: Pending, ID: &id}
+	id := ""
+	transaction := AuthenticatedPaymentState{Status: Pending, DocumentID: id}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	bitflyerStateMachine := BitflyerMachine{}
 	bitflyerStateMachine.setPersistenceConfigValues(
