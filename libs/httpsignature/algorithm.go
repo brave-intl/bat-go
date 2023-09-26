@@ -13,16 +13,20 @@ const (
 	ED25519
 	// HS2019 is a catch-all value for all algorithms
 	HS2019
+	// AWSNITRO uses AWS nitro attesation functionality
+	AWSNITRO
 )
 
 var algorithmName = map[Algorithm]string{
-	ED25519: "ed25519",
-	HS2019:  "hs2019",
+	ED25519:  "ed25519",
+	HS2019:   "hs2019",
+	AWSNITRO: "awsnitro",
 }
 
 var algorithmID = map[string]Algorithm{
-	"ed25519": ED25519,
-	"hs2019":  HS2019,
+	"ed25519":  ED25519,
+	"hs2019":   HS2019,
+	"awsnitro": AWSNITRO,
 }
 
 func (a Algorithm) String() string {
