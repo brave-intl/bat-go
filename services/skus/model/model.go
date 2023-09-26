@@ -271,6 +271,14 @@ type OrderItem struct {
 	IssuerConfig *IssuerConfig `json:"-" db:"-"`
 }
 
+func (x *OrderItem) IsLeo() bool {
+	if x == nil {
+		return false
+	}
+
+	return x.SKU == "brave-leo-premium"
+}
+
 // OrderNew represents a request to create an order in the database.
 type OrderNew struct {
 	MerchantID            string          `db:"merchant_id"`

@@ -303,8 +303,9 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 
 		// TODO: we ultimately need to figure out how to provision numPerInterval and numIntervals
 		// on the order item instead of the order itself to support multiple orders with
-		// different time limited v2 issuers.  For now leo sku needs 192 as num per interval
-		if orderItem.SKU == "brave-leo-premium" {
+		// different time limited v2 issuers.
+		// For now leo sku needs 192 as num per interval.
+		if orderItem.IsLeo() {
 			numPerInterval = 192 // 192 credentials per day for leo
 		}
 
@@ -1765,8 +1766,16 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		}
 	}
 
-	if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", 2); err != nil {
-		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	// Backporting changes from https://github.com/brave-intl/bat-go/pull/1998.
+	{
+		numPerInterval := 2
+		if nitems == 1 && items[0].IsLeo() {
+			numPerInterval = 192
+		}
+
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", numPerInterval); err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
 	}
 
 	return order, nil
