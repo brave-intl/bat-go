@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -44,10 +43,10 @@ var (
 // redisClient is an implementation of settlement client using clustered redis client
 type redisClient struct {
 	env   string
-	redis *redis.ClusterClient
+	redis *redis.Client
 }
 
-func newRedisClient(env, addrs, pass, username string) (*redisClient, error) {
+func newRedisClient(env, addr, pass, username string) (*redisClient, error) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		ClientAuth: 0,
@@ -66,17 +65,14 @@ func newRedisClient(env, addrs, pass, username string) (*redisClient, error) {
 
 	rc := &redisClient{
 		env: env,
-		redis: redis.NewClusterClient(
-			&redis.ClusterOptions{
-				Addrs: strings.Split(addrs, ","), Password: pass, Username: username,
+		redis: redis.NewClient(
+			&redis.Options{
+				Addr: addr, Password: pass, Username: username,
 				DialTimeout:     15 * time.Second,
 				WriteTimeout:    5 * time.Second,
 				MaxRetries:      5,
 				MinRetryBackoff: 5 * time.Millisecond,
 				MaxRetryBackoff: 500 * time.Millisecond,
-				PoolSize:        10,
-				PoolTimeout:     30 * time.Second,
-				TLSConfig:       tlsConfig,
 			}),
 	}
 	return rc, nil
@@ -211,5 +207,5 @@ type SettlementClient interface {
 
 // NewSettlementClient instantiates a new SettlementClient for use by tooling
 func NewSettlementClient(env string, config map[string]string) (SettlementClient, error) {
-	return newRedisClient(env, config["addrs"], config["pass"], config["username"])
+	return newRedisClient(env, config["addr"], config["pass"], config["username"])
 }

@@ -19,11 +19,11 @@ The flags are:
 		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
 			https://payments.bsg.brave.software
 	-ra
-		The redis cluster addresses comma seperated
+		The redis address
 	-rp
-		The redis cluster password
+		The redis password
 	-ru
-		The redis cluster user
+		The redis user
 	-p
 		The payout id
 */
@@ -51,17 +51,17 @@ func main() {
 		"e", "https://payments.bsg.brave.software",
 		"the environment to which the tool will interact")
 
-	redisAddrs := flag.String(
+	redisAddr := flag.String(
 		"ra", "",
-		"redis cluster addresses")
+		"redis address")
 
 	redisPass := flag.String(
 		"rp", "",
-		"redis cluster password")
+		"redis password")
 
 	redisUser := flag.String(
 		"ru", "",
-		"redis cluster username")
+		"redis username")
 
 	verbose := flag.Bool(
 		"v", false,
@@ -79,12 +79,12 @@ func main() {
 	if *verbose {
 		// print out the configuration
 		log.Printf("Operator Key File Location: %s\n", *key)
-		log.Printf("Redis: %s, %s\n", *redisAddrs, *redisUser)
+		log.Printf("Redis: %s, %s\n", *redisAddr, *redisUser)
 	}
 
 	// setup the settlement redis client
 	client, err := payments.NewSettlementClient(*env, map[string]string{
-		"addrs": *redisAddrs, "pass": *redisPass, "username": *redisUser, // client specific configurations
+		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, // client specific configurations
 	})
 	if err != nil {
 		log.Fatalf("failed to create settlement client: %v\n", err)

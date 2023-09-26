@@ -26,6 +26,7 @@ type Tx struct {
 	Amount    decimal.Decimal `json:"amount"`
 	ID        string          `json:"idempotencyKey"`
 	Custodian Custodian       `json:"custodian"`
+	PayoutID  string          `json:"payoutId"`
 	DryRun    *string         `json:"dryRun" ion:"-"`
 }
 
@@ -70,6 +71,7 @@ func (pt *PrepareTx) UnmarshalJSON(data []byte) error {
 	pt.Amount = altcurrency.BAT.FromProbi(aux.Amount)
 	pt.To = aux.To
 	pt.Custodian = Custodian(aux.Custodian)
+	pt.PayoutID = aux.BatchID
 
 	// uuidV5 with settlement namespace to get the idempotent key for this publisher/transactionId
 	// transactionId is the settlement batch identifier, and publisher is the identifier of the recipient

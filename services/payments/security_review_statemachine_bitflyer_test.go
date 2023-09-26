@@ -10,12 +10,14 @@ import (
 	"time"
 	"net/http"
 
-	"github.com/amazon-ion/ion-go/ion"
+	"github.com/shopspring/decimal"
+
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	//bitflyercmd "github.com/brave-intl/bat-go/tools/settlement/cmd"
 
+	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/jarcoal/httpmock"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
@@ -104,34 +106,38 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Equal(t, nil, err)
 
-	testTransaction := Transaction{
-		State:          Prepared,
-		ID:             &idempotencyKey,
-		Amount:         ion.MustParseDecimal("1.1"),
-		Authorizations: []Authorization{{}, {}, {}},
-		Custodian:      "bitflyer",
+	testTransaction := AuthenticatedPaymentState{
+		Status: Prepared,
+		PaymentDetails: PaymentDetails{
+			Amount:    decimal.NewFromFloat(1.1),
+			Custodian: "bitflyer",
+		},
+		Authorizations: []PaymentAuthorization{{}, {}, {}},
 	}
 
-	marshaledData, _ := testTransaction.MarshalJSON()
+	marshaledData, _ := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
-	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
-		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: qldbPaymentTransitionHistoryEntryData{
-			Data:           marshaledData,
-			Signature:      []byte{},
-			IdempotencyKey: &idempotencyKey,
+		Data: PaymentState{
+			UnsafePaymentState: marshaledData,
+			Signature:          []byte{},
+			ID:                 idempotencyKey,
 		},
-		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
 			TxID:    "test",
 		},
 	}
+	marshaledAuthenticatedState, err := json.Marshal(AuthenticatedPaymentState{Status: Prepared})
+	must.Equal(t, nil, err)
+	mockedPaymentState := PaymentState{UnsafePaymentState: marshaledAuthenticatedState}
 	mockKMS := new(mockKMSClient)
 	mockDriver := new(mockDriver)
 	mockKMS.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
@@ -144,6 +150,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	bitflyerStateMachine.setPersistenceConfigValues(
+		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
@@ -155,13 +162,19 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 
-	// Should create a transaction in QLDB. Current state argument is empty because
-	// the object does not yet exist.
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(nil, &QLDBReocrdNotFoundError{}).Once()
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	newTransaction, err := service.PrepareTransaction(ctx, &testTransaction)
+	// First call in order is to insertPayment and should return a fake document ID
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return("123456", nil).Once()
+	// Next call in order is to get GetTransactionFromDocumentID and should return an
+	// AuthenticatedPaymentState.
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockedPaymentState, nil).Once()
+	// All further calls should return the mocked history entry.
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory.Data, nil)
+	insertedDocumentID, err := service.insertPayment(ctx, testTransaction.PaymentDetails)
 	must.Equal(t, nil, err)
-	should.Equal(t, Prepared, newTransaction.State)
+	must.Equal(t, "123456", insertedDocumentID)
+	newTransaction, _, err := service.GetTransactionFromDocumentID(ctx, insertedDocumentID)
+	must.Equal(t, nil, err)
+	should.Equal(t, Prepared, newTransaction.Status)
 
 	// Should transition transaction into the Authorized state
 	testTransaction.State = Prepared
