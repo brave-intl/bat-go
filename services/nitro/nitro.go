@@ -142,11 +142,23 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	// setup payments routes
-	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
-	r.Post("/v1/payments/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
+	// prepare inserts transactions into qldb, returning a document which needs to be submitted by
+	// an authorizer
+	r.Post(
+		"/v1/payments/prepare",
+		middleware.InstrumentHandler(
+			"PrepareHandler",
+			payments.PrepareHandler(s),
+		).ServeHTTP,
+	)
 	logger.Info().Msg("prepare endpoint setup")
 	// submit will have an http signature from a known list of public keys
-	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
+	r.Post(
+		"/v1/payments/submit",
+		middleware.InstrumentHandler(
+			"SubmitHandler",
+			s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s)),
+		).ServeHTTP)
 	logger.Info().Msg("submit endpoint setup")
 
 	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)

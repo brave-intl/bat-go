@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amazon-ion/ion-go/ion"
+	"github.com/shopspring/decimal"
+
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/google/uuid"
 
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
@@ -105,25 +107,26 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 	must.Equal(t, nil, err)
 	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
 	must.Equal(t, nil, err)
-	testTransaction := Transaction{
-		State:  Prepared,
-		ID:     &idempotencyKey,
-		Amount: ion.MustParseDecimal("1.1"),
+	testTransaction := AuthenticatedPaymentState{
+		Status: Prepared,
+		PaymentDetails: PaymentDetails{
+			Amount: decimal.NewFromFloat(1.1),
+		},
 	}
-	marshaledData, err := testTransaction.MarshalJSON()
+	marshaledData, err := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
-	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
-		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: qldbPaymentTransitionHistoryEntryData{
-			Data:           marshaledData,
-			Signature:      []byte{},
-			IdempotencyKey: &idempotencyKey,
+		Data: PaymentState{
+			UnsafePaymentState: marshaledData,
+			Signature:          []byte{},
+			ID:                 idempotencyKey,
 		},
-		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
@@ -146,14 +149,14 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		valid, err := validateTransactionHistory(ctx, &idempotencyKey, namespaceUUID, transactionHistorySet, mockKMS)
+		valid, err := validatePaymentStateHistory(ctx, transactionHistorySet)
 		must.Equal(t, nil, err)
 		should.True(t, valid)
 	}
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		valid, _ := validateTransactionHistory(ctx, &idempotencyKey, namespaceUUID, transactionHistorySet, mockKMS)
+		valid, _ := validatePaymentStateHistory(ctx, transactionHistorySet)
 		should.False(t, valid)
 	}
 }
@@ -176,34 +179,34 @@ func TestValidateRevision(t *testing.T) {
 
 	var (
 		mockSDKClient = new(mockSDKClient)
-		trueObject    = qldbPaymentTransitionHistoryEntry{
-			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+		trueObject    = QLDBPaymentTransitionHistoryEntry{
+			BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 				StrandID:   "strand1",
 				SequenceNo: 10,
 			},
 			Hash: "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY=",
-			Data: qldbPaymentTransitionHistoryEntryData{
-				Signature: []byte{},
-				Data:      []byte{},
+			Data: PaymentState{
+				Signature:          []byte{},
+				UnsafePaymentState: []byte{},
 			},
-			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid1",
 				Version: 10,
 				TxTime:  time.Now(),
 				TxID:    "",
 			},
 		}
-		falseObject = qldbPaymentTransitionHistoryEntry{
-			BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+		falseObject = QLDBPaymentTransitionHistoryEntry{
+			BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 				StrandID:   "strand2",
 				SequenceNo: 10,
 			},
 			Hash: "dGVzdGVzdGVzdAo=",
-			Data: qldbPaymentTransitionHistoryEntryData{
-				Signature: []byte{},
-				Data:      []byte{},
+			Data: PaymentState{
+				Signature:          []byte{},
+				UnsafePaymentState: []byte{},
 			},
-			Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+			Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 				ID:      "transitionid2",
 				Version: 10,
 				TxTime:  time.Now(),
@@ -293,8 +296,8 @@ func TestVerifyHashSequence(t *testing.T) {
 	testProofIonText := [][32]byte{hash1, hash34}
 
 	var (
-		trueInitialHash  qldbPaymentTransitionHistoryEntryHash = "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="
-		falseInitialHash qldbPaymentTransitionHistoryEntryHash = "dGVzdGVzdGVzdAo="
+		trueInitialHash  QLDBPaymentTransitionHistoryEntryHash = "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="
+		falseInitialHash QLDBPaymentTransitionHistoryEntryHash = "dGVzdGVzdGVzdAo="
 	)
 
 	testDigestOutput := qldb.GetDigestOutput{
@@ -318,8 +321,8 @@ valid transition sequences. The purpose of this test is to alert us if outside c
 impact the set of valid transitions.
 */
 func TestRecurseTransitionResolution(t *testing.T) {
-	allValidTransitionSequences := recurseTransitionResolution("prepared", []TransactionState{})
-	knownValidTransitionSequences := [][]TransactionState{
+	allValidTransitionSequences := RecurseTransitionResolution("prepared", []PaymentStatus{})
+	knownValidTransitionSequences := [][]PaymentStatus{
 		{Prepared, Authorized, Pending, Paid},
 		{Prepared, Authorized, Pending, Failed},
 		{Prepared, Authorized, Failed},
@@ -350,26 +353,25 @@ func TestRecurseTransitionResolution(t *testing.T) {
 // TestQLDBSignedInteractions mocks QLDB to test signing and verifying of records that are
 // persisted into QLDB
 func TestQLDBSignedInteractions(t *testing.T) {
-	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	must.Equal(t, nil, err)
-	testTransaction := Transaction{
-		State:  Prepared,
-		ID:     &idempotencyKey,
-		Amount: ion.MustParseDecimal("1.1"),
+	testTransaction := AuthenticatedPaymentState{
+		Status: Prepared,
+		PaymentDetails: PaymentDetails{
+			Amount: decimal.NewFromFloat(1.1),
+		},
 	}
-	marshaledData, err := testTransaction.MarshalJSON()
+	marshaledData, err := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
-	mockTransitionHistory := qldbPaymentTransitionHistoryEntry{
-		BlockAddress: qldbPaymentTransitionHistoryEntryBlockAddress{
+	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
 		Hash: "test",
-		Data: qldbPaymentTransitionHistoryEntryData{
-			Data:      marshaledData,
-			Signature: []byte{},
+		Data: PaymentState{
+			UnsafePaymentState: marshaledData,
+			Signature:          []byte{},
 		},
-		Metadata: qldbPaymentTransitionHistoryEntryMetadata{
+		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
 			Version: 1,
 			TxTime:  time.Now(),
@@ -387,7 +389,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 	mockRes := new(mockResult)
 	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
 	mockDriver := new(mockDriver)
-	mockDriver.On("Execute", ctx, mock.Anything).Return(&mockTransitionHistory, nil)
+	mockDriver.On("Execute", ctx, mock.Anything).Return(&testTransaction, nil)
 	mockKMS.On("Sign", ctx, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
 	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
@@ -407,14 +409,17 @@ func TestQLDBSignedInteractions(t *testing.T) {
 		kmsSigningKeyID:  "123",
 		kmsSigningClient: mockKMS,
 	}
+	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
+	must.Equal(t, nil, err)
 
 	// First write should succeed because Verify returns true
-	_, err = WriteTransaction(
+	_, err = writeTransaction(
 		ctx,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
 		service.kmsSigningKeyID,
+		idempotencyKey,
 		&testTransaction,
 	)
 	should.NoError(t, err)

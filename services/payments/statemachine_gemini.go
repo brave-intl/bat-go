@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // GeminiMachine is an implementation of TxStateMachine for Gemini's use-case.
@@ -12,12 +13,12 @@ type GeminiMachine struct {
 }
 
 // Pay implements TxStateMachine for the Gemini machine.
-func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
+func (gm *GeminiMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	var (
-		entry *Transaction
+		entry *AuthenticatedPaymentState
 		err   error
 	)
-	if gm.transaction.State == Pending {
+	if gm.transaction.Status == Pending {
 		return gm.writeNextState(ctx, Paid)
 	} else {
 		entry, err = gm.writeNextState(ctx, Pending)
@@ -33,6 +34,6 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*Transaction, error) {
 }
 
 // Fail implements TxStateMachine for the Gemini machine.
-func (gm *GeminiMachine) Fail(ctx context.Context) (*Transaction, error) {
+func (gm *GeminiMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	return gm.writeNextState(ctx, Failed)
 }

@@ -3,35 +3,32 @@ package payments
 import (
 	"context"
 
-	"github.com/google/uuid"
-
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
-
-// idempotentObject is anything that can generate an idempotency key.
-type idempotentObject interface {
-	getIdempotencyKey() *uuid.UUID
-	generateIdempotencyKey(uuid.UUID) uuid.UUID
-}
 
 // TxStateMachine is anything that be progressed through states by the
 // Drive function.
 type TxStateMachine interface {
-	setPersistenceConfigValues(wrappedQldbDriverAPI, wrappedQldbSDKClient, wrappedKMSClient, string, *Transaction)
-	setTransaction(*Transaction)
-	getState() TransactionState
-	getTransaction() *Transaction
-	getTransactionID() *uuid.UUID
+	setPersistenceConfigValues(
+		wrappedQldbDriverAPI,
+		wrappedQldbSDKClient,
+		wrappedKMSClient,
+		string,
+		*AuthenticatedPaymentState,
+	)
+	setTransaction(*AuthenticatedPaymentState)
+	getState() PaymentStatus
+	getTransaction() *AuthenticatedPaymentState
 	getDatastore() wrappedQldbDriverAPI
 	getSDKClient() wrappedQldbSDKClient
 	getKMSSigningClient() wrappedKMSClient
-	GenerateTransactionID(namespace uuid.UUID) (*uuid.UUID, error)
-	Prepare(context.Context) (*Transaction, error)
-	Authorize(context.Context) (*Transaction, error)
-	Pay(context.Context) (*Transaction, error)
-	Fail(context.Context) (*Transaction, error)
+	Prepare(context.Context) (*AuthenticatedPaymentState, error)
+	Authorize(context.Context) (*AuthenticatedPaymentState, error)
+	Pay(context.Context) (*AuthenticatedPaymentState, error)
+	Fail(context.Context) (*AuthenticatedPaymentState, error)
 }
 
 // wrappedQldbDriverAPI defines the API for QLDB methods that we'll be using.

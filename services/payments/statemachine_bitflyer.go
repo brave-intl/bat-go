@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case.
@@ -12,15 +13,15 @@ type BitflyerMachine struct {
 }
 
 // Pay implements TxStateMachine for the Bitflyer machine.
-func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
+func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
 	var (
-		entry *Transaction
+		entry *AuthenticatedPaymentState
 		err   error
 	)
-	if bm.transaction.State == Pending {
+	if bm.transaction.Status == Pending {
 		return bm.writeNextState(ctx, Paid)
 	} else {
 		entry, err = bm.writeNextState(ctx, Pending)
@@ -36,7 +37,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*Transaction, error) {
 }
 
 // Fail implements TxStateMachine for the Bitflyer machine.
-func (bm *BitflyerMachine) Fail(ctx context.Context) (*Transaction, error) {
+func (bm *BitflyerMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/

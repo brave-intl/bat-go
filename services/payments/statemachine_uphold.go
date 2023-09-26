@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // UpholdMachine is an implementation of TxStateMachine for uphold's use-case.
@@ -12,12 +13,12 @@ type UpholdMachine struct {
 }
 
 // Pay implements TxStateMachine for uphold machine.
-func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
+func (um *UpholdMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	var (
-		entry *Transaction
+		entry *AuthenticatedPaymentState
 		err   error
 	)
-	if um.transaction.State == Pending {
+	if um.transaction.Status == Pending {
 		return um.writeNextState(ctx, Paid)
 	} else {
 		entry, err = um.writeNextState(ctx, Pending)
@@ -33,6 +34,6 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*Transaction, error) {
 }
 
 // Fail implements TxStateMachine for uphold machine.
-func (um *UpholdMachine) Fail(ctx context.Context) (*Transaction, error) {
+func (um *UpholdMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
 	return um.writeNextState(ctx, Failed)
 }

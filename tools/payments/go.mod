@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	filippo.io/age v1.1.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -37,7 +38,7 @@ require (
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/veraison/go-cose v1.0.0-rc.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/crypto v0.1.0 // indirect
+	golang.org/x/crypto v0.4.0 // indirect
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
