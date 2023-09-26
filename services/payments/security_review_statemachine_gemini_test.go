@@ -118,7 +118,6 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	geminiStateMachine.setPersistenceConfigValues(
-		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,

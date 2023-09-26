@@ -128,7 +128,6 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 		baseCtx:          context.Background(),
 	}
 	upholdStateMachine.setPersistenceConfigValues(
-		idempotencyKey,
 		service.datastore,
 		service.sdkClient,
 		service.kmsSigningClient,
