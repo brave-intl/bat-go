@@ -197,7 +197,7 @@ func (s Service) insertPayment(
 	/*pubkey,*/ signature, err := signPaymentState(
 		ctx,
 		s.kmsSigningClient,
-		s.kmsDecryptKeyArn,
+		s.kmsSigningKeyID,
 		*paymentStateForSigning,
 	)
 	if err != nil {
