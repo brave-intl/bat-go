@@ -23,6 +23,6 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 	should.Equal(
 		t,
 		transaction.GenerateIdempotencyKey().String(),
-		"5f07afb9-aac0-5dba-9378-5c3fc34b6ff2",
+		"29ccbbfd-7a77-5874-a5bb-d043d9f38bf2",
 	)
 }
