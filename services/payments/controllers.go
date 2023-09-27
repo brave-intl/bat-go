@@ -96,7 +96,14 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		// returns an enriched list of transactions, which includes the document metadata
 
-		documentID, err := service.insertPayment(ctx, req.PaymentDetails)
+		documentID, err := service.insertPayment(ctx, PaymentDetails{
+			Amount: req.Amount,
+			To: req.To,
+			From: req.From,
+			PayoutID: req.PayoutID,
+			Currency: req.Currency,
+			Custodian: req.Custodian,
+		})
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert payment", http.StatusInternalServerError)
 		}
