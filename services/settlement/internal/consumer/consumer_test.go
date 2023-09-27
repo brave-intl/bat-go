@@ -128,8 +128,7 @@ func TestBatchConsumer_statusAsync(t *testing.T) {
 	}
 
 	type args struct {
-		ctx     context.Context
-		resultC chan error
+		ctx context.Context
 	}
 
 	type want struct {
@@ -167,8 +166,7 @@ func TestBatchConsumer_statusAsync(t *testing.T) {
 				},
 			},
 			args: args{
-				ctx:     ctx,
-				resultC: make(chan error),
+				ctx: ctx,
 			},
 			want: want{err: nil},
 		},
@@ -181,9 +179,9 @@ func TestBatchConsumer_statusAsync(t *testing.T) {
 				conf:  tt.fields.conf,
 			}
 
-			b.statusAsync(tt.args.ctx, tt.args.resultC)
+			resultC := b.statusAsync(tt.args.ctx)
 
-			got := <-tt.args.resultC
+			got := <-resultC
 
 			assert.Equalf(t, tt.want.err, got, "want %v got %v", tt.want.err, got)
 		})

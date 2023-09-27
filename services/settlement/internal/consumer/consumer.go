@@ -150,9 +150,9 @@ func (c *consumer) processAsync(ctx context.Context) <-chan string {
 				for i := range xMsgs {
 					l.Info().Str("x_message_id", xMsgs[i].ID).Msg("")
 
-					data, ok := xMsgs[i].Values[dataKey]
-					if !ok {
-						if err := c.error.Handle(ctx, xMsgs[i], errDataKeyNotFound); err != nil {
+					message, err := newMessage(xMsgs[i])
+					if err != nil {
+						if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
 							l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error data handler")
 							sentry.CaptureException(err)
 							continue
@@ -161,56 +161,25 @@ func (c *consumer) processAsync(ctx context.Context) <-chan string {
 						continue
 					}
 
-					switch s := data.(type) {
-					case string:
-						message, err := NewMessageFromString(s)
-						if err != nil {
-							if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
-								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error new message")
-								sentry.CaptureException(err)
-								continue
-							}
-							ackC <- xMsgs[i].ID
-							continue
+					switch err := c.handler.Handle(ctx, message).(type) {
+					case nil:
+						ackC <- xMsgs[i].ID
+					case RetryError:
+						if _, err := c.redis.Set(ctx, redis.SetArgs{
+							Key:        retryAfterPrefix + message.ID.String(),
+							Expiration: err.RetryDelay(),
+						}); err != nil {
+							l.Error().Err(err).Msg("error setting retry after")
 						}
-
-						if len(message.Body) == 0 {
-							if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
-								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error message body")
-								sentry.CaptureException(err)
-								continue
-							}
-							ackC <- xMsgs[i].ID
-							continue
-						}
-
-						switch err := c.handler.Handle(ctx, message).(type) {
-						case nil:
-							ackC <- xMsgs[i].ID
-						case RetryError:
-							if _, err := c.redis.Set(ctx, redis.SetArgs{
-								Key:        retryAfterPrefix + message.ID.String(),
-								Expiration: err.RetryDelay(),
-							}); err != nil {
-								l.Error().Err(err).Msg("error setting retry after")
-							}
-						default:
-							if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
-								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling")
-								sentry.CaptureException(err)
-								continue
-							}
-							ackC <- xMsgs[i].ID
-						}
-
 					default:
-						if err := c.error.Handle(ctx, xMsgs[i], fmt.Errorf("unknow data type: %+v", s)); err != nil {
+						if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
 							l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling")
 							sentry.CaptureException(err)
 							continue
 						}
 						ackC <- xMsgs[i].ID
 					}
+
 				}
 			}
 		}
@@ -267,6 +236,7 @@ func (c *consumer) retryAsync(ctx context.Context) <-chan string {
 				})
 				if err != nil {
 					l.Error().Err(err).Strs("x_pending_ids", pendingEntryIDs).Msg("error claiming pendingEntries messages")
+					continue
 				}
 
 				for i := range xMsgs {
@@ -289,9 +259,9 @@ func (c *consumer) retryAsync(ctx context.Context) <-chan string {
 						continue
 					}
 
-					d, ok := xMsgs[i].Values[dataKey]
-					if !ok {
-						if err := c.error.Handle(ctx, xMsgs[i], errDataKeyNotFound); err != nil {
+					message, err := newMessage(xMsgs[i])
+					if err != nil {
+						if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
 							l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error data handler")
 							sentry.CaptureException(err)
 							continue
@@ -300,58 +270,26 @@ func (c *consumer) retryAsync(ctx context.Context) <-chan string {
 						continue
 					}
 
-					switch s := d.(type) {
-					case string:
-						message, err := NewMessageFromString(s)
-						if err != nil {
-							if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
-								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error new message")
-								sentry.CaptureException(err)
-								continue
-							}
-							ackC <- xMsgs[i].ID
+					// Check to see if there is a retry after value, if no key exists then we can process the message again.
+					if _, err := c.redis.Get(ctx, retryAfterPrefix+message.ID.String()); err != nil {
+						if !errors.Is(err, redis.ErrKeyDoesNotExist) {
+							l.Error().Err(err).Msg("error getting retry after value")
 							continue
 						}
+					}
 
-						if len(message.Body) == 0 {
-							if err := c.error.Handle(ctx, xMsgs[i], errNoMsgBody); err != nil {
-								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error message body")
-								sentry.CaptureException(err)
-								continue
-							}
-							ackC <- xMsgs[i].ID
-							continue
+					switch err := c.handler.Handle(ctx, message).(type) {
+					case nil:
+						ackC <- xMsgs[i].ID
+					case RetryError:
+						if _, err := c.redis.Set(ctx, redis.SetArgs{
+							Key:        retryAfterPrefix + message.ID.String(),
+							Expiration: err.RetryDelay(),
+						}); err != nil {
+							l.Error().Err(err).Msg("error setting retry after")
 						}
-
-						// Check to see if there is a retry after value, if no key exists then we can process the message again.
-						if _, err := c.redis.Get(ctx, retryAfterPrefix+message.ID.String()); err != nil {
-							if !errors.Is(err, redis.ErrKeyDoesNotExist) {
-								l.Error().Err(err).Msg("error getting retry after value")
-								continue
-							}
-						}
-
-						switch err := c.handler.Handle(ctx, message).(type) {
-						case nil:
-							ackC <- xMsgs[i].ID
-						case RetryError:
-							if _, err := c.redis.Set(ctx, redis.SetArgs{
-								Key:        retryAfterPrefix + message.ID.String(),
-								Expiration: err.RetryDelay(),
-							}); err != nil {
-								l.Error().Err(err).Msg("error setting retry after")
-							}
-						default:
-							if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
-								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling")
-								sentry.CaptureException(err)
-								continue
-							}
-							ackC <- xMsgs[i].ID
-						}
-
 					default:
-						if err := c.error.Handle(ctx, xMsgs[i], fmt.Errorf("unknow data type: %+v", s)); err != nil {
+						if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
 							l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling")
 							sentry.CaptureException(err)
 							continue
@@ -607,4 +545,27 @@ func (e *RetryError) RetryDelay() time.Duration {
 		return e.RetryAfter * time.Second
 	}
 	return raDefault
+}
+
+func newMessage(x redis.XMessage) (Message, error) {
+	d, ok := x.Values[dataKey]
+	if !ok {
+		return Message{}, errDataKeyNotFound
+	}
+
+	s, ok := d.(string)
+	if !ok {
+		return Message{}, fmt.Errorf("unknow msg data type: %+v", s)
+	}
+
+	message, err := NewMessageFromString(s)
+	if err != nil {
+		return Message{}, err
+	}
+
+	if len(message.Body) == 0 {
+		return Message{}, errNoMsgBody
+	}
+
+	return message, nil
 }
