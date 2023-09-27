@@ -134,7 +134,7 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	kmsClient := kms.NewFromConfig(s.awsCfg)
 
 	input := &kms.CreateKeyInput{
-		KeySpec:  kmsTypes.KeySpecEccNistP521,
+		KeySpec:  kmsTypes.KeySpecEccNistP256,
 		KeyUsage: kmsTypes.KeyUsageTypeSignVerify,
 		Policy:   aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
