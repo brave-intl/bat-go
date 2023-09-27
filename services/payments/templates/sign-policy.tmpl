@@ -73,12 +73,10 @@
             }
         },
         {
-          "Sid": "AllowEnclaveDecryptAccess",
+          "Sid": "AllowEnclaveSignAccess",
           "Effect": "Allow",
           "Action": [
-            "kms:GenerateRandom",
-            "kms:GenerateDataKey",
-            "kms:Decrypt"
+            "kms:Sign"
           ],
           "Resource": "*",
           "Principal": {
@@ -102,7 +100,8 @@
             "Action": [
                 "kms:Verify",
                 "kms:List*",
-                "kms:DescribeKey"
+                "kms:DescribeKey",
+                "kms:GetPublicKey"
             ],
             "Resource": "*"
         },
