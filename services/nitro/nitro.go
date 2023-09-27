@@ -34,6 +34,14 @@ func init() {
 	NitroServeCmd.PersistentFlags().String("log-address", "", "vsock address for log server to bind on")
 	// enclave decrypt key template secret
 	NitroServeCmd.PersistentFlags().String("enclave-decrypt-key-template-secret", "", "the template secret which has the decrypt key policy")
+	// aws-region - sets the aws region used for SDK integration
+	NitroServeCmd.PersistentFlags().String("aws-region", "", "the aws region used for SDK integration")
+	// qldb-role-arn - sets the AWS ARN for the role to use to access QLDB
+	NitroServeCmd.PersistentFlags().String("qldb-role-arn", "", "the AWS ARN for the role to use to access QLDB")
+	// qldb-ledger-name - sets the QLDB ledger name to use
+	NitroServeCmd.PersistentFlags().String("qldb-ledger-name", "", "the QLDB ledger name to use")
+	// qldb-ledger-arn - sets the AWS ARN for the QLDB ledger
+	NitroServeCmd.PersistentFlags().String("qldb-ledger-arn", "", "the AWS ARN for the QLDB ledger")
 
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
 	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
