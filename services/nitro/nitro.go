@@ -45,6 +45,15 @@ func init() {
 	rootcmd.Must(viper.BindPFlag("log-address", NitroServeCmd.PersistentFlags().Lookup("log-address")))
 	rootcmd.Must(viper.BindEnv("log-address", "LOG_ADDRESS"))
 
+	rootcmd.Must(viper.BindPFlag("aws-region", NitroServeCmd.PersistentFlags().Lookup("aws-region")))
+	rootcmd.Must(viper.BindEnv("aws-region", "AWS_REGION"))
+	rootcmd.Must(viper.BindPFlag("qldb-role-arn", NitroServeCmd.PersistentFlags().Lookup("qldb-role-arn")))
+	rootcmd.Must(viper.BindEnv("qldb-role-arn", "QLDB_ROLE_ARN"))
+	rootcmd.Must(viper.BindPFlag("qldb-ledger-name", NitroServeCmd.PersistentFlags().Lookup("qldb-ledger-name")))
+	rootcmd.Must(viper.BindEnv("qldb-ledger-name", "QLDB_LEDGER_NAME"))
+	rootcmd.Must(viper.BindPFlag("qldb-ledger-arn", NitroServeCmd.PersistentFlags().Lookup("qldb-ledger-arn")))
+	rootcmd.Must(viper.BindEnv("qldb-ledger-arn", "QLDB_LEDGER_ARN"))
+
 	// enclave decrypt key template used to create decryption key in enclave
 	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
 	viper.BindEnv("enclave-decrypt-key-template-secret", "ENCLAVE_DECRYPT_KEY_TEMPLATE_SECRET")
