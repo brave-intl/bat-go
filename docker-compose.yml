@@ -24,6 +24,7 @@ services:
     environment:
       - "ALLOWED_ORIGINS=http://localhost:8080"
       - AWS_ACCESS_KEY_ID=dummy
+      - "AWS_ENDPOINT=http://localstack:4566"
       - AWS_SECRET_ACCESS_KEY=dummy
       - AWS_REGION=us-west-2
       - BAT_SETTLEMENT_ADDRESS
@@ -80,12 +81,19 @@ services:
       - TEST_RUN
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
+      - "REDIS_URL=redis-master"
+      - "REDIS_USERNAME=redis"
+      - "REDIS_PASSWORD=redis"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
       - "out:/out"
     depends_on:
       redis:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+      localstack:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -112,6 +120,7 @@ services:
       - no-new-privileges:true
     environment:
       - AWS_ACCESS_KEY_ID=dummy
+      - "AWS_ENDPOINT=http://localstack:4566"
       - AWS_SECRET_ACCESS_KEY=dummy
       - AWS_REGION=us-west-2
       - BAT_SETTLEMENT_ADDRESS
@@ -167,11 +176,18 @@ services:
       - TEST_RUN
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
+      - "REDIS_URL=redis-master"
+      - "REDIS_USERNAME=redis"
+      - "REDIS_PASSWORD=redis"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
     depends_on:
       redis:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+      localstack:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -313,6 +329,54 @@ services:
       - "8000:8000"
     healthcheck:
       test: ["CMD-SHELL", "curl -Is http://localhost:8000/shell/ | grep HTTP || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  localstack:
+    container_name: localstack
+    image: localstack/localstack:latest
+    environment:
+      - SERVICES=s3
+      - DEFAULT_REGION=us-east-1
+      - START_WEB=0
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--silent",
+          "--show-error",
+          "--fail",
+          "http://localhost:4566/health",
+        ]
+    networks:
+      - grant
+
+  redis-master:
+    container_name: redis-master
+    image: bitnami/redis:6.2.13
+    environment:
+      - REDIS_ACLFILE=/etc/redis/users.acl
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_PORT=0
+      - REDIS_TLS_ENABLED=yes
+      - REDIS_TLS_PORT=6379
+      - REDIS_TLS_AUTH_CLIENTS=no
+      - REDIS_TLS_CERT_FILE=/etc/redis/redis.crt
+      - REDIS_TLS_KEY_FILE=/etc/redis/redis.key
+      - REDIS_TLS_CA_FILE=/etc/redis/ca.crt
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./test/redis/tls:/etc/redis
+    networks:
+      - grant
+    healthcheck:
+      test: ["CMD-SHELL", "exit 0"] # TODO add proper check
       interval: 5s
       timeout: 5s
       retries: 5

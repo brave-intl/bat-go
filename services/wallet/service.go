@@ -196,11 +196,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	awsClient, err := appaws.NewClient(cfg)
-	if err != nil {
-		logger.Panic().Err(err).Msg("failed to initialize wallet service")
-	}
-
+	awsClient := appaws.NewClient(cfg)
 	// put the configured aws client on ctx
 	ctx = context.WithValue(ctx, appctx.AWSClientCTXKey, awsClient)
 

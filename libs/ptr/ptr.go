@@ -33,3 +33,8 @@ func StringOr(s *string, or string) string {
 func FromTime(t time.Time) *time.Time {
 	return &t
 }
+
+// From gets the address of type [T]
+func From[T any](t T) *T {
+	return &t
+}

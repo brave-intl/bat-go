@@ -19,10 +19,10 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	uphold "github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/go-chi/chi"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -72,10 +72,6 @@ func (suite *WalletControllersTestSuite) CleanDB() {
 		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
-}
-
-func noUUID() *uuid.UUID {
-	return nil
 }
 
 func (suite *WalletControllersTestSuite) FundWallet(w *uphold.Wallet, probi decimal.Decimal) decimal.Decimal {
