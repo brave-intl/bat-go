@@ -294,8 +294,11 @@ func revisionValidInTree(
 	client wrappedQldbSDKClient,
 	transaction *QLDBPaymentTransitionHistoryEntry,
 ) (bool, error) {
-	ledgerName := "LEDGER_NAME"
-	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &ledgerName})
+	qldbLedgerName, ok := ctx.Value(appctx.PaymentsQLDBLedgerNameCTXKey).(string)
+	if !ok {
+		return false, fmt.Errorf("empty qldb ledger name. revision not verified for state: %v", transaction)
+	}
+	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &qldbLedgerName})
 
 	if err != nil {
 		return false, fmt.Errorf("Failed to get digest: %w", err)
@@ -304,7 +307,7 @@ func revisionValidInTree(
 	revision, err := client.GetRevision(ctx, &qldb.GetRevisionInput{
 		BlockAddress:     transaction.BlockAddress.ValueHolder(),
 		DocumentId:       &transaction.Metadata.ID,
-		Name:             &ledgerName,
+		Name:             &qldbLedgerName,
 		DigestTipAddress: digest.DigestTipAddress,
 	})
 
