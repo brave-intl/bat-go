@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aws/smithy-go"
+	smithy "github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 
@@ -238,13 +238,24 @@ func (s Service) insertPayment(
 						err,
 					)
 				}
-				ionBinary := documentIDResultBinary.GetCurrentData()
-				documentIDResult := new(qldbDocumentIDResult)
-				err = ion.Unmarshal(ionBinary, documentIDResult)
-				if err != nil {
-					return nil, err
+
+				if documentIDResultBinary.Next(txn) {
+					documentIDResult := new(qldbDocumentIDResult)
+					err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), documentIDResult)
+					if err != nil {
+						return nil, err
+					}
+					return documentIDResult.documentID, nil
 				}
-				return documentIDResult.documentID, nil
+
+				err = documentIDResultBinary.Err()
+				if err != nil {
+					return nil, fmt.Errorf(
+						"failed to insert tx: %s due to: %w",
+						paymentStateForSigning.ID,
+						err,
+					)
+				}
 			}
 
 			return nil, fmt.Errorf(
@@ -393,7 +404,8 @@ func writeTransaction(
 			}
 
 			// ignore public key
-			/*pubkey,*/ signature, err := signPaymentState(
+			/*pubkey,*/
+			signature, err := signPaymentState(
 				ctx,
 				kmsSigningClient,
 				kmsSigningKeyID,
