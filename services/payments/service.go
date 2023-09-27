@@ -134,7 +134,9 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	kmsClient := kms.NewFromConfig(s.awsCfg)
 
 	input := &kms.CreateKeyInput{
-		Policy:                         aws.String(policy),
+		KeySpec:  kmsTypes.KeySpecEccNistP521,
+		KeyUsage: kmsTypes.KeyUsageTypeSignVerify,
+		Policy:   aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -166,7 +168,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	kmsClient := kms.NewFromConfig(cfg)
 
 	input := &kms.CreateKeyInput{
-		Policy:                         aws.String(policy),
+		Policy: aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -426,7 +428,7 @@ func signPaymentState(
 	kmsClient wrappedKMSClient,
 	keyID string,
 	state PaymentState,
-) (/*string,*/ string, error) {
+) ( /*string,*/ string, error) {
 	//	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 	//		KeyId: &keyID,
 	//	})
