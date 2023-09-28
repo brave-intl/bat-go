@@ -4,7 +4,6 @@ package wallet
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
@@ -168,7 +168,7 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 
 	// should return sql not found error after a disconnect
 	cl, err = pg.GetCustodianLinkByWalletID(ctx, id)
-	suite.Require().True(errors.Is(err, sql.ErrNoRows), "should be no rows found error")
+	suite.Require().True(errors.Is(err, model.ErrNoWalletCustodian), "should be no rows found error")
 }
 
 func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {

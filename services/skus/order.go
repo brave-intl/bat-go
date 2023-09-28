@@ -35,13 +35,13 @@ const (
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
 )
 
-// TODO(pavelb): Gradually replace it everywhere.
-
-type Order = model.Order
-
-type OrderItem = model.OrderItem
-
-type CreateCheckoutSessionResponse = model.CreateCheckoutSessionResponse
+// TODO(pavelb): Gradually replace these everywhere.
+type (
+	Order                         = model.Order
+	OrderItem                     = model.OrderItem
+	CreateCheckoutSessionResponse = model.CreateCheckoutSessionResponse
+	Issuer                        = model.Issuer
+)
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
@@ -56,14 +56,8 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	return mac, nil
 }
 
-// IssuerConfig - the configuration of an issuer
-type IssuerConfig struct {
-	buffer  int
-	overlap int
-}
-
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, []string, *IssuerConfig, error) {
+func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, []string, *model.IssuerConfig, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
 	// validation prior to decoding/unmarshalling
@@ -94,9 +88,9 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	orderItem.Location.String = mac.Location()
 	orderItem.Location.Valid = true
 
-	issuerConfig := &IssuerConfig{
-		buffer:  defaultBuffer,
-		overlap: defaultOverlap,
+	issuerConfig := &model.IssuerConfig{
+		Buffer:  defaultBuffer,
+		Overlap: defaultOverlap,
 	}
 
 	for i := 0; i < len(caveats); i++ {
@@ -116,9 +110,6 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		case "description":
 			orderItem.Description.String = value
 			orderItem.Description.Valid = true
-			if err != nil {
-				return nil, nil, nil, err
-			}
 		case "currency":
 			orderItem.Currency = value
 		case "credential_type":
@@ -155,13 +146,13 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("error converting buffer for order item %s: %w", orderItem.ID, err)
 			}
-			issuerConfig.buffer = buffer
+			issuerConfig.Buffer = buffer
 		case "issuer_token_overlap":
 			overlap, err := strconv.Atoi(value)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("error converting overlap for order item %s: %w", orderItem.ID, err)
 			}
-			issuerConfig.overlap = overlap
+			issuerConfig.Overlap = overlap
 		case "allowed_payment_methods":
 			allowedPaymentMethods = strings.Split(value, ",")
 		case "metadata":
@@ -174,11 +165,8 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			}
 		}
 	}
-	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
-	if err != nil {
-		return nil, nil, nil, err
-	}
 
+	newQuantity := decimal.NewFromInt(int64(orderItem.Quantity))
 	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
 	return &orderItem, allowedPaymentMethods, issuerConfig, nil

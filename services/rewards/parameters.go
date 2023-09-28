@@ -26,5 +26,5 @@ type ParametersV1 struct {
 	AutoContribute   AutoContribute          `json:"autocontribute,omitempty"`
 	Tips             Tips                    `json:"tips,omitempty"`
 	Transition       bool                    `json:"vbatExpired"`
-	VBATDeadline     time.Time               `json:"vbatDeadline,omitempty"`
+	VBATDeadline     *time.Time              `json:"vbatDeadline,omitempty"`
 }

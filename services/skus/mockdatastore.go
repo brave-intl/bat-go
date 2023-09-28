@@ -68,6 +68,20 @@ func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt(arg0, arg1, arg2, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt), arg0, arg1, arg2, arg3)
 }
 
+// AppendOrderMetadataInt64 mocks base method.
+func (m *MockDatastore) AppendOrderMetadataInt64(arg0 context.Context, arg1 *go_uuid.UUID, arg2 string, arg3 int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendOrderMetadataInt64", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendOrderMetadataInt64 indicates an expected call of AppendOrderMetadataInt64.
+func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt64(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt64", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt64), arg0, arg1, arg2, arg3)
+}
+
 // AreTimeLimitedV2CredsSubmitted mocks base method.
 func (m *MockDatastore) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -248,21 +262,6 @@ func (m *MockDatastore) ExternalIDExists(arg0 context.Context, arg1 string) (boo
 func (mr *MockDatastoreMockRecorder) ExternalIDExists(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExternalIDExists", reflect.TypeOf((*MockDatastore)(nil).ExternalIDExists), arg0, arg1)
-}
-
-// GetIssuer mocks base method.
-func (m *MockDatastore) GetIssuer(merchantID string) (*Issuer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetIssuer", merchantID)
-	ret0, _ := ret[0].(*Issuer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetIssuer indicates an expected call of GetIssuer.
-func (mr *MockDatastoreMockRecorder) GetIssuer(merchantID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuer", reflect.TypeOf((*MockDatastore)(nil).GetIssuer), merchantID)
 }
 
 // GetIssuerByPublicKey mocks base method.
@@ -550,21 +549,6 @@ func (m *MockDatastore) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx
 func (mr *MockDatastoreMockRecorder) GetUncommittedVotesForUpdate(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUncommittedVotesForUpdate", reflect.TypeOf((*MockDatastore)(nil).GetUncommittedVotesForUpdate), ctx)
-}
-
-// InsertIssuer mocks base method.
-func (m *MockDatastore) InsertIssuer(issuer *Issuer) (*Issuer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertIssuer", issuer)
-	ret0, _ := ret[0].(*Issuer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// InsertIssuer indicates an expected call of InsertIssuer.
-func (mr *MockDatastoreMockRecorder) InsertIssuer(issuer interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertIssuer", reflect.TypeOf((*MockDatastore)(nil).InsertIssuer), issuer)
 }
 
 // InsertOrderCredsTx mocks base method.

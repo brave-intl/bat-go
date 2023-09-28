@@ -2,13 +2,13 @@ package skus
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
@@ -17,6 +17,7 @@ import (
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
 
+	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -26,85 +27,107 @@ import (
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/responses"
 	"github.com/brave-intl/bat-go/services/skus/handler"
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
-func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {
-	debug, err := strconv.ParseBool(os.Getenv("DEBUG"))
-	if err != nil {
-		debug = false
-	}
-	return cors.Handler(cors.Options{
-		Debug:            debug,
-		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
-		AllowedMethods:   allowedMethods,
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		ExposedHeaders:   []string{""},
-		AllowCredentials: false,
-		MaxAge:           300, // Maximum value not ignored by any of major browsers
-	})
-}
+type middlewareFn func(next http.Handler) http.Handler
 
-// Router for order endpoints
-func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
+func Router(
+	svc *Service,
+	authMwr middlewareFn,
+	metricsMwr middleware.InstrumentHandlerDef,
+	copts cors.Options,
+) chi.Router {
 	r := chi.NewRouter()
-	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
-	orderh := handler.NewOrder(service)
+	orderh := handler.NewOrder(svc)
+
+	corsMwrPost := NewCORSMwr(copts, http.MethodPost)
 
 	if os.Getenv("ENV") == "local" {
-		r.Method(http.MethodOptions, "/", middleware.InstrumentHandler(
-			"CreateOrderOptions",
-			corsMiddleware([]string{http.MethodPost})(nil),
-		))
+		r.Method(
+			http.MethodOptions,
+			"/",
+			metricsMwr("CreateOrderOptions", corsMwrPost(nil)),
+		)
 
-		r.Method(http.MethodPost, "/", middleware.InstrumentHandler(
-			"CreateOrder",
-			corsMiddleware([]string{http.MethodPost})(handlers.AppHandler(orderh.Create)),
-		))
+		r.Method(
+			http.MethodPost,
+			"/",
+			metricsMwr(
+				"CreateOrder",
+				corsMwrPost(handlers.AppHandler(orderh.Create)),
+			),
+		)
 	} else {
-		r.Method(http.MethodPost, "/", middleware.InstrumentHandler("CreateOrder", handlers.AppHandler(orderh.Create)))
+		r.Method(http.MethodPost, "/", metricsMwr("CreateOrder", handlers.AppHandler(orderh.Create)))
 	}
 
-	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
-	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
+	{
+		corsMwrGet := NewCORSMwr(copts, http.MethodGet)
+		r.Method(http.MethodOptions, "/{orderID}", metricsMwr("GetOrderOptions", corsMwrGet(nil)))
+		r.Method(http.MethodGet, "/{orderID}", metricsMwr("GetOrder", corsMwrGet(GetOrder(svc))))
+	}
 
-	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
-	r.Method("PATCH", "/{orderID}/set-trial", middleware.InstrumentHandler("SetOrderTrialDays", corsMiddleware([]string{"PATCH"})(merchantSignedMiddleware(SetOrderTrialDays(service)))))
+	r.Method(
+		http.MethodDelete,
+		"/{orderID}",
+		metricsMwr("CancelOrder", NewCORSMwr(copts, http.MethodDelete)(authMwr(CancelOrder(svc)))),
+	)
 
-	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
-	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", instrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+	r.Method(
+		http.MethodPatch,
+		"/{orderID}/set-trial",
+		metricsMwr("SetOrderTrialDays", NewCORSMwr(copts, http.MethodPatch)(authMwr(SetOrderTrialDays(svc)))),
+	)
 
-	// api routes for order receipt validation
-	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
+	r.Method(http.MethodGet, "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(svc)))
+	r.Method(http.MethodPost, "/{orderID}/transactions/uphold", metricsMwr("CreateUpholdTransaction", CreateUpholdTransaction(svc)))
+	r.Method(http.MethodPost, "/{orderID}/transactions/gemini", metricsMwr("CreateGeminiTransaction", CreateGeminiTransaction(svc)))
+
+	r.Method(
+		http.MethodPost,
+		"/{orderID}/transactions/anonymousCard",
+		metricsMwr("CreateAnonCardTransaction", CreateAnonCardTransaction(svc)),
+	)
+
+	// Receipt validation.
+	r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc))))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
-		cr.Use(corsMiddleware([]string{"GET", "POST"}))
-		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
-		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
+		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
+		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
+		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
+		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
+		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
 	})
 
 	return r
 }
 
-// CredentialRouter handles calls relating to credentials
-func CredentialRouter(service *Service) chi.Router {
+// CredentialRouter handles requests to /v1/credentials.
+func CredentialRouter(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
-	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredentialV1", merchantSignedMiddleware(VerifyCredentialV1(service))))
+	r.Method(
+		http.MethodPost,
+		"/subscription/verifications",
+		middleware.InstrumentHandler("VerifyCredentialV1", authMwr(VerifyCredentialV1(svc))),
+	)
+
 	return r
 }
 
-// CredentialV2Router handles calls relating to credentials
-func CredentialV2Router(service *Service) chi.Router {
+// CredentialV2Router handles requests to /v2/credentials.
+func CredentialV2Router(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
-	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredentialV2", merchantSignedMiddleware(VerifyCredentialV2(service))))
+	r.Method(
+		http.MethodPost,
+		"/subscription/verifications",
+		middleware.InstrumentHandler("VerifyCredentialV2", authMwr(VerifyCredentialV2(svc))),
+	)
+
 	return r
 }
 
@@ -535,7 +558,8 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			ctx    = r.Context()
 			logger = logging.Logger(ctx, "skus.CreateOrderCreds")
 		)
-		err := requestutils.ReadJSON(r.Context(), r.Body, req)
+
+		err := requestutils.ReadJSON(ctx, r.Body, req)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read body payload")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
@@ -548,7 +572,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			logger.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError(
 				"Error validating request url parameter",
@@ -558,7 +582,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderItem, err := service.Datastore.GetOrderItem(r.Context(), req.ItemID)
+		orderItem, err := service.Datastore.GetOrderItem(ctx, req.ItemID)
 		if err != nil {
 			logger.Error().Err(err).Msg("error getting the order item for creds")
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
@@ -566,7 +590,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 
 		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
 		if orderItem.CredentialType == timeLimitedV2 {
-			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(r.Context(), req.BlindedCreds...)
+			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, req.BlindedCreds...)
 			if err != nil {
 				// This is an existing error message so don't want to change it incase client are relying on it.
 				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
@@ -574,14 +598,14 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			if alreadySubmitted {
 				// since these are already submitted, no need to create order credentials
 				// return ok
-				return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+				return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 			}
 		}
 
 		// check if we already have a signing request for this order, delete order creds will
 		// delete the prior signing request.  this allows subscriptions to manage how many
 		// order creds are handed out.
-		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(r.Context(), req.ItemID)
+		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, req.ItemID)
 		if err != nil {
 			// This is an existing error message so don't want to change it incase client are relying on it.
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
@@ -591,13 +615,12 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
-		err = service.CreateOrderItemCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
-		if err != nil {
+		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, req.BlindedCreds); err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	}
 }
 
@@ -866,6 +889,7 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
 	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
 	return r
@@ -996,6 +1020,91 @@ func HandleIOSWebhook(service *Service) handlers.AppHandler {
 			}
 		}
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+	}
+}
+
+// HandleRadomWebhook handles Radom checkout session webhooks.
+func HandleRadomWebhook(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		lg := logging.Logger(ctx, "payments").With().Str("func", "HandleRadomWebhook").Logger()
+
+		// Get webhook secret.
+		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.RadomWebhookSecretCTXKey)
+		if err != nil {
+			lg.Error().Err(err).Msg("failed to get radom_webhook_secret from context")
+			return handlers.WrapError(err, "error getting radom_webhook_secret from context", http.StatusInternalServerError)
+		}
+
+		// Check verification key.
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("radom-verification-key")), []byte(endpointSecret)) != 1 {
+			lg.Error().Err(err).Msg("invalid verification key from webhook")
+			return handlers.WrapError(err, "invalid verification key", http.StatusBadRequest)
+		}
+
+		req := radom.WebhookRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, &req); err != nil {
+			lg.Error().Err(err).Msg("failed to read request body")
+			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
+		}
+
+		lg.Debug().Str("event_type", req.EventType).Str("data", fmt.Sprintf("%+v", req)).Msg("webhook event captured")
+
+		// Handle only successful payment events.
+		if req.EventType != "managedRecurringPayment" && req.EventType != "newSubscription" {
+			return handlers.WrapError(err, "event type not implemented", http.StatusBadRequest)
+		}
+
+		// Lookup the order, the checkout session was created with orderId in metadata.
+		rawOrderID, err := req.Data.CheckoutSession.Metadata.Get("braveOrderId")
+		if err != nil || rawOrderID == "" {
+			return handlers.WrapError(err, "brave metadata not found in webhook", http.StatusBadRequest)
+		}
+
+		orderID, err := uuid.FromString(rawOrderID)
+		if err != nil {
+			return handlers.WrapError(err, "invalid braveOrderId in request", http.StatusBadRequest)
+		}
+
+		// Set order id to paid, and update metadata values.
+		if err := service.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
+			lg.Error().Err(err).Msg("failed to update order status")
+			return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+		}
+
+		if err := service.Datastore.AppendOrderMetadata(
+			ctx, &orderID, "radomCheckoutSession", req.Data.CheckoutSession.CheckoutSessionID); err != nil {
+			lg.Error().Err(err).Msg("failed to update order metadata")
+			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+		}
+
+		if req.EventType == "newSubscription" {
+
+			if err := service.Datastore.AppendOrderMetadata(
+				ctx, &orderID, "subscriptionId", req.EventData.NewSubscription.SubscriptionID); err != nil {
+				lg.Error().Err(err).Msg("failed to update order metadata")
+				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+			}
+
+			if err := service.Datastore.AppendOrderMetadata(
+				ctx, &orderID, "subscriptionContractAddress",
+				req.EventData.NewSubscription.Subscription.AutomatedEVMSubscription.SubscriptionContractAddress); err != nil {
+
+				lg.Error().Err(err).Msg("failed to update order metadata")
+				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+			}
+
+		}
+
+		// Set paymentProcessor to Radom.
+		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, model.RadomPaymentMethod); err != nil {
+			lg.Error().Err(err).Msg("failed to update order to add the payment processor")
+			return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
+		}
+
+		lg.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
+		return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
 	}
 }
 
@@ -1233,4 +1342,23 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			Vendor:     req.Type.String(),
 		}, w, http.StatusOK)
 	})
+}
+
+func NewCORSMwr(opts cors.Options, methods ...string) func(next http.Handler) http.Handler {
+	opts.AllowedMethods = methods
+
+	return cors.Handler(opts)
+}
+
+func NewCORSOpts(origins []string, dbg bool) cors.Options {
+	result := cors.Options{
+		Debug:            dbg,
+		AllowedOrigins:   origins,
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		ExposedHeaders:   []string{""},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}
+
+	return result
 }

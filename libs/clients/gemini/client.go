@@ -54,24 +54,29 @@ var (
 		[]string{"country_code", "status"},
 	)
 
+	countGeminiDocumentTypeByIssuingCountry = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_gemini_document_type_by_issuing_country",
+			Help: "Counts the number document types being used for KYC broken down by country",
+		},
+		[]string{"document_type", "issuing_country"},
+	)
+
 	documentTypePrecedence = []string{
 		"passport",
 		"drivers_license",
 		"national_identity_card",
 		"passport_card",
-		"tax_id",
-		"residence_permit",
-		"work_permit",
-		"voter_id",
-		"visa",
-		"national_insurance_card",
-		"indigenous_card",
 	}
 )
+
+// ErrNoAcceptedDocumentType is the returned error when no accepted documents exist in the Gemini response.
+var ErrNoAcceptedDocumentType = errors.New("no accepted document type")
 
 func init() {
 	prometheus.MustRegister(balanceGauge)
 	prometheus.MustRegister(countGeminiWalletAccountValidation)
+	prometheus.MustRegister(countGeminiDocumentTypeByIssuingCountry)
 }
 
 // WatchGeminiBalance - when called reports the balance to prometheus
@@ -552,9 +557,16 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 			return "", "", errors.New("error no valid documents in response")
 		}
 
-		issuingCountry = strings.ToUpper(res.ValidDocuments[0].IssuingCountry)
-		if country := countryForDocByPrecedence(documentTypePrecedence, res.ValidDocuments); country != "" {
-			issuingCountry = strings.ToUpper(country)
+		for i := range res.ValidDocuments {
+			countGeminiDocumentTypeByIssuingCountry.With(prometheus.Labels{
+				"document_type":   res.ValidDocuments[i].Type,
+				"issuing_country": res.ValidDocuments[i].IssuingCountry,
+			}).Inc()
+		}
+
+		issuingCountry = countryForDocByPrecedence(documentTypePrecedence, res.ValidDocuments)
+		if issuingCountry == "" {
+			return "", "", ErrNoAcceptedDocumentType
 		}
 	}
 
@@ -651,7 +663,7 @@ func countryForDocByPrecedence(precedence []string, docs []ValidDocument) string
 	for _, pdoc := range precedence {
 		for _, vdoc := range docs {
 			if strings.EqualFold(pdoc, vdoc.Type) {
-				return vdoc.IssuingCountry
+				return strings.ToUpper(vdoc.IssuingCountry)
 			}
 		}
 	}

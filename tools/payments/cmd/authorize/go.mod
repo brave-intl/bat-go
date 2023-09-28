@@ -6,7 +6,10 @@ replace github.com/brave-intl/bat-go/libs => ../../../../libs
 
 go 1.20
 
-require github.com/brave-intl/bat-go/tools/payments v0.0.0-00010101000000-000000000000
+require (
+	github.com/brave-intl/bat-go/libs v0.0.0-20230403164253-ad445ff37512
+	github.com/brave-intl/bat-go/tools/payments v0.0.0-00010101000000-000000000000
+)
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
@@ -17,8 +20,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/qldb v1.16.5 // indirect
 	github.com/aws/smithy-go v1.14.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/brave-intl/bat-go/libs v0.0.0-20230403164253-ad445ff37512 // indirect
-	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
@@ -39,8 +40,6 @@ require (
 	github.com/rs/zerolog v1.29.0 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
-	github.com/veracruz-project/go-nitro-enclave-attestation-document v0.0.0-20230315135749-6fc97d770084 // indirect
-	github.com/veraison/go-cose v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.7.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect

@@ -53,10 +53,10 @@ const (
 	BuildTimeCTXKey CTXKey = "build_time"
 	// ReputationClientCTXKey - context key for the build time of code
 	ReputationClientCTXKey CTXKey = "reputation_client"
-	// XyzAbcLinkingKeyCTXKey - context key for the build time of code
-	XyzAbcLinkingKeyCTXKey CTXKey = "xyzabc_linking_key"
-	// DisableXyzAbcLinkingCTXKey - context key for the build time of code
-	DisableXyzAbcLinkingCTXKey CTXKey = "disable_xyzabc_linking"
+	// ZebPayLinkingKeyCTXKey - context key for the build time of code
+	ZebPayLinkingKeyCTXKey CTXKey = "zebpay_linking_key"
+	// DisableZebPayLinkingCTXKey - context key for the build time of code
+	DisableZebPayLinkingCTXKey CTXKey = "disable_zebpay_linking"
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
 	// GeminiBrowserClientIDCTXKey - context key for the gemini browser client id
@@ -146,6 +146,17 @@ const (
 	DisableGeminiLinkingCTXKey CTXKey = "disable_gemini_linking"
 	// DisableBitflyerLinkingCTXKey - this informs if bitflyer linking is enabled
 	DisableBitflyerLinkingCTXKey CTXKey = "disable_bitflyer_linking"
+
+	// RadomWebhookSecretCTXKey - the webhook secret key for radom integration
+	RadomWebhookSecretCTXKey CTXKey = "radom_webhook_secret"
+	// RadomEnabledCTXKey - this informs if radom is enabled
+	RadomEnabledCTXKey CTXKey = "radom_enabled"
+	// RadomSellerAddressCTXKey is the seller address on radom
+	RadomSellerAddressCTXKey CTXKey = "radom_seller_address"
+	// RadomServerCTXKey is the server address on radom
+	RadomServerCTXKey CTXKey = "radom_server"
+	// RadomSecretCTXKey is the server secret on radom
+	RadomSecretCTXKey CTXKey = "radom_secret"
 
 	// stripe related keys
 
