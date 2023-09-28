@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -36,18 +35,11 @@ const (
 	signatureHeader     = "Signature"
 )
 
-var (
-	payout       = strconv.FormatInt(time.Now().Unix(), 10)
-	SubmitStream = payments.SubmitPrefix + payout
-)
-
 // SettlementClient describes functionality of the settlement client
 type SettlementClient interface {
 	ConfigureWorker(context.Context, string, *payments.WorkerConfig) error
 	PrepareTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.PrepareRequest) error
 	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.SubmitRequest) error
-	//HandlePrepareResponse(ctx context.Context, stream, id string, data []byte) error
-	//GetStreamClient() redisconsumer.StreamClient
 	WaitForResponses(ctx context.Context, payoutID string, numTransactions int) error
 }
 
@@ -62,7 +54,7 @@ func NewSettlementClient(ctx context.Context, env string, config map[string]stri
 
 	// FIXME
 	pcrs := map[uint][]byte{
-		3: []byte{0},
+		12: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}
 	verifier := httpsignature.NewNitroVerifier(pcrs)
 
@@ -180,7 +172,7 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 		return err
 	}
 
-	submitGroups := make(map[string][]payments.RequestWrapper)
+	submitGroups := make(map[string][]interface{})
 	for _, v := range at {
 
 		buf := bytes.NewBuffer([]byte{})
@@ -212,9 +204,6 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 			return fmt.Errorf("failed to encapsulate request: %w", err)
 		}
 
-		if _, exists := submitGroups[v.PayoutID]; !exists {
-			submitGroups[v.PayoutID] = []payments.RequestWrapper{}
-		}
 		// message wrapper for submit
 		submitGroups[v.PayoutID] = append(submitGroups[v.PayoutID], payments.RequestWrapper{
 			ID:        uuid.New(),
@@ -226,7 +215,7 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 	for payoutID, messages := range submitGroups {
 		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("submitted transactions")
 		stream := payments.SubmitPrefix + payoutID
-		err := rc.redis.AddMessages(ctx, stream, messages)
+		err := rc.redis.AddMessages(ctx, stream, messages...)
 		if err != nil {
 			return fmt.Errorf("failed to exec submit transaction commands: %w", err)
 		}

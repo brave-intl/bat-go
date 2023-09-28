@@ -52,8 +52,6 @@ func main() {
 		log.Printf("Operator Key File Location: %s\n", *key)
 	}
 
-	// FIXME verify attesation as we pull responses off the stream
-
 	attestedReportFile, err := os.Open(*attestedReportFilename)
 	if err != nil {
 		log.Fatalf("failed to open attested report file: %v\n", err)
@@ -62,7 +60,7 @@ func main() {
 
 	// parse the attested report
 	attestedReport := payments.AttestedReport{}
-	if err := payments.ReadReport(&attestedReport, attestedReportFile); err != nil {
+	if err := payments.ReadReportFromResponses(&attestedReport, attestedReportFile); err != nil {
 		log.Fatalf("failed to read attested report: %v\n", err)
 	}
 

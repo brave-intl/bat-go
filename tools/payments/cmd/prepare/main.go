@@ -15,7 +15,7 @@ The flags are:
 		The environment to which the operator is sending transactions to be put in prepared state.
 		The environment is specified as the base URI of the payments service running in the
 		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
-			https://payments.bsg.brave.software
+			https://nitro-payments.bsg.brave.software
 	-ra
 		The redis addresses comma seperated
 	-rp
@@ -46,7 +46,7 @@ func main() {
 		"the operator's key file location (ed25519 private key) in PEM format")
 
 	env := flag.String(
-		"e", "https://payments.bsg.brave.software",
+		"e", "https://nitro-payments.bsg.brave.software",
 		"the environment to which the tool will interact")
 	verbose := flag.Bool(
 		"v", false,
@@ -122,6 +122,10 @@ func main() {
 				log.Fatalf("failed to validate report: %v\n", err)
 			}
 
+			if report[0].PayoutID != *payoutID {
+				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
+			}
+
 			totalTransactions += len(report)
 			if !firstRun && !*resubmit {
 				return
@@ -134,10 +138,6 @@ func main() {
 
 			if err := report.Prepare(ctx, priv, client); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
-			}
-
-			if report[0].PayoutID != *payoutID {
-				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
 			}
 
 			wc := &payments.WorkerConfig{

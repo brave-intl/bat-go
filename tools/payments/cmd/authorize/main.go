@@ -17,7 +17,7 @@ The flags are:
 		The environment to which the operator is sending approval for transactions.
 		The environment is specified as the base URI of the payments service running in the
 		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
-			https://payments.bsg.brave.software
+			https://nitro-payments.bsg.brave.software
 	-ra
 		The redis address
 	-rp
@@ -49,7 +49,7 @@ func main() {
 		"the operator's key file location (ed25519 private key) in PEM format")
 
 	env := flag.String(
-		"e", "https://payments.bsg.brave.software",
+		"e", "https://nitro-payments.bsg.brave.software",
 		"the environment to which the tool will interact")
 
 	redisAddr := flag.String(
@@ -95,13 +95,6 @@ func main() {
 		log.Fatal("failed payout id cannot be nil or empty\n")
 	}
 
-	wc := &payments.WorkerConfig{
-		PayoutID:      *payoutID,
-		ConsumerGroup: paymentscli.SubmitStream + "-cg",
-		Stream:        paymentscli.SubmitStream,
-		Count:         0,
-	}
-
 	for _, name := range files {
 		func() {
 			f, err := os.Open(name)
@@ -111,11 +104,13 @@ func main() {
 			defer f.Close()
 
 			var report paymentscli.AttestedReport
-			if err := paymentscli.ReadReport(&report, f); err != nil {
+			if err := paymentscli.ReadReportFromResponses(&report, f); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 
-			wc.Count += len(report)
+			if report[0].PayoutID != *payoutID {
+				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
+			}
 
 			if *verbose {
 				log.Printf("report stats: %d transactions; %s total bat\n", len(report), report.SumBAT())
@@ -129,16 +124,26 @@ func main() {
 			if err := report.Submit(ctx, priv, client); err != nil {
 				log.Fatalf("failed to submit report: %v\n", err)
 			}
+
+			wc := &payments.WorkerConfig{
+				PayoutID:      *payoutID,
+				ConsumerGroup: payments.SubmitPrefix + *payoutID + "-cg",
+				Stream:        payments.SubmitPrefix + *payoutID,
+				Count:         len(report),
+			}
+
+			err = client.ConfigureWorker(ctx, payments.SubmitConfigStream, wc)
+			if err != nil {
+				log.Fatalf("failed to write to submit config stream: %v\n", err)
+			}
+
+			if *verbose {
+				log.Printf("submit transactions loaded for %+v\n", wc)
+			}
 		}()
 	}
 
-	err = client.ConfigureWorker(ctx, payments.SubmitConfigStream, wc)
-	if err != nil {
-		log.Fatalf("failed to write to submit config stream: %v\n", err)
-	}
-
 	if *verbose {
-		log.Printf("submit transactions loaded for %+v\n", wc)
 		log.Println("authorize command complete")
 	}
 }

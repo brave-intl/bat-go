@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"bufio"
 	"context"
 	"crypto"
 	"crypto/ed25519"
@@ -23,7 +24,7 @@ var (
 )
 
 // AttestedReport is the report of payouts after being prepared
-type AttestedReport []*payments.PrepareResponse
+type AttestedReport []payments.PrepareResponse
 
 // SumBAT sums the total amount of BAT in the report.
 func (ar AttestedReport) SumBAT() decimal.Decimal {
@@ -108,6 +109,22 @@ func ReadReport(report any, reader io.Reader) error {
 	return nil
 }
 
+// ReadReportFromResponses reads a report from the reader
+func ReadReportFromResponses(report *AttestedReport, reader io.Reader) error {
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		var resp payments.PrepareResponse
+		if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
+			return err
+		}
+		*report = append(*report, resp)
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // rootAWSNitroCert is the root certificate for the nitro enclaves in aws,
 // retrieved from https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
 var rootAWSNitroCert = nitro.RootAWSNitroCert
@@ -164,6 +181,7 @@ func (ar AttestedReport) Submit(ctx context.Context, key ed25519.PrivateKey, cli
 	reqs := make([]payments.SubmitRequest, len(ar))
 	for i, resp := range ar {
 		reqs[i].DocumentID = resp.DocumentID
+		reqs[i].PayoutID = resp.PayoutID
 	}
 
 	return client.SubmitTransactions(ctx, signer, reqs...)

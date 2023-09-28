@@ -23,8 +23,16 @@ func WorkerRun(command *cobra.Command, args []string) {
 
 	worker := payments.NewWorker(redisClient)
 
-	err = worker.StartPrepareConfigConsumer(ctx)
+	go func() {
+		err = worker.StartPrepareConfigConsumer(ctx)
+		if err != nil {
+			logger.Error().Err(err).Msg("consumer exited with error")
+		}
+	}()
+
+	err = worker.StartSubmitConfigConsumer(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("consumer exited with error")
 	}
+
 }

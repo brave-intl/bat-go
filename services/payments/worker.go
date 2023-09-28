@@ -38,6 +38,15 @@ func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, da
 	return w.requestHandler(ctx, client, "POST", "/v1/prepare", stream, id, data)
 }
 
+// HandleSubmitMessage by sending it to the payments service
+func (w *Worker) HandleSubmitMessage(ctx context.Context, stream, id string, data []byte) error {
+	client, err := client.New("https://nitro-payments.bsg.brave.software", "")
+	if err != nil {
+		return err
+	}
+	return w.requestHandler(ctx, client, "POST", "/v1/submit", stream, id, data)
+}
+
 // requestHandler is a generic handler for sending encapsulated http requests and storing the results
 func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, stream, id string, data []byte) error {
 	logger, err := appctx.GetLogger(ctx)
@@ -69,6 +78,7 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 		return err
 	}
 
+	// FIXME we should probably complete override the url based on params
 	r.URL = client.BaseURL.ResolveReference(&url.URL{
 		Path: r.URL.RequestURI(),
 	})
@@ -111,12 +121,17 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 		Response:  sr,
 	}
 
-	return w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, &respWrapper)
+	return w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, respWrapper)
 }
 
 // HandlePrepareConfigMessage creates a new prepare consumer, waiting for all messages to be consumed
 func (w *Worker) HandlePrepareConfigMessage(ctx context.Context, stream, id string, data []byte) error {
 	return w.handleConfigMessage(w.HandlePrepareMessage, ctx, id, data)
+}
+
+// HandleSubmitConfigMessage creates a new submit consumer, waiting for all messages to be consumed
+func (w *Worker) HandleSubmitConfigMessage(ctx context.Context, stream, id string, data []byte) error {
+	return w.handleConfigMessage(w.HandleSubmitMessage, ctx, id, data)
 }
 
 // handleConfigMessage is a generic handler which creates a consumer, waiting for all messages to be consumed
@@ -163,4 +178,9 @@ func (w *Worker) handleConfigMessage(handle redisconsumer.MessageHandler, ctx co
 // StartPrepareConfigConsumer is a convenience function for starting the prepare config consumer
 func (w *Worker) StartPrepareConfigConsumer(ctx context.Context) error {
 	return redisconsumer.StartConsumer(ctx, w.rc, payments.PrepareConfigStream, payments.PrepareConfigConsumerGroup, "0", w.HandlePrepareConfigMessage)
+}
+
+// StartSubmitConfigConsumer is a convenience function for starting the prepare config consumer
+func (w *Worker) StartSubmitConfigConsumer(ctx context.Context) error {
+	return redisconsumer.StartConsumer(ctx, w.rc, payments.SubmitConfigStream, payments.SubmitConfigConsumerGroup, "0", w.HandleSubmitConfigMessage)
 }
