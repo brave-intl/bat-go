@@ -122,7 +122,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
-		Hash: "test",
+		Hash: []byte("test"),
 		Data: PaymentState{
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
@@ -135,9 +135,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-	marshaledAuthenticatedState, err := json.Marshal(AuthenticatedPaymentState{Status: Prepared})
-	must.Equal(t, nil, err)
-	mockedPaymentState := PaymentState{UnsafePaymentState: marshaledAuthenticatedState}
+	//	marshaledAuthenticatedState, err := json.Marshal(AuthenticatedPaymentState{Status: Prepared})
+	//	must.Equal(t, nil, err)
+	//	mockedPaymentState := PaymentState{UnsafePaymentState: marshaledAuthenticatedState}
 	mockKMS := new(mockKMSClient)
 	mockDriver := new(mockDriver)
 	mockKMS.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
@@ -165,9 +165,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return("123456", nil).Once()
 	// Next call in order is to get GetTransactionFromDocumentID and should return an
 	// AuthenticatedPaymentState.
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockedPaymentState, nil).Once()
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&testTransaction, nil).Once()
 	// All further calls should return the mocked history entry.
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory.Data, nil)
+	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&testTransaction, nil)
 	insertedDocumentID, err := service.insertPayment(ctx, testTransaction.PaymentDetails)
 	must.Equal(t, nil, err)
 	must.Equal(t, "123456", insertedDocumentID)

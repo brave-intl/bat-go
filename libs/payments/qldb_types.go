@@ -19,7 +19,7 @@ type QLDBPaymentTransitionHistoryEntryBlockAddress struct {
 }
 
 // QLDBPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry.
-type QLDBPaymentTransitionHistoryEntryHash string
+type QLDBPaymentTransitionHistoryEntryHash []byte
 
 // qldbPaymentTransitionHistoryEntrySignature defines signature for
 // qldbPaymentTransitionHistoryEntry.
