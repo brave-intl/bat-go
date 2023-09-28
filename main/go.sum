@@ -308,6 +308,7 @@ github.com/blang/semver v3.1.0+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnweb
 github.com/blang/semver v3.5.1+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869/go.mod h1:Ekp36dRnpXw/yCqJaO+ZrUyxD+3VXMFFr56k5XYrpB4=
 github.com/boombuler/barcode v1.0.0/go.mod h1:paBWMcWSl3LHKBqUq+rly7CNSldXjb2rDl3JlRe0mD8=
+github.com/brave-intl/bat-go v1.0.2 h1:0JHIPQrs3PuPL0BdUBOdlEImN7IsSZ3J5pLHr2wPCxA=
 github.com/bshuster-repo/logrus-logstash-hook v0.4.1/go.mod h1:zsTqEiSzDgAa/8GZR7E1qaXrhYNDKBYy5/dWPTIflbk=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufoqS23FtqVCzL0ZqgP5MqXbb4fg/WgDys70nA=
@@ -950,6 +951,8 @@ github.com/hashicorp/vault/sdk v0.6.1-0.20230427140652-b4b396ffc14f h1:0KmxboDYC
 github.com/hashicorp/vault/sdk v0.6.1-0.20230427140652-b4b396ffc14f/go.mod h1:XduFY2J0HMoM4mt4kkxlrrkF8bYowzUc2Gog6epWVsA=
 github.com/hashicorp/yamux v0.1.1 h1:yrQxtgseBDrq9Y652vSRDvsKCJKOUD+GzTS4Y0Y8pvE=
 github.com/hashicorp/yamux v0.1.1/go.mod h1:CtWFDAQgb7dxtzFs4tWbplKIe2jSi3+5vKbgIO0SLnQ=
+github.com/hf/nitrite v0.0.0-20211104000856-f9e0dcc73703 h1:oTi0zYvHo1sfk5sevGc4LrfgpLYB6cIhP/HllCUGcZ8=
+github.com/hf/nitrite v0.0.0-20211104000856-f9e0dcc73703/go.mod h1:ycRhVmo6wegyEl6WN+zXOHUTJvB0J2tiuH88q/McTK8=
 github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9 h1:pU32bJGmZwF4WXb9Yaz0T8vHDtIPVxqDOdmYdwTQPqw=
 github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9/go.mod h1:MJsac5D0fKcNWfriUERtln6segcGfD6Nu0V5uGBbPf8=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=

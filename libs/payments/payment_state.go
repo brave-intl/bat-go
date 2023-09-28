@@ -11,8 +11,9 @@ import (
 type PaymentState struct {
 	// Serialized AuthenticatedPaymentState. Should only ever be access via GetSafePaymentState,
 	// which does all of the needed validation of the state
-	UnsafePaymentState []byte     `ion:"data"`
-	Signature          []byte     `ion:"signature"`
+	UnsafePaymentState []byte    `ion:"data"`
+	Signature          []byte    `ion:"signature"`
+	PublicKey          []byte    `ion:"publicKey"`
 	ID                 uuid.UUID `ion:"idempotencyKey"`
 }
 
@@ -63,7 +64,7 @@ func (p *PaymentState) SetIdempotencyKey() error {
 func UnsignedPaymentStateFromDetails(details PaymentDetails) (*PaymentState, error) {
 	authenticatedState := AuthenticatedPaymentState{
 		PaymentDetails: details,
-		Status: Prepared,
+		Status:         Prepared,
 	}
 	authenticatedStateString, err := json.Marshal(authenticatedState)
 	if err != nil {
@@ -71,6 +72,6 @@ func UnsignedPaymentStateFromDetails(details PaymentDetails) (*PaymentState, err
 	}
 	return &PaymentState{
 		UnsafePaymentState: authenticatedStateString,
-		ID: authenticatedState.GenerateIdempotencyKey(),
+		ID:                 authenticatedState.GenerateIdempotencyKey(),
 	}, nil
 }

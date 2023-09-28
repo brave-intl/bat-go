@@ -143,6 +143,7 @@ require (
 	github.com/hashicorp/vault/api v1.8.1 // indirect
 	github.com/hashicorp/vault/sdk v0.6.1-0.20230427140652-b4b396ffc14f // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
+	github.com/hf/nitrite v0.0.0-20211104000856-f9e0dcc73703 // indirect
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/iancoleman/orderedmap v0.2.0 // indirect

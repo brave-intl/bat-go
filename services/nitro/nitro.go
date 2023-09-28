@@ -34,6 +34,14 @@ func init() {
 	NitroServeCmd.PersistentFlags().String("log-address", "", "vsock address for log server to bind on")
 	// enclave decrypt key template secret
 	NitroServeCmd.PersistentFlags().String("enclave-decrypt-key-template-secret", "", "the template secret which has the decrypt key policy")
+	// aws-region - sets the aws region used for SDK integration
+	NitroServeCmd.PersistentFlags().String("aws-region", "", "the aws region used for SDK integration")
+	// qldb-role-arn - sets the AWS ARN for the role to use to access QLDB
+	NitroServeCmd.PersistentFlags().String("qldb-role-arn", "", "the AWS ARN for the role to use to access QLDB")
+	// qldb-ledger-name - sets the QLDB ledger name to use
+	NitroServeCmd.PersistentFlags().String("qldb-ledger-name", "", "the QLDB ledger name to use")
+	// qldb-ledger-arn - sets the AWS ARN for the QLDB ledger
+	NitroServeCmd.PersistentFlags().String("qldb-ledger-arn", "", "the AWS ARN for the QLDB ledger")
 
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
 	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
@@ -44,6 +52,15 @@ func init() {
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("log-address"))
 	rootcmd.Must(viper.BindPFlag("log-address", NitroServeCmd.PersistentFlags().Lookup("log-address")))
 	rootcmd.Must(viper.BindEnv("log-address", "LOG_ADDRESS"))
+
+	rootcmd.Must(viper.BindPFlag("aws-region", NitroServeCmd.PersistentFlags().Lookup("aws-region")))
+	rootcmd.Must(viper.BindEnv("aws-region", "AWS_REGION"))
+	rootcmd.Must(viper.BindPFlag("qldb-role-arn", NitroServeCmd.PersistentFlags().Lookup("qldb-role-arn")))
+	rootcmd.Must(viper.BindEnv("qldb-role-arn", "QLDB_ROLE_ARN"))
+	rootcmd.Must(viper.BindPFlag("qldb-ledger-name", NitroServeCmd.PersistentFlags().Lookup("qldb-ledger-name")))
+	rootcmd.Must(viper.BindEnv("qldb-ledger-name", "QLDB_LEDGER_NAME"))
+	rootcmd.Must(viper.BindPFlag("qldb-ledger-arn", NitroServeCmd.PersistentFlags().Lookup("qldb-ledger-arn")))
+	rootcmd.Must(viper.BindEnv("qldb-ledger-arn", "QLDB_LEDGER_ARN"))
 
 	// enclave decrypt key template used to create decryption key in enclave
 	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
@@ -83,6 +100,10 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 
 	ctx = context.WithValue(ctx, appctx.LogWriterCTXKey, writer)
 	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
+	ctx = context.WithValue(ctx, appctx.AWSRegionCTXKey, viper.GetString("aws-region"))
+	ctx = context.WithValue(ctx, appctx.PaymentsQLDBRoleArnCTXKey, viper.GetString("qldb-role-arn"))
+	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerNameCTXKey, viper.GetString("qldb-ledger-name"))
+	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerARNCTXKey, viper.GetString("qldb-ledger-arn"))
 	ctx = context.WithValue(ctx, appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey, viper.GetString("enclave-decrypt-key-template-secret"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)

@@ -20,6 +20,7 @@ import (
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/smithy-go/middleware"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	should "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	must "github.com/stretchr/testify/require"
@@ -149,30 +150,30 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
-		authenticatedState, latestHistortyEntry, err := AuthenticatedStateFromQLDBHistory(
+		authenticatedState, latestHistoryItem, err := AuthenticatedStateFromQLDBHistory(
 			ctx,
 			mockKMS,
 			"",
 			transactionHistorySet,
 			mockTransitionHistory.Data,
 		)
-		must.Equal(t, nil, err)
+		must.Nil(t, err)
 		must.NotNil(t, authenticatedState)
-		must.NotNil(t, latestHistortyEntry)
+		must.NotNil(t, latestHistoryItem)
 	}
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
-		authenticatedState, latestHistortyEntry, err := AuthenticatedStateFromQLDBHistory(
+		authenticatedState, latestHistoryItem, _ := AuthenticatedStateFromQLDBHistory(
 			ctx,
 			mockKMS,
 			"",
 			transactionHistorySet,
 			mockTransitionHistory.Data,
 		)
-		must.NotNil(t, err)
+		must.Nil(t, err)
 		must.Nil(t, authenticatedState)
-		must.Nil(t, latestHistortyEntry)
+		must.Nil(t, latestHistoryItem)
 	}
 }
 
@@ -247,6 +248,7 @@ func TestValidateRevision(t *testing.T) {
 	}
 	mockSDKClient.On("GetDigest").Return(&testDigestOutput, nil)
 	mockSDKClient.On("GetRevision").Return(&testRevisionOutput, nil)
+	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerNameCTXKey, "TEST_LEDGER")
 	valid, err := revisionValidInTree(ctx, mockSDKClient, &trueObject)
 	must.Equal(t, nil, err)
 	should.True(t, valid)
