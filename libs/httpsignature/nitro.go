@@ -19,7 +19,7 @@ type NitroSigner struct{}
 
 // Sign the message using the nitro signer
 func (s NitroSigner) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	return nitro.Attest(context.Background(), []byte{}, message, []byte{})
+	return nitro.Attest(context.Background(), nil, message, nil)
 }
 
 // NitroVerifier specifies the PCR values required for verification
