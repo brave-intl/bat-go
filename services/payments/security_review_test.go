@@ -20,6 +20,7 @@ import (
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/smithy-go/middleware"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	should "github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	must "github.com/stretchr/testify/require"
@@ -247,6 +248,7 @@ func TestValidateRevision(t *testing.T) {
 	}
 	mockSDKClient.On("GetDigest").Return(&testDigestOutput, nil)
 	mockSDKClient.On("GetRevision").Return(&testRevisionOutput, nil)
+	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerNameCTXKey, "TEST_LEDGER")
 	valid, err := revisionValidInTree(ctx, mockSDKClient, &trueObject)
 	must.Equal(t, nil, err)
 	should.True(t, valid)

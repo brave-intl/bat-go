@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aws/smithy-go"
+	smithy "github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
 
@@ -22,7 +22,7 @@ import (
 )
 
 type qldbDocumentIDResult struct {
-	documentID string `ion:"documentId"`
+	DocumentID string `ion:"documentId"`
 }
 
 // ErrNotConfiguredYet - service not fully configured.
@@ -70,11 +70,11 @@ func (s *Service) setupLedger(ctx context.Context) error {
 			if !ok {
 				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
 			}
-		}
-
-		_, err = txn.Execute("CREATE INDEX ON transactions (idempotencyKey)")
-		if err != nil {
-			return nil, err
+		} else {
+			_, err = txn.Execute("CREATE INDEX ON transactions (idempotencyKey)")
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		ok = false
@@ -197,7 +197,7 @@ func (s Service) insertPayment(
 	/*pubkey,*/ signature, err := signPaymentState(
 		ctx,
 		s.kmsSigningClient,
-		s.kmsDecryptKeyArn,
+		s.kmsSigningKeyID,
 		*paymentStateForSigning,
 	)
 	if err != nil {
@@ -238,13 +238,24 @@ func (s Service) insertPayment(
 						err,
 					)
 				}
-				ionBinary := documentIDResultBinary.GetCurrentData()
-				documentIDResult := new(qldbDocumentIDResult)
-				err = ion.Unmarshal(ionBinary, documentIDResult)
-				if err != nil {
-					return nil, err
+
+				if documentIDResultBinary.Next(txn) {
+					documentIDResult := new(qldbDocumentIDResult)
+					err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
+					if err != nil {
+						return nil, err
+					}
+					return documentIDResult.DocumentID, nil
 				}
-				return documentIDResult.documentID, nil
+
+				err = documentIDResultBinary.Err()
+				if err != nil {
+					return nil, fmt.Errorf(
+						"failed to insert tx: %s due to: %w",
+						paymentStateForSigning.ID,
+						err,
+					)
+				}
 			}
 
 			return nil, fmt.Errorf(
@@ -393,7 +404,8 @@ func writeTransaction(
 			}
 
 			// ignore public key
-			/*pubkey,*/ signature, err := signPaymentState(
+			/*pubkey,*/
+			signature, err := signPaymentState(
 				ctx,
 				kmsSigningClient,
 				kmsSigningKeyID,

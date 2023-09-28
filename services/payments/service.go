@@ -134,6 +134,8 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	kmsClient := kms.NewFromConfig(s.awsCfg)
 
 	input := &kms.CreateKeyInput{
+		KeySpec:                        kmsTypes.KeySpecEccNistP256,
+		KeyUsage:                       kmsTypes.KeyUsageTypeSignVerify,
 		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
@@ -218,7 +220,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	}
 
 	if err := service.configureDatastore(ctx); err != nil {
-		logger.Fatal().Msg("could not configure datastore")
+		logger.Fatal().Err(err).Msg("could not configure datastore")
 	}
 
 	/*
@@ -292,8 +294,11 @@ func revisionValidInTree(
 	client wrappedQldbSDKClient,
 	transaction *QLDBPaymentTransitionHistoryEntry,
 ) (bool, error) {
-	ledgerName := "LEDGER_NAME"
-	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &ledgerName})
+	qldbLedgerName, ok := ctx.Value(appctx.PaymentsQLDBLedgerNameCTXKey).(string)
+	if !ok {
+		return false, fmt.Errorf("empty qldb ledger name. revision not verified for state: %v", transaction)
+	}
+	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &qldbLedgerName})
 
 	if err != nil {
 		return false, fmt.Errorf("Failed to get digest: %w", err)
@@ -302,7 +307,7 @@ func revisionValidInTree(
 	revision, err := client.GetRevision(ctx, &qldb.GetRevisionInput{
 		BlockAddress:     transaction.BlockAddress.ValueHolder(),
 		DocumentId:       &transaction.Metadata.ID,
-		Name:             &ledgerName,
+		Name:             &qldbLedgerName,
 		DigestTipAddress: digest.DigestTipAddress,
 	})
 
@@ -426,7 +431,7 @@ func signPaymentState(
 	kmsClient wrappedKMSClient,
 	keyID string,
 	state PaymentState,
-) (/*string,*/ string, error) {
+) ( /*string,*/ string, error) {
 	//	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 	//		KeyId: &keyID,
 	//	})

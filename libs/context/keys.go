@@ -223,12 +223,14 @@ const (
 	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
 	// PaymentsKMSWrapperCTXKey - the context key for getting the kms wrapper key
 	PaymentsKMSWrapperCTXKey CTXKey = "payments_kms_wrapper"
-	// AWSRegionCTXKey - reverse proxy address for egress traffic
+	// AWSRegionCTXKey - AWS region for SDK integration
 	AWSRegionCTXKey CTXKey = "aws_region"
-	// PaymentsQLDBRoleArnCTXKey - reverse proxy address for egress traffic
+	// PaymentsQLDBRoleArnCTXKey - ARN of the AWS role to assume for QLDB access
 	PaymentsQLDBRoleArnCTXKey CTXKey = "qldb_role_arn"
-	// PaymentsQLDBLedgerNameCTXKey - reverse proxy address for egress traffic
+	// PaymentsQLDBLedgerNameCTXKey - Name of the QLDB ledger to which the role has access
 	PaymentsQLDBLedgerNameCTXKey CTXKey = "qldb_ledger_name"
+	// PaymentsQLDBLedgerARNCTXKey - ARN of the AWS QLDB ledger to which the role has access
+	PaymentsQLDBLedgerARNCTXKey CTXKey = "qldb_ledger_arn"
 
 	// LogWriterCTXKey - the context key for getting the log writer
 	LogWriterCTXKey CTXKey = "log_writer"
