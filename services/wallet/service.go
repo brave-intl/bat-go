@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/go-chi/chi"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/lib/pq"
@@ -40,21 +42,6 @@ import (
 	"github.com/brave-intl/bat-go/services/cmd"
 )
 
-// ReputationGeoEnable - enable geo reputation check
-var ReputationGeoEnable = isReputationGeoEnabled()
-
-func isReputationGeoEnabled() bool {
-	var toggle = false
-	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
 // VerifiedWalletEnable enable verified wallet call
 var VerifiedWalletEnable = isVerifiedWalletEnable()
 
@@ -63,6 +50,21 @@ func isVerifiedWalletEnable() bool {
 	if os.Getenv("VERIFIED_WALLET_ENABLED") != "" {
 		var err error
 		toggle, err = strconv.ParseBool(os.Getenv("VERIFIED_WALLET_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
+// directVerifiedWalletEnable enable direct verified wallet call
+var directVerifiedWalletEnable = isDirectVerifiedWalletEnable()
+
+func isDirectVerifiedWalletEnable() bool {
+	var toggle = false
+	if os.Getenv("DIRECT_VERIFIED_WALLET_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("DIRECT_VERIFIED_WALLET_ENABLED"))
 		if err != nil {
 			return false
 		}
@@ -84,6 +86,16 @@ var (
 var (
 	errGeoCountryDisabled         = errors.New("geo country is disabled")
 	errRewardsWalletAlreadyExists = errors.New("rewards wallet already exists")
+
+	errZPInvalidIat       = errors.New("zebpay: linking info validation failed no iat")
+	errZPInvalidExp       = errors.New("zebpay: linking info validation failed no exp")
+	errZPInvalidAfter     = errors.New("zebpay: linking info validation failed issued at is after now")
+	errZPInvalidBefore    = errors.New("zebpay: linking info validation failed expired is before now")
+	errZPInvalidKYC       = errors.New("zebpay: user kyc did not pass")
+	errZPInvalidDepositID = errors.New("zebpay: deposit id does not match token")
+	errZPInvalidAccountID = errors.New("zebpay: account id invalid in token")
+
+	errCustodianLinkMismatch = errors.New("wallet: custodian link mismatch")
 )
 
 // GeoValidator - interface describing validation of geolocation
@@ -223,15 +235,18 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	s.jobs = []srv.Job{
 		{
-			Func:    s.RunVerifiedWalletWorker,
-			Cadence: 15 * time.Second,
-			Workers: 1,
-		},
-		{
 			Func:    s.RefreshCustodianRegionsWorker,
 			Cadence: 15 * time.Minute,
 			Workers: 1,
 		},
+	}
+
+	if VerifiedWalletEnable {
+		s.jobs = append(s.jobs, srv.Job{
+			Func:    s.RunVerifiedWalletWorker,
+			Cadence: 1 * time.Second,
+			Workers: 1,
+		})
 	}
 
 	err = cmd.SetupJobWorkers(ctx, s.Jobs())
@@ -274,8 +289,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
-			r.Post("/xyzabc/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
+			r.Post("/zebpay/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkZebPayDepositAccount", LinkZebPayDepositAccountV3(s))).ServeHTTP)
 
 			// create wallet connect routes for our wallet providers
 			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
@@ -284,8 +299,8 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) *chi.Mux {
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
-			r.Post("/xyzabc/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"LinkXyzAbcDepositAccount", LinkXyzAbcDepositAccountV3(s))).ServeHTTP)
+			r.Post("/zebpay/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkZebPayDepositAccount", LinkZebPayDepositAccountV3(s))).ServeHTTP)
 		}
 
 		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
@@ -382,83 +397,113 @@ func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, c
 }
 
 // LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UUID, depositID, accountHash string) error {
-	// during validation, we verified that the account hash and deposit id were signed by bitflyer
+func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UUID, depositID, accountHash string) (string, error) {
+	const (
+		depositProvider = "bitflyer"
+		country         = "JP"
+	)
+
+	err := validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
+	if err != nil {
+		if errors.Is(err, errCustodianLinkMismatch) {
+			return "", errCustodianLinkMismatch
+		}
+		return "", handlers.WrapError(err, "failed to check linking mismatch", http.StatusInternalServerError)
+	}
+
+	// In the controller validation, we verified that the account hash and deposit id were signed by bitflyer
 	// we also validated that this "info" signed the request to perform the linking with http signature
 	// we assume that since we got linkingInfo signed from BF that they are KYC
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountHash)
-	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer", "JP")
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, depositProvider, country)
 	if err != nil {
+		if errors.Is(err, ErrUnusualActivity) {
+			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return "", handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+		}
+
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
-		}
-		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
-		}
-		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
+
+		return "", handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
-	return nil
+
+	return country, nil
 }
 
-// LinkXyzAbcWallet links a wallet and transfers funds to newly linked wallet.
-func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
-	// Get xyzabc linking_info signing key.
-	linkingKeyB64, ok := ctx.Value(appctx.XyzAbcLinkingKeyCTXKey).(string)
+// LinkZebPayWallet links a wallet and transfers funds to newly linked wallet.
+func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) (string, error) {
+	const (
+		depositProvider = "zebpay"
+		country         = "IN"
+	)
+
+	// Get zebpay linking_info signing key.
+	linkingKeyB64, ok := ctx.Value(appctx.ZebPayLinkingKeyCTXKey).(string)
 	if !ok {
-		const msg = "xyzabc linking validation misconfigured"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
+		const msg = "zebpay linking validation misconfigured"
+		return "", handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
 	}
 
 	// Decode base64 encoded jwt key.
 	decodedJWTKey, err := base64.StdEncoding.DecodeString(linkingKeyB64)
 	if err != nil {
-		const msg = "xyzabc linking validation misconfigured"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
+		const msg = "zebpay linking validation misconfigured"
+		return "", handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
 	}
 
 	// Parse the signed verification token from input.
 	tok, err := jwt.ParseSigned(verificationToken)
 	if err != nil {
-		const msg = "xyzabc linking info parsing failed"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+		const msg = "zebpay linking info parsing failed"
+		return "", handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	}
+
+	if len(tok.Headers) == 0 {
+		const msg = "linking info token invalid no headers"
+		return "", handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+	}
+
+	// validate algorithm used
+	for i := range tok.Headers {
+		if tok.Headers[i].Algorithm != "HS256" {
+			const msg = "linking info token invalid"
+			return "", handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+		}
 	}
 
 	// Create the jwt claims and get them (verified) from the token.
-	claims := make(map[string]interface{})
-	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
-		const msg = "xyzabc linking info validation failed"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	claims := &claimsZP{}
+	if err := tok.Claims(decodedJWTKey, claims); err != nil {
+		const msg = "zebpay linking info validation failed"
+		return "", handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
 	}
 
-	// Make sure deposit id exists
-	depositID, ok := claims["depositId"].(string)
-	if !ok || depositID == "" {
-		const msg = "xyzabc deposit id does not match token"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	if err := claims.validate(time.Now()); err != nil {
+		return "", err
 	}
 
-	// Get the account id.
-	accountID, ok := claims["accountId"].(string)
-	if !ok || accountID == "" {
-		const msg = "xyzabc account id invalid in token"
-		return handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
+	err = validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
+	if err != nil {
+		if errors.Is(err, errCustodianLinkMismatch) {
+			return "", errCustodianLinkMismatch
+		}
+		return "", handlers.WrapError(err, "failed to check linking mismatch", http.StatusInternalServerError)
 	}
 
-	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
-
-	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking.
-	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "xyzabc", "IN"); err != nil {
+	providerLinkingID := uuid.NewV5(ClaimNamespace, claims.AccountID)
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), claims.DepositID, providerLinkingID, nil, depositProvider, country); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 
 		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+			return "", handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
 		}
 
 		status := http.StatusInternalServerError
@@ -466,20 +511,21 @@ func (service *Service) LinkXyzAbcWallet(ctx context.Context, walletID uuid.UUID
 			status = http.StatusConflict
 		}
 
-		return handlers.WrapError(err, "unable to link xyzabc wallets", status)
+		return "", handlers.WrapError(err, "unable to link zebpay wallets", status)
 	}
 
-	return nil
+	return country, nil
 }
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken, depositID string) error {
+func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken, depositID string) (string, error) {
+	const depositProvider = "gemini"
+
 	// get gemini client from context
 	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
 	if !ok {
 		// no gemini client on context
-		return handlers.WrapError(
-			appctx.ErrNotInContext, "gemini client misconfigured", http.StatusInternalServerError)
+		return "", handlers.WrapError(appctx.ErrNotInContext, "gemini client misconfigured", http.StatusInternalServerError)
 	}
 
 	// add custodian regions to ctx going to client
@@ -489,67 +535,74 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, &cr)
 	}
 
-	// perform an Account Validation call to gemini to get the accountID
+	err := validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
+	if err != nil {
+		if errors.Is(err, errCustodianLinkMismatch) {
+			return "", errCustodianLinkMismatch
+		}
+		return "", handlers.WrapError(err, "failed to check linking mismatch", http.StatusInternalServerError)
+	}
+
+	// If a wallet has previously been linked i.e. has a prior linking, but the country is now invalid/blocked
+	// then we can allow the account to link due to its prior successful linking i.e. it is grandfathered.
+	// If there is no prior linking and the country is invalid/blocked then we should apply the current rules and block it.
+
 	accountID, country, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
-		// check if this gemini accountID has already been linked to this wallet,
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
-			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
-				ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
+			hasPriorLinking, priorLinkingErr := service.Datastore.HasPriorLinking(ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
 			if priorLinkingErr != nil && !errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
+				return "", fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
 			}
-			if !ok {
-				// then pass back the original geo error
-				return fmt.Errorf("failed to validate account: %w", err)
+
+			if !hasPriorLinking {
+				return "", fmt.Errorf("failed to validate account: %w", err)
 			}
-			// allow invalid country if there was a prior linking
+
 		} else {
 			// not err invalid country error
-			return fmt.Errorf("failed to validate account: %w", err)
+			return "", fmt.Errorf("failed to validate account: %w", err)
 		}
 	}
 
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
-	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "gemini", country)
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, depositProvider, country)
 	if err != nil {
+		if errors.Is(err, ErrUnusualActivity) {
+			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return "", handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+		}
+
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
-		}
-		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
-		}
-		return handlers.WrapError(err, "unable to link gemini wallets", status)
+
+		return "", handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
-	return nil
+
+	return country, nil
 }
 
-// LinkWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkWallet(
-	ctx context.Context,
-	wallet uphold.Wallet,
-	transaction string,
-	anonymousAddress *uuid.UUID,
-) error {
+// LinkUpholdWallet links an uphold.Wallet and transfers funds.
+func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wallet, transaction string, anonymousAddress *uuid.UUID) (string, error) {
+	const depositProvider = "uphold"
 	// do not confirm this transaction yet
 	info := wallet.GetWalletInfo()
 
 	var (
-		userID          string
-		country         string
-		depositProvider string
-		probi           decimal.Decimal
+		userID  string
+		country string
+		probi   decimal.Decimal
 	)
 
 	transactionInfo, err := wallet.VerifyTransaction(ctx, transaction)
 	if err != nil {
-		return handlers.WrapError(
+		return "", handlers.WrapError(
 			errors.New("failed to verify transaction"), "transaction verification failure",
 			http.StatusForbidden)
 	}
@@ -561,33 +614,41 @@ func (service *Service) LinkWallet(
 		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, &cr)
 	}
 
+	walletID, err := uuid.FromString(info.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse uphold id: %w", err)
+	}
+
+	err = validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
+	if err != nil {
+		if errors.Is(err, errCustodianLinkMismatch) {
+			return "", errCustodianLinkMismatch
+		}
+		return "", handlers.WrapError(err, "failed to check linking mismatch", http.StatusInternalServerError)
+	}
+
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
 	if uID, ok, c, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
-		// get the rewards wallet id from the uphold wallet info
-		infoID, infoIDErr := uuid.FromString(info.ID)
-		if infoIDErr != nil {
-			return fmt.Errorf("failed to parse uphold id: %w", infoIDErr)
-		}
 		// check if this gemini accountID has already been linked to this wallet,
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
 			ok, priorLinkingErr := service.Datastore.HasPriorLinking(
-				ctx, infoID, uuid.NewV5(ClaimNamespace, userID))
+				ctx, walletID, uuid.NewV5(ClaimNamespace, userID))
 			if priorLinkingErr != nil && !errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
+				return "", fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
 			}
 			// if a wallet has a prior linking to this account, allow the invalid country, otherwise
 			// return the kyc error
 			if !ok {
 				// then pass back the original geo error
-				return err
+				return "", err
 			}
 			// allow invalid country if there was a prior linking
 		} else {
-			return fmt.Errorf("wallet could not be kyc checked: %w", err)
+			return "", fmt.Errorf("wallet could not be kyc checked: %w", err)
 		}
 	} else if !ok {
 		// fail
-		return handlers.WrapError(
+		return "", handlers.WrapError(
 			errors.New("user kyc did not pass"),
 			"KYC required",
 			http.StatusForbidden)
@@ -598,40 +659,43 @@ func (service *Service) LinkWallet(
 
 	// check kyc user id validity
 	if userID == "" {
-		return handlers.WrapError(
+		return "", handlers.WrapError(
 			errors.New("user id not provided"),
 			"KYC required",
 			http.StatusForbidden)
 	}
 
 	probi = transactionInfo.Probi
-	depositProvider = "uphold"
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
 	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, anonymousAddress, depositProvider, country)
 	if err != nil {
+		if errors.Is(err, ErrUnusualActivity) {
+			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return "", handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
+		}
+
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		if errors.Is(err, ErrUnusualActivity) {
-			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
-		}
-		if errors.Is(err, ErrGeoResetDifferent) {
-			return handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
-		}
-		return handlers.WrapError(err, "unable to link uphold wallets", status)
+
+		return "", handlers.WrapError(err, "unable to link uphold wallets", status)
 	}
 
 	// if this wallet is linking a deposit account do not submit a transaction
 	if decimal.NewFromFloat(0).LessThan(probi) {
 		_, err := service.SubmitCommitableAnonCardTransaction(ctx, &info, transaction, "", true)
 		if err != nil {
-			return handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
+			return "", handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
 		}
 	}
-	return nil
+
+	return country, nil
 }
 
 // DisconnectCustodianLink - removes the link to the custodian wallet that is active
@@ -768,4 +832,78 @@ func canRetry(nonRetriableErrors []int) func(error) bool {
 		}
 		return false
 	}
+}
+
+type claimsZP struct {
+	Iat         int64  `json:"iat"`
+	Exp         int64  `json:"exp"`
+	DepositID   string `json:"depositId"`
+	AccountID   string `json:"accountId"`
+	Valid       bool   `json:"isValid"`
+	CountryCode string `json:"countryCode"`
+}
+
+func (c *claimsZP) validate(now time.Time) error {
+	if c.Iat <= 0 {
+		return errZPInvalidIat
+	}
+
+	if c.Exp <= 0 {
+		return errZPInvalidExp
+	}
+
+	if !c.isKYC() {
+		return errZPInvalidKYC
+	}
+
+	// Make sure deposit id exists
+	if c.DepositID == "" {
+		return errZPInvalidDepositID
+	}
+
+	// Get the account id.
+	if c.AccountID == "" {
+		return errZPInvalidAccountID
+	}
+
+	if !strings.EqualFold(c.CountryCode, "IN") {
+		return errorutils.ErrInvalidCountry
+	}
+
+	return c.validateTime(now)
+}
+
+func (c *claimsZP) isKYC() bool {
+	return c.Valid
+}
+
+func (c *claimsZP) validateTime(now time.Time) error {
+	if now.Before(time.Unix(c.Iat, 0)) {
+		return errZPInvalidAfter
+	}
+
+	if now.After(time.Unix(c.Exp, 0)) {
+		return errZPInvalidBefore
+	}
+
+	return nil
+}
+
+func validateCustodianLinking(ctx context.Context, storage Datastore, walletID uuid.UUID, depositProvider string) error {
+	c, err := storage.GetCustodianLinkByWalletID(ctx, walletID)
+	if err != nil && !errors.Is(err, model.ErrNoWalletCustodian) {
+		return err
+	}
+
+	// if there are no instances of wallet custodian then it is
+	// considered a new linking and therefore valid.
+	if c == nil {
+		return nil
+	}
+
+	if !strings.EqualFold(c.Custodian, depositProvider) {
+		return errCustodianLinkMismatch
+	}
+
+	return nil
 }

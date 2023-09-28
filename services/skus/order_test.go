@@ -15,6 +15,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/test"
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 )
@@ -30,7 +31,13 @@ func TestOrderTestSuite(t *testing.T) {
 
 func (suite *OrderTestSuite) SetupSuite() {
 	govalidator.SetFieldsRequiredByDefault(true)
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -60,7 +67,13 @@ func (suite *OrderTestSuite) TearDownTest() {
 func (suite *OrderTestSuite) CleanDB() {
 	tables := []string{"api_keys"}
 
-	pg, err := NewPostgres(repository.NewOrder(), repository.NewOrderItem(), repository.NewOrderPayHistory(), "", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
@@ -111,8 +124,10 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	orderItem, apm, issuerConf, err := suite.service.CreateOrderItemFromMacaroon(ctx, sku, 1)
 	suite.Require().NoError(err)
 
-	suite.assertSuccess(orderItem, apm, issuerConf,
-		IssuerConfig{buffer: defaultBuffer, overlap: defaultOverlap})
+	suite.assertSuccess(orderItem, apm, &model.IssuerConfig{
+		Buffer:  defaultBuffer,
+		Overlap: defaultOverlap,
+	}, issuerConf)
 
 	badSku, err := t.Generate("321testing")
 	suite.Require().NoError(err)
@@ -131,7 +146,10 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon_WithBufferAndOverla
 	_, err = suite.service.Datastore.CreateKey("brave.com", "brave.com", hex.EncodeToString(cipher), hex.EncodeToString(nonce[:]))
 	suite.Require().NoError(err)
 
-	expectedIC := IssuerConfig{buffer: test.RandomInt(), overlap: test.RandomInt()}
+	expectedIC := &model.IssuerConfig{
+		Buffer:  test.RandomInt(),
+		Overlap: test.RandomInt(),
+	}
 
 	c := macarooncmd.Caveats{
 		"sku":                     "sku",
@@ -140,8 +158,8 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon_WithBufferAndOverla
 		"currency":                "usd",
 		"credential_type":         "time_bound",
 		"allowed_payment_methods": "stripe",
-		"issuer_token_buffer":     strconv.Itoa(expectedIC.buffer),
-		"issuer_token_overlap":    strconv.Itoa(expectedIC.overlap),
+		"issuer_token_buffer":     strconv.Itoa(expectedIC.Buffer),
+		"issuer_token_overlap":    strconv.Itoa(expectedIC.Overlap),
 		"metadata": `
 				{
 					"stripe_product_id":"stripe_product_id",
@@ -168,16 +186,16 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon_WithBufferAndOverla
 	orderItem, apm, issuerConf, err := suite.service.CreateOrderItemFromMacaroon(ctx, sku, 1)
 	suite.Require().NoError(err)
 
-	suite.assertSuccess(orderItem, apm, issuerConf, expectedIC)
+	suite.assertSuccess(orderItem, apm, expectedIC, issuerConf)
 }
 
-func (suite *OrderTestSuite) assertSuccess(orderItem *OrderItem, apm []string, issuerConf *IssuerConfig, expectedIssuerConf IssuerConfig) {
+func (suite *OrderTestSuite) assertSuccess(item *OrderItem, apm []string, expCfg, cfg *model.IssuerConfig) {
 	suite.Assert().Equal("stripe", strings.Join(apm, ","))
-	suite.Assert().Equal("usd", orderItem.Currency)
-	suite.Assert().Equal("sku", orderItem.SKU)
-	suite.Assert().Equal("5.01", orderItem.Price.String())
-	suite.Assert().Equal("coffee", orderItem.Description.String)
-	suite.Assert().Equal("brave.com", orderItem.Location.String)
-	suite.Assert().Equal(expectedIssuerConf.buffer, issuerConf.buffer)
-	suite.Assert().Equal(expectedIssuerConf.overlap, issuerConf.overlap)
+	suite.Assert().Equal("usd", item.Currency)
+	suite.Assert().Equal("sku", item.SKU)
+	suite.Assert().Equal("5.01", item.Price.String())
+	suite.Assert().Equal("coffee", item.Description.String)
+	suite.Assert().Equal("brave.com", item.Location.String)
+	suite.Assert().Equal(expCfg.Buffer, cfg.Buffer)
+	suite.Assert().Equal(expCfg.Overlap, cfg.Overlap)
 }
