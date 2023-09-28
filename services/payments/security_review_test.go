@@ -121,7 +121,7 @@ func TestVerifyPaymentTransitionHistory(t *testing.T) {
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
-		Hash: "test",
+		Hash: []byte("test"),
 		Data: PaymentState{
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
@@ -200,7 +200,7 @@ func TestValidateRevision(t *testing.T) {
 				StrandID:   "strand1",
 				SequenceNo: 10,
 			},
-			Hash: "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY=",
+			Hash: []byte("28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="),
 			Data: PaymentState{
 				Signature:          []byte{},
 				UnsafePaymentState: []byte{},
@@ -217,7 +217,7 @@ func TestValidateRevision(t *testing.T) {
 				StrandID:   "strand2",
 				SequenceNo: 10,
 			},
-			Hash: "dGVzdGVzdGVzdAo=",
+			Hash: []byte("dGVzdGVzdGVzdAo="),
 			Data: PaymentState{
 				Signature:          []byte{},
 				UnsafePaymentState: []byte{},
@@ -313,8 +313,8 @@ func TestVerifyHashSequence(t *testing.T) {
 	testProofIonText := [][32]byte{hash1, hash34}
 
 	var (
-		trueInitialHash  QLDBPaymentTransitionHistoryEntryHash = "28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="
-		falseInitialHash QLDBPaymentTransitionHistoryEntryHash = "dGVzdGVzdGVzdAo="
+		trueInitialHash  QLDBPaymentTransitionHistoryEntryHash = []byte("28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY=")
+		falseInitialHash QLDBPaymentTransitionHistoryEntryHash = []byte("dGVzdGVzdGVzdAo=")
 	)
 
 	testDigestOutput := qldb.GetDigestOutput{
@@ -383,7 +383,7 @@ func TestQLDBSignedInteractions(t *testing.T) {
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
-		Hash: "test",
+		Hash: []byte("test"),
 		Data: PaymentState{
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},

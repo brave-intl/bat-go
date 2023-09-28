@@ -89,7 +89,7 @@ func TestGeminiStateMachineHappyPathTransitions(t *testing.T) {
 			StrandID:   "test",
 			SequenceNo: 1,
 		},
-		Hash: "test",
+		Hash: []byte("test"),
 		Data: PaymentState{
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
