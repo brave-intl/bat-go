@@ -220,7 +220,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	}
 
 	if err := service.configureDatastore(ctx); err != nil {
-		logger.Fatal().Msg("could not configure datastore")
+		logger.Fatal().Err(err).Msg("could not configure datastore")
 	}
 
 	/*
