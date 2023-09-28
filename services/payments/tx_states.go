@@ -2,14 +2,17 @@ package payments
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/brave-intl/bat-go/libs/clients/zebpay"
 	. "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/google/uuid"
 )
 
 type baseStateMachine struct {
@@ -125,8 +128,19 @@ func StateMachineFromTransaction(
 	case "bitflyer":
 		// Set Bitflyer-specific properties
 		machine = &BitflyerMachine{
-			client: *http.DefaultClient,
+			client:       *http.DefaultClient,
 			bitflyerHost: os.Getenv("BITFLYER_SERVER"),
+		}
+	case "zebpay":
+		//parse the signing key
+		block, _ := pem.Decode([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
+		signingKey, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
+
+		machine = &BitflyerMachine{
+			client:     zebpay.New(),
+			apiKey:     os.Getenv("ZEBPAY_API_KEY"),
+			signingKey: signingKey,
+			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
 		}
 	case "gemini":
 		machine = &GeminiMachine{}
@@ -150,7 +164,7 @@ func Drive[T TxStateMachine](
 	// Drive is called recursively, so we need to check whether a deadline has been set
 	// by a prior caller and only set the default deadline if not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		ctx, _ = context.WithTimeout(ctx, 5 * time.Minute)
+		ctx, _ = context.WithTimeout(ctx, 5*time.Minute)
 	}
 	err := ctx.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -162,7 +176,7 @@ func Drive[T TxStateMachine](
 	switch machine.getState() {
 	case Prepared:
 		//if len(machine.getTransaction().Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
-			return machine.Authorize(ctx)
+		return machine.Authorize(ctx)
 		//}
 		//return nil, &InsufficientAuthorizationsError{}
 	case Authorized:
