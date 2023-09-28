@@ -70,11 +70,11 @@ func (s *Service) setupLedger(ctx context.Context) error {
 			if !ok {
 				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
 			}
-		}
-
-		_, err = txn.Execute("CREATE INDEX ON transactions (idempotencyKey)")
-		if err != nil {
-			return nil, err
+		} else {
+			_, err = txn.Execute("CREATE INDEX ON transactions (idempotencyKey)")
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		ok = false
