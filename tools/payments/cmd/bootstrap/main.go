@@ -110,7 +110,9 @@ func main() {
 		}
 	}
 
-	// TODO: validate this matches the attestation document
+	// FIXME we should be hitting the enclave config endpoint to retrieve the authoritative KMS key
+	// by validating the attestation we can be sure that the key policy is correct since the enclave
+	// checks it
 
 	// perform encryption of the operator's shamir share
 	out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{

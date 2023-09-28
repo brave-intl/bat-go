@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/google/uuid"
 )
 
@@ -25,32 +26,31 @@ func (wc WorkerConfig) MarshalBinary() (data []byte, err error) {
 	return bytes, nil
 }
 
-// prepareWrapper defines the settlement worker prepare message structure
-type prepareWrapper struct {
-	ID        uuid.UUID `json:"id"`
-	Timestamp time.Time `json:"timestamp"`
-	Body      string    `json:"body"`
+// RequestWrapper defines the settlement worker submit message structure
+type RequestWrapper struct {
+	ID        uuid.UUID                        `json:"id"`
+	Timestamp time.Time                        `json:"timestamp"`
+	Request   *httpsignature.HTTPSignedRequest `json:"request"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis
-func (pw prepareWrapper) MarshalBinary() (data []byte, err error) {
-	bytes, err := json.Marshal(pw)
+func (sw RequestWrapper) MarshalBinary() (data []byte, err error) {
+	bytes, err := json.Marshal(sw)
 	if err != nil {
 		return nil, fmt.Errorf("event message: error marshalling binary: %w", err)
 	}
 	return bytes, nil
 }
 
-// submitWrapper defines the settlement worker submit message structure
-type submitWrapper struct {
-	ID        uuid.UUID         `json:"id"`
-	Timestamp time.Time         `json:"timestamp"`
-	Headers   map[string]string `json:"headers"`
-	Body      string            `json:"body"`
+// ResponseWrapper defines the settlement worker submit message structure
+type ResponseWrapper struct {
+	ID        uuid.UUID                         `json:"id"`
+	Timestamp time.Time                         `json:"timestamp"`
+	Response  *httpsignature.HTTPSignedResponse `json:"request"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis
-func (sw submitWrapper) MarshalBinary() (data []byte, err error) {
+func (sw ResponseWrapper) MarshalBinary() (data []byte, err error) {
 	bytes, err := json.Marshal(sw)
 	if err != nil {
 		return nil, fmt.Errorf("event message: error marshalling binary: %w", err)

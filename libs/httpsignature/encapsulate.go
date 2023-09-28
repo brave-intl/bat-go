@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/brave-intl/bat-go/libs/requestutils"
@@ -21,30 +22,38 @@ type HTTPSignedRequest struct {
 
 // Extract from the encapsulated signed request
 // into the provided HTTP request
-// NOTE it intentionally does not set the URL
 func (sr *HTTPSignedRequest) Extract(r *http.Request) (*SignatureParams, error) {
 	if r == nil {
 		return nil, errors.New("r was nil")
 	}
 
 	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
+	r.ContentLength = int64(len(sr.Body))
 	if r.Header == nil {
 		r.Header = http.Header{}
 	}
 	for k, v := range sr.Headers {
-		if !httpguts.ValidHeaderFieldName(k) {
-			return nil, errors.New("invalid encapsulated header name")
-		}
-		if !httpguts.ValidHeaderFieldValue(v) {
-			return nil, errors.New("invalid encapsulated header value")
-		}
-
 		if k == RequestTargetHeader {
-			// TODO implement pseudo-header
-			return nil, fmt.Errorf("%s pseudo-header not implemented", RequestTargetHeader)
-		}
+			method, uri, found := strings.Cut(v, " ")
+			if !found {
+				return nil, errors.New("invalid encapsulated (request-target) pseudo-header value")
+			}
+			r.Method = strings.ToUpper(method)
+			pUri, err := url.ParseRequestURI(uri)
+			if err != nil {
+				return nil, fmt.Errorf("invalid encapsulated (request-target) pseudo-header value: %e", err)
+			}
+			r.URL = pUri
+		} else {
+			if !httpguts.ValidHeaderFieldName(k) {
+				return nil, errors.New("invalid encapsulated header name")
+			}
+			if !httpguts.ValidHeaderFieldValue(v) {
+				return nil, errors.New("invalid encapsulated header value")
+			}
 
-		r.Header.Set(k, v)
+			r.Header.Set(k, v)
+		}
 	}
 
 	return SignatureParamsFromRequest(r)
@@ -60,12 +69,14 @@ func EncapsulateRequest(req *http.Request) (*HTTPSignedRequest, error) {
 	enc := HTTPSignedRequest{}
 	enc.Headers = make(map[string]string)
 	for _, k := range s.Headers {
-		values := req.Header[http.CanonicalHeaderKey(k)]
-		enc.Headers[k] = strings.Join(values, ", ")
+		if k == RequestTargetHeader {
+			enc.Headers[k] = formatRequestTarget(req)
+		} else {
+			values := req.Header[http.CanonicalHeaderKey(k)]
+			enc.Headers[k] = strings.Join(values, ", ")
+		}
 	}
 	enc.Headers["signature"] = req.Header.Get("signature")
-
-	// TODO implement pseudo-header
 
 	bodyBytes, err := requestutils.Read(req.Context(), req.Body)
 	if err != nil {

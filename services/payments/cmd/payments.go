@@ -13,6 +13,9 @@ func init() {
 	// add grpc and rest commands
 	paymentsCmd.AddCommand(restCmd)
 
+	// add worker command
+	paymentsCmd.AddCommand(workersCmd)
+
 	// add this command as a serve subcommand
 	srvcmd.ServeCmd.AddCommand(paymentsCmd)
 
@@ -28,5 +31,11 @@ var (
 		Use:   "rest",
 		Short: "provides REST api services",
 		Run:   RestRun,
+	}
+
+	workersCmd = &cobra.Command{
+		Use:   "worker",
+		Short: "provides redis stream worker",
+		Run:   WorkerRun,
 	}
 )
