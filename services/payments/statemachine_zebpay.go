@@ -5,11 +5,13 @@ import (
 	"crypto"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
 	. "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/google/uuid"
 )
 
 // ZebpayMachine is an implementation of TxStateMachine for Zebpay's use-case.
@@ -35,13 +37,17 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 		return bm.transaction, nil
 	}
 
+	var (
+		entry *AuthenticatedPaymentState
+	)
+
 	if bm.transaction.Status == Pending {
 		// We don't want to check status too fast
 		time.Sleep(bm.backoffFactor * time.Millisecond)
 		// Get status of transaction and update the state accordingly
-		ctr, err := bm.client.CheckTransfer(ctx, zebpay.ClientOpts{
+		ctr, err := bm.client.CheckTransfer(ctx, &zebpay.ClientOpts{
 			APIKey: bm.apiKey, SigningKey: bm.signingKey,
-		}, bm.transaction.ID)
+		}, bm.transaction.GenerateIdempotencyKey())
 		if err != nil {
 			return nil, fmt.Errorf("failed to check transaction status: %w", err)
 		}
@@ -74,11 +80,19 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 			)
 		}
 	} else {
+		to, err := strconv.ParseInt(bm.transaction.To, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("transaction to is not well formed: %w", err)
+		}
 		// submit the transaction
 		btr, err := bm.client.BulkTransfer(ctx, &zebpay.ClientOpts{
 			APIKey: bm.apiKey, SigningKey: bm.signingKey,
 		}, zebpay.NewBulkTransferRequest(
-			zebpay.NewTransfer(bm.transaction.GenerateIdempotencyKey(), bm.transaction.From, bm.transaction.Amount, bm.transaction.To)))
+			zebpay.NewTransfer(
+				bm.transaction.GenerateIdempotencyKey(),
+				uuid.MustParse(bm.transaction.From),
+				bm.transaction.Amount,
+				to)))
 		if err != nil {
 			return nil, fmt.Errorf("failed to check transaction status: %w", err)
 		}

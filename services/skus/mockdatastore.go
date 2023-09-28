@@ -893,20 +893,6 @@ func (mr *MockorderStoreMockRecorder) AppendMetadataInt(ctx, dbi, id, key, val i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendMetadataInt", reflect.TypeOf((*MockorderStore)(nil).AppendMetadataInt), ctx, dbi, id, key, val)
 }
 
-// AppendMetadataInt64 mocks base method.
-func (m *MockorderStore) AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id go_uuid.UUID, key string, val int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendMetadataInt64", ctx, dbi, id, key, val)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AppendMetadataInt64 indicates an expected call of AppendMetadataInt64.
-func (mr *MockorderStoreMockRecorder) AppendMetadataInt64(ctx, dbi, id, key, val interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendMetadataInt64", reflect.TypeOf((*MockorderStore)(nil).AppendMetadataInt64), ctx, dbi, id, key, val)
-}
-
 // Create mocks base method.
 func (m *MockorderStore) Create(ctx context.Context, dbi sqlx.QueryerContext, totalPrice decimal.Decimal, merchantID, status, currency, location string, paymentMethods []string, validFor *time.Duration) (*model.Order, error) {
 	m.ctrl.T.Helper()
@@ -1191,72 +1177,4 @@ func (m *MockorderPayHistoryStore) Insert(ctx context.Context, dbi sqlx.ExecerCo
 func (mr *MockorderPayHistoryStoreMockRecorder) Insert(ctx, dbi, id, when interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Insert", reflect.TypeOf((*MockorderPayHistoryStore)(nil).Insert), ctx, dbi, id, when)
-}
-
-// MockissuerStore is a mock of issuerStore interface.
-type MockissuerStore struct {
-	ctrl     *gomock.Controller
-	recorder *MockissuerStoreMockRecorder
-}
-
-// MockissuerStoreMockRecorder is the mock recorder for MockissuerStore.
-type MockissuerStoreMockRecorder struct {
-	mock *MockissuerStore
-}
-
-// NewMockissuerStore creates a new mock instance.
-func NewMockissuerStore(ctrl *gomock.Controller) *MockissuerStore {
-	mock := &MockissuerStore{ctrl: ctrl}
-	mock.recorder = &MockissuerStoreMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockissuerStore) EXPECT() *MockissuerStoreMockRecorder {
-	return m.recorder
-}
-
-// Create mocks base method.
-func (m *MockissuerStore) Create(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, dbi, req)
-	ret0, _ := ret[0].(*model.Issuer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Create indicates an expected call of Create.
-func (mr *MockissuerStoreMockRecorder) Create(ctx, dbi, req interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockissuerStore)(nil).Create), ctx, dbi, req)
-}
-
-// GetByMerchID mocks base method.
-func (m *MockissuerStore) GetByMerchID(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetByMerchID", ctx, dbi, merchID)
-	ret0, _ := ret[0].(*model.Issuer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetByMerchID indicates an expected call of GetByMerchID.
-func (mr *MockissuerStoreMockRecorder) GetByMerchID(ctx, dbi, merchID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByMerchID", reflect.TypeOf((*MockissuerStore)(nil).GetByMerchID), ctx, dbi, merchID)
-}
-
-// GetByPubKey mocks base method.
-func (m *MockissuerStore) GetByPubKey(ctx context.Context, dbi sqlx.QueryerContext, pubKey string) (*model.Issuer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetByPubKey", ctx, dbi, pubKey)
-	ret0, _ := ret[0].(*model.Issuer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetByPubKey indicates an expected call of GetByPubKey.
-func (mr *MockissuerStoreMockRecorder) GetByPubKey(ctx, dbi, pubKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByPubKey", reflect.TypeOf((*MockissuerStore)(nil).GetByPubKey), ctx, dbi, pubKey)
 }

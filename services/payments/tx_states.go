@@ -134,10 +134,19 @@ func StateMachineFromTransaction(
 	case "zebpay":
 		//parse the signing key
 		block, _ := pem.Decode([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
-		signingKey, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
 
-		machine = &BitflyerMachine{
-			client:     zebpay.New(),
+		signingKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse signing key pem: %w", err)
+		}
+
+		client, err := zebpay.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create zebpay client: %w", err)
+		}
+
+		machine = &ZebpayMachine{
+			client:     client,
 			apiKey:     os.Getenv("ZEBPAY_API_KEY"),
 			signingKey: signingKey,
 			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
