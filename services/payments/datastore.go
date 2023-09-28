@@ -22,7 +22,7 @@ import (
 )
 
 type qldbDocumentIDResult struct {
-	documentID string `ion:"documentId"`
+	DocumentID string `ion:"documentId"`
 }
 
 // ErrNotConfiguredYet - service not fully configured.
@@ -245,7 +245,7 @@ func (s Service) insertPayment(
 					if err != nil {
 						return nil, err
 					}
-					return documentIDResult.documentID, nil
+					return documentIDResult.DocumentID, nil
 				}
 
 				err = documentIDResultBinary.Err()
