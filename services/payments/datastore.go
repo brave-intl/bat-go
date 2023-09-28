@@ -210,64 +210,70 @@ func (s Service) insertPayment(
 	insertedDocumentID, err := s.datastore.Execute(
 		context.Background(),
 		func(txn qldbdriver.Transaction) (interface{}, error) {
-			// For the transaction, check if this transaction has already existed. If not, perform
-			// the insertion.
-			existingPaymentState, err := txn.Execute(
-				"SELECT * FROM transactions WHERE idempotencyKey = ?",
-				paymentStateForSigning.ID,
-			)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to insert tx: %s due to: %w",
-					paymentStateForSigning.ID,
-					err,
-				)
-			}
-
-			// Check if there are any results. There should not be. If there are, we should not
-			// insert.
-			if !existingPaymentState.Next(txn) {
-				documentIDResultBinary, err := txn.Execute(
-					"INSERT INTO transactions ?",
-					paymentStateForSigning,
-				)
-				if err != nil {
-					return nil, fmt.Errorf(
-						"failed to insert tx: %s due to: %w",
-						paymentStateForSigning.ID,
-						err,
-					)
-				}
-
-				if documentIDResultBinary.Next(txn) {
-					documentIDResult := new(qldbDocumentIDResult)
-					err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
-					if err != nil {
-						return nil, err
-					}
-					return documentIDResult.DocumentID, nil
-				}
-
-				err = documentIDResultBinary.Err()
-				if err != nil {
-					return nil, fmt.Errorf(
-						"failed to insert tx: %s due to: %w",
-						paymentStateForSigning.ID,
-						err,
-					)
-				}
-			}
-
-			return nil, fmt.Errorf(
-				"failed to insert transaction because id already exists: %s",
-				paymentStateForSigning.ID,
-			)
+			return insertPaymentWithTransaction(*paymentStateForSigning, txn)
 		},
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to insert transaction: %w", err)
 	}
 	return insertedDocumentID.(string), nil
+}
+
+// insertPaymentWithTransaction executes a database insertion using a provided transaction after
+// checking that the record does not already exist. Returns the resulting document ID.
+func insertPaymentWithTransaction(state PaymentState, txn wrappedQldbTxnAPI) (string, error) {
+	// For the transaction, check if this transaction has already existed. If not, perform
+	// the insertion.
+	existingPaymentState, err := txn.Execute(
+		"SELECT * FROM transactions WHERE idempotencyKey = ?",
+		state.ID,
+	)
+	if err != nil {
+		return "", fmt.Errorf(
+			"failed to insert tx: %s due to: %w",
+			state.ID,
+			err,
+		)
+	}
+
+	// Check if there are any results. There should not be. If there are, we should not
+	// insert.
+	if !existingPaymentState.Next(txn) {
+		documentIDResultBinary, err := txn.Execute(
+			"INSERT INTO transactions ?",
+			state,
+		)
+		if err != nil {
+			return "", fmt.Errorf(
+				"failed to insert tx: %s due to: %w",
+				state.ID,
+				err,
+			)
+		}
+
+		if documentIDResultBinary.Next(txn) {
+			documentIDResult := new(qldbDocumentIDResult)
+			err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
+			if err != nil {
+				return "", err
+			}
+			return documentIDResult.DocumentID, nil
+		}
+
+		err = documentIDResultBinary.Err()
+		if err != nil {
+			return "", fmt.Errorf(
+				"failed to insert tx: %s due to: %w",
+				state.ID,
+				err,
+			)
+		}
+	}
+
+	return "", fmt.Errorf(
+		"failed to insert transaction because id already exists: %s",
+		state.ID,
+	)
 }
 
 // AuthorizeTransaction - Add an Authorization for the Transaction and attempt to Drive

@@ -31,6 +31,11 @@ type mockDriver struct {
 	mock.Mock
 }
 
+// Unit testing the package code using a Mock Driver
+type mockTxnDriver struct {
+	mock.Mock
+}
+
 // Unit testing the package code using a Mock QLDB SDK
 type mockSDKClient struct {
 	mock.Mock
@@ -49,6 +54,26 @@ func (m *mockDriver) Execute(ctx context.Context, fn func(txn qldbdriver.Transac
 	return args.Get(0), args.Error(1)
 }
 
+func (m *mockTxnDriver) Execute(query string, vars ...interface{}) (qldbdriver.Result, error) {
+	args := m.Called(query, vars)
+	return args.Get(0).(qldbdriver.Result), args.Error(1)
+}
+
+func (m *mockTxnDriver) Abort() error {
+	args := m.Called()
+	return args.Error(1)
+}
+
+func (m *mockTxnDriver) ID() string {
+	args := m.Called()
+	return args.Get(0).(string)
+}
+
+func (m *mockTxnDriver) BufferResult(qldbdriver.Result) (qldbdriver.BufferedResult, error) {
+	args := m.Called()
+	return args.Get(0).(qldbdriver.BufferedResult), args.Error(1)
+}
+
 func (m *mockDriver) Shutdown(ctx context.Context) {
 	return
 }
@@ -57,7 +82,19 @@ func (m *mockResult) GetCurrentData() []byte {
 	args := m.Called()
 	return args.Get(0).([]byte)
 }
-func (m *mockResult) Next(txn wrappedQldbTxnAPI) bool {
+func (m *mockResult) Err() error {
+	args := m.Called()
+	return args.Error(1)
+}
+func (m *mockResult) GetConsumedIOs() *qldbdriver.IOUsage {
+	args := m.Called()
+	return args.Get(0).(*qldbdriver.IOUsage)
+}
+func (m *mockResult) GetTimingInformation() *qldbdriver.TimingInformation {
+	args := m.Called()
+	return args.Get(0).(*qldbdriver.TimingInformation)
+}
+func (m *mockResult) Next(txn qldbdriver.Transaction) bool {
 	args := m.Called(txn)
 	return args.Get(0).(bool)
 }
