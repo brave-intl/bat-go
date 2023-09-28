@@ -2,13 +2,20 @@ package payments
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/asn1"
+	"encoding/ecdh"
 	"fmt"
 	"time"
+	"math/big"
 
-	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 )
 
 // QLDBPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for
@@ -135,6 +142,9 @@ func validatePaymentStateHistory(
 	return &transactionHistory[0], reason
 }
 
+type ECDSASignature struct {
+    R, S *big.Int
+}
 // validatePaymentStateSignatures returns whether a slice of entries representing the entire state
 // history for a given id include exclusively valid signatures.
 func validatePaymentStateSignatures(
@@ -153,7 +163,34 @@ func validatePaymentStateSignatures(
 		if err != nil {
 			return false, fmt.Errorf("failed to verify state signature: %e", err)
 		}
+		// If signature verification fails with the current enclave, check if the signature is valid
+		// for the key that is persisted on the record itself.
+		// @TODO: Maintain a list of known prior public keys to prevent verification of valid, but
+		// unknown signatures.
 		if !verifyOutput.SignatureValid {
+			der, err := base64.StdEncoding.DecodeString(string(marshaledTransaction.Data.Signature))
+			if err != nil {
+				return false, err
+			}
+			sig := &ECDSASignature{}
+			_, err = asn1.Unmarshal(der, sig)
+			if err != nil {
+				return false, err
+			}
+			base64PubKey, err := hex.DecodeString(string(marshaledTransaction.Data.PublicKey))
+			if err != nil {
+				return false, fmt.Errorf("failed to decode hex public key: %w", err)
+			}
+			keyString, err := base64.StdEncoding.DecodeString(string(base64PubKey))
+			if err != nil {
+				return false, fmt.Errorf("failed to decode base64 public key: %w", err)
+			}
+			storedPubKeyAny, err := x509.ParsePKIXPublicKey(keyString)
+			if err != nil {
+				return false, fmt.Errorf("failed to parse DER encoded public key: %w", err)
+			}
+			storedPubKey, ok := storedPubKeyAny.(*ecdh.PublicKey)
+			ecdsa.Verify(storedPubKey, marshaledTransaction.Data.UnsafePaymentState, sig.R, sig.S)
 			return false, fmt.Errorf("signature for state was not valid: %s", marshaledTransaction.Metadata.ID)
 		}
 	}
