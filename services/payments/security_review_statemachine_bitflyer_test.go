@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/amazon-ion/ion-go/ion"
 	"github.com/shopspring/decimal"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -109,13 +110,14 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	must.Equal(t, nil, err)
 	mockedPaymentState := PaymentState{UnsafePaymentState: marshaledAuthenticatedState}
 	mockKMS := new(mockKMSClient)
-	mockDriver := new(mockDriver)
+	mockDBDriver := new(mockDriver)
+	mockTxnDriver := new(mockTxnDriver)
 	mockKMS.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil)
 	mockKMS.On("GetPublicKey", mock.Anything, mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)
 
 	service := Service{
-		datastore:        mockDriver,
+		datastore:        mockDBDriver,
 		kmsSigningClient: mockKMS,
 		baseCtx:          context.Background(),
 	}
@@ -132,15 +134,38 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 
 	// First call in order is to insertPayment and should return a fake document ID
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return("123456", nil).Once()
+	mockDBDriver.On("Execute", mock.Anything, mock.Anything).Return("123456", nil).Once()
 	// Next call in order is to get GetTransactionFromDocumentID and should return an
 	// AuthenticatedPaymentState.
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockedPaymentState, nil).Once()
+	mockDBDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockedPaymentState, nil).Once()
 	// All further calls should return the mocked history entry.
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory.Data, nil)
+	mockDBDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory.Data, nil)
 	insertedDocumentID, err := service.insertPayment(ctx, testTransaction.PaymentDetails)
 	must.Equal(t, nil, err)
 	must.Equal(t, "123456", insertedDocumentID)
+
+	type Document struct {
+		DocumentID string `ion:"documentId"`
+	}
+	resultID, _ := ion.MarshalBinary(Document{DocumentID: "testdocumentid"})
+	emptyResult := new(mockResult)
+	fullResult := new(mockResult)
+	mockTxnDriver.On(
+		"Execute",
+		"SELECT * FROM transactions WHERE idempotencyKey = ?",
+		mock.Anything,
+	).Return(emptyResult,nil)
+	mockTxnDriver.On(
+		"Execute",
+		"INSERT INTO transactions ?",
+		mock.Anything,
+	).Return(fullResult, nil)
+	emptyResult.On("Next", mockTxnDriver).Return(false)
+	fullResult.On("Next", mockTxnDriver).Return(true)
+	fullResult.On("GetCurrentData").Return(resultID)
+	insertedDocumentID, err = insertPaymentWithTransaction(mockTransitionHistory.Data, mockTxnDriver)
+	must.Equal(t, nil, err)
+	must.Equal(t, "testdocumentid", insertedDocumentID)
 	//newTransaction, _, err := service.GetTransactionFromDocumentID(ctx, insertedDocumentID)
 	//must.Equal(t, nil, err)
 	//should.Equal(t, Prepared, newTransaction.Status)
