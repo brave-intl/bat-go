@@ -9,7 +9,7 @@ import (
 
 var (
 	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	amount, _        = decimal.NewFromString("1.1")
+	amount           = decimal.NewFromFloat(1.1)
 	txn0             = AuthenticatedPaymentState{Status: Prepared, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn1             = AuthenticatedPaymentState{Status: Authorized, PaymentDetails: PaymentDetails{Amount: amount}}
 	txn2             = AuthenticatedPaymentState{Status: Pending, PaymentDetails: PaymentDetails{Amount: amount}}
@@ -222,49 +222,74 @@ var geminiTransactionCheckSuccessResponse = map[string]string{
 }*/
 
 var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
-		"transfer_Status": "",
+		"transfer_Status": "pending",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
-/*var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
-	"dry_run": "false",
+var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
-	},
-	},
-}*/
+	}},
+}
 
 var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
-		"transfer_Status": "",
+		"transfer_Status": "success",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
-/*var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
-	"dry_run": "false",
+var bitflyerTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
+	"dry_run": false,
+	"withdrawals": []map[string]interface{}{{
+		"currency_code":   "",
+		"amount":          1.0,
+		"message":         "",
+		"transfer_Status": "pending",
+		"transfer_id":     "",
+	}},
+}
+
+var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
-	},
-	},
-}*/
+	}},
+}
+
+var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
+	"dry_run": false,
+	"access_token": "Look at me. I'm a token.",
+	"refresh_toke": "another token",
+	"expires_in": 4,
+	"scope": "some scope",
+	"account_hash": "hashed something",
+	"tokey_type": "token type",
+}
+
+var bitflyerFetchPriceResponse = map[string]interface{}{
+	"product_code": "BAT_JPY",
+	"main_currency": "BAT",
+	"sub_currency": "",
+	"rate": 4,
+	"price_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
+}

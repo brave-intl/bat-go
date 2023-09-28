@@ -247,7 +247,7 @@ func setupSettlementTransactions(
 	return settlements, notSubmittedSettlements, numReduced, nil
 }
 
-func createBitflyerRequest(
+func CreateBitflyerRequest(
 	dryRun *bitflyer.DryRunOption,
 	token string,
 	settlementRequests []settlement.AggregateTransaction,
@@ -405,7 +405,7 @@ func IterateRequest(
 			return nil, err
 		}
 
-		request, err := createBitflyerRequest(
+		request, err := CreateBitflyerRequest(
 			dryRun,
 			quote.PriceToken,
 			batch,
