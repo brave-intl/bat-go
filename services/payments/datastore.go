@@ -241,7 +241,7 @@ func (s Service) insertPayment(
 
 				if documentIDResultBinary.Next(txn) {
 					documentIDResult := new(qldbDocumentIDResult)
-					err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), documentIDResult)
+					err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
 					if err != nil {
 						return nil, err
 					}
