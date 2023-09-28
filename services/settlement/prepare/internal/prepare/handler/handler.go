@@ -50,19 +50,23 @@ func New(storage Storage, payment PaymentClient, payoutConf payment.Config, retr
 // Handle processes prepare transaction messages. Handle calls the payment service prepare endpoint then stores the
 // successfully attested transaction response.
 func (h *Handler) Handle(ctx context.Context, message consumer.Message) error {
+	const (
+		minRetryAfter = 1
+	)
+
 	sd := payment.SerializedDetails(message.Body)
 
 	attestedDet, err := h.payment.Prepare(ctx, sd)
 	if err != nil {
 		if isRetry(err) {
-			return consumer.RetryError{Err: err}
+			return consumer.NewRetryError(minRetryAfter, err)
 		}
 		return fmt.Errorf("error calling prepare: %w", err)
 	}
 
 	err = h.store.SaveTransaction(ctx, h.payoutConf.PayoutID, attestedDet)
 	if err != nil {
-		return consumer.RetryError{Err: err}
+		return consumer.NewRetryError(minRetryAfter, err)
 	}
 
 	return nil

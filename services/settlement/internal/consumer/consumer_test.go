@@ -16,6 +16,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// TODO(clD11) rewrite tests using new approach
+
 func TestBatchConsumer_processAsync(t *testing.T) {
 	//ctx := context.Background()
 	//ctx, _ = logging.SetupLogger(ctx)
@@ -114,10 +116,6 @@ func TestBatchConsumer_retryAsync(t *testing.T) {
 	//cancel()
 }
 
-func TestBatchConsumer_ackAsync(t *testing.T) {
-
-}
-
 func TestBatchConsumer_statusAsync(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
@@ -135,14 +133,12 @@ func TestBatchConsumer_statusAsync(t *testing.T) {
 		err error
 	}
 
-	type test struct {
+	tests := []struct {
 		name   string
 		fields fields
 		args   args
 		want   want
-	}
-
-	tests := []test{
+	}{
 		{
 			name: "success",
 			fields: fields{
@@ -172,18 +168,18 @@ func TestBatchConsumer_statusAsync(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			b := &consumer{
-				redis: tt.fields.streamClient,
-				conf:  tt.fields.conf,
+				redis: tc.fields.streamClient,
+				conf:  tc.fields.conf,
 			}
 
-			resultC := b.statusAsync(tt.args.ctx)
+			resultC := b.statusAsync(tc.args.ctx)
 
 			got := <-resultC
 
-			assert.Equalf(t, tt.want.err, got, "want %v got %v", tt.want.err, got)
+			assert.Equal(t, tc.want.err, got)
 		})
 	}
 }

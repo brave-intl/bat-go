@@ -11,7 +11,6 @@ import (
 	testutils "github.com/brave-intl/bat-go/libs/test"
 	"github.com/brave-intl/bat-go/services/settlement/internal/consumer"
 	"github.com/brave-intl/bat-go/services/settlement/internal/payment"
-
 	"github.com/stretchr/testify/assert"
 )
 
@@ -63,7 +62,7 @@ func TestSubmit_Handle(t *testing.T) {
 				},
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorAs(t, err, &consumer.RetryError{})
+				return assert.ErrorAs(t, err, new(*consumer.RetryError))
 			},
 		},
 		{
@@ -81,7 +80,7 @@ func TestSubmit_Handle(t *testing.T) {
 				},
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorAs(t, err, &consumer.RetryError{})
+				return assert.ErrorAs(t, err, new(*consumer.RetryError))
 			},
 		},
 		{
@@ -117,7 +116,7 @@ func TestSubmit_Handle(t *testing.T) {
 				},
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorIs(t, err, consumer.RetryError{Err: ErrSubmitNotComplete, RetryAfter: time.Duration(10)})
+				return assert.Equal(t, err, consumer.NewRetryError(10, ErrSubmitNotComplete))
 			},
 		},
 	}

@@ -47,6 +47,10 @@ func New(payment PaymentClient) *Handler {
 // Transactions will be retired when we receive a status code as defined in the retriable errors
 // e.g. http.StatusTooManyRequests and also when a transaction has been successfully submitted but not fully processed.
 func (h *Handler) Handle(ctx context.Context, message consumer.Message) error {
+	const (
+		minRetryAfter = 1
+	)
+
 	ah := make(payment.AuthorizationHeader)
 	for k, v := range message.Headers {
 		ah[k] = []string{v}
@@ -56,16 +60,13 @@ func (h *Handler) Handle(ctx context.Context, message consumer.Message) error {
 	submit, err := h.payment.Submit(ctx, ah, sd)
 	if err != nil {
 		if isRetry(err) {
-			return consumer.RetryError{Err: err}
+			return consumer.NewRetryError(minRetryAfter, err)
 		}
 		return fmt.Errorf("error calling submit: %w", err)
 	}
 
 	if !submit.IsComplete() {
-		return consumer.RetryError{
-			RetryAfter: submit.RetryAfter,
-			Err:        ErrSubmitNotComplete,
-		}
+		return consumer.NewRetryError(submit.RetryAfter, ErrSubmitNotComplete)
 	}
 
 	return nil

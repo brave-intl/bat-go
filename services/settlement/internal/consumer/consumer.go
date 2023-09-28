@@ -161,25 +161,24 @@ func (c *consumer) processAsync(ctx context.Context) <-chan string {
 						continue
 					}
 
-					switch err := c.handler.Handle(ctx, message).(type) {
-					case nil:
-						ackC <- xMsgs[i].ID
-					case RetryError:
-						if _, err := c.redis.Set(ctx, redis.SetArgs{
-							Key:        retryAfterPrefix + message.ID.String(),
-							Expiration: err.RetryDelay(),
-						}); err != nil {
-							l.Error().Err(err).Msg("error setting retry after")
-						}
-					default:
-						if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
-							l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling")
-							sentry.CaptureException(err)
+					if err := c.handler.Handle(ctx, message); err != nil {
+						l.Error().Err(err).Msg("handler error")
+						var reErr *RetryError
+						switch {
+						case errors.As(err, &reErr):
+							if err := setRetryAfter(ctx, c.redis, message.ID.String(), reErr.RetryDelay()); err != nil {
+								l.Error().Err(err).Msg("error setting retry after")
+							}
 							continue
+						default:
+							if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
+								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling error")
+								sentry.CaptureException(err)
+								continue
+							}
 						}
-						ackC <- xMsgs[i].ID
 					}
-
+					ackC <- xMsgs[i].ID
 				}
 			}
 		}
@@ -217,6 +216,8 @@ func (c *consumer) retryAsync(ctx context.Context) <-chan string {
 					continue
 				}
 
+				// TODO(clD11) move this into function
+
 				// flatten the pending entry ids for use in the claim command
 				pendingEntryIDs := make([]string, countPending)
 				// keep a map of pending entry to retry count, so we can check it against the claimed message
@@ -242,7 +243,7 @@ func (c *consumer) retryAsync(ctx context.Context) <-chan string {
 				for i := range xMsgs {
 					// A message may have been claimed by another consumer after calling XPending
 					// so check if we claimed it successfully before further processing if not skip it.
-					// TODO check if we can remove this check as pending will always contain the xMsg
+					// TODO(clD11) check if we can remove this check as pending will always contain the xMsg
 					retryCount, ok := pendingEntryRetryCount[xMsgs[i].ID]
 					if !ok {
 						continue
@@ -270,32 +271,34 @@ func (c *consumer) retryAsync(ctx context.Context) <-chan string {
 						continue
 					}
 
-					// Check to see if there is a retry after value, if no key exists then we can process the message again.
-					if _, err := c.redis.Get(ctx, retryAfterPrefix+message.ID.String()); err != nil {
-						if !errors.Is(err, redis.ErrKeyDoesNotExist) {
-							l.Error().Err(err).Msg("error getting retry after value")
-							continue
-						}
+					retry, err := fetchRetryAfter(ctx, c.redis, message.ID.String())
+					if err != nil {
+						l.Error().Err(err).Msg("error getting retry")
+						continue
 					}
 
-					switch err := c.handler.Handle(ctx, message).(type) {
-					case nil:
-						ackC <- xMsgs[i].ID
-					case RetryError:
-						if _, err := c.redis.Set(ctx, redis.SetArgs{
-							Key:        retryAfterPrefix + message.ID.String(),
-							Expiration: err.RetryDelay(),
-						}); err != nil {
-							l.Error().Err(err).Msg("error setting retry after")
-						}
-					default:
-						if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
-							l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling")
-							sentry.CaptureException(err)
-							continue
-						}
-						ackC <- xMsgs[i].ID
+					if !retry {
+						continue
 					}
+
+					if err := c.handler.Handle(ctx, message); err != nil {
+						l.Error().Err(err).Msg("handler error")
+						var reErr *RetryError
+						switch {
+						case errors.As(err, &reErr):
+							if err := setRetryAfter(ctx, c.redis, message.ID.String(), reErr.RetryDelay()); err != nil {
+								l.Error().Err(err).Msg("error setting retry after")
+							}
+							continue
+						default:
+							if err := c.error.Handle(ctx, xMsgs[i], err); err != nil {
+								l.Error().Err(err).Str("x_message_id", xMsgs[i].ID).Msg("error handling error")
+								sentry.CaptureException(err)
+								continue
+							}
+						}
+					}
+					ackC <- xMsgs[i].ID
 				}
 			}
 		}
@@ -513,7 +516,7 @@ func WithStatusTimeout(statusTimeout time.Duration) Option {
 }
 
 func (c *Config) String() string {
-	return fmt.Sprintf("id=%s cg=%s stream=%s", c.consumerID, c.consumerGroup, c.streamName)
+	return "id=" + c.consumerID + " cg=" + c.consumerGroup + " stream=" + c.streamName
 }
 
 // TODO(clD11) Temp, revisit once we finalise retry and transient errors, improve this error type.
@@ -526,11 +529,18 @@ type RetryError struct {
 	Err        error
 }
 
+func NewRetryError(ra time.Duration, err error) error {
+	return &RetryError{
+		RetryAfter: ra,
+		Err:        err,
+	}
+}
+
 // Unwrap returns the nested error if any, or nil.
 func (e *RetryError) Unwrap() error { return e.Err }
 
 // Error returns the error message.
-func (e RetryError) Error() string {
+func (e *RetryError) Error() string {
 	const m = "retry error"
 	if e.Err != nil {
 		return e.Err.Error()
@@ -568,4 +578,28 @@ func newMessage(x redis.XMessage) (Message, error) {
 	}
 
 	return message, nil
+}
+
+func setRetryAfter(ctx context.Context, rc RedisClient, key string, exp time.Duration) error {
+	_, err := rc.Set(ctx, redis.SetArgs{
+		Key:        retryAfterPrefix + key,
+		Expiration: exp,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Check to see if there is a retry after value, if no key exists then we can process the message again.
+func fetchRetryAfter(ctx context.Context, rc RedisClient, key string) (bool, error) {
+	_, err := rc.Get(ctx, retryAfterPrefix+key)
+	if err != nil {
+		if errors.Is(err, redis.ErrKeyDoesNotExist) {
+			return true, nil
+		}
+		return false, err
+	}
+	// a value must exist so dont retry
+	return false, nil
 }
