@@ -95,11 +95,14 @@ func New(redis RedisClient, conf *Config, handler Handler, errorHandler ErrorHan
 }
 
 // Consume creates or joins an existing consumer group and starts consuming Message's.
-func (c *consumer) Consume(ctx context.Context) error {
-	err := c.redis.XGroupCreateMKStream(ctx, c.conf.streamName, c.conf.consumerGroup, c.conf.start)
+func (c *consumer) Consume(pctx context.Context) error {
+	err := c.redis.XGroupCreateMKStream(pctx, c.conf.streamName, c.conf.consumerGroup, c.conf.start)
 	if err != nil {
 		return fmt.Errorf("error creating consumer group %w", err)
 	}
+
+	ctx, cancel := context.WithCancel(pctx)
+	defer cancel()
 
 	processC := c.processAsync(ctx)
 	retryC := c.retryAsync(ctx)

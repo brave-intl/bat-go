@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// TODO(clD11) rewrite tests using new approach
+//TODO(clD11) rewrite tests using new approach
 
 type WorkerTestSuite struct {
 	suite.Suite

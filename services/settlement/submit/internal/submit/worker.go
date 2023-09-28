@@ -61,7 +61,7 @@ func (w *Worker) Run(ctx context.Context) {
 				continue
 			}
 
-			if err := consume(ctx, c); err != nil {
+			if err := c.Consume(ctx); err != nil {
 				l.Error().Err(err).Msg("error processing payout")
 				continue
 			}
@@ -75,19 +75,6 @@ func (w *Worker) Run(ctx context.Context) {
 			l.Info().Interface("submit_config", pc).Msg("submit complete")
 		}
 	}
-}
-
-func consume(ctx context.Context, consumer consumer.Consumer) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		cancel() // calling cancel stops the consumer
-	}()
-
-	if err := consumer.Consume(ctx); err != nil {
-		return fmt.Errorf("error start prepare consumer: %w", err)
-	}
-
-	return nil
 }
 
 // WorkerConfig holds the configuration for a Worker.
