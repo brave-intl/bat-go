@@ -15,10 +15,10 @@ func TestIdempotencyKeyGeneration(t *testing.T) {
 			To:        "683bc9ba-497a-47a5-9587-3bd03fd722bd",
 			From:      "af68d02a-907f-4e9a-8f74-b54c7629412b",
 			Custodian: "uphold",
-			PayoutID:            "78910",
+			PayoutID:  "78910",
 		},
-		Status:               Prepared,
-		DocumentID:          "1234",
+		Status:     Prepared,
+		DocumentID: "1234",
 	}
 	should.Equal(
 		t,

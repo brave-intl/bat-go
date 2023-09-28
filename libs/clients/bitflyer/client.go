@@ -384,9 +384,6 @@ func (c *HTTPClient) FetchQuote(
 		return nil, err
 	}
 
-	// use the client auth token, token is required for bf api call
-	c.setupRequestHeaders(req)
-
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
 	if err == nil {
@@ -503,14 +500,14 @@ func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*T
 
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate refresh token request: %w", err)
 	}
 	c.setupRequestHeaders(req)
 
 	var body TokenResponse
 	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
-		return &body, err
+		return &body, fmt.Errorf("failed to execute refresh token request: %w", err)
 	}
 	c.SetAuthToken(body.AccessToken)
 
