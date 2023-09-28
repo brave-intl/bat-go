@@ -1,11 +1,11 @@
 package payments
 
 import (
+	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"crypto"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/middleware"
@@ -152,7 +152,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		_, err = govalidator.ValidateStruct(submitRequest)
 		if err != nil {
-			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", submitRequest)).Msg("failed to validate structure")
+			return handlers.WrapValidationError(err)
 		}
 
 		logger.Debug().Str("transactions", fmt.Sprintf("%+v", submitRequest)).Msg("handling submit request")
@@ -160,34 +160,34 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// we have passed the http signature middleware, record who authorized the tx
 		keyID, err := middleware.GetKeyID(ctx)
 		if err != nil {
-			return handlers.WrapValidationError(err)
+			return handlers.WrapError(err, "error getting identity of transaction authorizer", http.StatusInternalServerError)
 		}
 
 		// get the current state of the transaction from qldb
 		authenticatedState, _, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
 		if err != nil {
-			//return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
-			submitResponse.LastError = &PaymentError{
-				OriginalError: err,
-			}
-			return handlers.RenderContent(r.Context(), submitResponse, w, http.StatusOK)
+			return handlers.WrapError(err, "failed to get transaction from document id", http.StatusInternalServerError)
 		}
 
 		// attempt authorization on the transaction
 		err = service.AuthorizeTransaction(ctx, keyID, *authenticatedState)
 		if err != nil {
-			//return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
-			submitResponse.LastError = &PaymentError{
-				OriginalError: err,
-			}
-			return handlers.RenderContent(r.Context(), submitResponse, w, http.StatusOK)
+			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
 		submitResponse.Status = authenticatedState.Status
 
 		// TODO: check if business logic was met from authorizers table in qldb for this transaction
 		// TODO: state machine handling for custodian submissions
+		// TODO: if error is temporary, return non-200
 
-		return handlers.RenderContent(r.Context(), submitResponse, w, http.StatusOK)
+		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
+		// "permanent" errors indiciating a transaction state machine has reached an end state
+		return &handlers.AppError{
+			Cause:   nil,
+			Message: "dry-run succeeded",
+			Code:    http.StatusOK,
+			Data:    submitResponse,
+		}
 	}
 }
