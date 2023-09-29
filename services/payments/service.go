@@ -100,14 +100,11 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 		AWSAccount string
 	}
 
-	imageSHA := ad.Digest
-
 	buf := bytes.NewBuffer([]byte{})
 	if err := t.Execute(buf, keyTemplateData{
 		PCR0:       hex.EncodeToString(ad.PCRs[0]),
 		PCR1:       hex.EncodeToString(ad.PCRs[1]),
 		PCR2:       hex.EncodeToString(ad.PCRs[2]),
-		ImageSHA:   imageSHA,
 		AWSAccount: os.Getenv("AWS_ACCOUNT"),
 	}); err != nil {
 		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)
@@ -118,7 +115,7 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 
 	logger.Info().Msgf("key policy: %+v", policy)
 
-	return policy, imageSHA, nil
+	return policy, hex.EncodeToString(ad.PCRs[2]), nil
 }
 
 type serviceNamespaceContextKey struct{}
