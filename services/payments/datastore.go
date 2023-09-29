@@ -204,7 +204,7 @@ func (s Service) insertPayment(
 		return "", err
 	}
 
-	paymentStateForSigning.Signature = []byte(signature)
+	paymentStateForSigning.Signature = signature
 	paymentStateForSigning.PublicKey = pubkey
 
 	insertedDocumentID, err := s.datastore.Execute(
