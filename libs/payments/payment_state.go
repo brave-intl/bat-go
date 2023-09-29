@@ -1,7 +1,6 @@
 package payments
 
 import (
-	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 
@@ -12,10 +11,10 @@ import (
 type PaymentState struct {
 	// Serialized AuthenticatedPaymentState. Should only ever be access via GetSafePaymentState,
 	// which does all of the needed validation of the state
-	UnsafePaymentState []byte          `ion:"data"`
-	Signature          []byte          `ion:"signature"`
-	PublicKey          ecdsa.PublicKey `ion:"publicKey"`
-	ID                 uuid.UUID       `ion:"idempotencyKey"`
+	UnsafePaymentState []byte    `ion:"data"`
+	Signature          []byte    `ion:"signature"`
+	PublicKey          []byte    `ion:"publicKey"`
+	ID                 uuid.UUID `ion:"idempotencyKey"`
 }
 
 // ToStructuredUnsafePaymentState only unmarshals an ToStructuredUnsafePaymentState from the

@@ -165,7 +165,7 @@ func validatePaymentStateSignatures(
 		// key is in the list of valid prior keys.
 		if !verifyOutput.SignatureValid {
 			isValidPriorKey, err := publicKeyInHistoricalAuthorizedKeySet(
-				&historyEntry.Data.PublicKey,
+				historyEntry.Data.PublicKey,
 			)
 			if err != nil || !isValidPriorKey {
 				return false, fmt.Errorf(
@@ -173,12 +173,26 @@ func validatePaymentStateSignatures(
 					err,
 				)
 			}
+			pubkeyParsed, err := x509.ParsePKIXPublicKey(historyEntry.Data.PublicKey)
+			if err != nil {
+				return false, fmt.Errorf(
+					"failed to marshal public key for prior key comparison: %w",
+					err,
+				)
+			}
+			pubkey, ok := pubkeyParsed.(*ecdsa.PublicKey)
+			if !ok {
+				return false, fmt.Errorf(
+					"public key was of the wrong type for document ID %s",
+					historyEntry.Metadata.ID,
+				)
+			}
 
 			hash := sha256.New()
 			hash.Write(historyEntry.Data.UnsafePaymentState)
 
 			pubkeyVerified := ecdsa.VerifyASN1(
-				&historyEntry.Data.PublicKey,
+				pubkey,
 				hash.Sum(nil),
 				historyEntry.Data.Signature,
 			)
@@ -196,16 +210,9 @@ func validatePaymentStateSignatures(
 
 // publicKeyInHistoricalAuthorizedKeySet checks if the hex encoded, marshalled representation of the
 // provided public key is present in a list of valid prior public keys.
-func publicKeyInHistoricalAuthorizedKeySet(pubkey *ecdsa.PublicKey) (bool, error) {
+func publicKeyInHistoricalAuthorizedKeySet(pubkey []byte) (bool, error) {
 	priorPubkeys := []string{}
-	currentKey, err := x509.MarshalPKIXPublicKey(&pubkey)
-	if err != nil {
-		return false, fmt.Errorf(
-			"failed to marshal public key for prior key comparison: %w",
-			err,
-		)
-	}
-	hexKey := hex.EncodeToString(currentKey)
+	hexKey := hex.EncodeToString(pubkey)
 	if !slices.Contains(priorPubkeys, hexKey) {
 		return false, fmt.Errorf(
 			"public key %s associated with document ID does not match any valid keys",

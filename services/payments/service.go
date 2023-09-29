@@ -3,14 +3,12 @@ package payments
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"text/template"
 
 	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
@@ -433,28 +431,12 @@ func signPaymentState(
 	kmsClient wrappedKMSClient,
 	keyID string,
 	state PaymentState,
-) (*ecdsa.PublicKey, string, error) {
+) ([]byte, string, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyID,
 	})
-	pubkeyBytes, err := base64.StdEncoding.DecodeString(string(pubkeyOutput.PublicKey))
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to base64 decode public key: %s", pubkeyOutput.PublicKey)
-	}
-	pubkeyAny, err := x509.ParsePKIXPublicKey(pubkeyBytes)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse public key: %s", pubkeyBytes)
-	}
-	pubkey, ok := pubkeyAny.(*ecdsa.PublicKey)
-	if !ok {
-		return nil, "", fmt.Errorf(
-			"parsed public key is of the wrong type. expected ecdsa.PublicKey but found: %s",
-			reflect.TypeOf(pubkeyAny),
-		)
-	}
-
-	if err != nil {
-		return pubkey, "", fmt.Errorf("Failed to get public key: %w", err)
+		return pubkeyOutput.PublicKey, "", fmt.Errorf("Failed to get public key: %w", err)
 	}
 
 	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
@@ -468,7 +450,7 @@ func signPaymentState(
 		return nil, "", fmt.Errorf("Failed to sign transaction: %w", err)
 	}
 
-	return pubkey, hex.EncodeToString(signingOutput.Signature), nil
+	return pubkeyOutput.PublicKey, hex.EncodeToString(signingOutput.Signature), nil
 }
 
 func sortHashes(a, b []byte) ([][]byte, error) {

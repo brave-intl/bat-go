@@ -205,7 +205,7 @@ func (s Service) insertPayment(
 	}
 
 	paymentStateForSigning.Signature = []byte(signature)
-	paymentStateForSigning.PublicKey = *pubkey
+	paymentStateForSigning.PublicKey = pubkey
 
 	insertedDocumentID, err := s.datastore.Execute(
 		context.Background(),
@@ -414,7 +414,7 @@ func writeTransaction(
 				return nil, fmt.Errorf("failed to sign transaction: %w", err)
 			}
 			paymentState.Signature = []byte(signature)
-			paymentState.PublicKey = *pubkey
+			paymentState.PublicKey = pubkey
 
 			_, err = txn.Execute(
 				"UPDATE transactions BY d_id SET data = ?, signature = ?, publicKey = ? WHERE d_id = ?",

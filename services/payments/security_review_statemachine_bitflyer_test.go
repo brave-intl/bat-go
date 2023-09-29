@@ -6,7 +6,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -125,6 +124,8 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	must.Equal(t, nil, err)
 	privkey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	must.Equal(t, nil, err)
+	marshalledPubkey, err := x509.MarshalPKIXPublicKey(&privkey.PublicKey)
+	must.Nil(t, err)
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
@@ -135,7 +136,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
 			ID:                 idempotencyKey,
-			PublicKey:          privkey.PublicKey,
+			PublicKey:          marshalledPubkey,
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
@@ -151,11 +152,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	mockDriver := new(mockDriver)
 	mockKMS.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil)
-	marshalledPubkey, err := x509.MarshalPKIXPublicKey(&privkey.PublicKey)
-	must.Nil(t, err)
 	mockKMS.On("GetPublicKey", mock.Anything, mock.Anything, mock.Anything).Return(
 		&kms.GetPublicKeyOutput{
-			PublicKey: []byte(base64.StdEncoding.EncodeToString(marshalledPubkey)),
+			PublicKey: marshalledPubkey,
 		},
 		nil,
 	)
