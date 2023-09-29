@@ -139,11 +139,8 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	})
 	// If the error is that the key wasn't found, proceed. Otherwise, fail with error.
 	if err != nil {
-		var ae smithy.APIError
-		if errors.As(err, &ae) {
-			if !strings.Contains(ae.ErrorMessage(), "NotFoundException") {
-				return fmt.Errorf("failed to get key by alias: %w", err)
-			}
+		if !strings.Contains(err.Error(), "NotFoundException") {
+			return fmt.Errorf("failed to get key by alias: %w", err)
 		}
 	}
 
