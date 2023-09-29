@@ -7,7 +7,6 @@ import (
 
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
