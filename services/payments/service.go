@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"text/template"
 
 	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
@@ -23,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
+	smithy "github.com/aws/smithy-go"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
@@ -135,8 +137,14 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	getKeyResult, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
 		KeyId: aws.String("signing-" + imageSHA),
 	})
+	// If the error is that the key wasn't found, proceed. Otherwise, fail with error.
 	if err != nil {
-		return fmt.Errorf("failed to get key by alias: %w", err)
+		var ae smithy.APIError
+		if errors.As(err, &ae) {
+			if !strings.Contains(ae.ErrorMessage(), "NotFoundException") {
+				return fmt.Errorf("failed to get key by alias: %w", err)
+			}
+		}
 	}
 
 	if getKeyResult != nil {
