@@ -1,14 +1,13 @@
 package payments
 
 import (
+	"fmt"
 	"context"
 	"crypto/sha256"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -44,9 +43,6 @@ TestValidatePaymentStateSignatures
 func TestValidatePaymentStateSignatures(t *testing.T) {
 	privkey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	must.Equal(t, nil, err)
-	pubkeyMarshalled := elliptic.MarshalCompressed(elliptic.P256(), privkey.X, privkey.Y)
-	fmt.Printf("%v\n", pubkeyMarshalled)
-	pubkeyHex := hex.EncodeToString(pubkeyMarshalled)
 
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Equal(t, nil, err)
@@ -66,9 +62,10 @@ func TestValidatePaymentStateSignatures(t *testing.T) {
 	//	must.Equal(t, nil, err)
 
 	hash := sha256.New()
-	hash.Write(marshaledDataJSON)
 	signature, err := ecdsa.SignASN1(rand.Reader, privkey, hash.Sum(nil))
 	must.Equal(t, nil, err)
+	initialVerify := ecdsa.VerifyASN1(&privkey.PublicKey, hash.Sum(nil), signature)
+	must.True(t, initialVerify)
 
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
@@ -79,7 +76,7 @@ func TestValidatePaymentStateSignatures(t *testing.T) {
 			UnsafePaymentState: marshaledDataJSON,
 			Signature:          signature,
 			ID:                 idempotencyKey,
-			PublicKey:          []byte(pubkeyHex),
+			PublicKey:          privkey.PublicKey,
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",

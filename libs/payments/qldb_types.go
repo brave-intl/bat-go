@@ -3,12 +3,8 @@ package payments
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/x509"
-	"encoding/asn1"
+	"crypto/sha256"
 
-	//"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -143,10 +139,6 @@ func validatePaymentStateHistory(
 	return &transactionHistory[0], reason
 }
 
-type ECDSASignature struct {
-	R, S *big.Int
-}
-
 // validatePaymentStateSignatures returns whether a slice of entries representing the entire state
 // history for a given id include exclusively valid signatures.
 func validatePaymentStateSignatures(
@@ -159,6 +151,7 @@ func validatePaymentStateSignatures(
 		verifyOutput, err := kmsClient.Verify(ctx, &kms.VerifyInput{
 			KeyId:            &kmsSigningKeyID,
 			Message:          historyEntry.Data.UnsafePaymentState,
+			MessageType:      kmsTypes.MessageTypeRaw,
 			Signature:        historyEntry.Data.Signature,
 			SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 		})
@@ -170,35 +163,21 @@ func validatePaymentStateSignatures(
 		// @TODO: Maintain a list of known prior public keys to prevent verification of valid, but
 		// unknown signatures.
 		if !verifyOutput.SignatureValid {
-			//der, err := base64.StdEncoding.DecodeString(string(historyEntry.Data.Signature))
-			//if err != nil {
-			//	return false, err
-			//}
-			sig := ECDSASignature{}
-			_, err = asn1.Unmarshal(historyEntry.Data.Signature, &sig)
-			if err != nil {
-				return false, err
-			}
-			// The public key is stored as a hex byte slice and needs to be decoded and parsed
-			decodedPubKey, err := hex.DecodeString(string(historyEntry.Data.PublicKey))
-			if err != nil {
-				return false, fmt.Errorf("failed to decode hex public key: %w", err)
-			}
-			fmt.Printf("%v\n", decodedPubKey)
-			x, y := elliptic.UnmarshalCompressed(elliptic.P256(), decodedPubKey)
-			pubKeyAny, err := x509.ParsePKIXPublicKey(unmarshalledPubkey)
-			if err != nil {
-				return false, fmt.Errorf("failed to parse DER encoded public key: %w", err)
-			}
-			assertedPubKey, ok := pubKeyAny.(*ecdsa.PublicKey)
-			if !ok {
-				return false, fmt.Errorf("asserted public key was of the wrong type: %v", &pubKeyAny)
-			}
-			ecdsa.Verify(assertedPubKey, historyEntry.Data.UnsafePaymentState, x, y)
-			return false, fmt.Errorf(
-				"signature for state was not valid: %s",
-				historyEntry.Metadata.ID,
+			hash := sha256.New()
+			hash.Write(historyEntry.Data.UnsafePaymentState)
+
+			pubkeyVerified := ecdsa.VerifyASN1(
+				&historyEntry.Data.PublicKey,
+				hash.Sum(nil),
+				historyEntry.Data.Signature,
 			)
+
+			if !pubkeyVerified {
+				return false, fmt.Errorf(
+					"signature for state with document ID %s was not valid",
+					historyEntry.Metadata.ID,
+				)
+			}
 		}
 	}
 	return true, nil

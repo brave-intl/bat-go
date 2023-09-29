@@ -443,6 +443,7 @@ func signPaymentState(
 	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
 		KeyId:            &keyID,
 		Message:          state.UnsafePaymentState,
+		MessageType:      kmsTypes.MessageTypeRaw,
 		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 	})
 
