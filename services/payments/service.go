@@ -53,17 +53,17 @@ type Service struct {
 	pubKey           []byte
 }
 
-func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, error) {
+func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, string, error) {
 	// perform enclave attestation
 	nonce := make([]byte, 64)
 	_, err := rand.Read(nonce)
 	if err != nil {
-		return "", fmt.Errorf("failed to create nonce for attestation: %w", err)
+		return "", "", fmt.Errorf("failed to create nonce for attestation: %w", err)
 	}
 
 	document, err := nitro.Attest(ctx, nonce, nil, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create attestation document: %w", err)
+		return "", "", fmt.Errorf("failed to create attestation document: %w", err)
 	}
 
 	var logger = logging.Logger(ctx, "payments.configureKMSKey")
@@ -74,14 +74,14 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse certificate: %w", err)
+		return "", "", fmt.Errorf("failed to parse certificate: %w", err)
 	}
 
 	// parse document
 	ad, err := nitro_eclave_attestation_document.AuthenticateDocument(document, *cert, true)
 	if err != nil {
 		logger.Error().Err(err).Msgf("failed to parse template attestation document: %+v", ad)
-		return "", err
+		return "", "", err
 	}
 	logger.Info().Msgf("digest: %+v", ad.Digest)
 	logger.Info().Msgf("pcrs: %+v", ad.PCRs)
@@ -89,7 +89,7 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 	t, err := template.ParseFiles(templateFile)
 	if err != nil {
 		logger.Error().Err(err).Msgf("failed to parse template file: %+v", templateFile)
-		return "", err
+		return "", "", err
 	}
 
 	type keyTemplateData struct {
@@ -100,23 +100,25 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, e
 		AWSAccount string
 	}
 
+	imageSHA := ad.Digest
+
 	buf := bytes.NewBuffer([]byte{})
 	if err := t.Execute(buf, keyTemplateData{
 		PCR0:       hex.EncodeToString(ad.PCRs[0]),
 		PCR1:       hex.EncodeToString(ad.PCRs[1]),
 		PCR2:       hex.EncodeToString(ad.PCRs[2]),
-		ImageSHA:   ad.Digest,
+		ImageSHA:   imageSHA,
 		AWSAccount: os.Getenv("AWS_ACCOUNT"),
 	}); err != nil {
 		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)
-		return "", err
+		return "", "", err
 	}
 
 	policy := buf.String()
 
 	logger.Info().Msgf("key policy: %+v", policy)
 
-	return policy, nil
+	return policy, imageSHA, nil
 }
 
 type serviceNamespaceContextKey struct{}
@@ -124,19 +126,36 @@ type serviceNamespaceContextKey struct{}
 // configureSigningKey creates the enclave kms key which is only sign capable with enclave
 // attestation.
 func (s *Service) configureSigningKey(ctx context.Context) error {
+	// get the aws configuration loaded
+	kmsClient := kms.NewFromConfig(s.awsCfg)
+
 	// parse the key policy
-	policy, err := parseKeyPolicyTemplate(ctx, "/sign-policy.tmpl")
+	policy, imageSHA, err := parseKeyPolicyTemplate(ctx, "/sign-policy.tmpl")
 	if err != nil {
 		return fmt.Errorf("failed to parse signing policy template: %w", err)
 	}
 
-	// get the aws configuration loaded
-	kmsClient := kms.NewFromConfig(s.awsCfg)
+	// if the key alias already exists, pull down that particular key
+	getKeyResult, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
+		KeyId: aws.String("signing-" + imageSHA),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get key by alias: %w", err)
+	}
+
+	if getKeyResult != nil {
+		// key exists, use it
+		s.kmsSigningKeyID = *getKeyResult.KeyMetadata.KeyId
+		s.kmsSigningClient = kmsClient
+		return nil
+	}
+
+	// otherwise create and alias
 
 	input := &kms.CreateKeyInput{
-		KeySpec:  kmsTypes.KeySpecEccNistP256,
-		KeyUsage: kmsTypes.KeyUsageTypeSignVerify,
-		Policy:   aws.String(policy),
+		KeySpec:                        kmsTypes.KeySpecEccNistP256,
+		KeyUsage:                       kmsTypes.KeyUsageTypeSignVerify,
+		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -146,6 +165,17 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	result, err := kmsClient.CreateKey(ctx, input)
 	if err != nil {
 		return fmt.Errorf("failed to make key: %w", err)
+	}
+
+	// create a key alias for this key
+	aliasInput := &kms.CreateAliasInput{
+		AliasName:   aws.String("signing-" + imageSHA),
+		TargetKeyId: result.KeyMetadata.KeyId,
+	}
+
+	_, err = kmsClient.CreateAlias(ctx, aliasInput)
+	if err != nil {
+		return fmt.Errorf("failed to make key alias: %w", err)
 	}
 
 	s.kmsSigningKeyID = *result.KeyMetadata.KeyId
@@ -156,19 +186,32 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 // configureKMSKey creates the enclave kms key which is only decrypt capable with enclave
 // attestation.
 func (s *Service) configureKMSKey(ctx context.Context) error {
-
-	// parse the key policy
-	policy, err := parseKeyPolicyTemplate(ctx, "/decrypt-policy.tmpl")
-	if err != nil {
-		return fmt.Errorf("failed to parse decrypt policy template: %w", err)
-	}
-
 	// get the aws configuration loaded
 	cfg := s.awsCfg
 	kmsClient := kms.NewFromConfig(cfg)
 
+	// parse the key policy
+	policy, imageSHA, err := parseKeyPolicyTemplate(ctx, "/decrypt-policy.tmpl")
+	if err != nil {
+		return fmt.Errorf("failed to parse decrypt policy template: %w", err)
+	}
+
+	// if the key alias already exists, pull down that particular key
+	getKeyResult, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
+		KeyId: aws.String("decryption-" + imageSHA),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get key by alias: %w", err)
+	}
+
+	if getKeyResult != nil {
+		// key exists, use it
+		s.kmsDecryptKeyArn = *getKeyResult.KeyMetadata.KeyId
+		return nil
+	}
+
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -178,6 +221,16 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	result, err := kmsClient.CreateKey(ctx, input)
 	if err != nil {
 		return fmt.Errorf("failed to make key: %w", err)
+	}
+
+	aliasInput := &kms.CreateAliasInput{
+		AliasName:   aws.String("encryption-" + imageSHA),
+		TargetKeyId: result.KeyMetadata.KeyId,
+	}
+
+	_, err = kmsClient.CreateAlias(ctx, aliasInput)
+	if err != nil {
+		return fmt.Errorf("failed to make key alias: %w", err)
 	}
 
 	s.kmsDecryptKeyArn = *result.KeyMetadata.KeyId
@@ -222,32 +275,6 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")
 	}
-
-	/*
-			FIXME
-		// setup our custodian integrations
-		upholdCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Uphold})
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create uphold custodian")
-			return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
-		}
-		geminiCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Gemini})
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create gemini custodian")
-			return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
-		}
-		bitflyerCustodian, err := provider.New(ctx, provider.Config{Provider: provider.Bitflyer})
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create bitflyer custodian")
-			return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
-		}
-
-		service.custodians = map[string]provider.Custodian{
-			provider.Uphold:   upholdCustodian,
-			provider.Gemini:   geminiCustodian,
-			provider.Bitflyer: bitflyerCustodian,
-		}
-	*/
 
 	return ctx, service, nil
 }
