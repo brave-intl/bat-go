@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/sha256"
+	"crypto/x509"
 
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -158,10 +161,19 @@ func validatePaymentStateSignatures(
 			return false, fmt.Errorf("failed to verify state signature: %e", err)
 		}
 		// If signature verification fails with the current enclave, check if the signature is valid
-		// for the key that is persisted on the record itself.
-		// @TODO: Maintain a list of known prior public keys to prevent verification of valid, but
-		// unknown signatures.
+		// for the key that is persisted on the record itself. Only do this check for if the public
+		// key is in the list of valid prior keys.
 		if !verifyOutput.SignatureValid {
+			isValidPriorKey, err := publicKeyInHistoricalAuthorizedKeySet(
+				&historyEntry.Data.PublicKey,
+			)
+			if err != nil || !isValidPriorKey {
+				return false, fmt.Errorf(
+					"key could not be found in list of valid prior keys: %w",
+					err,
+				)
+			}
+
 			hash := sha256.New()
 			hash.Write(historyEntry.Data.UnsafePaymentState)
 
@@ -178,6 +190,26 @@ func validatePaymentStateSignatures(
 				)
 			}
 		}
+	}
+	return true, nil
+}
+
+// publicKeyInHistoricalAuthorizedKeySet checks if the hex encoded, marshalled representation of the
+// provided public key is present in a list of valid prior public keys.
+func publicKeyInHistoricalAuthorizedKeySet(pubkey *ecdsa.PublicKey) (bool, error) {
+	priorPubkeys := []string{}
+	currentKey, err := x509.MarshalPKIXPublicKey(&pubkey)
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to marshal public key for prior key comparison: %w",
+			err,
+		)
+	}
+	hexKey := hex.EncodeToString(currentKey)
+	if !slices.Contains(priorPubkeys, hexKey) {
+		return false, fmt.Errorf(
+			"public key %s associated with document ID does not match any valid keys",
+		)
 	}
 	return true, nil
 }
