@@ -250,7 +250,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	}
 
 	aliasInput := &kms.CreateAliasInput{
-		AliasName:   aws.String("alias/encryption-" + imageSHA),
+		AliasName:   aws.String("alias/decryption-" + imageSHA),
 		TargetKeyId: result.KeyMetadata.KeyId,
 	}
 
