@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
-	"golang.org/x/exp/slices"
 )
 
 type PaymentDetails struct {
@@ -55,7 +54,7 @@ func (t *AuthenticatedPaymentState) NextStateValid(nextState PaymentStatus) bool
 	}
 	// New transaction state should be present in the list of valid next states for the current
 	// state.
-	return slices.Contains(t.Status.GetValidTransitions(), nextState)
+	return statusListContainsStatus(t.Status.GetValidTransitions(), nextState)
 }
 
 func (t *AuthenticatedPaymentState) shouldDryRun() bool {
@@ -77,4 +76,13 @@ func AuthenticatedPaymentStateFromPaymentDetails(details PaymentDetails) Authent
 	return AuthenticatedPaymentState{
 		PaymentDetails: details,
 	}
+}
+
+func statusListContainsStatus(s []PaymentStatus, e PaymentStatus) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }

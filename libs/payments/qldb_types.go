@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -216,8 +215,11 @@ func validatePaymentStateSignatures(
 func publicKeyInHistoricalAuthorizedKeySet(pubkey []byte) (bool, error) {
 	priorPubkeys := []string{}
 	base64Pubkey := base64.StdEncoding.EncodeToString(pubkey)
-	if !slices.Contains(priorPubkeys, base64Pubkey) {
-		return false, errors.New("provided public key is not in the list of valid prior keys")
+
+	for _, priorKey := range priorPubkeys {
+		if priorKey == base64Pubkey {
+			return true, nil
+		}
 	}
-	return true, nil
+	return false, errors.New("provided public key is not in the list of valid prior keys")
 }
