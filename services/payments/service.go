@@ -436,7 +436,7 @@ func signPaymentState(
 		KeyId: &keyID,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to get public key: %w", err)
+		return nil, nil, fmt.Errorf("failed to get public key: %w", err)
 	}
 
 	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
