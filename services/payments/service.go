@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"text/template"
 
 	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
@@ -140,7 +141,7 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	if err != nil {
 		var ae smithy.APIError
 		if errors.As(err, &ae) {
-			if ae.ErrorCode() != "400" {
+			if strings.Contains(ae.ErrorMessage(), "NotFoundException") {
 				return fmt.Errorf("failed to get key by alias: %w", err)
 			}
 		}
