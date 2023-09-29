@@ -96,7 +96,6 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 		PCR0       string
 		PCR1       string
 		PCR2       string
-		ImageSHA   string
 		AWSAccount string
 	}
 
