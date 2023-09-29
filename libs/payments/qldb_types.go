@@ -3,15 +3,16 @@ package payments
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/x509"
-	"encoding/base64"
+	"encoding/asn1"
+
+	//"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/asn1"
-	"encoding/ecdh"
 	"fmt"
-	"time"
 	"math/big"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
@@ -143,8 +144,9 @@ func validatePaymentStateHistory(
 }
 
 type ECDSASignature struct {
-    R, S *big.Int
+	R, S *big.Int
 }
+
 // validatePaymentStateSignatures returns whether a slice of entries representing the entire state
 // history for a given id include exclusively valid signatures.
 func validatePaymentStateSignatures(
@@ -153,11 +155,11 @@ func validatePaymentStateSignatures(
 	kmsSigningKeyID string,
 	transactionHistory []QLDBPaymentTransitionHistoryEntry,
 ) (bool, error) {
-	for _, marshaledTransaction := range transactionHistory {
+	for _, historyEntry := range transactionHistory {
 		verifyOutput, err := kmsClient.Verify(ctx, &kms.VerifyInput{
 			KeyId:            &kmsSigningKeyID,
-			Message:          marshaledTransaction.Data.UnsafePaymentState,
-			Signature:        marshaledTransaction.Data.Signature,
+			Message:          historyEntry.Data.UnsafePaymentState,
+			Signature:        historyEntry.Data.Signature,
 			SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 		})
 		if err != nil {
@@ -168,30 +170,35 @@ func validatePaymentStateSignatures(
 		// @TODO: Maintain a list of known prior public keys to prevent verification of valid, but
 		// unknown signatures.
 		if !verifyOutput.SignatureValid {
-			der, err := base64.StdEncoding.DecodeString(string(marshaledTransaction.Data.Signature))
+			//der, err := base64.StdEncoding.DecodeString(string(historyEntry.Data.Signature))
+			//if err != nil {
+			//	return false, err
+			//}
+			sig := ECDSASignature{}
+			_, err = asn1.Unmarshal(historyEntry.Data.Signature, &sig)
 			if err != nil {
 				return false, err
 			}
-			sig := &ECDSASignature{}
-			_, err = asn1.Unmarshal(der, sig)
-			if err != nil {
-				return false, err
-			}
-			base64PubKey, err := hex.DecodeString(string(marshaledTransaction.Data.PublicKey))
+			// The public key is stored as a hex byte slice and needs to be decoded and parsed
+			decodedPubKey, err := hex.DecodeString(string(historyEntry.Data.PublicKey))
 			if err != nil {
 				return false, fmt.Errorf("failed to decode hex public key: %w", err)
 			}
-			keyString, err := base64.StdEncoding.DecodeString(string(base64PubKey))
-			if err != nil {
-				return false, fmt.Errorf("failed to decode base64 public key: %w", err)
-			}
-			storedPubKeyAny, err := x509.ParsePKIXPublicKey(keyString)
+			fmt.Printf("%v\n", decodedPubKey)
+			x, y := elliptic.UnmarshalCompressed(elliptic.P256(), decodedPubKey)
+			pubKeyAny, err := x509.ParsePKIXPublicKey(unmarshalledPubkey)
 			if err != nil {
 				return false, fmt.Errorf("failed to parse DER encoded public key: %w", err)
 			}
-			storedPubKey, ok := storedPubKeyAny.(*ecdh.PublicKey)
-			ecdsa.Verify(storedPubKey, marshaledTransaction.Data.UnsafePaymentState, sig.R, sig.S)
-			return false, fmt.Errorf("signature for state was not valid: %s", marshaledTransaction.Metadata.ID)
+			assertedPubKey, ok := pubKeyAny.(*ecdsa.PublicKey)
+			if !ok {
+				return false, fmt.Errorf("asserted public key was of the wrong type: %v", &pubKeyAny)
+			}
+			ecdsa.Verify(assertedPubKey, historyEntry.Data.UnsafePaymentState, x, y)
+			return false, fmt.Errorf(
+				"signature for state was not valid: %s",
+				historyEntry.Metadata.ID,
+			)
 		}
 	}
 	return true, nil
