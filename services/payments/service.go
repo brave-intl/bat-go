@@ -134,7 +134,7 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 
 	// if the key alias already exists, pull down that particular key
 	getKeyResult, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
-		KeyId: aws.String("signing-" + imageSHA),
+		KeyId: aws.String("alias/signing-" + imageSHA),
 	})
 	// If the error is that the key wasn't found, proceed. Otherwise, fail with error.
 	if err != nil {
@@ -180,7 +180,7 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 
 	// create a key alias for this key
 	aliasInput := &kms.CreateAliasInput{
-		AliasName:   aws.String("signing-" + imageSHA),
+		AliasName:   aws.String("alias/signing-" + imageSHA),
 		TargetKeyId: result.KeyMetadata.KeyId,
 	}
 
@@ -209,10 +209,13 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 
 	// if the key alias already exists, pull down that particular key
 	getKeyResult, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
-		KeyId: aws.String("decryption-" + imageSHA),
+		KeyId: aws.String("alias/decryption-" + imageSHA),
 	})
+	// If the error is that the key wasn't found, proceed. Otherwise, fail with error.
 	if err != nil {
-		return fmt.Errorf("failed to get key by alias: %w", err)
+		if !strings.Contains(err.Error(), "NotFoundException") {
+			return fmt.Errorf("failed to get key by alias: %w", err)
+		}
 	}
 
 	if getKeyResult != nil {
@@ -247,7 +250,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	}
 
 	aliasInput := &kms.CreateAliasInput{
-		AliasName:   aws.String("encryption-" + imageSHA),
+		AliasName:   aws.String("alias/decryption-" + imageSHA),
 		TargetKeyId: result.KeyMetadata.KeyId,
 	}
 
