@@ -211,8 +211,11 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	getKeyResult, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
 		KeyId: aws.String("alias/decryption-" + imageSHA),
 	})
+	// If the error is that the key wasn't found, proceed. Otherwise, fail with error.
 	if err != nil {
-		return fmt.Errorf("failed to get key by alias: %w", err)
+		if !strings.Contains(err.Error(), "NotFoundException") {
+			return fmt.Errorf("failed to get key by alias: %w", err)
+		}
 	}
 
 	if getKeyResult != nil {
@@ -247,7 +250,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	}
 
 	aliasInput := &kms.CreateAliasInput{
-		AliasName:   aws.String("encryption-" + imageSHA),
+		AliasName:   aws.String("alias/encryption-" + imageSHA),
 		TargetKeyId: result.KeyMetadata.KeyId,
 	}
 
