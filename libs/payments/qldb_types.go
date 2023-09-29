@@ -179,7 +179,7 @@ func validatePaymentStateSignatures(
 			pubkeyParsed, err := x509.ParsePKIXPublicKey(historyEntry.Data.PublicKey)
 			if err != nil {
 				return false, fmt.Errorf(
-					"failed to marshal public key for prior key comparison: %w",
+					"failed to unmarshal public key for prior key comparison: %w",
 					err,
 				)
 			}

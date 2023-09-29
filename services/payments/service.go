@@ -447,7 +447,7 @@ func signPaymentState(
 	})
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to sign transaction: %w", err)
+		return nil, nil, fmt.Errorf("failed to sign transaction: %w", err)
 	}
 
 	return pubkeyOutput.PublicKey, signingOutput.Signature, nil
