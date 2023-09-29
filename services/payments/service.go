@@ -144,10 +144,21 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	}
 
 	if getKeyResult != nil {
-		// key exists, use it
-		s.kmsSigningKeyID = *getKeyResult.KeyMetadata.KeyId
-		s.kmsSigningClient = kmsClient
-		return nil
+		// key exists, check the key policy matches
+		// if the key alias already exists, pull down that particular key
+		getKeyPolicyResult, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+			KeyId: getKeyResult.KeyMetadata.KeyId,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get key by alias: %w", err)
+		}
+
+		if *getKeyPolicyResult.Policy == policy {
+			// if the policy matches, we should use this key
+			s.kmsSigningKeyID = *getKeyResult.KeyMetadata.KeyId
+			s.kmsSigningClient = kmsClient
+			return nil
+		}
 	}
 
 	// otherwise create and alias
@@ -205,9 +216,21 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	}
 
 	if getKeyResult != nil {
-		// key exists, use it
-		s.kmsDecryptKeyArn = *getKeyResult.KeyMetadata.KeyId
-		return nil
+		// key exists, check the key policy matches
+		// if the key alias already exists, pull down that particular key
+		getKeyPolicyResult, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+			KeyId: getKeyResult.KeyMetadata.KeyId,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get key by alias: %w", err)
+		}
+
+		if *getKeyPolicyResult.Policy == policy {
+			// if the policy matches, we should use this key
+			s.kmsSigningKeyID = *getKeyResult.KeyMetadata.KeyId
+			s.kmsSigningClient = kmsClient
+			return nil
+		}
 	}
 
 	input := &kms.CreateKeyInput{
