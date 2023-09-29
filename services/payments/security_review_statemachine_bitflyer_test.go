@@ -2,25 +2,30 @@ package payments
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
-	"net/http"
 
 	"github.com/shopspring/decimal"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+
 	//bitflyercmd "github.com/brave-intl/bat-go/tools/settlement/cmd"
 
 	. "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/jarcoal/httpmock"
-	must "github.com/stretchr/testify/require"
 	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 )
 
 var (
@@ -51,7 +56,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	bitflyerStateMachine := BitflyerMachine{
-		client: http.Client{},
+		client:       http.Client{},
 		bitflyerHost: mockBitflyerHost,
 	}
 
@@ -117,6 +122,10 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 
 	marshaledData, _ := json.Marshal(testTransaction)
 	must.Equal(t, nil, err)
+	privkey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	must.Equal(t, nil, err)
+	marshalledPubkey, err := x509.MarshalPKIXPublicKey(&privkey.PublicKey)
+	must.Nil(t, err)
 	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
 		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
 			StrandID:   "test",
@@ -127,6 +136,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
 			ID:                 idempotencyKey,
+			PublicKey:          marshalledPubkey,
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
@@ -142,7 +152,12 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	mockDriver := new(mockDriver)
 	mockKMS.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
 	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil)
-	mockKMS.On("GetPublicKey", mock.Anything, mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)
+	mockKMS.On("GetPublicKey", mock.Anything, mock.Anything, mock.Anything).Return(
+		&kms.GetPublicKeyOutput{
+			PublicKey: marshalledPubkey,
+		},
+		nil,
+	)
 
 	service := Service{
 		datastore:        mockDriver,
@@ -194,7 +209,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	marshaledData, _ = json.Marshal(testTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	bitflyerStateMachine.setTransaction(&testTransaction)
-	timeout, cancel := context.WithTimeout(ctx, 1 * time.Millisecond)
+	timeout, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
 	defer cancel()
 	// For this test, we will return Pending status forever, so we need it to time out
 	// in order to capture and verify that pending status.
@@ -222,7 +237,7 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	bitflyerStateMachine.setTransaction(&testTransaction)
 	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
 	// is 5 minutes and we don't want the test to run that long even if it's broken.
-	timeout, cancel = context.WithTimeout(ctx, 100 * time.Millisecond)
+	timeout, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
 	newTransaction, err = Drive(timeout, &bitflyerStateMachine)
 	must.Equal(t, nil, err)

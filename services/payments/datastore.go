@@ -194,7 +194,7 @@ func (s Service) insertPayment(
 	if err != nil {
 		return "", err
 	}
-	/*pubkey,*/ signature, err := signPaymentState(
+	pubkey, signature, err := signPaymentState(
 		ctx,
 		s.kmsSigningClient,
 		s.kmsSigningKeyID,
@@ -204,8 +204,8 @@ func (s Service) insertPayment(
 		return "", err
 	}
 
-	paymentStateForSigning.Signature = []byte(signature)
-	//paymentStateForSigning.PublicKey = []byte(pubkey)
+	paymentStateForSigning.Signature = signature
+	paymentStateForSigning.PublicKey = pubkey
 
 	insertedDocumentID, err := s.datastore.Execute(
 		context.Background(),
@@ -404,8 +404,7 @@ func writeTransaction(
 			}
 
 			// ignore public key
-			/*pubkey,*/
-			signature, err := signPaymentState(
+			pubkey, signature, err := signPaymentState(
 				ctx,
 				kmsSigningClient,
 				kmsSigningKeyID,
@@ -415,13 +414,13 @@ func writeTransaction(
 				return nil, fmt.Errorf("failed to sign transaction: %w", err)
 			}
 			paymentState.Signature = []byte(signature)
-			//paymentState.PublicKey = []byte(pubkey)
+			paymentState.PublicKey = pubkey
 
 			_, err = txn.Execute(
 				"UPDATE transactions BY d_id SET data = ?, signature = ?, publicKey = ? WHERE d_id = ?",
 				paymentState.UnsafePaymentState,
 				paymentState.Signature,
-				//paymentState.PublicKey,
+				paymentState.PublicKey,
 				authenticatedState.DocumentID,
 			)
 			if err != nil {

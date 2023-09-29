@@ -2,13 +2,20 @@ package payments
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"errors"
+
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
-	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
 )
 
 // QLDBPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for
@@ -143,19 +150,74 @@ func validatePaymentStateSignatures(
 	kmsSigningKeyID string,
 	transactionHistory []QLDBPaymentTransitionHistoryEntry,
 ) (bool, error) {
-	for _, marshaledTransaction := range transactionHistory {
+	for _, historyEntry := range transactionHistory {
 		verifyOutput, err := kmsClient.Verify(ctx, &kms.VerifyInput{
 			KeyId:            &kmsSigningKeyID,
-			Message:          marshaledTransaction.Data.UnsafePaymentState,
-			Signature:        marshaledTransaction.Data.Signature,
+			Message:          historyEntry.Data.UnsafePaymentState,
+			MessageType:      kmsTypes.MessageTypeRaw,
+			Signature:        historyEntry.Data.Signature,
 			SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
 		})
 		if err != nil {
 			return false, fmt.Errorf("failed to verify state signature: %e", err)
 		}
+		// If signature verification fails with the current enclave, check if the signature is valid
+		// for the key that is persisted on the record itself. Only do this check for if the public
+		// key is in the list of valid prior keys.
+		// Note: KMS is hashing the value internally during signing, so we need to verify a hash of
+		// the message as well when we're verifying without KMS.
 		if !verifyOutput.SignatureValid {
-			return false, fmt.Errorf("signature for state was not valid: %s", marshaledTransaction.Metadata.ID)
+			isValidPriorKey, err := publicKeyInHistoricalAuthorizedKeySet(
+				historyEntry.Data.PublicKey,
+			)
+			if err != nil || !isValidPriorKey {
+				return false, fmt.Errorf(
+					"key could not be found in list of valid prior keys: %w",
+					err,
+				)
+			}
+			pubkeyParsed, err := x509.ParsePKIXPublicKey(historyEntry.Data.PublicKey)
+			if err != nil {
+				return false, fmt.Errorf(
+					"failed to unmarshal public key for prior key comparison: %w",
+					err,
+				)
+			}
+			pubkey, ok := pubkeyParsed.(*ecdsa.PublicKey)
+			if !ok {
+				return false, fmt.Errorf(
+					"public key was of the wrong type for document ID %s",
+					historyEntry.Metadata.ID,
+				)
+			}
+
+			hash := sha256.New()
+			hash.Write(historyEntry.Data.UnsafePaymentState)
+
+			pubkeyVerified := ecdsa.VerifyASN1(
+				pubkey,
+				hash.Sum(nil),
+				historyEntry.Data.Signature,
+			)
+
+			if !pubkeyVerified {
+				return false, fmt.Errorf(
+					"signature for state with document ID %s was not valid",
+					historyEntry.Metadata.ID,
+				)
+			}
 		}
+	}
+	return true, nil
+}
+
+// publicKeyInHistoricalAuthorizedKeySet checks if the hex encoded, marshalled representation of the
+// provided public key is present in a list of valid prior public keys.
+func publicKeyInHistoricalAuthorizedKeySet(pubkey []byte) (bool, error) {
+	priorPubkeys := []string{}
+	base64Pubkey := base64.StdEncoding.EncodeToString(pubkey)
+	if !slices.Contains(priorPubkeys, base64Pubkey) {
+		return false, errors.New("provided public key is not in the list of valid prior keys")
 	}
 	return true, nil
 }
