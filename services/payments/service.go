@@ -24,7 +24,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
-	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/hashicorp/vault/shamir"
@@ -428,60 +427,6 @@ func verifyHashSequence(
 		return true, nil
 	}
 	return false, nil
-}
-
-func (s *Service) PaymentStateToAuthenticatedPaymentState(
-	ctx context.Context,
-	paymentState PaymentState,
-	documentID string,
-) (*AuthenticatedPaymentState, error) {
-	// implicitly validates the state history of the provided PaymentState. This will not validate
-	// the provided payment itself, so we'll ignore the result and verify the provided PaymentState
-	// separately (above).
-	authenticatedStateInterface, err := s.datastore.Execute(
-		ctx,
-		func(txn qldbdriver.Transaction) (interface{}, error) {
-			stateHistory, err := getTransactionHistory(txn, documentID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get transaction history: %w", err)
-			}
-			if len(stateHistory) < 1 {
-				return nil, &QLDBTransitionHistoryNotFoundError{}
-			}
-
-			authenticatedState, latestHistoryItem, err := AuthenticatedStateFromQLDBHistory(
-				ctx,
-				s.kmsSigningClient,
-				s.kmsSigningKeyID,
-				stateHistory,
-				paymentState,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to validate transition history: %w", err)
-			}
-			merkleValid, err := revisionValidInTree(ctx, s.sdkClient, latestHistoryItem)
-			if err != nil {
-				return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
-			}
-			if !merkleValid {
-				return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
-			}
-			return authenticatedState, nil
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	authenticatedState, ok := authenticatedStateInterface.(*AuthenticatedPaymentState)
-	if !ok {
-		return nil, fmt.Errorf(
-			"validated response was of the wrong type: %v",
-			authenticatedStateInterface,
-		)
-	}
-
-	// At this point, the PaymentStateToAuthenticatedPaymentState is authenticated and safe to use.
-	return authenticatedState, nil
 }
 
 // signPaymentState - perform KMS signing of the transaction, return publicKey and

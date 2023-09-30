@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
@@ -103,13 +102,6 @@ func (s *baseStateMachine) getSDKClient() wrappedQldbSDKClient {
 // getKMSSigningClient returns a transaction id for a state machine, implementing TxStateMachine.
 func (s *baseStateMachine) getKMSSigningClient() wrappedKMSClient {
 	return s.kmsSigningClient
-}
-
-// GenerateTransactionID returns the generated transaction id for a state machine's transaction,
-// implementing TxStateMachine.
-func (s *baseStateMachine) GenerateTransactionID() (*uuid.UUID, error) {
-	paymentStateID := s.transaction.GenerateIdempotencyKey()
-	return &paymentStateID, nil
 }
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.

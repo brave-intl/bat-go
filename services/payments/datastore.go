@@ -322,7 +322,8 @@ func (s Service) insertPayment(
 	ctx context.Context,
 	details PaymentDetails,
 ) (string, error) {
-	paymentStateForSigning, err := UnsignedPaymentStateFromDetails(details)
+	// FIXME we should propogate dry run
+	paymentStateForSigning, err := details.ToPaymentState(nil)
 	if err != nil {
 		return "", err
 	}
@@ -480,29 +481,4 @@ func writeTransaction(
 		return nil, fmt.Errorf("QLDB write execution failed: %w", err)
 	}
 	return newAuthenticatedStateInterface.(*AuthenticatedPaymentState), nil
-}
-
-// getTransactionHistory returns a slice of entries representing the entire state history
-// for a given id.
-func getTransactionHistory(
-	txn wrappedQldbTxnAPI,
-	documentID string,
-) ([]QLDBPaymentTransitionHistoryEntry, error) {
-	result, err := txn.Execute(
-		"SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?",
-		documentID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("QLDB transaction failed: %w", err)
-	}
-	var collectedData []QLDBPaymentTransitionHistoryEntry
-	for result.Next(txn) {
-		var data QLDBPaymentTransitionHistoryEntry
-		err := ion.Unmarshal(result.GetCurrentData(), &data)
-		if err != nil {
-			return nil, fmt.Errorf("ion unmarshal failed: %w", err)
-		}
-		collectedData = append(collectedData, data)
-	}
-	return collectedData, nil
 }

@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -25,16 +26,16 @@ type PaymentAuthorization struct {
 
 type AuthenticatedPaymentState struct {
 	PaymentDetails
-	Status         PaymentStatus
+	Status         PaymentStatus          `json:"status"`
 	Authorizations []PaymentAuthorization `json:"authorizations"`
 	DryRun         *string                `json:"dryRun"`
-	LastError      *PaymentError
-	DocumentID     string
+	LastError      *PaymentError          `json:"lastError"`
+	DocumentID     string                 `json:"documentID"`
 }
 
-func (p *AuthenticatedPaymentState) GenerateIdempotencyKey() uuid.UUID {
+func (p PaymentDetails) ToPaymentState(dryRun *string) (*PaymentState, error) {
 	idempotencyNamespace := uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c")
-	return uuid.NewSHA1(
+	id := uuid.NewSHA1(
 		idempotencyNamespace,
 		[]byte(fmt.Sprintf(
 			"%s%s%s%s%s%s",
@@ -46,6 +47,28 @@ func (p *AuthenticatedPaymentState) GenerateIdempotencyKey() uuid.UUID {
 			p.PayoutID,
 		)),
 	)
+
+	authenticatedState := AuthenticatedPaymentState{
+		PaymentDetails: p,
+		Status:         Prepared,
+		Authorizations: []PaymentAuthorization{},
+		DryRun:         dryRun,
+		LastError:      nil,
+		DocumentID:     "",
+	}
+	bytes, err := json.Marshal(authenticatedState)
+	if err != nil {
+		return nil, err
+	}
+
+	state := PaymentState{
+		UnsafePaymentState: bytes,
+		Signature:          []byte{},
+		PublicKey:          []byte{},
+		ID:                 id,
+	}
+
+	return &state, nil
 }
 
 func (t *AuthenticatedPaymentState) NextStateValid(nextState PaymentStatus) bool {
@@ -69,12 +92,6 @@ func (t *AuthenticatedPaymentState) shouldDryRun() bool {
 		return *t.DryRun == "submit"
 	default:
 		return false
-	}
-}
-
-func AuthenticatedPaymentStateFromPaymentDetails(details PaymentDetails) AuthenticatedPaymentState {
-	return AuthenticatedPaymentState{
-		PaymentDetails: details,
 	}
 }
 

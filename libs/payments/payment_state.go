@@ -8,7 +8,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// PaymentState defines data for qldbPaymentTransitionHistoryEntry.
+// PaymentState is the high level structure which is stored in a datastore.
+// It includes the full payment state as well as authentication information which proves it is a valid
+// object authored by the enclave. Accessing the payment state directly is considered unsafe, one must
+// go through a getter which verifies the history.
 type PaymentState struct {
 	// Serialized AuthenticatedPaymentState. Should only ever be access via GetSafePaymentState,
 	// which does all of the needed validation of the state
@@ -18,84 +21,64 @@ type PaymentState struct {
 	ID                 uuid.UUID `ion:"idempotencyKey"`
 }
 
+// Verifier is an interface for verifying signatures
 type Verifier interface {
 	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
 }
 
+// PaymentStateHistory is a sequence of payment states.
 type PaymentStateHistory []PaymentState
 
-func (p PaymentStateHistory) GetAuthenticatedPaymentState(v Verifier, documentID string) (*AuthenticatedPaymentState, error) {
+// GetAuthenticatedPaymentState by performing the appropriate validation.
+func (p PaymentStateHistory) GetAuthenticatedPaymentState(verifier Verifier, documentID string) (*AuthenticatedPaymentState, error) {
+	// iterate through our payment states checking:
+	// 1. the signature
+	// 2. the documentID matches any internal documentIDs
+	// 3. the transition was valid
 	var authenticatedState AuthenticatedPaymentState
-	history := []PaymentState(p)
-	err := json.Unmarshal(history[len(history)-1].UnsafePaymentState, &authenticatedState)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
-			err,
-		)
-	}
+	for i, state := range []PaymentState(p) {
+		var unsafeState AuthenticatedPaymentState
+		valid, err := verifier.Verify(state.UnsafePaymentState, state.Signature, crypto.Hash(0))
+		if err != nil {
+			return nil, fmt.Errorf("signature validation for state with document ID %s failed: %w", documentID, err)
+		}
+		if !valid {
+			return nil, fmt.Errorf("signature for state with document ID %s was not valid", documentID)
+		}
 
-	// FIXME validate all signatures here
+		err = json.Unmarshal(state.UnsafePaymentState, &unsafeState)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal transaction data: %w", err)
+		}
+
+		if unsafeState.DocumentID != "" && unsafeState.DocumentID != documentID {
+			return nil, fmt.Errorf("internal document ID %s did not match expected document ID %s", unsafeState.DocumentID, documentID)
+		}
+		for _, authorization := range unsafeState.Authorizations {
+			if authorization.DocumentID != documentID {
+				return nil, fmt.Errorf("internal authorization document ID %s did not match expected document ID %s", authorization.DocumentID, documentID)
+			}
+		}
+
+		if i == 0 {
+			// must always start in prepared
+			if unsafeState.Status != Prepared {
+				return nil, &InvalidTransitionState{}
+			}
+		} else {
+			// New state should be present in the list of valid next states for the
+			// "previous" (current) state.
+			if !authenticatedState.NextStateValid(unsafeState.Status) {
+				return nil, &InvalidTransitionState{
+					From: string(authenticatedState.Status),
+					To:   string(unsafeState.Status),
+				}
+			}
+		}
+
+		authenticatedState = unsafeState
+	}
 
 	authenticatedState.DocumentID = documentID
 	return &authenticatedState, nil
-}
-
-// ToStructuredUnsafePaymentState only unmarshals an ToStructuredUnsafePaymentState from the
-// UnsafePaymentState field in a PaymentState. It does NOT do the requisite validation and should
-// not be used except to get the fields needed to do that validation.
-func (p *PaymentState) ToStructuredUnsafePaymentState() (*AuthenticatedPaymentState, error) {
-	var unauthenticatedState AuthenticatedPaymentState
-	err := json.Unmarshal(p.UnsafePaymentState, &unauthenticatedState)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
-			err,
-		)
-	}
-	return &unauthenticatedState, nil
-}
-
-// GenerateIdempotencyKey returns a UUID v5 ID if the ID on the Transaction matches its expected
-// value. Otherwise, it returns an error.
-func (p *PaymentState) GenerateIdempotencyKey() (uuid.UUID, error) {
-	authenticatedState, err := p.ToStructuredUnsafePaymentState()
-	if err != nil {
-		return uuid.Nil, err
-	}
-	generatedIdempotencyKey := authenticatedState.GenerateIdempotencyKey()
-	if generatedIdempotencyKey != p.ID {
-		return uuid.Nil, fmt.Errorf(
-			"ID does not match transaction fields: have %s, want %s",
-			p.ID,
-			generatedIdempotencyKey,
-		)
-	}
-	return p.ID, nil
-}
-
-// SetIdempotencyKey assigns a UUID v5 value to PaymentState.ID.
-func (p *PaymentState) SetIdempotencyKey() error {
-	authenticatedPaymentState, err := p.ToStructuredUnsafePaymentState()
-	if err != nil {
-		return err
-	}
-	generatedIdempotencyKey := authenticatedPaymentState.GenerateIdempotencyKey()
-	p.ID = generatedIdempotencyKey
-	return nil
-}
-
-func UnsignedPaymentStateFromDetails(details PaymentDetails) (*PaymentState, error) {
-	authenticatedState := AuthenticatedPaymentState{
-		PaymentDetails: details,
-		Status:         Prepared,
-	}
-	authenticatedStateString, err := json.Marshal(authenticatedState)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal authenticated state: %w", err)
-	}
-	return &PaymentState{
-		UnsafePaymentState: authenticatedStateString,
-		ID:                 authenticatedState.GenerateIdempotencyKey(),
-	}, nil
 }

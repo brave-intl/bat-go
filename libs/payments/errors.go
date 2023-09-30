@@ -6,8 +6,8 @@ import (
 
 // PaymentError is an error used to communicate whether an error is temporary.
 type PaymentError struct {
-	OriginalError  error
-	Temporary      bool
+	OriginalError error
+	Temporary     bool
 }
 
 // Error makes ProcessingError an error
@@ -32,15 +32,15 @@ func (e PaymentError) Unwrap() error {
 // ProcessingErrorFromError - given an error turn it into a processing error
 func ProcessingErrorFromError(cause error, isTemporary bool) error {
 	return &PaymentError{
-		OriginalError:  cause,
-		Temporary:      isTemporary,
+		OriginalError: cause,
+		Temporary:     isTemporary,
 	}
 }
 
-// InvalidTransitionState indicates that a record does not exist in QLDB.
-type InvalidTransitionState struct{
+// InvalidTransitionState indicates that the payment state transition is invalid
+type InvalidTransitionState struct {
 	From string
-	To string
+	To   string
 }
 
 func (e *InvalidTransitionState) Error() string {
