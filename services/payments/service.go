@@ -302,7 +302,10 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Error().Err(err).Msg("could not create kms signing key")
 		return nil, nil, errors.New("could not create kms signing key")
 	}
-	// FIXME init KMS verifier using s.kmsSigningKeyID
+	service.verifier = KMSVerifier{
+		kmsSigningKeyID: service.kmsSigningKeyID,
+		kmsClient:       service.kmsSigningClient,
+	}
 
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")
