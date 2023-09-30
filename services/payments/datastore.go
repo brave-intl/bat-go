@@ -31,33 +31,17 @@ type QLDBDatastore struct {
 	// FIXME add AWS SDK client
 }
 
-/*
-type SignedDatastore struct {
-	d Datastore
-}
-
-func (db *SignedDatastore) InsertPaymentState(ctx context.Context, state *PaymentState) (string, error) {
-
-	s.signature = Sign(state)
-	return db.InsertPaymentState(ctx, state)
-}
-*/
-
 // ErrNotConfiguredYet - service not fully configured.
 var ErrNotConfiguredYet = errors.New("not yet configured")
 
 const (
-	// StatePrepared - transaction prepared state
-	StatePrepared = "prepared"
-	// StateSubmitted - transaction prepared state
-	StateSubmitted          = "submitted"
 	tableAlreadyCreatedCode = "412"
 )
 
 type Datastore interface {
 	InsertPaymentState(ctx context.Context, state *PaymentState) (string, error)
 	GetPaymentStateHistory(ctx context.Context, documentID string) (*PaymentStateHistory, error)
-	UpdatePaymentState(ctx context.Context, state *PaymentState) error
+	UpdatePaymentState(ctx context.Context, documentID string, state *PaymentState) error
 }
 
 func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *PaymentState) (string, error) {
@@ -164,8 +148,24 @@ func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID s
 	return stateHistory.(*PaymentStateHistory), err
 }
 
-func (q *QLDBDatastore) UpdatePaymentState(ctx context.Context, state *PaymentState) error {
-	return errors.New("unimplemented")
+func (q *QLDBDatastore) UpdatePaymentState(ctx context.Context, documentID string, state *PaymentState) error {
+	_, err := q.Execute(
+		ctx,
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+			_, err := txn.Execute(
+				"UPDATE transactions BY d_id SET data = ?, signature = ?, publicKey = ? WHERE d_id = ?",
+				state.UnsafePaymentState,
+				state.Signature,
+				state.PublicKey,
+				documentID,
+			)
+			return nil, err
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("QLDB write execution failed: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) configureDatastore(ctx context.Context) error {
@@ -433,52 +433,33 @@ func (s *Service) GetTransactionFromDocumentID(
 // represents a valid state transition.
 func writeTransaction(
 	ctx context.Context,
-	datastore wrappedQldbDriverAPI,
+	datastore compatDatastore,
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
 	kmsSigningKeyID string,
 	authenticatedState *AuthenticatedPaymentState,
 ) (*AuthenticatedPaymentState, error) {
-	newAuthenticatedStateInterface, err := datastore.Execute(
+	marshaledState, err := json.Marshal(authenticatedState)
+	if err != nil {
+		return nil, err
+	}
+
+	paymentState := PaymentState{
+		UnsafePaymentState: marshaledState,
+	}
+
+	// ignore public key
+	pubkey, signature, err := signPaymentState(
 		ctx,
-		func(txn qldbdriver.Transaction) (interface{}, error) {
-			marshaledState, err := json.Marshal(authenticatedState)
-			if err != nil {
-				return nil, err
-			}
-
-			paymentState := PaymentState{
-				UnsafePaymentState: marshaledState,
-			}
-
-			// ignore public key
-			pubkey, signature, err := signPaymentState(
-				ctx,
-				kmsSigningClient,
-				kmsSigningKeyID,
-				paymentState,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to sign transaction: %w", err)
-			}
-			paymentState.Signature = []byte(signature)
-			paymentState.PublicKey = pubkey
-
-			_, err = txn.Execute(
-				"UPDATE transactions BY d_id SET data = ?, signature = ?, publicKey = ? WHERE d_id = ?",
-				paymentState.UnsafePaymentState,
-				paymentState.Signature,
-				paymentState.PublicKey,
-				authenticatedState.DocumentID,
-			)
-			if err != nil {
-				return nil, err
-			}
-			return authenticatedState, nil
-		},
+		kmsSigningClient,
+		kmsSigningKeyID,
+		paymentState,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("QLDB write execution failed: %w", err)
+		return nil, fmt.Errorf("failed to sign transaction: %w", err)
 	}
-	return newAuthenticatedStateInterface.(*AuthenticatedPaymentState), nil
+	paymentState.Signature = []byte(signature)
+	paymentState.PublicKey = pubkey
+
+	return authenticatedState, datastore.UpdatePaymentState(ctx, authenticatedState.DocumentID, &paymentState)
 }
