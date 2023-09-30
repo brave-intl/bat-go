@@ -45,47 +45,38 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 func (s *Service) AuthorizeTransaction(
 	ctx context.Context,
 	keyID string,
-	transaction AuthenticatedPaymentState,
+	transaction *AuthenticatedPaymentState,
 ) error {
-	fetchedTxn, idempotencyKey, err := s.GetTransactionFromDocumentID(ctx, transaction.DocumentID)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to get transaction with idempotencyKey %s by document ID %s: %w",
-			idempotencyKey,
-			transaction.DocumentID,
-			err,
-		)
-	}
 	auth := PaymentAuthorization{
 		KeyID:      keyID,
 		DocumentID: transaction.DocumentID,
 	}
 	keyHasNotYetSigned := true
-	for _, authorization := range fetchedTxn.Authorizations {
+	for _, authorization := range transaction.Authorizations {
 		if authorization.KeyID == auth.KeyID {
 			keyHasNotYetSigned = false
 		}
 	}
 	if !keyHasNotYetSigned {
-		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, fetchedTxn.DocumentID)
+		return fmt.Errorf("key %s has already signed document %s", auth.KeyID, transaction.DocumentID)
 	}
-	fetchedTxn.Authorizations = append(fetchedTxn.Authorizations, auth)
-	authenticatedState, err := writeTransaction(
+	transaction.Authorizations = append(transaction.Authorizations, auth)
+	transaction, err := writeTransaction(
 		ctx,
 		s.datastore,
 		s.sdkClient,
 		s.kmsSigningClient,
 		s.kmsSigningKeyID,
-		fetchedTxn,
+		transaction,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update transaction: %w", err)
 	}
-	stateMachine, err := StateMachineFromTransaction(s, authenticatedState)
+	stateMachine, err := StateMachineFromTransaction(s, transaction)
 	if err != nil {
 		return fmt.Errorf("failed to create stateMachine: %w", err)
 	}
-	_, err = Drive(ctx, stateMachine)
+	transaction, err = Drive(ctx, stateMachine)
 	if err != nil {
 		// Insufficient authorizations is an expected state. Treat it as such.
 		var insufficientAuthorizations *InsufficientAuthorizationsError
@@ -94,13 +85,16 @@ func (s *Service) AuthorizeTransaction(
 		}
 		return fmt.Errorf("failed to progress transaction: %w", err)
 	}
-	// If the above call to Drive succeeds without giving insufficientAuthorizations,
-	// it's time to kick off payment. @TODO: Needs to be async, but for dry-run we
-	// can leave it synchronous.
-	_, err = Drive(ctx, stateMachine)
+	_, err = writeTransaction(
+		ctx,
+		s.datastore,
+		s.sdkClient,
+		s.kmsSigningClient,
+		s.kmsSigningKeyID,
+		transaction,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to progress transaction: %w", err)
+		return fmt.Errorf("failed to update transaction: %w", err)
 	}
-
 	return nil
 }

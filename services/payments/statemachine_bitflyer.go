@@ -167,7 +167,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 		switch strings.ToUpper(transactionsStatus.Withdrawals[0].Status) {
 		case "SUCCESS", "EXECUTED":
 			// Write the Paid status and end the loop by not calling Drive
-			entry, err = bm.writeNextState(ctx, Paid)
+			entry, err = bm.SetNextState(ctx, Paid)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -183,7 +183,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 			}
 		default:
 			// Status unknown. Fail
-			entry, err = bm.writeNextState(ctx, Failed)
+			entry, err = bm.SetNextState(ctx, Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -209,13 +209,13 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 		switch strings.ToUpper(submittedTransaction.Status) {
 		case "SUCCESS", "EXECUTED":
 			// Write the Paid status and end the loop by not calling Drive
-			entry, err = bm.writeNextState(ctx, Paid)
+			entry, err = bm.SetNextState(ctx, Paid)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
 		case "CREATED", "PENDING":
 			// Write the Pending status and call Drive to come around again
-			entry, err = bm.writeNextState(ctx, Pending)
+			entry, err = bm.SetNextState(ctx, Pending)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -230,7 +230,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 			}
 		default:
 			// Status unknown. Fail
-			entry, err = bm.writeNextState(ctx, Failed)
+			entry, err = bm.SetNextState(ctx, Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -248,7 +248,7 @@ func (bm *BitflyerMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
-	return bm.writeNextState(ctx, Failed)
+	return bm.SetNextState(ctx, Failed)
 }
 
 func (bm *BitflyerMachine) fetchQuote(

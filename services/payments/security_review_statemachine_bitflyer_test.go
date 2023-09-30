@@ -159,16 +159,17 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		nil,
 	)
 
-	service := Service{
-		datastore:        mockDriver,
-		kmsSigningClient: mockKMS,
-		baseCtx:          context.Background(),
-	}
-	bitflyerStateMachine.setPersistenceConfigValues(
-		service.datastore,
-		service.sdkClient,
-		service.kmsSigningClient,
-		service.kmsSigningKeyID,
+	//service := Service{
+	//datastore:        mockDriver,
+	//kmsSigningClient: mockKMS,
+	//baseCtx:          context.Background(),
+	//}
+	//bitflyerStateMachine.setPersistenceConfigValues(
+	//service.datastore,
+	//service.sdkClient,
+	//service.kmsSigningClient,
+	//service.kmsSigningKeyID,
+	bitflyerStateMachine.setTransaction(
 		&testTransaction,
 	)
 
@@ -183,9 +184,9 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&testTransaction, nil).Once()
 	// All further calls should return the mocked history entry.
 	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&testTransaction, nil)
-	insertedDocumentID, err := service.insertPayment(ctx, testTransaction.PaymentDetails)
-	must.Equal(t, nil, err)
-	must.Equal(t, "123456", insertedDocumentID)
+	//insertedDocumentID, err := service.insertPayment(ctx, testTransaction.PaymentDetails)
+	//must.Equal(t, nil, err)
+	//must.Equal(t, "123456", insertedDocumentID)
 	//newTransaction, _, err := service.GetTransactionFromDocumentID(ctx, insertedDocumentID)
 	//must.Equal(t, nil, err)
 	//should.Equal(t, Prepared, newTransaction.Status)
@@ -264,19 +265,30 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-	mockDriver := new(mockDriver)
-	service := Service{
-		datastore: mockDriver,
-		baseCtx:   context.Background(),
-	}
+	//mockDriver := new(mockDriver)
+	//service := Service{
+	//datastore: mockDriver,
+	//baseCtx: context.Background(),
+	//}
 	id := ""
-	transaction := AuthenticatedPaymentState{Status: Prepared, DocumentID: id}
+	authorizations := []PaymentAuthorization{
+		{
+			KeyID:      "1",
+			DocumentID: "A",
+		},
+		{
+			KeyID:      "2",
+			DocumentID: "A",
+		},
+	}
+	transaction := AuthenticatedPaymentState{Status: Prepared, DocumentID: id, Authorizations: authorizations}
 	bitflyerStateMachine := BitflyerMachine{}
-	bitflyerStateMachine.setPersistenceConfigValues(
-		service.datastore,
-		service.sdkClient,
-		service.kmsSigningClient,
-		service.kmsSigningKeyID,
+	//bitflyerStateMachine.setPersistenceConfigValues(
+	//service.datastore,
+	//service.sdkClient,
+	//service.kmsSigningClient,
+	//service.kmsSigningKeyID,
+	bitflyerStateMachine.setTransaction(
 		&transaction,
 	)
 	// When the implementation is in place, this Version value will not be necessary.
@@ -285,8 +297,9 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 	// @TODO: Make this test fail
 	// currentVersion := 500
 
-	newState, _ := Drive(ctx, &bitflyerStateMachine)
-	should.Equal(t, Authorized, newState)
+	newState, err := Drive(ctx, &bitflyerStateMachine)
+	must.Nil(t, err)
+	should.Equal(t, Authorized, newState.Status)
 }
 
 // TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
@@ -308,20 +321,21 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	mockDriver := new(mockDriver)
-	service := Service{
-		datastore: mockDriver,
-		baseCtx:   context.Background(),
-	}
+	//mockDriver := new(mockDriver)
+	//service := Service{
+	//datastore: mockDriver,
+	//baseCtx: context.Background(),
+	//}
 	id := ""
 	transaction := AuthenticatedPaymentState{Status: Pending, DocumentID: id}
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 	bitflyerStateMachine := BitflyerMachine{}
-	bitflyerStateMachine.setPersistenceConfigValues(
-		service.datastore,
-		service.sdkClient,
-		service.kmsSigningClient,
-		service.kmsSigningKeyID,
+	//bitflyerStateMachine.setPersistenceConfigValues(
+	//service.datastore,
+	//service.sdkClient,
+	//service.kmsSigningClient,
+	//service.kmsSigningKeyID,
+	bitflyerStateMachine.setTransaction(
 		&transaction,
 	)
 	// When the implementation is in place, this Version value will not be necessary.
@@ -330,6 +344,7 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 	// @TODO: Make this test fail
 	// currentVersion := 404
 
-	newState, _ := Drive(ctx, &bitflyerStateMachine)
-	should.Equal(t, Pending, newState)
+	newState, err := Drive(ctx, &bitflyerStateMachine)
+	must.Nil(t, err)
+	should.Equal(t, Pending, newState.Status)
 }

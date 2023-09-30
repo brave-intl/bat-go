@@ -6,30 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
-	. "github.com/brave-intl/bat-go/libs/payments"
 )
-
-// TxStateMachine is anything that be progressed through states by the
-// Drive function.
-type TxStateMachine interface {
-	setPersistenceConfigValues(
-		wrappedQldbDriverAPI,
-		wrappedQldbSDKClient,
-		wrappedKMSClient,
-		string,
-		*AuthenticatedPaymentState,
-	)
-	setTransaction(*AuthenticatedPaymentState)
-	getState() PaymentStatus
-	getTransaction() *AuthenticatedPaymentState
-	getDatastore() wrappedQldbDriverAPI
-	getSDKClient() wrappedQldbSDKClient
-	getKMSSigningClient() wrappedKMSClient
-	Prepare(context.Context) (*AuthenticatedPaymentState, error)
-	Authorize(context.Context) (*AuthenticatedPaymentState, error)
-	Pay(context.Context) (*AuthenticatedPaymentState, error)
-	Fail(context.Context) (*AuthenticatedPaymentState, error)
-}
 
 // wrappedQldbDriverAPI defines the API for QLDB methods that we'll be using.
 type wrappedQldbDriverAPI interface {

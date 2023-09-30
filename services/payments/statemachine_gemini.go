@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+
 	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
@@ -19,9 +20,9 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 		err   error
 	)
 	if gm.transaction.Status == Pending {
-		return gm.writeNextState(ctx, Paid)
+		return gm.SetNextState(ctx, Paid)
 	} else {
-		entry, err = gm.writeNextState(ctx, Pending)
+		entry, err = gm.SetNextState(ctx, Pending)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write next state: %w", err)
 		}
@@ -35,5 +36,5 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 
 // Fail implements TxStateMachine for the Gemini machine.
 func (gm *GeminiMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return gm.writeNextState(ctx, Failed)
+	return gm.SetNextState(ctx, Failed)
 }

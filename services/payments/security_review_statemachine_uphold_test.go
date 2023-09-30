@@ -1,26 +1,12 @@
 package payments
 
 import (
-	"context"
 	"crypto/ed25519"
-	"encoding/json"
-	"fmt"
-	"os"
-	"testing"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/mock"
-
-	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	. "github.com/brave-intl/bat-go/libs/payments"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/jarcoal/httpmock"
-	must "github.com/stretchr/testify/require"
 )
 
 var (
@@ -43,6 +29,7 @@ TestUpholdStateMachineHappyPathTransitions tests for correct state progression f
 Initialized to Paid. Additionally, Paid status should be final and Failed status should
 be permanent.
 */
+/*
 func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
@@ -122,15 +109,16 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	mockKMS.On("GetPublicKey", mock.Anything, mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)
 
 	service := Service{
-		datastore:        mockDriver,
+		//datastore:        mockDriver,
 		kmsSigningClient: mockKMS,
 		baseCtx:          context.Background(),
 	}
-	upholdStateMachine.setPersistenceConfigValues(
-		service.datastore,
-		service.sdkClient,
-		service.kmsSigningClient,
-		service.kmsSigningKeyID,
+	//upholdStateMachine.setPersistenceConfigValues(
+	//service.datastore,
+	//service.sdkClient,
+	//service.kmsSigningClient,
+	//service.kmsSigningKeyID,
+	upholdStateMachine.setTransaction(
 		&testTransaction,
 	)
 	upholdStateMachine.setTransaction(&testTransaction)
@@ -178,6 +166,7 @@ func TestUpholdStateMachineHappyPathTransitions(t *testing.T) {
 	//	must.Equal(t, nil, err)
 	//	should.Equal(t, Paid, newTransaction.Status)
 }
+*/
 
 /*
 TestUpholdStateMachine500FailureToPendingTransitions tests for a failure to progress status

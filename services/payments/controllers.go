@@ -170,7 +170,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		}
 
 		// attempt authorization on the transaction
-		err = service.AuthorizeTransaction(ctx, keyID, *authenticatedState)
+		err = service.AuthorizeTransaction(ctx, keyID, authenticatedState)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}

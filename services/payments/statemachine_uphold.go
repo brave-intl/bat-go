@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"fmt"
+
 	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
@@ -19,9 +20,9 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 		err   error
 	)
 	if um.transaction.Status == Pending {
-		return um.writeNextState(ctx, Paid)
+		return um.SetNextState(ctx, Paid)
 	} else {
-		entry, err = um.writeNextState(ctx, Pending)
+		entry, err = um.SetNextState(ctx, Pending)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write next state: %w", err)
 		}
@@ -35,5 +36,5 @@ func (um *UpholdMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 
 // Fail implements TxStateMachine for uphold machine.
 func (um *UpholdMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return um.writeNextState(ctx, Failed)
+	return um.SetNextState(ctx, Failed)
 }

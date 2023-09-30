@@ -1,11 +1,8 @@
 package payments
 
-import ()
-
 // PaymentStatus is an integer representing transaction status.
 type PaymentStatus string
 
-// TxStateMachine describes types with the appropriate methods to be Driven as a state machine
 const (
 	// Prepared represents a record that has been prepared for authorization.
 	Prepared PaymentStatus = "prepared"
