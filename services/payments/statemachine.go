@@ -50,7 +50,11 @@ func (s *baseStateMachine) Prepare(ctx context.Context) (*AuthenticatedPaymentSt
 
 // Authorize implements TxStateMachine for the baseStateMachine.
 func (s *baseStateMachine) Authorize(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return s.SetNextState(ctx, Authorized)
+	if len(s.getTransaction().Authorizations) >= 2 {
+		return s.SetNextState(ctx, Authorized)
+	} else {
+		return s.transaction, &InsufficientAuthorizationsError{}
+	}
 }
 
 func (s *baseStateMachine) setTransaction(transaction *AuthenticatedPaymentState) {
@@ -85,6 +89,14 @@ func StateMachineFromTransaction(
 		}
 	case "gemini":
 		machine = &GeminiMachine{}
+	case "dryrun-happypath":
+		machine = &HappyPathMachine{}
+	case "dryrun-prepare-fails":
+		machine = &PrepareFailsMachine{}
+	case "dryrun-authorize-fails":
+		machine = &AuthorizeFailsMachine{}
+	case "dryrun-pay-fails":
+		machine = &PayFailsMachine{}
 	}
 	machine.setTransaction(authenticatedState)
 	return machine, nil
@@ -110,11 +122,7 @@ func Drive[T TxStateMachine](
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.getState() {
 	case Prepared:
-		if len(machine.getTransaction().Authorizations) >= 2 {
-			return machine.Authorize(ctx)
-		} else {
-			return nil, &InsufficientAuthorizationsError{}
-		}
+		return machine.Authorize(ctx)
 	case Authorized:
 		return machine.Pay(ctx)
 	case Pending:

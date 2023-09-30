@@ -236,8 +236,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 
 		if *getKeyPolicyResult.Policy == policy {
 			// if the policy matches, we should use this key
-			s.kmsSigningKeyID = *getKeyResult.KeyMetadata.KeyId
-			s.kmsSigningClient = kmsClient
+			s.kmsDecryptKeyArn = *getKeyResult.KeyMetadata.KeyId
 			return nil
 		}
 	}
@@ -303,6 +302,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Error().Err(err).Msg("could not create kms signing key")
 		return nil, nil, errors.New("could not create kms signing key")
 	}
+	// FIXME init KMS verifier using s.kmsSigningKeyID
 
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")

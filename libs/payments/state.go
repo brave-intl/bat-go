@@ -33,7 +33,6 @@ type AuthenticatedPaymentState struct {
 	PaymentDetails
 	Status         PaymentStatus          `json:"status"`
 	Authorizations []PaymentAuthorization `json:"authorizations"`
-	DryRun         *string                `json:"dryRun"`
 	LastError      *PaymentError          `json:"lastError"`
 	DocumentID     string                 `json:"documentID"`
 }
@@ -70,29 +69,27 @@ func (p PaymentDetails) IdempotencyKey() uuid.UUID {
 	)
 }
 
-// ToPaymentState creates an unsigned PaymentState from PaymentDetails
-func (p PaymentDetails) ToPaymentState(dryRun *string) (*PaymentState, error) {
+// ToAuthenticatedPaymentState creates an new AuthenticatedPaymentState from PaymentDetails
+func (p PaymentDetails) ToAuthenticatedPaymentState() *AuthenticatedPaymentState {
 	authenticatedState := AuthenticatedPaymentState{
 		PaymentDetails: p,
-		Status:         Prepared,
-		Authorizations: []PaymentAuthorization{},
-		DryRun:         dryRun,
-		LastError:      nil,
-		DocumentID:     "",
 	}
-	bytes, err := json.Marshal(authenticatedState)
+	return &authenticatedState
+}
+
+// ToPaymentState creates an unsigned PaymentState from an AuthenticatedPaymentState
+func (t AuthenticatedPaymentState) ToPaymentState() (*PaymentState, error) {
+	marshaledState, err := json.Marshal(t)
 	if err != nil {
 		return nil, err
 	}
 
-	state := PaymentState{
-		UnsafePaymentState: bytes,
-		Signature:          []byte{},
-		PublicKey:          []byte{},
-		ID:                 p.IdempotencyKey(),
+	paymentState := PaymentState{
+		UnsafePaymentState: marshaledState,
+		ID:                 t.PaymentDetails.IdempotencyKey(),
 	}
 
-	return &state, nil
+	return &paymentState, nil
 }
 
 // NextStateValid returns true if nextState is a valid transition from the current one
@@ -103,22 +100,6 @@ func (t *AuthenticatedPaymentState) NextStateValid(nextState PaymentStatus) bool
 	// New transaction state should be present in the list of valid next states for the current
 	// state.
 	return statusListContainsStatus(t.Status.GetValidTransitions(), nextState)
-}
-
-// shouldDryRun returns whether we should skip logic for the next state transition based on the dryRun flag
-func (t *AuthenticatedPaymentState) shouldDryRun() bool {
-	if t.DryRun == nil {
-		return false
-	}
-
-	switch t.Status {
-	case Prepared:
-		return *t.DryRun == "prepare"
-	case Authorized, Pending, Paid, Failed:
-		return *t.DryRun == "submit"
-	default:
-		return false
-	}
 }
 
 // statusListContainsStatus returns true if the status list contains the passed status

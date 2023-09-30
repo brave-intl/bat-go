@@ -13,12 +13,12 @@ import (
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	. "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/google/uuid"
 )
 
 type qldbDocumentIDResult struct {
@@ -27,8 +27,7 @@ type qldbDocumentIDResult struct {
 
 type QLDBDatastore struct {
 	*qldbdriver.QLDBDriver
-
-	// FIXME add AWS SDK client
+	sdkClient *qldb.Client
 }
 
 // ErrNotConfiguredYet - service not fully configured.
@@ -131,16 +130,14 @@ func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID s
 			return nil, &QLDBTransitionHistoryNotFoundError{}
 		}
 
-		// FIXME use the sdk client once added to q
-		/*
-			merkleValid, err := revisionValidInTree(ctx, q.sdkClient, latestHistoryItem)
-			if err != nil {
-				return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
-			}
-			if !merkleValid {
-				return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
-			}
-		*/
+		merkleValid, err := revisionValidInTree(ctx, q.sdkClient, &latestHistoryItem)
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
+		}
+		if !merkleValid {
+			return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
+		}
+
 		tmp := PaymentStateHistory(stateHistory)
 		return &tmp, nil
 	})
@@ -322,8 +319,19 @@ func (s Service) insertPayment(
 	ctx context.Context,
 	details PaymentDetails,
 ) (string, error) {
-	// FIXME we should propogate dry run
-	paymentStateForSigning, err := details.ToPaymentState(nil)
+	authenticatedState := details.ToAuthenticatedPaymentState()
+
+	// Ensure that prepare succeeds ( i.e. we are not using a failing dry-run state machine )
+	stateMachine, err := StateMachineFromTransaction(&s, authenticatedState)
+	if err != nil {
+		return "", fmt.Errorf("failed to create stateMachine: %w", err)
+	}
+	_, err = stateMachine.Prepare(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	paymentStateForSigning, err := authenticatedState.ToPaymentState()
 	if err != nil {
 		return "", err
 	}
@@ -336,7 +344,6 @@ func (s Service) insertPayment(
 	if err != nil {
 		return "", err
 	}
-
 	paymentStateForSigning.Signature = signature
 	paymentStateForSigning.PublicKey = pubkey
 
@@ -347,20 +354,17 @@ func (s Service) insertPayment(
 func (s *Service) GetTransactionFromDocumentID(
 	ctx context.Context,
 	documentID string,
-) (*AuthenticatedPaymentState, uuid.UUID, error) {
+) (*AuthenticatedPaymentState, error) {
 	history, err := s.datastore.GetPaymentStateHistory(ctx, documentID)
 	if err != nil {
-		return nil, uuid.Nil, err
+		return nil, err
 	}
 	authenticatedState, err := history.GetAuthenticatedPaymentState(s.verifier, documentID)
 	if err != nil {
-		return nil, uuid.Nil, err
+		return nil, err
 	}
 
-	// FIXME
-	tmp := []PaymentState(*history)
-
-	return authenticatedState, tmp[len(tmp)-1].ID, nil
+	return authenticatedState, nil
 }
 
 // writeTransaction persists an object in a transaction after verifying that its change

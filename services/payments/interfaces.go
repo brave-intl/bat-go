@@ -15,7 +15,6 @@ type wrappedQldbDriverAPI interface {
 }
 
 type wrappedQldbSDKClient interface {
-	New() *wrappedQldbSDKClient
 	GetDigest(ctx context.Context, params *qldb.GetDigestInput, optFns ...func(*qldb.Options)) (*qldb.GetDigestOutput, error)
 	GetRevision(ctx context.Context, params *qldb.GetRevisionInput, optFns ...func(*qldb.Options)) (*qldb.GetRevisionOutput, error)
 }

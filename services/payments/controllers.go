@@ -107,14 +107,6 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
 
-		// create a random nonce for nitro attestation
-		nonce := make([]byte, 64)
-		_, err = rand.Read(nonce)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create random nonce")
-			return handlers.WrapError(err, "failed to create random nonce", http.StatusInternalServerError)
-		}
-
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	}
 }
@@ -164,7 +156,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		}
 
 		// get the current state of the transaction from qldb
-		authenticatedState, _, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
+		authenticatedState, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to get transaction from document id", http.StatusInternalServerError)
 		}
@@ -175,17 +167,19 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
-		submitResponse.Status = authenticatedState.Status
+		err = service.DriveTransaction(ctx, authenticatedState)
+		if err != nil {
+			// TODO: if error is permanent, return 200
+			return handlers.WrapError(err, "failed to drive transaction", http.StatusInternalServerError)
+		}
 
-		// TODO: check if business logic was met from authorizers table in qldb for this transaction
-		// TODO: state machine handling for custodian submissions
-		// TODO: if error is temporary, return non-200
+		submitResponse.Status = authenticatedState.Status
 
 		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
 		// "permanent" errors indiciating a transaction state machine has reached an end state
 		return &handlers.AppError{
 			Cause:   nil,
-			Message: "dry-run succeeded",
+			Message: "submit succeeded",
 			Code:    http.StatusOK,
 			Data:    submitResponse,
 		}

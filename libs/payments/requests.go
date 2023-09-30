@@ -5,7 +5,6 @@ package payments
 // PaymentDetails.
 type PrepareRequest struct {
 	PaymentDetails
-	DryRun *string `json:"dryRun"`
 }
 
 // PrepareResponse is sent to the client in response to a PrepareRequest.
