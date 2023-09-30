@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"crypto"
 	"encoding/json"
 	"fmt"
 
@@ -15,6 +16,29 @@ type PaymentState struct {
 	Signature          []byte    `ion:"signature"`
 	PublicKey          []byte    `ion:"publicKey"`
 	ID                 uuid.UUID `ion:"idempotencyKey"`
+}
+
+type Verifier interface {
+	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
+}
+
+type PaymentStateHistory []PaymentState
+
+func (p PaymentStateHistory) GetAuthenticatedPaymentState(v Verifier, documentID string) (*AuthenticatedPaymentState, error) {
+	var authenticatedState AuthenticatedPaymentState
+	history := []PaymentState(p)
+	err := json.Unmarshal(history[len(history)-1].UnsafePaymentState, &authenticatedState)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to unmarshal record data for conversion from qldbPaymentTransitionHistoryEntry to Transaction: %w",
+			err,
+		)
+	}
+
+	// FIXME validate all signatures here
+
+	authenticatedState.DocumentID = documentID
+	return &authenticatedState, nil
 }
 
 // ToStructuredUnsafePaymentState only unmarshals an ToStructuredUnsafePaymentState from the

@@ -37,10 +37,15 @@ import (
 	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
+type compatDatastore interface {
+	Datastore
+	wrappedQldbDriverAPI
+}
+
 // Service struct definition of payments service.
 type Service struct {
 	// concurrent safe
-	datastore  wrappedQldbDriverAPI
+	datastore  compatDatastore
 	custodians map[string]provider.Custodian
 	awsCfg     aws.Config
 
@@ -52,6 +57,8 @@ type Service struct {
 	kmsSigningClient wrappedKMSClient
 	sdkClient        wrappedQldbSDKClient
 	pubKey           []byte
+
+	verifier Verifier
 }
 
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, string, error) {
@@ -164,9 +171,9 @@ func (s *Service) configureSigningKey(ctx context.Context) error {
 	// otherwise create and alias
 
 	input := &kms.CreateKeyInput{
-		KeySpec:                        kmsTypes.KeySpecEccNistP256,
-		KeyUsage:                       kmsTypes.KeyUsageTypeSignVerify,
-		Policy:                         aws.String(policy),
+		KeySpec:  kmsTypes.KeySpecEccNistP256,
+		KeyUsage: kmsTypes.KeyUsageTypeSignVerify,
+		Policy:   aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -237,7 +244,7 @@ func (s *Service) configureKMSKey(ctx context.Context) error {
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy:                         aws.String(policy),
+		Policy: aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
