@@ -54,11 +54,10 @@ type PaymentState struct {
 // PaymentStateHistory is a sequence of payment states.
 type PaymentStateHistory []PaymentState
 
-// ToPaymentState creates an unsigned PaymentState from PaymentDetails
-func (p PaymentDetails) ToPaymentState(dryRun *string) (*PaymentState, error) {
-	idempotencyNamespace := uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c")
-	id := uuid.NewSHA1(
-		idempotencyNamespace,
+// IdempotencyKey calculates the idempotency key for these PaymentDetails
+func (p PaymentDetails) IdempotencyKey() uuid.UUID {
+	return uuid.NewSHA1(
+		uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c"),
 		[]byte(fmt.Sprintf(
 			"%s%s%s%s%s%s",
 			p.To,
@@ -69,7 +68,10 @@ func (p PaymentDetails) ToPaymentState(dryRun *string) (*PaymentState, error) {
 			p.PayoutID,
 		)),
 	)
+}
 
+// ToPaymentState creates an unsigned PaymentState from PaymentDetails
+func (p PaymentDetails) ToPaymentState(dryRun *string) (*PaymentState, error) {
 	authenticatedState := AuthenticatedPaymentState{
 		PaymentDetails: p,
 		Status:         Prepared,
@@ -87,7 +89,7 @@ func (p PaymentDetails) ToPaymentState(dryRun *string) (*PaymentState, error) {
 		UnsafePaymentState: bytes,
 		Signature:          []byte{},
 		PublicKey:          []byte{},
-		ID:                 id,
+		ID:                 p.IdempotencyKey(),
 	}
 
 	return &state, nil

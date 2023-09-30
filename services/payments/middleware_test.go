@@ -99,10 +99,10 @@ func TestAuthorizerSignedMiddleware(t *testing.T) {
 	// before key is added to verifiers so like it doesnt exist
 	r.ServeHTTP(wIv, reqIv)
 
-	// add keypair to validVerifiers
-	validVerifiers[hex.EncodeToString(pub)] = true
+	// add keypair to validAuthorizers
+	validAuthorizers[hex.EncodeToString(pub)] = true
 	defer func() {
-		delete(validVerifiers, hex.EncodeToString(pub))
+		delete(validAuthorizers, hex.EncodeToString(pub))
 	}()
 
 	w = httptest.NewRecorder()

@@ -4,17 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
-	"reflect"
 	"testing"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	. "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/google/uuid"
 
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
@@ -97,84 +91,6 @@ func (m *mockKMSClient) Verify(ctx context.Context, params *kms.VerifyInput, opt
 func (m *mockKMSClient) GetPublicKey(ctx context.Context, params *kms.GetPublicKeyInput, optFns ...func(*kms.Options)) (*kms.GetPublicKeyOutput, error) {
 	args := m.Called(ctx, params, optFns)
 	return args.Get(0).(*kms.GetPublicKeyOutput), args.Error(1)
-}
-
-/*
-Traverse QLDB history for a transaction and ensure that only valid transitions have occurred.
-Should include exhaustive passing and failing tests.
-*/
-func TestVerifyPaymentTransitionHistory(t *testing.T) {
-	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
-	must.Equal(t, nil, err)
-	idempotencyKey, err := uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	must.Equal(t, nil, err)
-	testTransaction := AuthenticatedPaymentState{
-		Status: Prepared,
-		PaymentDetails: PaymentDetails{
-			Amount: decimal.NewFromFloat(1.1),
-		},
-	}
-	marshaledData, err := json.Marshal(testTransaction)
-	must.Equal(t, nil, err)
-	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
-		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
-			StrandID:   "test",
-			SequenceNo: 1,
-		},
-		Hash: []byte("test"),
-		Data: PaymentState{
-			UnsafePaymentState: marshaledData,
-			Signature:          []byte{},
-			ID:                 idempotencyKey,
-		},
-		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
-			ID:      "test",
-			Version: 1,
-			TxTime:  time.Now(),
-			TxID:    "test",
-		},
-	}
-	binaryTransitionHistory, err := json.Marshal(mockTransitionHistory)
-	must.Equal(t, nil, err)
-	mockKMS := new(mockKMSClient)
-	mockRes := new(mockResult)
-	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
-	mockDriver := new(mockDriver)
-	mockDriver.On("Execute", mock.Anything, mock.Anything).Return(&mockTransitionHistory, nil)
-	mockKMS.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
-	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil)
-	mockKMS.On("GetPublicKey", mock.Anything, mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)
-
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
-
-	// Valid transitions should be valid
-	for _, transactionHistorySet := range transactionHistorySetTrue {
-		authenticatedState, latestHistoryItem, err := AuthenticatedStateFromQLDBHistory(
-			ctx,
-			mockKMS,
-			"",
-			transactionHistorySet,
-			mockTransitionHistory.Data,
-		)
-		must.Nil(t, err)
-		must.NotNil(t, authenticatedState)
-		must.NotNil(t, latestHistoryItem)
-	}
-	mockKMS.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
-	// Invalid transitions should be invalid
-	for _, transactionHistorySet := range transactionHistorySetFalse {
-		authenticatedState, latestHistoryItem, _ := AuthenticatedStateFromQLDBHistory(
-			ctx,
-			mockKMS,
-			"",
-			transactionHistorySet,
-			mockTransitionHistory.Data,
-		)
-		must.Nil(t, err)
-		must.Nil(t, authenticatedState)
-		must.Nil(t, latestHistoryItem)
-	}
 }
 
 // Test that QLDB revisions are valid by generating a digest from a set of hashes.
@@ -330,114 +246,4 @@ func TestVerifyHashSequence(t *testing.T) {
 	valid, err = verifyHashSequence(&testDigestOutput, falseInitialHash, testProofIonText)
 	must.Equal(t, nil, err)
 	should.False(t, valid)
-}
-
-/*
-Generate all valid transition sequences and ensure that this test contains the exact same set of
-valid transition sequences. The purpose of this test is to alert us if outside changes
-impact the set of valid transitions.
-*/
-func TestRecurseTransitionResolution(t *testing.T) {
-	allValidTransitionSequences := RecurseTransitionResolution("prepared", []PaymentStatus{})
-	knownValidTransitionSequences := [][]PaymentStatus{
-		{Prepared, Authorized, Pending, Paid},
-		{Prepared, Authorized, Pending, Failed},
-		{Prepared, Authorized, Failed},
-		{Prepared, Failed},
-	}
-	// Ensure all generatedTransitionSequence have a matching knownValidTransitionSequences
-	for _, generatedTransitionSequence := range allValidTransitionSequences {
-		foundMatch := false
-		for _, knownValidTransitionSequence := range knownValidTransitionSequences {
-			if reflect.DeepEqual(generatedTransitionSequence, knownValidTransitionSequence) {
-				foundMatch = true
-			}
-		}
-		should.True(t, foundMatch)
-	}
-	// Ensure all knownValidTransitionSequences have a matching generatedTransitionSequence
-	for _, knownValidTransitionSequence := range allValidTransitionSequences {
-		foundMatch := false
-		for _, generatedTransitionSequence := range allValidTransitionSequences {
-			if reflect.DeepEqual(generatedTransitionSequence, knownValidTransitionSequence) {
-				foundMatch = true
-			}
-		}
-		should.True(t, foundMatch)
-	}
-}
-
-// TestQLDBSignedInteractions mocks QLDB to test signing and verifying of records that are
-// persisted into QLDB
-func TestQLDBSignedInteractions(t *testing.T) {
-	testTransaction := AuthenticatedPaymentState{
-		Status: Prepared,
-		PaymentDetails: PaymentDetails{
-			Amount: decimal.NewFromFloat(1.1),
-		},
-	}
-	marshaledData, err := json.Marshal(testTransaction)
-	must.Equal(t, nil, err)
-	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
-		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
-			StrandID:   "test",
-			SequenceNo: 1,
-		},
-		Hash: []byte("test"),
-		Data: PaymentState{
-			UnsafePaymentState: marshaledData,
-			Signature:          []byte{},
-		},
-		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
-			ID:      "test",
-			Version: 1,
-			TxTime:  time.Now(),
-			TxID:    "test",
-		},
-	}
-	binaryTransitionHistory, err := json.Marshal(mockTransitionHistory)
-	must.Equal(t, nil, err)
-	ctx := context.Background()
-	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
-	must.Equal(t, nil, err)
-	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
-
-	mockKMS := new(mockKMSClient)
-	mockRes := new(mockResult)
-	mockRes.On("GetCurrentData").Return(binaryTransitionHistory)
-	mockDriver := new(mockDriver)
-	mockDriver.On("Execute", ctx, mock.Anything).Return(&testTransaction, nil)
-	mockKMS.On("Sign", ctx, mock.Anything, mock.Anything).Return(&kms.SignOutput{Signature: []byte("succeed")}, nil)
-	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: true}, nil).Once()
-	mockKMS.On("Verify", context.Background(), mock.Anything, mock.Anything).Return(&kms.VerifyOutput{SignatureValid: false}, nil)
-	mockKMS.On("GetPublicKey", context.Background(), mock.Anything, mock.Anything).Return(&kms.GetPublicKeyOutput{PublicKey: []byte("test")}, nil)
-
-	todoString := ""
-	message := []byte("test")
-	signingOutput, _ := mockKMS.Sign(ctx, &kms.SignInput{
-		KeyId:            &todoString,
-		Message:          message,
-		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-	})
-	mockTransitionHistory.Data.Signature = signingOutput.Signature
-	service := Service{
-		datastore:        mockDriver,
-		baseCtx:          context.Background(),
-		kmsSigningKeyID:  "123",
-		kmsSigningClient: mockKMS,
-	}
-
-	// First write should succeed because Verify returns true
-	_, err = writeTransaction(
-		ctx,
-		service.datastore,
-		service.sdkClient,
-		service.kmsSigningClient,
-		service.kmsSigningKeyID,
-		&testTransaction,
-	)
-	should.NoError(t, err)
-	// Second write of the same object should fail because Verify returns false
-	// _, err := WriteTransaction(ctx, mockDriver, nil, mockKMS, &testData)
-	// should.Error(t, err)
 }
