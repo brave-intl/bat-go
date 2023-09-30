@@ -5,6 +5,7 @@ import (
 	"time"
 
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
+	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // QLDBPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for

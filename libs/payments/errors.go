@@ -43,6 +43,7 @@ type InvalidTransitionState struct {
 	To   string
 }
 
+// Error makes InvalidTransitionState an error
 func (e *InvalidTransitionState) Error() string {
 	return fmt.Sprintf("invalid state transition from %s to %s.", e.From, e.To)
 }
