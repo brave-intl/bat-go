@@ -8,44 +8,26 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	. "github.com/brave-intl/bat-go/libs/payments"
 )
 
+// TxStateMachine is anything that be progressed through states by the
+// Drive function.
+type TxStateMachine interface {
+	setTransaction(*AuthenticatedPaymentState)
+	getState() PaymentStatus
+	getTransaction() *AuthenticatedPaymentState
+	Prepare(context.Context) (*AuthenticatedPaymentState, error)
+	Authorize(context.Context) (*AuthenticatedPaymentState, error)
+	Pay(context.Context) (*AuthenticatedPaymentState, error)
+	Fail(context.Context) (*AuthenticatedPaymentState, error)
+}
+
 type baseStateMachine struct {
 	transaction      *AuthenticatedPaymentState
-	datastore        wrappedQldbDriverAPI
-	sdkClient        wrappedQldbSDKClient
-	kmsSigningClient wrappedKMSClient
-	kmsSigningKeyID  string
 }
 
-func (s *baseStateMachine) setPersistenceConfigValues(
-	datastore wrappedQldbDriverAPI,
-	sdkClient wrappedQldbSDKClient,
-	kmsSigningClient wrappedKMSClient,
-	kmsSigningKeyID string,
-	transaction *AuthenticatedPaymentState,
-) {
-	s.datastore = datastore
-	s.sdkClient = sdkClient
-	s.kmsSigningClient = kmsSigningClient
-	s.kmsSigningKeyID = kmsSigningKeyID
-	s.transaction = transaction
-}
-
-func (s *baseStateMachine) wrappedWrite(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return writeTransaction(
-		ctx,
-		s.datastore,
-		s.sdkClient,
-		s.kmsSigningClient,
-		s.kmsSigningKeyID,
-		s.transaction,
-	)
-}
-
-func (s *baseStateMachine) writeNextState(
+func (s *baseStateMachine) SetNextState(
 	ctx context.Context,
 	nextState PaymentStatus,
 ) (*AuthenticatedPaymentState, error) {
@@ -58,22 +40,21 @@ func (s *baseStateMachine) writeNextState(
 		)
 	}
 	s.transaction.Status = nextState
-	authenticatedState, err := s.wrappedWrite(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write transaction: %w", err)
-	}
-	s.transaction = authenticatedState
-	return authenticatedState, nil
+	return s.transaction, nil
 }
 
 // Prepare implements TxStateMachine for the baseStateMachine.
 func (s *baseStateMachine) Prepare(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return s.writeNextState(ctx, Prepared)
+	return s.SetNextState(ctx, Prepared)
 }
 
 // Authorize implements TxStateMachine for the baseStateMachine.
 func (s *baseStateMachine) Authorize(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return s.writeNextState(ctx, Authorized)
+	if len(s.getTransaction().Authorizations) >= 2 {
+		return s.SetNextState(ctx, Authorized)
+	} else {
+		return s.transaction, &InsufficientAuthorizationsError{}
+	}
 }
 
 func (s *baseStateMachine) setTransaction(transaction *AuthenticatedPaymentState) {
@@ -88,28 +69,6 @@ func (s *baseStateMachine) getState() PaymentStatus {
 // GetTransaction returns a full transaction for a state machine, implementing TxStateMachine.
 func (s *baseStateMachine) getTransaction() *AuthenticatedPaymentState {
 	return s.transaction
-}
-
-// getDatastore returns a transaction id for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getDatastore() wrappedQldbDriverAPI {
-	return s.datastore
-}
-
-// getSDKClient returns a transaction id for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getSDKClient() wrappedQldbSDKClient {
-	return s.sdkClient
-}
-
-// getKMSSigningClient returns a transaction id for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getKMSSigningClient() wrappedKMSClient {
-	return s.kmsSigningClient
-}
-
-// GenerateTransactionID returns the generated transaction id for a state machine's transaction,
-// implementing TxStateMachine.
-func (s *baseStateMachine) GenerateTransactionID() (*uuid.UUID, error) {
-	paymentStateID := s.transaction.GenerateIdempotencyKey()
-	return &paymentStateID, nil
 }
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
@@ -130,14 +89,16 @@ func StateMachineFromTransaction(
 		}
 	case "gemini":
 		machine = &GeminiMachine{}
+	case "dryrun-happypath":
+		machine = &HappyPathMachine{}
+	case "dryrun-prepare-fails":
+		machine = &PrepareFailsMachine{}
+	case "dryrun-authorize-fails":
+		machine = &AuthorizeFailsMachine{}
+	case "dryrun-pay-fails":
+		machine = &PayFailsMachine{}
 	}
-	machine.setPersistenceConfigValues(
-		service.datastore,
-		service.sdkClient,
-		service.kmsSigningClient,
-		service.kmsSigningKeyID,
-		authenticatedState,
-	)
+	machine.setTransaction(authenticatedState)
 	return machine, nil
 }
 
@@ -161,10 +122,7 @@ func Drive[T TxStateMachine](
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.getState() {
 	case Prepared:
-		//if len(machine.getTransaction().Authorizations) >= 3 /* TODO MIN AUTHORIZERS */ {
-			return machine.Authorize(ctx)
-		//}
-		//return nil, &InsufficientAuthorizationsError{}
+		return machine.Authorize(ctx)
 	case Authorized:
 		return machine.Pay(ctx)
 	case Pending:
