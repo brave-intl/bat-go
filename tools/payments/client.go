@@ -4,12 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -21,7 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/redisconsumer"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/google/uuid"
-	redis "github.com/redis/go-redis/v9"
 )
 
 const (
@@ -33,6 +29,14 @@ const (
 	contentLengthHeader = "Content-Length"
 	contentTypeHeader   = "Content-Type"
 	signatureHeader     = "Signature"
+)
+
+var (
+	paymentsAPIBase = map[string]string{
+		"":      "https://nitro-payments.bsg.brave.software",
+		"local": "https://nitro-payments.bsg.brave.software",
+		"dev":   "https://nitro-payments.bsg.brave.software",
+	}
 )
 
 // SettlementClient describes functionality of the settlement client
@@ -58,48 +62,31 @@ func NewSettlementClient(ctx context.Context, env string, config map[string]stri
 	}
 	verifier := httpsignature.NewNitroVerifier(pcrs)
 
-	client, err := newRedisClient(env, config["addr"], config["pass"], config["username"], sp, verifier)
+	client, err := newRedisClient(ctx, env, config["addr"], config["pass"], config["username"], sp, verifier)
 	return ctx, client, err
 }
 
 // redisClient is an implementation of settlement client using clustered redis client
 type redisClient struct {
-	env      string
-	redis    *redisconsumer.RedisClient
-	sp       httpsignature.SignatureParams
-	verifier httpsignature.Verifier
+	env             string
+	paymentsAPIBase string
+	redis           *redisconsumer.RedisClient
+	sp              httpsignature.SignatureParams
+	verifier        httpsignature.Verifier
 }
 
-func newRedisClient(env, addr, pass, username string, sp httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ClientAuth: 0,
-	}
-
-	// only if environment is local do we hardcode these values
-	if env == "local" {
-		certPool := x509.NewCertPool()
-		pem, err := ioutil.ReadFile("redistest/test/redis/tls/ca.crt")
-		if err != nil {
-			return nil, fmt.Errorf("failed to read test-mode ca.crt: %w", err)
-		}
-		certPool.AppendCertsFromPEM(pem)
-		tlsConfig.RootCAs = certPool
+func newRedisClient(ctx context.Context, env, addr, pass, username string, sp httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
+	redis, err := redisconsumer.NewStreamClient(ctx, env, addr, pass, username)
+	if err != nil {
+		return nil, err
 	}
 
 	rc := &redisClient{
-		env: env,
-		redis: (*redisconsumer.RedisClient)(redis.NewClient(
-			&redis.Options{
-				Addr: addr, Password: pass, Username: username,
-				DialTimeout:     15 * time.Second,
-				WriteTimeout:    5 * time.Second,
-				MaxRetries:      5,
-				MinRetryBackoff: 5 * time.Millisecond,
-				MaxRetryBackoff: 500 * time.Millisecond,
-			})),
-		sp:       sp,
-		verifier: verifier,
+		env:             env,
+		paymentsAPIBase: paymentsAPIBase[env],
+		redis:           redis,
+		sp:              sp,
+		verifier:        verifier,
 	}
 	return rc, nil
 }
@@ -126,7 +113,7 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 		err := json.NewEncoder(buf).Encode(v)
 		body := buf.Bytes()
 
-		req, err := http.NewRequest(http.MethodPost, rc.env+"/v1/payments/prepare", buf)
+		req, err := http.NewRequest(http.MethodPost, rc.paymentsAPIBase+"/v1/payments/prepare", buf)
 		if err != nil {
 			return fmt.Errorf("failed to create request to sign: %w", err)
 		}
@@ -185,7 +172,7 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 		// Create a request and set the headers we require for signing. The Digest header is added
 		// during the signing call and the request.Host is set during the new request creation so,
 		// we don't need to explicitly set them here.
-		req, err := http.NewRequest(http.MethodPost, rc.env+"/v1/payments/submit", buf)
+		req, err := http.NewRequest(http.MethodPost, rc.paymentsAPIBase+"/v1/payments/submit", buf)
 		if err != nil {
 			return fmt.Errorf("failed to create request to sign: %w", err)
 		}
