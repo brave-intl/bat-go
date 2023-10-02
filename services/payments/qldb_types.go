@@ -5,7 +5,7 @@ import (
 	"time"
 
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // QLDBPaymentTransitionHistoryEntryBlockAddress defines blockAddress data for
@@ -33,7 +33,7 @@ type QLDBPaymentTransitionHistoryEntryMetadata struct {
 type QLDBPaymentTransitionHistoryEntry struct {
 	BlockAddress QLDBPaymentTransitionHistoryEntryBlockAddress `ion:"blockAddress"`
 	Hash         QLDBPaymentTransitionHistoryEntryHash         `ion:"hash"`
-	Data         PaymentState                                  `ion:"data"`
+	Data         paymentLib.PaymentState                                  `ion:"data"`
 	Metadata     QLDBPaymentTransitionHistoryEntryMetadata     `ion:"metadata"`
 }
 

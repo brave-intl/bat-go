@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 
 	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	qldbTypes "github.com/aws/aws-sdk-go-v2/service/qldb/types"
@@ -117,7 +117,7 @@ func TestValidateRevision(t *testing.T) {
 				SequenceNo: 10,
 			},
 			Hash: []byte("28G0yQD/5I1XW12lxjgEASX2XbD+PiRJS3bqmGRX2YY="),
-			Data: PaymentState{
+			Data: paymentLib.PaymentState{
 				Signature:          []byte{},
 				UnsafePaymentState: []byte{},
 			},
@@ -134,7 +134,7 @@ func TestValidateRevision(t *testing.T) {
 				SequenceNo: 10,
 			},
 			Hash: []byte("dGVzdGVzdGVzdAo="),
-			Data: PaymentState{
+			Data: paymentLib.PaymentState{
 				Signature:          []byte{},
 				UnsafePaymentState: []byte{},
 			},

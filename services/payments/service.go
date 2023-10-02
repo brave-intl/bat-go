@@ -32,7 +32,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
@@ -57,7 +57,7 @@ type Service struct {
 	sdkClient        wrappedQldbSDKClient
 	pubKey           []byte
 
-	verifier Verifier
+	verifier paymentLib.Verifier
 }
 
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, string, error) {
@@ -438,7 +438,7 @@ func signPaymentState(
 	ctx context.Context,
 	kmsClient wrappedKMSClient,
 	keyID string,
-	state PaymentState,
+	state paymentLib.PaymentState,
 ) ([]byte, []byte, error) {
 	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: &keyID,

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // GeminiMachine is an implementation of TxStateMachine for Gemini's use-case.
@@ -14,15 +14,15 @@ type GeminiMachine struct {
 }
 
 // Pay implements TxStateMachine for the Gemini machine.
-func (gm *GeminiMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (gm *GeminiMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	var (
-		entry *AuthenticatedPaymentState
+		entry *paymentLib.AuthenticatedPaymentState
 		err   error
 	)
-	if gm.transaction.Status == Pending {
-		return gm.SetNextState(ctx, Paid)
+	if gm.transaction.Status == paymentLib.Pending {
+		return gm.SetNextState(ctx, paymentLib.Paid)
 	} else {
-		entry, err = gm.SetNextState(ctx, Pending)
+		entry, err = gm.SetNextState(ctx, paymentLib.Pending)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write next state: %w", err)
 		}
@@ -35,6 +35,6 @@ func (gm *GeminiMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 }
 
 // Fail implements TxStateMachine for the Gemini machine.
-func (gm *GeminiMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return gm.SetNextState(ctx, Failed)
+func (gm *GeminiMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return gm.SetNextState(ctx, paymentLib.Failed)
 }

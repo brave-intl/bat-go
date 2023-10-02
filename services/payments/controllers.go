@@ -14,7 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
@@ -76,7 +76,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
-			req    = new(PrepareRequest)
+			req    = new(paymentLib.PrepareRequest)
 		)
 
 		// read the transactions in the body
@@ -100,7 +100,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert payment", http.StatusInternalServerError)
 		}
-		resp := PrepareResponse{
+		resp := paymentLib.PrepareResponse{
 			PaymentDetails: req.PaymentDetails,
 			DocumentID:     documentID,
 		}
@@ -132,8 +132,8 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger         = logging.Logger(ctx, "SubmitHandler")
-			submitRequest  = &SubmitRequest{}
-			submitResponse = SubmitResponse{}
+			submitRequest  = &paymentLib.SubmitRequest{}
+			submitResponse = paymentLib.SubmitResponse{}
 		)
 
 		// read the transactions in the body

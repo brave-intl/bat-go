@@ -18,7 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
 type qldbDocumentIDResult struct {
@@ -38,12 +38,12 @@ const (
 )
 
 type Datastore interface {
-	InsertPaymentState(ctx context.Context, state *PaymentState) (string, error)
-	GetPaymentStateHistory(ctx context.Context, documentID string) (*PaymentStateHistory, error)
-	UpdatePaymentState(ctx context.Context, documentID string, state *PaymentState) error
+	InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error)
+	GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error)
+	UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error
 }
 
-func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *PaymentState) (string, error) {
+func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error) {
 	insertedDocumentID, err := q.Execute(
 		context.Background(),
 		func(txn qldbdriver.Transaction) (interface{}, error) {
@@ -107,7 +107,7 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *PaymentSt
 	return insertedDocumentID.(string), nil
 }
 
-func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID string) (*PaymentStateHistory, error) {
+func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error) {
 	stateHistory, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		result, err := txn.Execute(
 			"SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?",
@@ -116,7 +116,7 @@ func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID s
 		if err != nil {
 			return nil, fmt.Errorf("QLDB transaction failed: %w", err)
 		}
-		var stateHistory []PaymentState
+		var stateHistory []paymentLib.PaymentState
 		var latestHistoryItem QLDBPaymentTransitionHistoryEntry
 		for result.Next(txn) {
 			err := ion.Unmarshal(result.GetCurrentData(), &latestHistoryItem)
@@ -138,14 +138,14 @@ func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID s
 			return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
 		}
 
-		tmp := PaymentStateHistory(stateHistory)
+		tmp := paymentLib.PaymentStateHistory(stateHistory)
 		return &tmp, nil
 	})
 
-	return stateHistory.(*PaymentStateHistory), err
+	return stateHistory.(*paymentLib.PaymentStateHistory), err
 }
 
-func (q *QLDBDatastore) UpdatePaymentState(ctx context.Context, documentID string, state *PaymentState) error {
+func (q *QLDBDatastore) UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error {
 	_, err := q.Execute(
 		ctx,
 		func(txn qldbdriver.Transaction) (interface{}, error) {
@@ -317,7 +317,7 @@ func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 // Returns the documentID for the record that was inserted.
 func (s Service) insertPayment(
 	ctx context.Context,
-	details PaymentDetails,
+	details paymentLib.PaymentDetails,
 ) (string, error) {
 	authenticatedState := details.ToAuthenticatedPaymentState()
 
@@ -354,7 +354,7 @@ func (s Service) insertPayment(
 func (s *Service) GetTransactionFromDocumentID(
 	ctx context.Context,
 	documentID string,
-) (*AuthenticatedPaymentState, error) {
+) (*paymentLib.AuthenticatedPaymentState, error) {
 	history, err := s.datastore.GetPaymentStateHistory(ctx, documentID)
 	if err != nil {
 		return nil, err
@@ -375,14 +375,14 @@ func writeTransaction(
 	sdkClient wrappedQldbSDKClient,
 	kmsSigningClient wrappedKMSClient,
 	kmsSigningKeyID string,
-	authenticatedState *AuthenticatedPaymentState,
-) (*AuthenticatedPaymentState, error) {
+	authenticatedState *paymentLib.AuthenticatedPaymentState,
+) (*paymentLib.AuthenticatedPaymentState, error) {
 	marshaledState, err := json.Marshal(authenticatedState)
 	if err != nil {
 		return nil, err
 	}
 
-	paymentState := PaymentState{
+	paymentState := paymentLib.PaymentState{
 		UnsafePaymentState: marshaledState,
 	}
 
