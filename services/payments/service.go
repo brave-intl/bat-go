@@ -298,6 +298,15 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("could not create kms signing key")
 	}
 
+	// download the configuration file, kms decrypt the file
+
+	// do we have enough shares to attempt to reconstitute the key?
+	// yes - attempt to decrypt the file
+	// fail to decrypt?  panic loudly
+	// then unmarshal the json configuration file and load the secrets in memory
+
+	// no - poll for operator shares until we can attempt to decrypt the file
+
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")
 	}
