@@ -157,7 +157,6 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 	r.Use(middleware.RequestLogger(logger))
 	r.Use(chiware.Timeout(15 * time.Second))
-	r.Use(s.ConfigurationMiddleware)
 	logger.Info().Msg("configuration middleware setup")
 	// routes
 	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
@@ -182,8 +181,8 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 		).ServeHTTP)
 	logger.Info().Msg("submit endpoint setup")
 
-	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
-	logger.Info().Msg("get config endpoint setup")
+	r.Get("/v1/info", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
+	logger.Info().Msg("get info endpoint setup")
 	return ctx, r
 }
 
