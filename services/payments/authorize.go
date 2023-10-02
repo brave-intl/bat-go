@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // validAuthorizers is the list of payment authorizers, mapping to individuals in payments-ops.
@@ -45,9 +45,9 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 func (s *Service) AuthorizeTransaction(
 	ctx context.Context,
 	keyID string,
-	transaction *AuthenticatedPaymentState,
+	transaction *paymentLib.AuthenticatedPaymentState,
 ) error {
-	auth := PaymentAuthorization{
+	auth := paymentLib.PaymentAuthorization{
 		KeyID:      keyID,
 		DocumentID: transaction.DocumentID,
 	}
@@ -77,7 +77,7 @@ func (s *Service) AuthorizeTransaction(
 // DriveTransaction attempts to Drive the Transaction forward.
 func (s *Service) DriveTransaction(
 	ctx context.Context,
-	transaction *AuthenticatedPaymentState,
+	transaction *paymentLib.AuthenticatedPaymentState,
 ) error {
 	stateMachine, err := StateMachineFromTransaction(s, transaction)
 	if err != nil {

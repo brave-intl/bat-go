@@ -8,29 +8,29 @@ import (
 	"os"
 	"time"
 
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // TxStateMachine is anything that be progressed through states by the
 // Drive function.
 type TxStateMachine interface {
-	setTransaction(*AuthenticatedPaymentState)
-	getState() PaymentStatus
-	getTransaction() *AuthenticatedPaymentState
-	Prepare(context.Context) (*AuthenticatedPaymentState, error)
-	Authorize(context.Context) (*AuthenticatedPaymentState, error)
-	Pay(context.Context) (*AuthenticatedPaymentState, error)
-	Fail(context.Context) (*AuthenticatedPaymentState, error)
+	setTransaction(*paymentLib.AuthenticatedPaymentState)
+	getState() paymentLib.PaymentStatus
+	getTransaction() *paymentLib.AuthenticatedPaymentState
+	Prepare(context.Context) (*paymentLib.AuthenticatedPaymentState, error)
+	Authorize(context.Context) (*paymentLib.AuthenticatedPaymentState, error)
+	Pay(context.Context) (*paymentLib.AuthenticatedPaymentState, error)
+	Fail(context.Context) (*paymentLib.AuthenticatedPaymentState, error)
 }
 
 type baseStateMachine struct {
-	transaction      *AuthenticatedPaymentState
+	transaction      *paymentLib.AuthenticatedPaymentState
 }
 
 func (s *baseStateMachine) SetNextState(
 	ctx context.Context,
-	nextState PaymentStatus,
-) (*AuthenticatedPaymentState, error) {
+	nextState paymentLib.PaymentStatus,
+) (*paymentLib.AuthenticatedPaymentState, error) {
 	if !s.transaction.NextStateValid(nextState) {
 		return nil, fmt.Errorf(
 			"invalid state transition from %s to %s for transaction %s",
@@ -44,37 +44,37 @@ func (s *baseStateMachine) SetNextState(
 }
 
 // Prepare implements TxStateMachine for the baseStateMachine.
-func (s *baseStateMachine) Prepare(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return s.SetNextState(ctx, Prepared)
+func (s *baseStateMachine) Prepare(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return s.SetNextState(ctx, paymentLib.Prepared)
 }
 
 // Authorize implements TxStateMachine for the baseStateMachine.
-func (s *baseStateMachine) Authorize(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (s *baseStateMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	if len(s.getTransaction().Authorizations) >= 2 {
-		return s.SetNextState(ctx, Authorized)
+		return s.SetNextState(ctx, paymentLib.Authorized)
 	} else {
 		return s.transaction, &InsufficientAuthorizationsError{}
 	}
 }
 
-func (s *baseStateMachine) setTransaction(transaction *AuthenticatedPaymentState) {
+func (s *baseStateMachine) setTransaction(transaction *paymentLib.AuthenticatedPaymentState) {
 	s.transaction = transaction
 }
 
 // GetState returns transaction state for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getState() PaymentStatus {
+func (s *baseStateMachine) getState() paymentLib.PaymentStatus {
 	return s.transaction.Status
 }
 
 // GetTransaction returns a full transaction for a state machine, implementing TxStateMachine.
-func (s *baseStateMachine) getTransaction() *AuthenticatedPaymentState {
+func (s *baseStateMachine) getTransaction() *paymentLib.AuthenticatedPaymentState {
 	return s.transaction
 }
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
 func StateMachineFromTransaction(
 	service *Service,
-	authenticatedState *AuthenticatedPaymentState,
+	authenticatedState *paymentLib.AuthenticatedPaymentState,
 ) (TxStateMachine, error) {
 	var machine TxStateMachine
 
@@ -107,7 +107,7 @@ func StateMachineFromTransaction(
 func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
-) (*AuthenticatedPaymentState, error) {
+) (*paymentLib.AuthenticatedPaymentState, error) {
 	// Drive is called recursively, so we need to check whether a deadline has been set
 	// by a prior caller and only set the default deadline if not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
@@ -121,15 +121,15 @@ func Drive[T TxStateMachine](
 
 	// If the transaction does exist in the database, attempt to drive the state machine forward
 	switch machine.getState() {
-	case Prepared:
+	case paymentLib.Prepared:
 		return machine.Authorize(ctx)
-	case Authorized:
+	case paymentLib.Authorized:
 		return machine.Pay(ctx)
-	case Pending:
+	case paymentLib.Pending:
 		return machine.Pay(ctx)
-	case Paid:
+	case paymentLib.Paid:
 		return machine.Pay(ctx)
-	case Failed:
+	case paymentLib.Failed:
 		return machine.Fail(ctx)
 	default:
 		return nil, errors.New("invalid transition state")

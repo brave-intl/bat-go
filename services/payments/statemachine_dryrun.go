@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
 // HappyPathMachine is an implementation of TxStateMachine for a happy path dry-run
@@ -13,13 +13,13 @@ type HappyPathMachine struct {
 }
 
 // Pay implements TxStateMachine for the HappyPathMachine.
-func (s *HappyPathMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return s.SetNextState(ctx, Paid)
+func (s *HappyPathMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return s.SetNextState(ctx, paymentLib.Paid)
 }
 
 // Fail implements TxStateMachine for the HappyPathMachine.
-func (s *HappyPathMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return s.SetNextState(ctx, Failed)
+func (s *HappyPathMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return s.SetNextState(ctx, paymentLib.Failed)
 }
 
 // PrepareFailsMachine is an implementation of TxStateMachine for a dry-run with a failing submit
@@ -28,7 +28,7 @@ type PrepareFailsMachine struct {
 }
 
 // Prepare implements TxStateMachine for the baseStateMachine.
-func (s *PrepareFailsMachine) Prepare(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (s *PrepareFailsMachine) Prepare(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	return s.getTransaction(), errors.New("dry-run authorize fails")
 }
 
@@ -38,7 +38,7 @@ type AuthorizeFailsMachine struct {
 }
 
 // Authorize implements TxStateMachine for the baseStateMachine.
-func (s *AuthorizeFailsMachine) Authorize(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (s *AuthorizeFailsMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	return s.getTransaction(), errors.New("dry-run authorize fails")
 }
 
@@ -48,11 +48,11 @@ type PayFailsMachine struct {
 }
 
 // Authorize implements TxStateMachine for the baseStateMachine.
-func (s *PayFailsMachine) Authorize(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return s.SetNextState(ctx, Authorized)
+func (s *PayFailsMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return s.SetNextState(ctx, paymentLib.Authorized)
 }
 
 // Pay implements TxStateMachine for the baseStateMachine.
-func (s *PayFailsMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (s *PayFailsMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	return s.getTransaction(), errors.New("dry-run pay fails")
 }
