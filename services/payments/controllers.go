@@ -184,7 +184,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// validate the history of the transaction
 		authenticatedState, err := history.GetAuthenticatedPaymentState(service.verifier, submitRequest.DocumentID)
 		if err != nil {
-			return handlers.WrapError(err, "failed to valid payment state history", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to validate payment state history", http.StatusInternalServerError)
 		}
 
 		// attempt authorization on the transaction
