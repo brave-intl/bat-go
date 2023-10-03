@@ -22,9 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/awslabs/amazon-qldb-driver-go/v3/qldbdriver"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/hashicorp/vault/shamir"
@@ -128,7 +126,6 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 
 type serviceNamespaceContextKey struct{}
 
-<<<<<<< HEAD
 // fetchConfiguration will take an s3 bucket/object and fetch the configuration and store the
 // ciphertext on the service for decryption later
 func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string) error {
@@ -286,7 +283,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},

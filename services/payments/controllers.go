@@ -16,10 +16,7 @@ import (
 )
 
 type getConfResponse struct {
-	AttestationDocument string `json:"attestation"`
-	PublicKey           string
-	EncryptionKeyARN    string `json:"encryptionKeyArn"`
-	SigningKeyARN       string `json:"signingKeyArn"`
+	EncryptionKeyARN string `json:"encryptionKeyArn"`
 }
 
 // GetConfigurationHandler gets important payments configuration information, attested by nitro.
@@ -44,7 +41,6 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 
 		resp := &getConfResponse{
 			EncryptionKeyARN: service.kmsDecryptKeyArn,
-			SigningKeyARN:    service.kmsSigningKeyID,
 		}
 
 		logger.Debug().Msg("handling configuration request")
