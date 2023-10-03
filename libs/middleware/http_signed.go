@@ -35,6 +35,15 @@ func GetKeyID(ctx context.Context) (string, error) {
 	return keyID, nil
 }
 
+func SignResponse(p httpsignature.ParameterizedSignator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w = httpsignature.NewParameterizedSignatorResponseWriter(p, w)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // HTTPSignedOnly is a middleware that requires an HTTP request to be signed
 func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 	verifier := httpsignature.ParameterizedKeystoreVerifier{
