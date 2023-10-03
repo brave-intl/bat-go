@@ -15,9 +15,6 @@ The flags are:
 		Location on file system of the operators private ED25519 signing key in PEM format.
 	-e
 		The environment to which the operator is sending approval for transactions.
-		The environment is specified as the base URI of the payments service running in the
-		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
-			https://nitro-payments.bsg.brave.software
 	-ra
 		The redis address
 	-rp
@@ -49,11 +46,11 @@ func main() {
 		"the operator's key file location (ed25519 private key) in PEM format")
 
 	env := flag.String(
-		"e", "https://nitro-payments.bsg.brave.software",
+		"e", "local",
 		"the environment to which the tool will interact")
 
 	redisAddr := flag.String(
-		"ra", "",
+		"ra", "127.0.0.1:6380",
 		"redis address")
 
 	redisPass := flag.String(

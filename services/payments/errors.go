@@ -14,11 +14,11 @@ func (e *QLDBTransitionHistoryNotFoundError) Error() string {
 	return "QLDB transition history not found"
 }
 
-// ErrInvalidVerifier is an error stating the keyID is not a valid verifier.
-type ErrInvalidVerifier struct{}
+// ErrInvalidAuthorizer is an error stating the keyID is not a valid payment authorizer.
+type ErrInvalidAuthorizer struct{}
 
-func (e *ErrInvalidVerifier) Error() string {
-	return "not a valid verifier"
+func (e *ErrInvalidAuthorizer) Error() string {
+	return "not a valid payment authorizer"
 }
 
 // InsufficientAuthorizationsError indicates that not enough authorizers have submitted

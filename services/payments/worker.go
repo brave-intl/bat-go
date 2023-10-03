@@ -16,7 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/redisconsumer"
 	"github.com/google/uuid"
-	redis "github.com/redis/go-redis/v9"
 )
 
 // Worker for payments
@@ -25,8 +24,8 @@ type Worker struct {
 }
 
 // NewWorker from redis client
-func NewWorker(rc *redis.Client) *Worker {
-	return &Worker{rc: redisconsumer.NewStreamClient(rc)}
+func NewWorker(rc redisconsumer.StreamClient) *Worker {
+	return &Worker{rc}
 }
 
 // HandlePrepareMessage by sending it to the payments service

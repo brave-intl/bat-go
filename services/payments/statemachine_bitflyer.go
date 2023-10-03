@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/shopspring/decimal"
 )
@@ -27,7 +27,7 @@ type BitflyerMachine struct {
 }
 
 type bitflyerResult struct {
-	AuthenticatedPaymentState *AuthenticatedPaymentState
+	AuthenticatedPaymentState *paymentLib.AuthenticatedPaymentState
 	Error                     error
 }
 
@@ -121,14 +121,14 @@ type inventoryResponse struct {
 }
 
 // Pay implements TxStateMachine for the Bitflyer machine.
-func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (bm *BitflyerMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	err := ctx.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
 		return bm.transaction, err
 	}
 
 	// Do nothing if the state is already final
-	if bm.transaction.Status == Paid || bm.transaction.Status == Failed {
+	if bm.transaction.Status == paymentLib.Paid || bm.transaction.Status == paymentLib.Failed {
 		return bm.transaction, nil
 	}
 
@@ -144,13 +144,13 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 		// Do bitflyer stuff
 	}*/
 	var (
-		entry *AuthenticatedPaymentState
+		entry *paymentLib.AuthenticatedPaymentState
 	)
 	batchOfOneTransaction := authenticatedStateToBitflyerBulkTransaction(
 		bm.transaction,
 		bm.priceQuote.PriceToken,
 	)
-	if bm.transaction.Status == Pending {
+	if bm.transaction.Status == paymentLib.Pending {
 		// We don't want to check status too fast
 		time.Sleep(bm.backoffFactor * time.Millisecond)
 		// Get status of transaction and update the state accordingly
@@ -167,7 +167,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 		switch strings.ToUpper(transactionsStatus.Withdrawals[0].Status) {
 		case "SUCCESS", "EXECUTED":
 			// Write the Paid status and end the loop by not calling Drive
-			entry, err = bm.writeNextState(ctx, Paid)
+			entry, err = bm.SetNextState(ctx, paymentLib.Paid)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -183,7 +183,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 			}
 		default:
 			// Status unknown. Fail
-			entry, err = bm.writeNextState(ctx, Failed)
+			entry, err = bm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -209,13 +209,13 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 		switch strings.ToUpper(submittedTransaction.Status) {
 		case "SUCCESS", "EXECUTED":
 			// Write the Paid status and end the loop by not calling Drive
-			entry, err = bm.writeNextState(ctx, Paid)
+			entry, err = bm.SetNextState(ctx, paymentLib.Paid)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
 		case "CREATED", "PENDING":
 			// Write the Pending status and call Drive to come around again
-			entry, err = bm.writeNextState(ctx, Pending)
+			entry, err = bm.SetNextState(ctx, paymentLib.Pending)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -230,7 +230,7 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 			}
 		default:
 			// Status unknown. Fail
-			entry, err = bm.writeNextState(ctx, Failed)
+			entry, err = bm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -244,11 +244,11 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState,
 }
 
 // Fail implements TxStateMachine for the Bitflyer machine.
-func (bm *BitflyerMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (bm *BitflyerMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	/*if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
 	}*/
-	return bm.writeNextState(ctx, Failed)
+	return bm.SetNextState(ctx, paymentLib.Failed)
 }
 
 func (bm *BitflyerMachine) fetchQuote(
@@ -420,7 +420,7 @@ func (bm *BitflyerMachine) buildRequest(
 }
 
 func authenticatedStateToBitflyerBulkTransaction(
-	authenticatedState *AuthenticatedPaymentState,
+	authenticatedState *paymentLib.AuthenticatedPaymentState,
 	priceToken string,
 ) bitflyerBulkTransactionPayload {
 	dryRun := false

@@ -1,88 +1,5 @@
 package payments
 
-import (
-	"encoding/json"
-	. "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
-)
-
-var (
-	generatedUUID, _ = uuid.Parse("727ccc14-1951-5a75-bbce-489505a684b1")
-	amount           = decimal.NewFromFloat(1.1)
-	txn0             = AuthenticatedPaymentState{Status: Prepared, PaymentDetails: PaymentDetails{Amount: amount}}
-	txn1             = AuthenticatedPaymentState{Status: Authorized, PaymentDetails: PaymentDetails{Amount: amount}}
-	txn2             = AuthenticatedPaymentState{Status: Pending, PaymentDetails: PaymentDetails{Amount: amount}}
-	txn3             = AuthenticatedPaymentState{Status: Paid, PaymentDetails: PaymentDetails{Amount: amount}}
-	txn4             = AuthenticatedPaymentState{Status: Failed, PaymentDetails: PaymentDetails{Amount: amount}}
-	status0, _       = json.Marshal(txn0)
-	status1, _       = json.Marshal(txn1)
-	status2, _       = json.Marshal(txn2)
-	status3, _       = json.Marshal(txn3)
-	status4, _       = json.Marshal(txn4)
-)
-
-var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-	},
-}
-
-var transactionHistorySetFalse = [][]QLDBPaymentTransitionHistoryEntry{
-	// Transitions must always start at 0
-	{
-		{Data: PaymentState{UnsafePaymentState: status1, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status4, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status3, ID: generatedUUID}},
-	},
-	{
-		{Data: PaymentState{UnsafePaymentState: status0, ID: generatedUUID}},
-		{Data: PaymentState{UnsafePaymentState: status2, ID: generatedUUID}},
-	},
-}
-
 var upholdCreateTransactionSuccessResponse = map[string]interface{}{
 	"application": nil,
 	"createdAt":   "2018-08-01T09:53:47.020Z",
@@ -277,19 +194,19 @@ var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
 }
 
 var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
-	"dry_run": false,
+	"dry_run":      false,
 	"access_token": "Look at me. I'm a token.",
 	"refresh_toke": "another token",
-	"expires_in": 4,
-	"scope": "some scope",
+	"expires_in":   4,
+	"scope":        "some scope",
 	"account_hash": "hashed something",
-	"tokey_type": "token type",
+	"tokey_type":   "token type",
 }
 
 var bitflyerFetchPriceResponse = map[string]interface{}{
-	"product_code": "BAT_JPY",
+	"product_code":  "BAT_JPY",
 	"main_currency": "BAT",
-	"sub_currency": "",
-	"rate": 4,
-	"price_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
+	"sub_currency":  "",
+	"rate":          4,
+	"price_token":   "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
 }

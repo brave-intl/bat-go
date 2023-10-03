@@ -1,13 +1,12 @@
 package cmd
 
 import (
-	"fmt"
-
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/redisconsumer"
 	"github.com/brave-intl/bat-go/services/payments"
-	redis "github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // WorkerRun is the endpoint for running the payment worker
@@ -16,10 +15,16 @@ func WorkerRun(command *cobra.Command, args []string) {
 	logger, err := appctx.GetLogger(ctx)
 	rootcmd.Must(err)
 
-	// FIXME
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", "127.0.0.1", "6379"),
-	})
+	env := viper.GetString("environment")
+	addr := viper.GetString("redis-addr")
+	user := viper.GetString("redis-user")
+	pass := viper.GetString("redis-pass")
+
+	redisClient, err := redisconsumer.NewStreamClient(ctx, env, addr, user, pass, true)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to start redis consumer")
+		return
+	}
 
 	worker := payments.NewWorker(redisClient)
 

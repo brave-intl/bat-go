@@ -2,13 +2,19 @@ package redisconsumer
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/concurrent"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/rootdir"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -46,8 +52,49 @@ type StreamClient interface {
 // RedisClient is an implementation of StreamClient using an actual redis connection
 type RedisClient redis.Client
 
-func NewStreamClient(redisClient *redis.Client) *RedisClient {
-	return (*RedisClient)(redisClient)
+func NewStreamClient(ctx context.Context, env, addr, user, pass string, useTLS bool) (*RedisClient, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var tlsConfig *tls.Config
+	if useTLS {
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ClientAuth: 0,
+		}
+	}
+
+	// only if environment is local do we hardcode these values
+	if tlsConfig != nil && env == "local" {
+		certPool := x509.NewCertPool()
+		pem, err := ioutil.ReadFile(filepath.Join(rootdir.Path, "./libs/redisconsumer/tests/tls/ca.crt"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read test-mode ca.crt: %w", err)
+		}
+		certPool.AppendCertsFromPEM(pem)
+		tlsConfig.RootCAs = certPool
+	}
+	rc := redis.NewClient(
+		&redis.Options{
+			Addr: addr, Password: pass, Username: user,
+			DialTimeout:     15 * time.Second,
+			WriteTimeout:    5 * time.Second,
+			MaxRetries:      5,
+			MinRetryBackoff: 5 * time.Millisecond,
+			MaxRetryBackoff: 500 * time.Millisecond,
+			TLSConfig:       tlsConfig,
+		},
+	)
+
+	_, err = rc.Ping(ctx).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup redis client: %w", err)
+	}
+	logger.Info().Msg("ping success, redis client connected")
+
+	return (*RedisClient)(rc), nil
 }
 
 // CreateStream if it does not already exist

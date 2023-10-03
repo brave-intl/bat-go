@@ -13,7 +13,7 @@ func TestLookupVerifier(t *testing.T) {
 	if err == nil {
 		t.Error("should return an invalid verifier error")
 	}
-	var verifierError *ErrInvalidVerifier
+	var verifierError *ErrInvalidAuthorizer
 	if !errors.As(err, &verifierError) {
 		t.Error("should return an invalid verifier error")
 	}

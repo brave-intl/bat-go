@@ -46,7 +46,7 @@ func (sw RequestWrapper) MarshalBinary() (data []byte, err error) {
 type ResponseWrapper struct {
 	ID        uuid.UUID                         `json:"id"`
 	Timestamp time.Time                         `json:"timestamp"`
-	Response  *httpsignature.HTTPSignedResponse `json:"request"`
+	Response  *httpsignature.HTTPSignedResponse `json:"response"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis

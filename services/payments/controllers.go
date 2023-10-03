@@ -2,7 +2,6 @@ package payments
 
 import (
 	"crypto"
-	"crypto/rand"
 	"fmt"
 	"net/http"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
@@ -78,7 +77,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
-			req    = new(PrepareRequest)
+			req    = new(paymentLib.PrepareRequest)
 		)
 
 		// read the transactions in the body
@@ -96,26 +95,38 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
 		}
 
-		// returns an enriched list of transactions, which includes the document metadata
+		authenticatedState := req.ToAuthenticatedPaymentState()
 
-		documentID, err := service.insertPayment(ctx, req.PaymentDetails)
+		// Ensure that prepare succeeds ( i.e. we are not using a failing dry-run state machine )
+		stateMachine, err := service.StateMachineFromTransaction(authenticatedState)
 		if err != nil {
-			return handlers.WrapError(err, "failed to insert payment", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to create stateMachine", http.StatusBadRequest)
 		}
-		resp := PrepareResponse{
+		_, err = stateMachine.Prepare(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "could not put transaction into the prepared state", http.StatusBadRequest)
+		}
+
+		paymentState, err := authenticatedState.ToPaymentState()
+		if err != nil {
+			return handlers.WrapError(err, "could not create a payment state", http.StatusBadRequest)
+		}
+
+		err = paymentState.Sign(service.signer, service.publicKey)
+		if err != nil {
+			return handlers.WrapError(err, "failed to sign payment state", http.StatusInternalServerError)
+		}
+
+		documentID, err := service.datastore.InsertPaymentState(ctx, paymentState)
+		if err != nil {
+			return handlers.WrapError(err, "failed to insert payment state", http.StatusInternalServerError)
+		}
+		resp := paymentLib.PrepareResponse{
 			PaymentDetails: req.PaymentDetails,
 			DocumentID:     documentID,
 		}
 
 		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
-
-		// create a random nonce for nitro attestation
-		nonce := make([]byte, 64)
-		_, err = rand.Read(nonce)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create random nonce")
-			return handlers.WrapError(err, "failed to create random nonce", http.StatusInternalServerError)
-		}
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	}
@@ -142,8 +153,8 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger         = logging.Logger(ctx, "SubmitHandler")
-			submitRequest  = &SubmitRequest{}
-			submitResponse = SubmitResponse{}
+			submitRequest  = &paymentLib.SubmitRequest{}
+			submitResponse = paymentLib.SubmitResponse{}
 		)
 
 		// read the transactions in the body
@@ -165,29 +176,37 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error getting identity of transaction authorizer", http.StatusInternalServerError)
 		}
 
-		// get the current state of the transaction from qldb
-		authenticatedState, _, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
+		// get the history of the transaction from qldb
+		history, err := service.datastore.GetPaymentStateHistory(ctx, submitRequest.DocumentID)
 		if err != nil {
-			return handlers.WrapError(err, "failed to get transaction from document id", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to get history from document id", http.StatusInternalServerError)
+		}
+
+		// validate the history of the transaction
+		authenticatedState, err := history.GetAuthenticatedPaymentState(service.verifier, submitRequest.DocumentID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to validate payment state history", http.StatusInternalServerError)
 		}
 
 		// attempt authorization on the transaction
-		err = service.AuthorizeTransaction(ctx, keyID, *authenticatedState)
+		err = service.AuthorizeTransaction(ctx, keyID, authenticatedState)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
-		submitResponse.Status = authenticatedState.Status
+		err = service.DriveTransaction(ctx, authenticatedState)
+		if err != nil {
+			// TODO: if error is permanent, return 200
+			return handlers.WrapError(err, "failed to drive transaction", http.StatusInternalServerError)
+		}
 
-		// TODO: check if business logic was met from authorizers table in qldb for this transaction
-		// TODO: state machine handling for custodian submissions
-		// TODO: if error is temporary, return non-200
+		submitResponse.Status = authenticatedState.Status
 
 		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
 		// "permanent" errors indiciating a transaction state machine has reached an end state
 		return &handlers.AppError{
 			Cause:   nil,
-			Message: "dry-run succeeded",
+			Message: "submit succeeded",
 			Code:    http.StatusOK,
 			Data:    submitResponse,
 		}
