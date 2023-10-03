@@ -65,6 +65,18 @@ func Attest(ctx context.Context, nonce, userData, publicKey []byte) ([]byte, err
 	return res.Attestation.Document, nil
 }
 
+// GetPCRs returns the PCR values for the currently running enclave by
+// performing an attestation and parsing the result
+func GetPCRs() (map[uint][]byte, error) {
+	sig, err := Attest(context.Background(), nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	verifier := NewVerifier(nil)
+	_, pcrs, err := verifier.verifySigOnlyNotPCRs(nil, sig, crypto.Hash(0))
+	return pcrs, err
+}
+
 // Signer is a placeholder struct to sign using a nitro attestation
 type Signer struct{}
 
@@ -87,12 +99,12 @@ func NewVerifier(pcrs map[uint][]byte) Verifier {
 	}
 }
 
-// Verify the signature sig for message using the nitro verifier
-func (v Verifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
+// verifySigOnlyNotPCRs verifies that a signature is good but does not check the PCR values
+func (v Verifier) verifySigOnlyNotPCRs(message, sig []byte, opts crypto.SignerOpts) (bool, map[uint][]byte, error) {
 	pool := x509.NewCertPool()
 	ok := pool.AppendCertsFromPEM([]byte(RootAWSNitroCert))
 	if !ok {
-		return false, errors.New("could not create a valid root cert pool")
+		return false, nil, errors.New("could not create a valid root cert pool")
 	}
 
 	res, err := nitrite.Verify(
@@ -103,11 +115,21 @@ func (v Verifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, err
 		},
 	)
 	if nil != err {
-		return false, err
+		return false, nil, err
 	}
 
 	if !bytes.Equal(res.Document.UserData, message) {
-		return false, nil
+		return false, nil, nil
+	}
+
+	return true, res.Document.PCRs, nil
+}
+
+// Verify the signature sig for message using the nitro verifier
+func (v Verifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
+	valid, pcrs, err := v.verifySigOnlyNotPCRs(message, sig, opts)
+	if err != nil || !valid {
+		return valid, err
 	}
 
 	if len(v.PCRs) == 0 {
@@ -115,7 +137,7 @@ func (v Verifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, err
 	}
 
 	for pcr, expectedV := range v.PCRs {
-		v, exists := res.Document.PCRs[pcr]
+		v, exists := pcrs[pcr]
 		if !exists {
 			return false, nil
 		}

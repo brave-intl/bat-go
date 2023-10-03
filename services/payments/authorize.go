@@ -3,7 +3,6 @@ package payments
 import (
 	"context"
 	"encoding/hex"
-	"errors"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -59,50 +58,6 @@ func (s *Service) AuthorizeTransaction(
 	}
 	if keyHasNotYetSigned {
 		transaction.Authorizations = append(transaction.Authorizations, auth)
-		_, err := writeTransaction(
-			ctx,
-			s.datastore,
-			s.sdkClient,
-			s.kmsSigningClient,
-			s.kmsSigningKeyID,
-			transaction,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to update transaction: %w", err)
-		}
-	}
-	return nil
-}
-
-// DriveTransaction attempts to Drive the Transaction forward.
-func (s *Service) DriveTransaction(
-	ctx context.Context,
-	transaction *paymentLib.AuthenticatedPaymentState,
-) error {
-	stateMachine, err := StateMachineFromTransaction(s, transaction)
-	if err != nil {
-		return fmt.Errorf("failed to create stateMachine: %w", err)
-	}
-
-	transaction, err = Drive(ctx, stateMachine)
-	if err != nil {
-		// Insufficient authorizations is an expected state. Treat it as such.
-		var insufficientAuthorizations *InsufficientAuthorizationsError
-		if errors.As(err, &insufficientAuthorizations) {
-			return nil
-		}
-		return fmt.Errorf("failed to progress transaction: %w", err)
-	}
-	_, err = writeTransaction(
-		ctx,
-		s.datastore,
-		s.sdkClient,
-		s.kmsSigningClient,
-		s.kmsSigningKeyID,
-		transaction,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update transaction: %w", err)
 	}
 	return nil
 }

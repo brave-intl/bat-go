@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -14,16 +13,13 @@ import (
 
 	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 
-	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/aws/aws-sdk-go-v2/service/qldb"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/hashicorp/vault/shamir"
@@ -52,12 +48,11 @@ type Service struct {
 	secretMgr        appsrv.SecretManager
 	keyShares        [][]byte
 	kmsDecryptKeyArn string
-	kmsSigningKeyID  string
-	kmsSigningClient wrappedKMSClient
 	sdkClient        wrappedQldbSDKClient
-	pubKey           []byte
 
-	verifier paymentLib.Verifier
+	publicKey []byte
+	signer    paymentLib.Signator
+	verifier  paymentLib.Verifier
 }
 
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, string, error) {
@@ -126,83 +121,9 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 
 type serviceNamespaceContextKey struct{}
 
-// configureSigningKey creates the enclave kms key which is only sign capable with enclave
+// configureKMSEncryptionKey creates the enclave kms key which is only decrypt capable with enclave
 // attestation.
-func (s *Service) configureSigningKey(ctx context.Context) error {
-	// get the aws configuration loaded
-	kmsClient := kms.NewFromConfig(s.awsCfg)
-
-	// parse the key policy
-	policy, imageSHA, err := parseKeyPolicyTemplate(ctx, "/sign-policy.tmpl")
-	if err != nil {
-		return fmt.Errorf("failed to parse signing policy template: %w", err)
-	}
-
-	// if the key alias already exists, pull down that particular key
-	getKeyResult, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{
-		KeyId: aws.String("alias/signing-" + imageSHA),
-	})
-	// If the error is that the key wasn't found, proceed. Otherwise, fail with error.
-	if err != nil {
-		if !strings.Contains(err.Error(), "NotFoundException") {
-			return fmt.Errorf("failed to get key by alias: %w", err)
-		}
-	}
-
-	if getKeyResult != nil {
-		// key exists, check the key policy matches
-		// if the key alias already exists, pull down that particular key
-		getKeyPolicyResult, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
-			KeyId: getKeyResult.KeyMetadata.KeyId,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to get key by alias: %w", err)
-		}
-
-		if *getKeyPolicyResult.Policy == policy {
-			// if the policy matches, we should use this key
-			s.kmsSigningKeyID = *getKeyResult.KeyMetadata.KeyId
-			s.kmsSigningClient = kmsClient
-			return nil
-		}
-	}
-
-	// otherwise create and alias
-
-	input := &kms.CreateKeyInput{
-		KeySpec:  kmsTypes.KeySpecEccNistP256,
-		KeyUsage: kmsTypes.KeyUsageTypeSignVerify,
-		Policy:   aws.String(policy),
-		BypassPolicyLockoutSafetyCheck: true,
-		Tags: []kmsTypes.Tag{
-			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
-		},
-	}
-
-	result, err := kmsClient.CreateKey(ctx, input)
-	if err != nil {
-		return fmt.Errorf("failed to make key: %w", err)
-	}
-
-	// create a key alias for this key
-	aliasInput := &kms.CreateAliasInput{
-		AliasName:   aws.String("alias/signing-" + imageSHA),
-		TargetKeyId: result.KeyMetadata.KeyId,
-	}
-
-	_, err = kmsClient.CreateAlias(ctx, aliasInput)
-	if err != nil {
-		return fmt.Errorf("failed to make key alias: %w", err)
-	}
-
-	s.kmsSigningKeyID = *result.KeyMetadata.KeyId
-	s.kmsSigningClient = kmsClient
-	return nil
-}
-
-// configureKMSKey creates the enclave kms key which is only decrypt capable with enclave
-// attestation.
-func (s *Service) configureKMSKey(ctx context.Context) error {
+func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	// get the aws configuration loaded
 	cfg := s.awsCfg
 	kmsClient := kms.NewFromConfig(cfg)
@@ -289,26 +210,33 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("no egress addr for payments service")
 	}
 
+	pcrs, err := nitro.GetPCRs()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("could not retrieve nitro PCRs")
+		return nil, nil, errors.New("could not retrieve nitro PCRs")
+	}
+
 	service := &Service{
-		baseCtx: ctx,
-		awsCfg:  awsCfg,
+		baseCtx:   ctx,
+		awsCfg:    awsCfg,
+		publicKey: pcrs[2],
+		signer:    nitro.Signer{},
+		// FIXME need to handle past valid PCRs
+		verifier: nitro.NewVerifier(map[uint][]byte{
+			0: pcrs[0],
+			1: pcrs[1],
+			2: pcrs[2],
+		}),
 	}
 
-	if err := service.configureKMSKey(ctx); err != nil {
-		logger.Error().Err(err).Msg("could not create kms secret decryption key")
-	}
-
-	if err := service.configureSigningKey(ctx); err != nil {
-		logger.Error().Err(err).Msg("could not create kms signing key")
-		return nil, nil, errors.New("could not create kms signing key")
-	}
-	service.verifier = KMSVerifier{
-		kmsSigningKeyID: service.kmsSigningKeyID,
-		kmsClient:       service.kmsSigningClient,
+	if err := service.configureKMSEncryptionKey(ctx); err != nil {
+		logger.Error().Err(err).Msg("could not create kms secret encryption key")
+		return nil, nil, errors.New("could not create kms secret encryption key")
 	}
 
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")
+		return nil, nil, errors.New("could not configure datastore")
 	}
 
 	return ctx, service, nil
@@ -347,132 +275,6 @@ func (s *Service) DecryptBootstrap(
 	}
 
 	return output, nil
-}
-
-// revisionValidInTree verifies a document revision in QLDB using a digest and the Merkle
-// hashes to re-derive the digest.
-func revisionValidInTree(
-	ctx context.Context,
-	client wrappedQldbSDKClient,
-	transaction *QLDBPaymentTransitionHistoryEntry,
-) (bool, error) {
-	qldbLedgerName, ok := ctx.Value(appctx.PaymentsQLDBLedgerNameCTXKey).(string)
-	if !ok {
-		return false, fmt.Errorf("empty qldb ledger name. revision not verified for state: %v", transaction)
-	}
-	digest, err := client.GetDigest(ctx, &qldb.GetDigestInput{Name: &qldbLedgerName})
-
-	if err != nil {
-		return false, fmt.Errorf("Failed to get digest: %w", err)
-	}
-
-	revision, err := client.GetRevision(ctx, &qldb.GetRevisionInput{
-		BlockAddress:     transaction.BlockAddress.ValueHolder(),
-		DocumentId:       &transaction.Metadata.ID,
-		Name:             &qldbLedgerName,
-		DigestTipAddress: digest.DigestTipAddress,
-	})
-
-	if err != nil {
-		return false, fmt.Errorf("Failed to get revision: %w", err)
-	}
-	var hashes [][32]byte
-
-	// This Ion unmarshal gives us the hashes as bytes. The documentation implies that
-	// these are base64 encoded strings, but testing indicates that is not the case.
-	err = ion.UnmarshalString(*revision.Proof.IonText, &hashes)
-
-	if err != nil {
-		return false, fmt.Errorf("Failed to unmarshal revision proof: %w", err)
-	}
-	return verifyHashSequence(digest, transaction.Hash, hashes)
-}
-
-func verifyHashSequence(
-	digest *qldb.GetDigestOutput,
-	initialHash QLDBPaymentTransitionHistoryEntryHash,
-	hashes [][32]byte,
-) (bool, error) {
-	var concatenatedHash [32]byte
-	for i, providedHash := range hashes {
-		// During the first integration concatenatedHash hasn't been populated.
-		// Populate it with the hash from the provided transaction.
-		if i == 0 {
-			decodedHash, err := base64.StdEncoding.DecodeString(string(initialHash))
-			if err != nil {
-				return false, err
-			}
-			copy(concatenatedHash[:], decodedHash)
-		}
-		// QLDB determines hash order by comparing the hashes byte by byte until
-		// one is greater than the other. The larger becomes the left hash and the
-		// smaller becomes the right hash for the next phase of hash generation.
-		// This is not documented, but can be inferred from the Java reference
-		// implementation here: https://github.com/aws-samples/amazon-qldb-dmv-sample-java/blob/master/src/main/java/software/amazon/qldb/tutorial/Verifier.java#L60
-		sortedHashes, err := sortHashes(providedHash[:], concatenatedHash[:])
-		if err != nil {
-			return false, err
-		}
-		// Concatenate the hashes and then hash the result to get the next hash
-		// in the tree.
-		concatenatedHash = sha256.Sum256(append(sortedHashes[0], sortedHashes[1]...))
-	}
-
-	// The digest comes to us as a base64 encoded string. We need to decode it before
-	// using it.
-	decodedDigest, err := base64.StdEncoding.DecodeString(string(digest.Digest))
-
-	if err != nil {
-		return false, fmt.Errorf("Failed to base64 decode digest: %w", err)
-	}
-
-	if bytes.Compare(concatenatedHash[:], decodedDigest) == 0 {
-		return true, nil
-	}
-	return false, nil
-}
-
-// signPaymentState - perform KMS signing of the transaction, return publicKey and
-// signature in hex string.
-func signPaymentState(
-	ctx context.Context,
-	kmsClient wrappedKMSClient,
-	keyID string,
-	state paymentLib.PaymentState,
-) ([]byte, []byte, error) {
-	pubkeyOutput, err := kmsClient.GetPublicKey(ctx, &kms.GetPublicKeyInput{
-		KeyId: &keyID,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get public key: %w", err)
-	}
-
-	signingOutput, err := kmsClient.Sign(ctx, &kms.SignInput{
-		KeyId:            &keyID,
-		Message:          state.UnsafePaymentState,
-		MessageType:      kmsTypes.MessageTypeRaw,
-		SigningAlgorithm: kmsTypes.SigningAlgorithmSpecEcdsaSha256,
-	})
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to sign transaction: %w", err)
-	}
-
-	return pubkeyOutput.PublicKey, signingOutput.Signature, nil
-}
-
-func sortHashes(a, b []byte) ([][]byte, error) {
-	if len(a) != len(b) {
-		return nil, errors.New("provided hashes do not have matching length")
-	}
-	for i := 0; i < len(a); i++ {
-		if a[i] > b[i] {
-			return [][]byte{a, b}, nil
-		} else if a[i] < b[i] {
-			return [][]byte{b, a}, nil
-		}
-	}
-	return [][]byte{a, b}, nil
 }
 
 func isQLDBReady(ctx context.Context) bool {

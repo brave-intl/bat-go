@@ -2,6 +2,7 @@ package payments
 
 import (
 	"crypto"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 
@@ -110,6 +111,17 @@ func statusListContainsStatus(s []PaymentStatus, e PaymentStatus) bool {
 		}
 	}
 	return false
+}
+
+// Sign this payment state, authenticating the contents of UnsafePaymentState
+func (p *PaymentState) Sign(signer Signator, publicKey []byte) error {
+	var err error
+	p.Signature, err = signer.Sign(rand.Reader, p.UnsafePaymentState, crypto.Hash(0))
+	if err != nil {
+		return fmt.Errorf("Failed to sign payment state: %w", err)
+	}
+	p.PublicKey = publicKey
+	return nil
 }
 
 // GetAuthenticatedPaymentState by performing the appropriate validation.
