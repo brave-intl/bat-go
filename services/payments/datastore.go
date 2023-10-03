@@ -311,20 +311,3 @@ func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 
 	return &QLDBDatastore{QLDBDriver: driver}, nil
 }
-
-// GetTransactionFromDocumentID - get the transaction data from the document ID in qldb.
-func (s *Service) GetTransactionFromDocumentID(
-	ctx context.Context,
-	documentID string,
-) (*paymentLib.AuthenticatedPaymentState, error) {
-	history, err := s.datastore.GetPaymentStateHistory(ctx, documentID)
-	if err != nil {
-		return nil, err
-	}
-	authenticatedState, err := history.GetAuthenticatedPaymentState(s.verifier, documentID)
-	if err != nil {
-		return nil, err
-	}
-
-	return authenticatedState, nil
-}
