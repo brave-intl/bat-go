@@ -27,7 +27,6 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /src/main/bat-go /bin/
 
 FROM base as payments
-COPY --from=builder /src/services/payments/templates/sign-policy.tmpl /
 COPY --from=builder /src/services/payments/templates/decrypt-policy.tmpl /
 CMD ["bat-go", "serve", "nitro", "inside-enclave", "--log-address", "vm(3):2345", "--egress-address", "http://vm(3):1234", "--upstream-url", "http://0.0.0.0:8080", "--address", ":8080"]
 

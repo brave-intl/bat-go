@@ -62,7 +62,7 @@ func NewSettlementClient(ctx context.Context, env string, config map[string]stri
 	}
 	verifier := httpsignature.NewNitroVerifier(pcrs)
 
-	client, err := newRedisClient(ctx, env, config["addr"], config["pass"], config["username"], sp, verifier)
+	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], sp, verifier)
 	return ctx, client, err
 }
 
@@ -75,8 +75,8 @@ type redisClient struct {
 	verifier        httpsignature.Verifier
 }
 
-func newRedisClient(ctx context.Context, env, addr, pass, username string, sp httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
-	redis, err := redisconsumer.NewStreamClient(ctx, env, addr, pass, username)
+func newRedisClient(ctx context.Context, env, addr, username, pass string, sp httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
+	redis, err := redisconsumer.NewStreamClient(ctx, env, addr, username, pass, false)
 	if err != nil {
 		return nil, err
 	}

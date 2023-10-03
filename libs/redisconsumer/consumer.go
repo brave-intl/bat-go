@@ -52,19 +52,22 @@ type StreamClient interface {
 // RedisClient is an implementation of StreamClient using an actual redis connection
 type RedisClient redis.Client
 
-func NewStreamClient(ctx context.Context, env, addr, user, pass string) (*RedisClient, error) {
+func NewStreamClient(ctx context.Context, env, addr, user, pass string, useTLS bool) (*RedisClient, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ClientAuth: 0,
+	var tlsConfig *tls.Config
+	if useTLS {
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ClientAuth: 0,
+		}
 	}
 
 	// only if environment is local do we hardcode these values
-	if env == "local" {
+	if tlsConfig != nil && env == "local" {
 		certPool := x509.NewCertPool()
 		pem, err := ioutil.ReadFile(filepath.Join(rootdir.Path, "./libs/redisconsumer/tests/tls/ca.crt"))
 		if err != nil {
