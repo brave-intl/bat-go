@@ -20,7 +20,7 @@ func WorkerRun(command *cobra.Command, args []string) {
 	user := viper.GetString("redis-user")
 	pass := viper.GetString("redis-pass")
 
-	redisClient, err := redisconsumer.NewStreamClient(ctx, env, addr, user, pass)
+	redisClient, err := redisconsumer.NewStreamClient(ctx, env, addr, user, pass, true)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to start redis consumer")
 		return

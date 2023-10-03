@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"encoding/json"
 
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
@@ -72,8 +73,7 @@ func (s *baseStateMachine) getTransaction() *paymentLib.AuthenticatedPaymentStat
 }
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
-func StateMachineFromTransaction(
-	service *Service,
+func (service *Service) StateMachineFromTransaction(
 	authenticatedState *paymentLib.AuthenticatedPaymentState,
 ) (TxStateMachine, error) {
 	var machine TxStateMachine
@@ -134,4 +134,46 @@ func Drive[T TxStateMachine](
 	default:
 		return nil, errors.New("invalid transition state")
 	}
+}
+
+// DriveTransaction attempts to Drive the Transaction forward.
+func (s *Service) DriveTransaction(
+	ctx context.Context,
+	transaction *paymentLib.AuthenticatedPaymentState,
+) error {
+	stateMachine, err := s.StateMachineFromTransaction(transaction)
+	if err != nil {
+		return fmt.Errorf("failed to create stateMachine: %w", err)
+	}
+
+	state, err := Drive(ctx, stateMachine)
+	if err != nil {
+		// Insufficient authorizations is an expected state. Treat it as such.
+		var insufficientAuthorizations *InsufficientAuthorizationsError
+		if errors.As(err, &insufficientAuthorizations) {
+			return nil
+		}
+		return fmt.Errorf("failed to progress transaction: %w", err)
+	}
+
+	marshaledState, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %w", err)
+	}
+
+	paymentState := paymentLib.PaymentState{
+		UnsafePaymentState: marshaledState,
+	}
+
+	err = paymentState.Sign(s.signer, s.publicKey)
+	if err != nil {
+		return fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	s.datastore.UpdatePaymentState(ctx, state.DocumentID, &paymentState)
+
+	if err != nil {
+		return fmt.Errorf("failed to update transaction: %w", err)
+	}
+	return nil
 }

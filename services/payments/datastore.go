@@ -2,7 +2,6 @@ package payments
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -242,7 +241,7 @@ func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 		return nil, fmt.Errorf("failed to get egress proxy for qldb")
 	}
 
-	// decrypt the aws region
+	// the aws region
 	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
 	if !ok {
 		err := errors.New("empty aws region")
@@ -311,93 +310,4 @@ func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 	driver.SetRetryPolicy(retryPolicy2)
 
 	return &QLDBDatastore{QLDBDriver: driver}, nil
-}
-
-// insertPayment - perform a qldb insertion on a given transaction after doing all validation.
-// Returns the documentID for the record that was inserted.
-func (s Service) insertPayment(
-	ctx context.Context,
-	details paymentLib.PaymentDetails,
-) (string, error) {
-	authenticatedState := details.ToAuthenticatedPaymentState()
-
-	// Ensure that prepare succeeds ( i.e. we are not using a failing dry-run state machine )
-	stateMachine, err := StateMachineFromTransaction(&s, authenticatedState)
-	if err != nil {
-		return "", fmt.Errorf("failed to create stateMachine: %w", err)
-	}
-	_, err = stateMachine.Prepare(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	paymentStateForSigning, err := authenticatedState.ToPaymentState()
-	if err != nil {
-		return "", err
-	}
-	pubkey, signature, err := signPaymentState(
-		ctx,
-		s.kmsSigningClient,
-		s.kmsSigningKeyID,
-		*paymentStateForSigning,
-	)
-	if err != nil {
-		return "", err
-	}
-	paymentStateForSigning.Signature = signature
-	paymentStateForSigning.PublicKey = pubkey
-
-	return s.datastore.InsertPaymentState(ctx, paymentStateForSigning)
-}
-
-// GetTransactionFromDocumentID - get the transaction data from the document ID in qldb.
-func (s *Service) GetTransactionFromDocumentID(
-	ctx context.Context,
-	documentID string,
-) (*paymentLib.AuthenticatedPaymentState, error) {
-	history, err := s.datastore.GetPaymentStateHistory(ctx, documentID)
-	if err != nil {
-		return nil, err
-	}
-	authenticatedState, err := history.GetAuthenticatedPaymentState(s.verifier, documentID)
-	if err != nil {
-		return nil, err
-	}
-
-	return authenticatedState, nil
-}
-
-// writeTransaction persists an object in a transaction after verifying that its change
-// represents a valid state transition.
-func writeTransaction(
-	ctx context.Context,
-	datastore compatDatastore,
-	sdkClient wrappedQldbSDKClient,
-	kmsSigningClient wrappedKMSClient,
-	kmsSigningKeyID string,
-	authenticatedState *paymentLib.AuthenticatedPaymentState,
-) (*paymentLib.AuthenticatedPaymentState, error) {
-	marshaledState, err := json.Marshal(authenticatedState)
-	if err != nil {
-		return nil, err
-	}
-
-	paymentState := paymentLib.PaymentState{
-		UnsafePaymentState: marshaledState,
-	}
-
-	// ignore public key
-	pubkey, signature, err := signPaymentState(
-		ctx,
-		kmsSigningClient,
-		kmsSigningKeyID,
-		paymentState,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign transaction: %w", err)
-	}
-	paymentState.Signature = []byte(signature)
-	paymentState.PublicKey = pubkey
-
-	return authenticatedState, datastore.UpdatePaymentState(ctx, authenticatedState.DocumentID, &paymentState)
 }

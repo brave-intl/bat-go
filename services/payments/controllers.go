@@ -94,11 +94,31 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
 		}
 
-		// returns an enriched list of transactions, which includes the document metadata
+		authenticatedState := req.ToAuthenticatedPaymentState()
 
-		documentID, err := service.insertPayment(ctx, req.PaymentDetails)
+		// Ensure that prepare succeeds ( i.e. we are not using a failing dry-run state machine )
+		stateMachine, err := service.StateMachineFromTransaction(authenticatedState)
 		if err != nil {
-			return handlers.WrapError(err, "failed to insert payment", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to create stateMachine", http.StatusBadRequest)
+		}
+		_, err = stateMachine.Prepare(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "could not put transaction into the prepared state", http.StatusBadRequest)
+		}
+
+		paymentState, err := authenticatedState.ToPaymentState()
+		if err != nil {
+			return handlers.WrapError(err, "could not create a payment state", http.StatusBadRequest)
+		}
+
+		err = paymentState.Sign(service.signer, service.publicKey)
+		if err != nil {
+			return handlers.WrapError(err, "failed to sign payment state", http.StatusInternalServerError)
+		}
+
+		documentID, err := service.datastore.InsertPaymentState(ctx, paymentState)
+		if err != nil {
+			return handlers.WrapError(err, "failed to insert payment state", http.StatusInternalServerError)
 		}
 		resp := paymentLib.PrepareResponse{
 			PaymentDetails: req.PaymentDetails,
@@ -155,10 +175,16 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error getting identity of transaction authorizer", http.StatusInternalServerError)
 		}
 
-		// get the current state of the transaction from qldb
-		authenticatedState, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
+		// get the history of the transaction from qldb
+		history, err := service.datastore.GetPaymentStateHistory(ctx, submitRequest.DocumentID)
 		if err != nil {
-			return handlers.WrapError(err, "failed to get transaction from document id", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to get history from document id", http.StatusInternalServerError)
+		}
+
+		// validate the history of the transaction
+		authenticatedState, err := history.GetAuthenticatedPaymentState(service.verifier, submitRequest.DocumentID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to validate payment state history", http.StatusInternalServerError)
 		}
 
 		// attempt authorization on the transaction

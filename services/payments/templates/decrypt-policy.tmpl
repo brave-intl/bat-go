@@ -2,6 +2,23 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+        "Sid": "AllowHostNodeAccess",
+        "Effect": "Allow",
+        "Principal": {
+        "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+        },
+        "Action": [
+            "kms:TagResource",
+            "kms:List*",
+            "kms:Get*",
+            "kms:Enable*",
+            "kms:Describe*",
+            "kms:CreateKey",
+            "kms:CreateAlias"
+        ],
+        "Resource": "*"
+    },
+    {
       "Sid": "AllowKeyAdminAccess",
       "Effect": "Allow",
       "Action": [
