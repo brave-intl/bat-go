@@ -30,7 +30,7 @@ func (e PaymentError) Unwrap() error {
 }
 
 // ProcessingErrorFromError - given an error turn it into a processing error
-func ProcessingErrorFromError(cause error, isTemporary bool) error {
+func ProcessingErrorFromError(cause error, isTemporary bool) *PaymentError {
 	return &PaymentError{
 		OriginalError: cause,
 		Temporary:     isTemporary,

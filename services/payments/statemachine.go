@@ -146,33 +146,45 @@ func (s *Service) DriveTransaction(
 		return fmt.Errorf("failed to create stateMachine: %w", err)
 	}
 
-	state, err := Drive(ctx, stateMachine)
-	if err != nil {
-		// Insufficient authorizations is an expected state. Treat it as such.
-		var insufficientAuthorizations *InsufficientAuthorizationsError
-		if !errors.As(err, &insufficientAuthorizations) {
-			return fmt.Errorf("failed to progress transaction: %w", err)
+	state, lastErr := Drive(ctx, stateMachine)
+	if state != nil {
+		var errTmp paymentLib.PaymentError
+		if errors.As(lastErr, &errTmp) {
+			state.LastError = &errTmp
+		} else {
+			// Assume any non-categorized error is temporary
+			state.LastError = paymentLib.ProcessingErrorFromError(lastErr, true)
 		}
-	}
 
-	marshaledState, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("failed to marshal state: %w", err)
-	}
+		marshaledState, err := json.Marshal(state)
+		if err != nil {
+			return fmt.Errorf("failed to marshal state: %w", err)
+		}
 
-	paymentState := paymentLib.PaymentState{
-		UnsafePaymentState: marshaledState,
-	}
+		paymentState := paymentLib.PaymentState{
+			UnsafePaymentState: marshaledState,
+		}
 
-	err = paymentState.Sign(s.signer, s.publicKey)
-	if err != nil {
-		return fmt.Errorf("failed to sign transaction: %w", err)
-	}
+		err = paymentState.Sign(s.signer, s.publicKey)
+		if err != nil {
+			return fmt.Errorf("failed to sign transaction: %w", err)
+		}
 
-	s.datastore.UpdatePaymentState(ctx, state.DocumentID, &paymentState)
+		s.datastore.UpdatePaymentState(ctx, state.DocumentID, &paymentState)
 
-	if err != nil {
-		return fmt.Errorf("failed to update transaction: %w", err)
+		if err != nil {
+			return fmt.Errorf("failed to update transaction: %w", err)
+		}
+
+		if lastErr != nil {
+			// Insufficient authorizations is an expected state. Treat it as such.
+			var errTmp *InsufficientAuthorizationsError
+			if !errors.As(err, &errTmp) {
+				return fmt.Errorf("failed to progress transaction: %w", err)
+			}
+		}
+		return nil
+	} else {
+		return errors.New("failed to progress transaction, no state returned")
 	}
-	return nil
 }

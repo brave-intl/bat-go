@@ -151,9 +151,8 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 
 		var (
-			logger         = logging.Logger(ctx, "SubmitHandler")
-			submitRequest  = &paymentLib.SubmitRequest{}
-			submitResponse = paymentLib.SubmitResponse{}
+			logger        = logging.Logger(ctx, "SubmitHandler")
+			submitRequest = &paymentLib.SubmitRequest{}
 		)
 
 		// read the transactions in the body
@@ -194,20 +193,20 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		}
 
 		err = service.DriveTransaction(ctx, authenticatedState)
-		if err != nil {
-			// TODO: if error is permanent, return 200
-			return handlers.WrapError(err, "failed to drive transaction", http.StatusInternalServerError)
-		}
+		status := authenticatedState.Status
 
-		submitResponse.Status = authenticatedState.Status
+		code := http.StatusOK
+		if status != paymentLib.Failed && err != nil {
+			code = http.StatusInternalServerError
+		}
 
 		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
 		// "permanent" errors indiciating a transaction state machine has reached an end state
 		return &handlers.AppError{
-			Cause:   nil,
-			Message: "submit succeeded",
-			Code:    http.StatusOK,
-			Data:    submitResponse,
+			Cause:   err,
+			Message: "submitted",
+			Code:    code,
+			Data:    paymentLib.SubmitResponse{Status: status},
 		}
 	}
 }
