@@ -150,10 +150,9 @@ func (s *Service) DriveTransaction(
 	if err != nil {
 		// Insufficient authorizations is an expected state. Treat it as such.
 		var insufficientAuthorizations *InsufficientAuthorizationsError
-		if errors.As(err, &insufficientAuthorizations) {
-			return nil
+		if !errors.As(err, &insufficientAuthorizations) {
+			return fmt.Errorf("failed to progress transaction: %w", err)
 		}
-		return fmt.Errorf("failed to progress transaction: %w", err)
 	}
 
 	marshaledState, err := json.Marshal(state)
