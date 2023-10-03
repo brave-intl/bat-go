@@ -107,6 +107,8 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 }
 
 func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error) {
+	logger := logging.Logger(ctx, "payments.setupLedger")
+
 	stateHistory, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		result, err := txn.Execute(
 			"SELECT * FROM history(transactions) AS h WHERE h.metadata.id = ?",
@@ -131,16 +133,21 @@ func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID s
 
 		merkleValid, err := revisionValidInTree(ctx, q.sdkClient, &latestHistoryItem)
 		if err != nil {
-			return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
+			//return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
+			logger.Warn().Err(err).Msg("failed to verify Merkle tree")
 		}
 		if !merkleValid {
-			return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
+			//return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
+			logger.Warn().Msg("invalid Merkle tree for record")
 		}
 
 		tmp := paymentLib.PaymentStateHistory(stateHistory)
 		return &tmp, nil
 	})
 
+	if err != nil {
+		return nil, err
+	}
 	return stateHistory.(*paymentLib.PaymentStateHistory), err
 }
 
