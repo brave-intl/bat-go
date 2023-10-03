@@ -2,8 +2,6 @@ package payments
 
 import (
 	"crypto"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"net/http"
 
@@ -13,37 +11,36 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
 type getConfResponse struct {
-	AttestationDocument string `json:"attestation"`
-	PublicKey           string
+	EncryptionKeyARN string `json:"encryptionKeyArn"`
 }
 
 // GetConfigurationHandler gets important payments configuration information, attested by nitro.
 func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		nitroKey := httpsignature.NitroSigner{}
+
+		var sp httpsignature.SignatureParams
+		sp.Algorithm = httpsignature.AWSNITRO
+		sp.KeyID = "primary"
+		sp.Headers = []string{"digest"}
+
+		ps := httpsignature.ParameterizedSignator{
+			SignatureParams: sp,
+			Signator:        nitroKey,
+			Opts:            crypto.Hash(0),
+		}
+		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
+
 		ctx := r.Context()
 		logger := logging.Logger(ctx, "GetConfigurationHandler")
-		nonce := make([]byte, 64)
-		_, err := rand.Read(nonce)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create random nonce")
-			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
-		}
-
-		attestationDocument, err := nitro.Attest(ctx, nonce, []byte{}, []byte{})
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to get attestation from nitro")
-			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
-		}
 
 		resp := &getConfResponse{
-			// return the attestation document
-			AttestationDocument: base64.StdEncoding.EncodeToString(attestationDocument),
+			EncryptionKeyARN: service.kmsDecryptKeyArn,
 		}
 
 		logger.Debug().Msg("handling configuration request")

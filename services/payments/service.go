@@ -7,9 +7,11 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
+	"time"
 
 	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/hashicorp/vault/shamir"
@@ -47,6 +50,8 @@ type Service struct {
 	baseCtx          context.Context
 	secretMgr        appsrv.SecretManager
 	keyShares        [][]byte
+	configCiphertext []byte
+	config           map[string]string
 	kmsDecryptKeyArn string
 	sdkClient        wrappedQldbSDKClient
 
@@ -121,6 +126,121 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 
 type serviceNamespaceContextKey struct{}
 
+// fetchConfiguration will take an s3 bucket/object and fetch the configuration and store the
+// ciphertext on the service for decryption later
+func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string) error {
+	// get proxy address for outbound
+	egressAddr, _ := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
+
+	// download the configuration from s3 bucket/object
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok {
+		region = "us-west-2"
+	}
+
+	awsCfg, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
+	if err != nil {
+		return errors.New("no egress addr for payments service")
+	}
+
+	client := s3.NewFromConfig(awsCfg)
+
+	// use kms encrypt key arn on service to decrypt
+	input := &s3.GetObjectInput{
+		Bucket:               aws.String(bucket),
+		Key:                  aws.String(object),
+		SSECustomerAlgorithm: aws.String("AES256"),           // kms algorithm
+		SSECustomerKey:       aws.String(s.kmsDecryptKeyArn), // kms key to use for decrypt
+	}
+
+	secretsResponse, err := client.GetObject(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to get object: %w", err)
+	}
+
+	data, err := ioutil.ReadAll(secretsResponse.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read object: %w", err)
+	}
+
+	s.configCiphertext = data
+	// store the ciphertext on the service as []byte for later
+	return nil
+}
+
+// enoughShares informs the caller if there are enough operator shares present to attempt a decrypt
+func (s *Service) enoughShares(ctx context.Context) bool {
+	if len(s.keyShares) > 1 { // TODO: configurable in future, right now need two shares
+		return true
+	}
+	return false
+}
+
+// configureService takes the ciphertext configuration from fetchConfiguration, then decrypts it with the keyshares
+// from fetchOperatorShares then stores the values in the configuration map
+func (s *Service) configureService(ctx context.Context) error {
+	if len(s.configCiphertext) < 1 {
+		return fmt.Errorf("failed to get service configuration ciphertext")
+	}
+	config, err := s.DecryptBootstrap(ctx, s.configCiphertext)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt bootstrap configuration: %w", err)
+	}
+	// store conf on service
+	s.config = config
+	return nil
+}
+
+// fetchOperatorShares will take an s3 bucket and fetch all of the operator shares and store them
+func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error {
+	s.keyShares = [][]byte{} // clear out old keyshares
+
+	// get proxy address for outbound
+	egressAddr, _ := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
+
+	// download the configuration from s3 bucket/object
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok {
+		region = "us-west-2"
+	}
+
+	awsCfg, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
+	if err != nil {
+		return errors.New("no egress addr for payments service")
+	}
+
+	client := s3.NewFromConfig(awsCfg)
+
+	shareObjects, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String(bucket),
+	})
+
+	// for each share object, get it and append to keyShares
+	for _, shareObject := range shareObjects.Contents {
+		// download all objects from operator shares s3 bucket
+		// use kms encrypt key arn on service to decrypt
+		input := &s3.GetObjectInput{
+			Bucket:               aws.String(bucket),
+			Key:                  shareObject.Key,                // the share object key for this iteration
+			SSECustomerAlgorithm: aws.String("AES256"),           // kms algorithm
+			SSECustomerKey:       aws.String(s.kmsDecryptKeyArn), // kms key to use for decrypt
+		}
+		// use kms encrypt key arn on service to decrypt each file
+		shareResponse, err := client.GetObject(ctx, input)
+		if err != nil {
+			return fmt.Errorf("failed to get object: %w", err)
+		}
+		data, err := ioutil.ReadAll(shareResponse.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read object: %w", err)
+		}
+		// store the decrypted keyShares on the service as [][]byte for later
+		s.keyShares = append(s.keyShares, data)
+	}
+
+	return nil
+}
+
 // configureKMSEncryptionKey creates the enclave kms key which is only decrypt capable with enclave
 // attestation.
 func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
@@ -163,7 +283,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -234,6 +354,46 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("could not create kms secret encryption key")
 	}
 
+	// get the config object key and bucket name from environment
+	configBucketName, ok := ctx.Value(appctx.EnclaveConfigBucketNameCTXKey).(string)
+	if !ok {
+		return nil, nil, errors.New("no configuration bucket name for payments service")
+	}
+
+	// download the configuration file, kms decrypt the file
+	configObjectName, ok := ctx.Value(appctx.EnclaveConfigObjectNameCTXKey).(string)
+	if !ok {
+		return nil, nil, errors.New("no configuration object name for payments service")
+	}
+
+	// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
+	if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch configuration: %w", err)
+	}
+
+	// operator shares files
+	operatorSharesBucketName, ok := ctx.Value(appctx.EnclaveOperatorSharesBucketNameCTXKey).(string)
+	if !ok {
+		return nil, nil, errors.New("no operator shares bucket name for payments service")
+	}
+
+	for {
+		// do we have enough shares to attempt to reconstitute the key?
+		if err := service.fetchOperatorShares(ctx, operatorSharesBucketName); err != nil {
+			return nil, nil, fmt.Errorf("failed to fetch operator shares: %w", err)
+		}
+		if ok := service.enoughShares(ctx); ok {
+			// yes - attempt to decrypt the file
+			if err := service.configureService(ctx); err != nil {
+				// fail to decrypt?  panic loudly
+				return nil, nil, fmt.Errorf("failed to configure payments service: %w", err)
+			}
+			break
+		}
+		// no - poll for operator shares until we can attempt to decrypt the file
+		<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
+	}
+
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")
 		return nil, nil, errors.New("could not configure datastore")
@@ -246,7 +406,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 func (s *Service) DecryptBootstrap(
 	ctx context.Context,
 	ciphertext []byte,
-) (map[appctx.CTXKey]interface{}, error) {
+) (map[string]string, error) {
 	// combine the service configured key shares
 	key, err := shamir.Combine(s.keyShares)
 	if err != nil {
@@ -267,8 +427,8 @@ func (s *Service) DecryptBootstrap(
 		return nil, fmt.Errorf("failed to decrypt secrets: %w", err)
 	}
 
-	// decrypted message is a json blob, convert to our output
-	var output = map[appctx.CTXKey]interface{}{}
+	// then unmarshal the json configuration file and load the secrets in memory
+	var output = map[string]string{}
 	err = json.Unmarshal([]byte(v), &output)
 	if err != nil {
 		return nil, fmt.Errorf("failed to json decode secrets: %w", err)

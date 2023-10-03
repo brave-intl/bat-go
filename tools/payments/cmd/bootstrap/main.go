@@ -13,8 +13,8 @@ The flags are:
 
 	-s
 		The operator's Shamir key share from the create command
-	-k
-		The KMS Key ARN to encrypt the key share with
+	-u
+		The enclave services' base uri to get the key id from
 	-b
 		The S3 URI to upload the ciphertext to
 */
@@ -28,7 +28,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -46,9 +48,9 @@ func main() {
 	s := flag.String(
 		"s", "",
 		"the operators shamir key share")
-	k := flag.String(
-		"k", "",
-		"the kms key arn for the encryption key")
+	enclaveBaseURI := flag.String(
+		"u", "",
+		"the enclave base uri in order to get the key arn for encrypting")
 	b := flag.String(
 		"b", "", "the s3 bucket to upload ciphertext to")
 	verbose := flag.Bool(
@@ -63,6 +65,23 @@ func main() {
 		log.Printf("KMS Key ARN: %s\n", *k)
 		log.Printf("S3 Bucket URI: %s\n", *b)
 	}
+
+	// get the info endpoint to key kms arn
+	resp, err := http.Get(enclaveBaseURI + "/v1/info")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	resp.Body.Close()
+
+	data := make(map[string]string)
+	err := json.Unmarshal(body, data)
+
+	encryptKeyARN = data["encryptionKeyArn"]
 
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
@@ -116,7 +135,7 @@ func main() {
 
 	// perform encryption of the operator's shamir share
 	out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{
-		KeyId:     aws.String(*k),
+		KeyId:     aws.String(encryptKeyARN),
 		Plaintext: []byte(*s),
 	})
 	if err != nil {
