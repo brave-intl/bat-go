@@ -43,6 +43,13 @@ func init() {
 	// qldb-ledger-arn - sets the AWS ARN for the QLDB ledger
 	NitroServeCmd.PersistentFlags().String("qldb-ledger-arn", "", "the AWS ARN for the QLDB ledger")
 
+	// enclave-config-object-name is the config object name in s3 (from configure command)
+	NitroServeCmd.PersistentFlags().String("enclave-config-object-name", "", "the configuration object name in s3")
+	// enclave-config-bucket-name is the config bucket name in s3 (from configure command)
+	NitroServeCmd.PersistentFlags().String("enclave-config-bucket-name", "", "the configuration bucket name in s3")
+	// enclave-operator-shares-bucket-name is the operator-shares bucket name in s3 (from bootstrap command)
+	NitroServeCmd.PersistentFlags().String("enclave-operator-shares-bucket-name", "", "the operator shares bucket name in s3")
+
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
 	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
 	rootcmd.Must(viper.BindEnv("upstream-url", "UPSTREAM_URL"))
@@ -61,6 +68,13 @@ func init() {
 	rootcmd.Must(viper.BindEnv("qldb-ledger-name", "QLDB_LEDGER_NAME"))
 	rootcmd.Must(viper.BindPFlag("qldb-ledger-arn", NitroServeCmd.PersistentFlags().Lookup("qldb-ledger-arn")))
 	rootcmd.Must(viper.BindEnv("qldb-ledger-arn", "QLDB_LEDGER_ARN"))
+
+	rootcmd.Must(viper.BindPFlag("enclave-config-object-name", NitroServeCmd.PersistentFlags().Lookup("enclave-config-object-name")))
+	rootcmd.Must(viper.BindEnv("enclave-config-object-name", "ENCLAVE_CONFIG_OBJECT_NAME"))
+	rootcmd.Must(viper.BindPFlag("enclave-config-bucket-name", NitroServeCmd.PersistentFlags().Lookup("enclave-config-bucket-name")))
+	rootcmd.Must(viper.BindEnv("enclave-config-bucket-name", "ENCLAVE_CONFIG_BUCKET_NAME"))
+	rootcmd.Must(viper.BindPFlag("enclave-operator-shares-bucket-name", NitroServeCmd.PersistentFlags().Lookup("enclave-operator-shares-bucket-name")))
+	rootcmd.Must(viper.BindEnv("enclave-operator-shares-bucket-name", "ENCLAVE_OPERATOR_SHARES_BUCKET_NAME"))
 
 	// enclave decrypt key template used to create decryption key in enclave
 	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
@@ -105,6 +119,10 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerNameCTXKey, viper.GetString("qldb-ledger-name"))
 	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerARNCTXKey, viper.GetString("qldb-ledger-arn"))
 	ctx = context.WithValue(ctx, appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey, viper.GetString("enclave-decrypt-key-template-secret"))
+
+	ctx = context.WithValue(ctx, appctx.EnclaveConfigObjectNameCTXKey, viper.GetString("enclave-config-object-name"))
+	ctx = context.WithValue(ctx, appctx.EnclaveConfigBucketNameCTXKey, viper.GetString("enclave-config-bucket-name"))
+	ctx = context.WithValue(ctx, appctx.EnclaveOperatorSharesBucketNameCTXKey, viper.GetString("enclave-operator-shares-bucket-name"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
 	logger.Info().Msg("starting payments service")

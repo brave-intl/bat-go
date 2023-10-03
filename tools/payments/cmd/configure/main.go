@@ -137,19 +137,20 @@ func main() {
 		s3Client := s3.NewFromConfig(cfg)
 		h := md5.New()
 		h.Write(out.CiphertextBlob)
+		configObjectName := fmt.Sprintf("configuration_%s.json", time.Now().Format(time.RFC3339))),
 
 		// put the enclave configuration up in s3
 		_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
 			Bucket: aws.String(*b),
-			Key: aws.String(
-				fmt.Sprintf("configuration_%s.json", time.Now().Format(time.RFC3339))),
+			Key: aws.String(configObjectName),
 			Body:                      bytes.NewBuffer(out.CiphertextBlob),
 			ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 			ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 		})
 		if err != nil {
-			log.Fatalf("failed to encrypt operator key share: %v", err)
+			log.Fatalf("failed to encrypt configuration share: %v", err)
 		}
+		log.Printf("payments enclave to use configuration: %s\n", configObjectName)
 	}
 
 	if *verbose {

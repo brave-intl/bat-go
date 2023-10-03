@@ -249,6 +249,12 @@ const (
 	EgressProxyAddrCTXKey CTXKey = "egress_proxy_addr"
 	// EnclaveDecryptKeyTemplateSecretIDCTXKey - the context key for getting the key template for key creation
 	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
+	// EnclaveConfigObjectNameCTXKey specifies the config object name for nitro enclave payments service
+	EnclaveConfigObjectNameCTXKey CTXKey = "enclave_config_object_name"
+	// EnclaveConfigBucketNameCTXKey specifies the config bucket name for nitro enclave payments service
+	EnclaveConfigBucketNameCTXKey CTXKey = "enclave_config_bucket_name"
+	// EnclaveOperatorSharesBucketNameCTXKey specifies the operator shares bucket name for nitro enclave payments service
+	EnclaveOperatorSharesBucketNameCTXKey CTXKey = "enclave_operator_shares_bucket_name"
 )
 
 var (
