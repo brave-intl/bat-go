@@ -4,6 +4,8 @@ package payments
 type PaymentStatus string
 
 const (
+	// empty is an internal only status which is never recorded, it exists purely to transition to prepared.
+	empty PaymentStatus = ""
 	// Prepared represents a record that has been prepared for authorization.
 	Prepared PaymentStatus = "prepared"
 	// Authorized represents a record that has been authorized.
@@ -18,6 +20,7 @@ const (
 
 // Transitions represents the valid forward-transitions for each given state.
 var Transitions = map[PaymentStatus][]PaymentStatus{
+	empty:      {Prepared},
 	Prepared:   {Authorized, Failed},
 	Authorized: {Pending, Failed},
 	Pending:    {Paid, Failed},
