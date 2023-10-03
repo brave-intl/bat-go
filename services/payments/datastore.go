@@ -309,5 +309,5 @@ func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 	// Overrides the retry policy set by the driver instance
 	driver.SetRetryPolicy(retryPolicy2)
 
-	return &QLDBDatastore{QLDBDriver: driver}, nil
+	return &QLDBDatastore{QLDBDriver: driver, sdkClient: qldb.NewFromConfig(awsCfg)}, nil
 }
