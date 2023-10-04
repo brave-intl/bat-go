@@ -305,6 +305,10 @@ func TestBitflyerStateMachine500FailureToPaidTransition(t *testing.T) {
 // TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
 // Failure with 404 error when attempting to transfer from Pending to Paid
 func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
+	err := os.Setenv("BITFLYER_ENVIRONMENT", "test")
+	must.Equal(t, nil, err)
+	err = os.Setenv("BITFLYER_SERVER", mockBitflyerHost)
+	must.Equal(t, nil, err)
 	httpmock.Activate()
 	defer httpmock.DeactivateAndReset()
 
@@ -318,6 +322,16 @@ func TestBitflyerStateMachine404FailureToPaidTransition(t *testing.T) {
 			mockBitflyerHost,
 		),
 		httpmock.NewStringResponder(404, string(jsonResponse)),
+	)
+	jsonTokenRefreshResponse, err := json.Marshal(bitflyerTransactionTokenRefreshResponse)
+	must.Equal(t, nil, err)
+	httpmock.RegisterResponder(
+		"POST",
+		fmt.Sprintf(
+			"%s/api/link/v1/token",
+			mockBitflyerHost,
+		),
+		httpmock.NewStringResponder(200, string(jsonTokenRefreshResponse)),
 	)
 
 	ctx := context.Background()
