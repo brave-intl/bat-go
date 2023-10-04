@@ -148,10 +148,8 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 
 	// use kms encrypt key arn on service to decrypt
 	input := &s3.GetObjectInput{
-		Bucket:               aws.String(bucket),
-		Key:                  aws.String(object),
-		SSECustomerAlgorithm: aws.String("AES256"),           // kms algorithm
-		SSECustomerKey:       aws.String(s.kmsDecryptKeyArn), // kms key to use for decrypt
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
 	}
 
 	secretsResponse, err := client.GetObject(ctx, input)
@@ -164,8 +162,19 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		return fmt.Errorf("failed to read object: %w", err)
 	}
 
-	s.configCiphertext = data
+	// decrypt with kms key
+	kmsClient := kms.NewFromConfig(awsCfg)
+
+	decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
+		CiphertextBlob: data,
+		KeyId:          aws.String(s.kmsDecryptKeyArn),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to decrypt object with kms: %w", err)
+	}
+
 	// store the ciphertext on the service as []byte for later
+	s.configCiphertext = decryptOutput.Plaintext
 	return nil
 }
 
@@ -222,10 +231,8 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		// download all objects from operator shares s3 bucket
 		// use kms encrypt key arn on service to decrypt
 		input := &s3.GetObjectInput{
-			Bucket:               aws.String(bucket),
-			Key:                  shareObject.Key,                // the share object key for this iteration
-			SSECustomerAlgorithm: aws.String("AES256"),           // kms algorithm
-			SSECustomerKey:       aws.String(s.kmsDecryptKeyArn), // kms key to use for decrypt
+			Bucket: aws.String(bucket),
+			Key:    shareObject.Key, // the share object key for this iteration
 		}
 		// use kms encrypt key arn on service to decrypt each file
 		shareResponse, err := client.GetObject(ctx, input)
@@ -236,8 +243,18 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		if err != nil {
 			return fmt.Errorf("failed to read object: %w", err)
 		}
+		// decrypt with kms key
+		kmsClient := kms.NewFromConfig(awsCfg)
+
+		decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
+			CiphertextBlob: data,
+			KeyId:          aws.String(s.kmsDecryptKeyArn),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to decrypt object with kms: %w", err)
+		}
 		// store the decrypted keyShares on the service as [][]byte for later
-		s.keyShares = append(s.keyShares, data)
+		s.keyShares = append(s.keyShares, decryptOutput.Plaintext)
 	}
 
 	return nil

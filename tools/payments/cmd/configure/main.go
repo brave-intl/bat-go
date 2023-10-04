@@ -28,12 +28,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"filippo.io/age"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -54,6 +52,9 @@ func main() {
 	s3Bucket := flag.String(
 		"b", "",
 		"the s3 bucket to upload to")
+	s3Object := flag.String(
+		"o", "",
+		"the s3 object name for output")
 	verbose := flag.Bool(
 		"v", false,
 		"view verbose logging")
@@ -141,12 +142,11 @@ func main() {
 		s3Client := s3.NewFromConfig(cfg)
 		h := md5.New()
 		h.Write(out.CiphertextBlob)
-		configObjectName := fmt.Sprintf("configuration_%s.json.enc", time.Now().Format(time.RFC3339))
 
 		// put the enclave configuration up in s3
 		_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:                    aws.String(*s3Bucket),
-			Key:                       aws.String(configObjectName),
+			Key:                       aws.String(*s3Object),
 			Body:                      bytes.NewBuffer(out.CiphertextBlob),
 			ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 			ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
@@ -154,7 +154,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to encrypt configuration share: %v", err)
 		}
-		log.Printf("payments enclave to use configuration: %s\n", configObjectName)
+		log.Printf("payments enclave to use configuration: %s/%s\n", *s3Bucket, *s3Object)
 	}
 
 	if *verbose {
