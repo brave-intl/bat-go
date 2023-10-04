@@ -23,6 +23,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -38,6 +39,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go/aws"
 )
 
@@ -67,7 +69,7 @@ func main() {
 	}
 
 	// get the info endpoint to key kms arn
-	resp, err := http.Get(enclaveBaseURI + "/v1/info")
+	resp, err := http.Get(*enclaveBaseURI + "/v1/info")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -79,9 +81,10 @@ func main() {
 	resp.Body.Close()
 
 	data := make(map[string]string)
-	err := json.Unmarshal(body, data)
+	err = json.Unmarshal(body, data)
+	ctx := context.Background()
 
-	encryptKeyARN = data["encryptionKeyArn"]
+	encryptKeyArn := data["encryptionKeyArn"]
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -137,12 +140,12 @@ func main() {
 		s3Client := s3.NewFromConfig(cfg)
 		h := md5.New()
 		h.Write(out.CiphertextBlob)
-		configObjectName := fmt.Sprintf("configuration_%s.json", time.Now().Format(time.RFC3339))),
+		configObjectName := fmt.Sprintf("configuration_%s.json", time.Now().Format(time.RFC3339))
 
 		// put the enclave configuration up in s3
 		_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket: aws.String(*b),
-			Key: aws.String(configObjectName),
+			Bucket:                    aws.String(*s3Bucket),
+			Key:                       aws.String(configObjectName),
 			Body:                      bytes.NewBuffer(out.CiphertextBlob),
 			ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 			ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
