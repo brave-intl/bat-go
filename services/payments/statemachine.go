@@ -151,9 +151,11 @@ func (s *Service) DriveTransaction(
 		var errTmp paymentLib.PaymentError
 		if errors.As(lastErr, &errTmp) {
 			state.LastError = &errTmp
-		} else {
+		} else if lastErr != nil {
 			// Assume any non-categorized error is temporary
 			state.LastError = paymentLib.ProcessingErrorFromError(lastErr, true)
+		} else {
+			state.LastError = nil
 		}
 
 		marshaledState, err := json.Marshal(state)
