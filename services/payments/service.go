@@ -366,33 +366,46 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("no configuration object name for payments service")
 	}
 
-	// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
-	if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
-		return nil, nil, fmt.Errorf("failed to fetch configuration: %w", err)
-	}
-
 	// operator shares files
 	operatorSharesBucketName, ok := ctx.Value(appctx.EnclaveOperatorSharesBucketNameCTXKey).(string)
 	if !ok {
 		return nil, nil, errors.New("no operator shares bucket name for payments service")
 	}
 
-	for {
-		// do we have enough shares to attempt to reconstitute the key?
-		if err := service.fetchOperatorShares(ctx, operatorSharesBucketName); err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch operator shares: %w", err)
-		}
-		if ok := service.enoughShares(ctx); ok {
-			// yes - attempt to decrypt the file
-			if err := service.configureService(ctx); err != nil {
-				// fail to decrypt?  panic loudly
-				return nil, nil, fmt.Errorf("failed to configure payments service: %w", err)
+	// kick off the configuration of the service, get secrets and decrypt
+	// needs to be run in another goroutine as we need to poll for configuration
+	go func() {
+		for {
+			// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
+			// it might not exist yet at the time of service start, but we still need to start the service
+			// so we can get the kms key in the info endpoint
+			err := service.fetchConfiguration(ctx, configBucketName, configObjectName)
+			if err != nil {
+				logger.Error().Err(err).Msg("fetchConfiguration failed, will retry shortly")
+				<-time.After(30 * time.Second)
+				continue
 			}
 			break
 		}
-		// no - poll for operator shares until we can attempt to decrypt the file
-		<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
-	}
+
+		for {
+			// do we have enough shares to attempt to reconstitute the key?
+			if err := service.fetchOperatorShares(ctx, operatorSharesBucketName); err != nil {
+				logger.Error().Err(err).Msg("fetchOperatorShares failed, will retry shortly")
+			}
+
+			if ok := service.enoughShares(ctx); ok {
+				// yes - attempt to decrypt the file
+				if err := service.configureService(ctx); err != nil {
+					// fail to decrypt?  panic loudly
+					logger.Fatal().Err(err).Msg("failed to configure payments service")
+				}
+				break
+			}
+			// no - poll for operator shares until we can attempt to decrypt the file
+			<-time.After(30 * time.Second) // wait a minute before attempting again to get operator shares
+		}
+	}()
 
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")
