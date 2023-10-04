@@ -28,7 +28,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -67,19 +66,17 @@ func main() {
 	}
 
 	// get the info endpoint to key kms arn
-	resp, err := http.Get(*enclaveBaseURI + "/v1/info")
+	resp, err := http.Get(*enclaveBaseURI + "/v1/payments/info")
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	data := make(map[string]string)
+	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	resp.Body.Close()
-
-	data := make(map[string]string)
-	err = json.Unmarshal(body, data)
 
 	encryptKeyArn := data["encryptionKeyArn"]
 
@@ -117,7 +114,7 @@ func main() {
 		}
 
 		for _, statement := range p.Statement {
-			if statement.Effect == "Allow" && strings.Contains(strings.Join(statement.Action, "|"), "Decrypt") {
+			if statement.Effect == "Allow" && strings.Contains(fmt.Sprintf("%+v", statement.Action), "Decrypt") {
 				conditions, err := json.MarshalIndent(statement.Condition, "", "\t")
 				if err != nil {
 					log.Fatalf("failed to parse key policy conditions: %v", err)

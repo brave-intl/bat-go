@@ -369,9 +369,15 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 				return nil, nil, errors.New("no configuration object name for payments service")
 			}
 
-			// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
-			if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
-				return nil, nil, fmt.Errorf("failed to fetch configuration: %w", err)
+			for {
+				// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
+				if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
+					// log the error, we will retry again
+					logger.Error().Err(err).Msg("failed to fetch configuration, will retry shortly")
+					<-time.After(30 * time.Second)
+					continue
+				}
+				break
 			}
 
 			// operator shares files

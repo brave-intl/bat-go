@@ -65,26 +65,27 @@ func main() {
 	if *verbose {
 		// print out the configuration
 		log.Printf("Public Key: %s\n", *publicKey)
+		log.Printf("EnclaveBaseURI: %s\n", *enclaveBaseURI)
 		log.Printf("Configuration Files: %s\n", files)
 	}
 
 	// get the info endpoint to key kms arn
-	resp, err := http.Get(*enclaveBaseURI + "/v1/info")
+	resp, err := http.Get(*enclaveBaseURI + "/v1/payments/info")
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	resp.Body.Close()
 
 	data := make(map[string]string)
-	err = json.Unmarshal(body, data)
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	resp.Body.Close()
 	ctx := context.Background()
 
 	encryptKeyArn := data["encryptionKeyArn"]
+
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -140,7 +141,7 @@ func main() {
 		s3Client := s3.NewFromConfig(cfg)
 		h := md5.New()
 		h.Write(out.CiphertextBlob)
-		configObjectName := fmt.Sprintf("configuration_%s.json", time.Now().Format(time.RFC3339))
+		configObjectName := fmt.Sprintf("configuration_%s.json.enc", time.Now().Format(time.RFC3339))
 
 		// put the enclave configuration up in s3
 		_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
