@@ -402,6 +402,11 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 				// no - poll for operator shares until we can attempt to decrypt the file
 				<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
 			}
+			// at this point we should have our config loaded, lets print out the keys
+			for k := range service.config {
+				logger.Info().Msgf("%s is loaded in configuration!", k)
+			}
+
 			return nil, nil, nil
 		}()
 		if err != nil {
