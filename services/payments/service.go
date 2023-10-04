@@ -212,6 +212,7 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 	client := s3.NewFromConfig(awsCfg)
 
 	shareObjects, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Prefix: aws.String("operator-share"),
 		Bucket: aws.String(bucket),
 	})
 
