@@ -28,6 +28,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -86,6 +87,8 @@ func main() {
 	ctx := context.Background()
 
 	encryptKeyArn := data["encryptionKeyArn"]
+
+	fmt.Println("keyid: ", encryptKeyArn)
 
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
@@ -152,7 +155,7 @@ func main() {
 			ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 		})
 		if err != nil {
-			log.Fatalf("failed to encrypt configuration share: %v", err)
+			log.Fatalf("failed to encrypt configuration: %v", err)
 		}
 		log.Printf("payments enclave to use configuration: %s/%s\n", *s3Bucket, *s3Object)
 	}
