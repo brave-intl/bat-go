@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -158,7 +159,7 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		return fmt.Errorf("failed to get object: %w", err)
 	}
 
-	data, err := ioutil.ReadAll(secretsResponse.Body)
+	data, err := io.ReadAll(secretsResponse.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read object: %w", err)
 	}
@@ -370,6 +371,8 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 			}
 
 			for {
+				logger.Info().Msgf("enclave-config-bucket-name: %s", configBucketName)
+				logger.Info().Msgf("enclave-config-object-name: %s", configObjectName)
 				// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
 				if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
 					// log the error, we will retry again
@@ -385,6 +388,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 			if !ok {
 				return nil, nil, errors.New("no operator shares bucket name for payments service")
 			}
+			logger.Info().Msgf("enclave-operator-shares-bucket-name: %s", operatorSharesBucketName)
 
 			for {
 				// do we have enough shares to attempt to reconstitute the key?
