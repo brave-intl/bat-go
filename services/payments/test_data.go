@@ -210,3 +210,41 @@ var bitflyerFetchPriceResponse = map[string]interface{}{
 	"rate":          4,
 	"price_token":   "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
 }
+
+var zebpayTransactionSubmitSuccessResponse = map[string]interface{}{
+	"data": "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED",
+}
+
+var zebpayTransactionSubmitFailureResponse = map[string]interface{}{
+	"data": "oops",
+}
+
+var zebpayTransactionCheckStatusSuccessResponse = map[string]interface{}{
+	"transaction_id": "725c920b-d158-56fb-b5cf-5910d9ca4a16",
+	"code":           2,
+	"status":         "Success",
+	"details": map[string]interface{}{
+		"amount":      13.736461457342187,
+		"destination": 512,
+	},
+}
+
+var zebpayTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
+	"transaction_id": "725c920b-d158-56fb-b5cf-5910d9ca4a16",
+	"code":           1,
+	"status":         "Pending",
+	"details": map[string]interface{}{
+		"amount":      13.736461457342187,
+		"destination": 512,
+	},
+}
+
+var zebpayTransactionCheckStatusFailureResponse = map[string]interface{}{
+	"transaction_id": "725c920b-d158-56fb-b5cf-5910d9ca4a16",
+	"code":           3,
+	"status":         "Failed",
+	"details": map[string]interface{}{
+		"amount":      13.736461457342187,
+		"destination": 512,
+	},
+}
