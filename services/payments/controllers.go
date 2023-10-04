@@ -1,16 +1,22 @@
 package payments
 
 import (
+	"context"
 	"crypto"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/go-chi/chi"
+	chiware "github.com/go-chi/chi/middleware"
+	"github.com/rs/zerolog/hlog"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 )
@@ -19,23 +25,66 @@ type getConfResponse struct {
 	EncryptionKeyARN string `json:"encryptionKeyArn"`
 }
 
+func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
+	// base service logger
+	logger := logging.Logger(ctx, "payments")
+	// base router
+	r := chi.NewRouter()
+
+	nitroKey := httpsignature.NitroSigner{}
+
+	var sp httpsignature.SignatureParams
+	sp.Algorithm = httpsignature.AWSNITRO
+	sp.KeyID = "primary"
+	sp.Headers = []string{"digest"}
+
+	ps := httpsignature.ParameterizedSignator{
+		SignatureParams: sp,
+		Signator:        nitroKey,
+		Opts:            crypto.Hash(0),
+	}
+
+	// middlewares
+	r.Use(chiware.RequestID)
+	r.Use(middleware.RequestIDTransfer)
+	r.Use(hlog.NewHandler(*logger))
+	r.Use(hlog.UserAgentHandler("user_agent"))
+	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
+	r.Use(middleware.RequestLogger(logger))
+	r.Use(middleware.SignResponse(ps))
+	r.Use(chiware.Timeout(15 * time.Second))
+	logger.Info().Msg("configuration middleware setup")
+	// routes
+	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
+	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
+	// setup payments routes
+	// prepare inserts transactions into qldb, returning a document which needs to be submitted by
+	// an authorizer
+	r.Post(
+		"/v1/payments/prepare",
+		middleware.InstrumentHandler(
+			"PrepareHandler",
+			PrepareHandler(s),
+		).ServeHTTP,
+	)
+	logger.Info().Msg("prepare endpoint setup")
+	// submit will have an http signature from a known list of public keys
+	r.Post(
+		"/v1/payments/submit",
+		middleware.InstrumentHandler(
+			"SubmitHandler",
+			s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
+		).ServeHTTP)
+	logger.Info().Msg("submit endpoint setup")
+
+	r.Get("/v1/info", handlers.AppHandler(GetConfigurationHandler(s)).ServeHTTP)
+	logger.Info().Msg("get info endpoint setup")
+	return ctx, r
+}
+
 // GetConfigurationHandler gets important payments configuration information, attested by nitro.
 func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		nitroKey := httpsignature.NitroSigner{}
-
-		var sp httpsignature.SignatureParams
-		sp.Algorithm = httpsignature.AWSNITRO
-		sp.KeyID = "primary"
-		sp.Headers = []string{"digest"}
-
-		ps := httpsignature.ParameterizedSignator{
-			SignatureParams: sp,
-			Signator:        nitroKey,
-			Opts:            crypto.Hash(0),
-		}
-		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
-
 		ctx := r.Context()
 		logger := logging.Logger(ctx, "GetConfigurationHandler")
 
@@ -54,20 +103,6 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 // will fail..
 func PrepareHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		nitroKey := httpsignature.NitroSigner{}
-
-		var sp httpsignature.SignatureParams
-		sp.Algorithm = httpsignature.AWSNITRO
-		sp.KeyID = "primary"
-		sp.Headers = []string{"digest"}
-
-		ps := httpsignature.ParameterizedSignator{
-			SignatureParams: sp,
-			Signator:        nitroKey,
-			Opts:            crypto.Hash(0),
-		}
-		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
-
 		// get context from request
 		ctx := r.Context()
 
@@ -131,19 +166,6 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 // SubmitHandler performs submission of transactions to custodian.
 func SubmitHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		nitroKey := httpsignature.NitroSigner{}
-
-		var sp httpsignature.SignatureParams
-		sp.Algorithm = httpsignature.AWSNITRO
-		sp.KeyID = "primary"
-		sp.Headers = []string{"digest"}
-
-		ps := httpsignature.ParameterizedSignator{
-			SignatureParams: sp,
-			Signator:        nitroKey,
-			Opts:            crypto.Hash(0),
-		}
-		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
 		// get context from request
 		ctx := r.Context()
 

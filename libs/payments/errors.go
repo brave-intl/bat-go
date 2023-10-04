@@ -6,13 +6,14 @@ import (
 
 // PaymentError is an error used to communicate whether an error is temporary.
 type PaymentError struct {
-	OriginalError error
-	Temporary     bool
+	originalError error  `json:"-"`
+	Message       string `json:"message"`
+	Temporary     bool   `json:"temporary"`
 }
 
 // Error makes ProcessingError an error
 func (e PaymentError) Error() string {
-	msg := fmt.Sprintf("error: %s", e.OriginalError)
+	msg := fmt.Sprintf("error: %s", e.originalError)
 	if e.Cause() != nil {
 		msg = fmt.Sprintf("%s: %s", msg, e.Cause())
 	}
@@ -21,18 +22,19 @@ func (e PaymentError) Error() string {
 
 // Cause implements Cause for error
 func (e PaymentError) Cause() error {
-	return e.OriginalError
+	return e.originalError
 }
 
 // Unwrap implements Unwrap for error
 func (e PaymentError) Unwrap() error {
-	return e.OriginalError
+	return e.originalError
 }
 
 // ProcessingErrorFromError - given an error turn it into a processing error
 func ProcessingErrorFromError(cause error, isTemporary bool) *PaymentError {
 	return &PaymentError{
-		OriginalError: cause,
+		originalError: cause,
+		Message:       cause.Error(),
 		Temporary:     isTemporary,
 	}
 }

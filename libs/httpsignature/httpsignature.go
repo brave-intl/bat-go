@@ -284,7 +284,9 @@ func (psrw *ParameterizedSignatorResponseWriter) Write(body []byte) (int, error)
 		return -1, err
 	}
 
-	psrw.w.WriteHeader(psrw.statusCode)
+	if psrw.statusCode != -1 {
+		psrw.w.WriteHeader(psrw.statusCode)
+	}
 	return psrw.w.Write(body)
 }
 

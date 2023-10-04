@@ -283,7 +283,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy:                         aws.String(policy),
+		Policy: aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -354,45 +354,53 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("could not create kms secret encryption key")
 	}
 
-	// get the config object key and bucket name from environment
-	configBucketName, ok := ctx.Value(appctx.EnclaveConfigBucketNameCTXKey).(string)
-	if !ok {
-		return nil, nil, errors.New("no configuration bucket name for payments service")
-	}
-
-	// download the configuration file, kms decrypt the file
-	configObjectName, ok := ctx.Value(appctx.EnclaveConfigObjectNameCTXKey).(string)
-	if !ok {
-		return nil, nil, errors.New("no configuration object name for payments service")
-	}
-
-	// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
-	if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
-		return nil, nil, fmt.Errorf("failed to fetch configuration: %w", err)
-	}
-
-	// operator shares files
-	operatorSharesBucketName, ok := ctx.Value(appctx.EnclaveOperatorSharesBucketNameCTXKey).(string)
-	if !ok {
-		return nil, nil, errors.New("no operator shares bucket name for payments service")
-	}
-
-	for {
-		// do we have enough shares to attempt to reconstitute the key?
-		if err := service.fetchOperatorShares(ctx, operatorSharesBucketName); err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch operator shares: %w", err)
-		}
-		if ok := service.enoughShares(ctx); ok {
-			// yes - attempt to decrypt the file
-			if err := service.configureService(ctx); err != nil {
-				// fail to decrypt?  panic loudly
-				return nil, nil, fmt.Errorf("failed to configure payments service: %w", err)
+	go func() {
+		_, _, err := func() (interface{}, interface{}, error) {
+			// get the config object key and bucket name from environment
+			configBucketName, ok := ctx.Value(appctx.EnclaveConfigBucketNameCTXKey).(string)
+			if !ok {
+				return nil, nil, errors.New("no configuration bucket name for payments service")
 			}
-			break
+
+			// download the configuration file, kms decrypt the file
+			configObjectName, ok := ctx.Value(appctx.EnclaveConfigObjectNameCTXKey).(string)
+			if !ok {
+				return nil, nil, errors.New("no configuration object name for payments service")
+			}
+
+			// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
+			if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
+				return nil, nil, fmt.Errorf("failed to fetch configuration: %w", err)
+			}
+
+			// operator shares files
+			operatorSharesBucketName, ok := ctx.Value(appctx.EnclaveOperatorSharesBucketNameCTXKey).(string)
+			if !ok {
+				return nil, nil, errors.New("no operator shares bucket name for payments service")
+			}
+
+			for {
+				// do we have enough shares to attempt to reconstitute the key?
+				if err := service.fetchOperatorShares(ctx, operatorSharesBucketName); err != nil {
+					return nil, nil, fmt.Errorf("failed to fetch operator shares: %w", err)
+				}
+				if ok := service.enoughShares(ctx); ok {
+					// yes - attempt to decrypt the file
+					if err := service.configureService(ctx); err != nil {
+						// fail to decrypt?  panic loudly
+						return nil, nil, fmt.Errorf("failed to configure payments service: %w", err)
+					}
+					break
+				}
+				// no - poll for operator shares until we can attempt to decrypt the file
+				<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
+			}
+			return nil, nil, nil
+		}()
+		if err != nil {
+			logger.Error().Err(err).Msg("something went wrong during vault unseal")
 		}
-		// no - poll for operator shares until we can attempt to decrypt the file
-		<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
-	}
+	}()
 
 	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("could not configure datastore")

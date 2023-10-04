@@ -10,14 +10,10 @@ import (
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	srvcmd "github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/payments"
-	chiware "github.com/go-chi/chi/middleware"
-	"github.com/rs/zerolog/hlog"
 
 	"github.com/go-chi/chi"
 	"github.com/mdlayher/vsock"
@@ -133,7 +129,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	}
 	logger.Info().Msg("payments service setup")
 	// setup router
-	ctx, r := setupRouter(ctx, s)
+	ctx, r := payments.SetupRouter(ctx, s)
 	logger.Info().Msg("payments routes setup")
 
 	// setup listener
@@ -160,48 +156,6 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// run the server in another routine
 	logger.Fatal().Err(srv.Serve(l)).Msg("server shutdown")
 	return nil
-}
-
-func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *chi.Mux) {
-	// base service logger
-	logger := logging.Logger(ctx, "payments")
-	// base router
-	r := chi.NewRouter()
-	// middlewares
-	r.Use(chiware.RequestID)
-	r.Use(middleware.RequestIDTransfer)
-	r.Use(hlog.NewHandler(*logger))
-	r.Use(hlog.UserAgentHandler("user_agent"))
-	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
-	r.Use(middleware.RequestLogger(logger))
-	r.Use(chiware.Timeout(15 * time.Second))
-	logger.Info().Msg("configuration middleware setup")
-	// routes
-	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
-	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
-	// setup payments routes
-	// prepare inserts transactions into qldb, returning a document which needs to be submitted by
-	// an authorizer
-	r.Post(
-		"/v1/payments/prepare",
-		middleware.InstrumentHandler(
-			"PrepareHandler",
-			payments.PrepareHandler(s),
-		).ServeHTTP,
-	)
-	logger.Info().Msg("prepare endpoint setup")
-	// submit will have an http signature from a known list of public keys
-	r.Post(
-		"/v1/payments/submit",
-		middleware.InstrumentHandler(
-			"SubmitHandler",
-			s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s)),
-		).ServeHTTP)
-	logger.Info().Msg("submit endpoint setup")
-
-	r.Get("/v1/info", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
-	logger.Info().Msg("get info endpoint setup")
-	return ctx, r
 }
 
 // RunNitroServerOutsideEnclave - start up all the services which are outside
