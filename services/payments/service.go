@@ -162,12 +162,27 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		return fmt.Errorf("failed to read object: %w", err)
 	}
 
+	// perform enclave attestation for recipient
+	nonce := make([]byte, 64)
+	_, err = rand.Read(nonce)
+	if err != nil {
+		return fmt.Errorf("failed to create nonce for attestation: %w", err)
+	}
+
+	document, err := nitro.Attest(ctx, nonce, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create attestation document: %w", err)
+	}
+
 	// decrypt with kms key
 	kmsClient := kms.NewFromConfig(awsCfg)
 
 	decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
 		CiphertextBlob: data,
 		KeyId:          aws.String(s.kmsDecryptKeyArn),
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument: document,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to decrypt object with kms: %w", err)
@@ -244,12 +259,29 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 			return fmt.Errorf("failed to read object: %w", err)
 		}
 		// decrypt with kms key
+		// perform enclave attestation for recipient
+		nonce := make([]byte, 64)
+		_, err = rand.Read(nonce)
+		if err != nil {
+			return fmt.Errorf("failed to create nonce for attestation: %w", err)
+		}
+
+		document, err := nitro.Attest(ctx, nonce, nil, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create attestation document: %w", err)
+		}
+
+		// decrypt with kms key
 		kmsClient := kms.NewFromConfig(awsCfg)
 
 		decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
 			CiphertextBlob: data,
 			KeyId:          aws.String(s.kmsDecryptKeyArn),
+			Recipient: &kmsTypes.RecipientInfo{
+				AttestationDocument: document,
+			},
 		})
+
 		if err != nil {
 			return fmt.Errorf("failed to decrypt object with kms: %w", err)
 		}
