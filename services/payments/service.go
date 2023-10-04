@@ -178,8 +178,9 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 	kmsClient := kms.NewFromConfig(awsCfg)
 
 	decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
-		CiphertextBlob: data,
-		KeyId:          aws.String(s.kmsDecryptKeyArn),
+		CiphertextBlob:      data,
+		EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
+		KeyId:               aws.String(s.kmsDecryptKeyArn),
 		Recipient: &kmsTypes.RecipientInfo{
 			AttestationDocument: document,
 		},
@@ -275,8 +276,9 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		kmsClient := kms.NewFromConfig(awsCfg)
 
 		decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
-			CiphertextBlob: data,
-			KeyId:          aws.String(s.kmsDecryptKeyArn),
+			CiphertextBlob:      data,
+			EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
+			KeyId:               aws.String(s.kmsDecryptKeyArn),
 			Recipient: &kmsTypes.RecipientInfo{
 				AttestationDocument: document,
 			},
