@@ -130,6 +130,8 @@ type serviceNamespaceContextKey struct{}
 // fetchConfiguration will take an s3 bucket/object and fetch the configuration and store the
 // ciphertext on the service for decryption later
 func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string) error {
+	var logger = logging.Logger(ctx, "payments.fetchConfiguration")
+
 	// get proxy address for outbound
 	egressAddr, _ := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
 
@@ -173,6 +175,8 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 	if err != nil {
 		return fmt.Errorf("failed to create attestation document: %w", err)
 	}
+
+	logger.Info().Msgf("attestation document for config decrypt: %s", document)
 
 	// decrypt with kms key
 	kmsClient := kms.NewFromConfig(awsCfg)
