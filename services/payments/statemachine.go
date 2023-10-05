@@ -181,8 +181,8 @@ func (s *Service) DriveTransaction(
 		if lastErr != nil {
 			// Insufficient authorizations is an expected state. Treat it as such.
 			var errTmp *InsufficientAuthorizationsError
-			if !errors.As(err, &errTmp) {
-				return fmt.Errorf("failed to progress transaction: %w", err)
+			if !errors.As(lastErr, &errTmp) {
+				return fmt.Errorf("failed to progress transaction: %w", lastErr)
 			}
 		}
 		return nil
