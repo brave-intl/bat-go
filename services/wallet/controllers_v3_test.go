@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -34,7 +34,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	"gopkg.in/square/go-jose.v2"
+	jose "gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
@@ -259,16 +259,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
-	mockReputation.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
-		true,
-		[]int{},
-		nil,
-	)
-
 	r = r.WithContext(ctx)
 
 	router := chi.NewRouter()
@@ -325,16 +315,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
-	)
-
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
-		true,
-		[]int{},
-		nil,
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -557,16 +537,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		rw      = httptest.NewRecorder()
 	)
 
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
-		true,
-		[]int{},
-		nil,
-	)
-
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
@@ -770,16 +740,6 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		)),
 	)
 
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
-		true,
-		[]int{},
-		nil,
-	)
-
 	mockSQLCustodianLink(mock, "zebpay")
 
 	// begin linking tx
@@ -884,16 +844,6 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	).Return(
 		accountID.String(),
 		"GB",
-		nil,
-	)
-
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
-		true,
-		[]int{},
 		nil,
 	)
 
