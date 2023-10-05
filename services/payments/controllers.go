@@ -220,9 +220,12 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		err = service.DriveTransaction(ctx, authenticatedState)
 		status := authenticatedState.Status
 
-		code := http.StatusOK
-		if status != paymentLib.Failed && err != nil {
-			code = http.StatusInternalServerError
+		// Paid and Failed are final states, we don't want the worker to retry.
+		// additionally, if we are still in prepared but there is no error,
+		// it indicates we did not have sufficient authorizations and should not retry
+		code := http.StatusInternalServerError
+		if status == paymentLib.Paid || status == paymentLib.Failed || (status == paymentLib.Prepared && err == nil) {
+			code = http.StatusOK
 		}
 
 		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
