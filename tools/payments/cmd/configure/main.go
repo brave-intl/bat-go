@@ -153,8 +153,6 @@ func main() {
 			Body:                      bytes.NewBuffer(out.CiphertextBlob),
 			ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 			ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
-			SSEKMSKeyId:               aws.String(encryptKeyArn),
-			ServerSideEncryption:      s3types.ServerSideEncryptionAwsKms,
 		})
 		if err != nil {
 			log.Fatalf("failed to encrypt configuration: %v", err)
