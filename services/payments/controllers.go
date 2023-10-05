@@ -77,7 +77,13 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 		).ServeHTTP)
 	logger.Info().Msg("submit endpoint setup")
 
-	r.Get("/v1/info", handlers.AppHandler(GetConfigurationHandler(s)).ServeHTTP)
+	r.Get(
+		"/v1/payments/info",
+		middleware.InstrumentHandler(
+			"InfoHandler",
+			GetConfigurationHandler(s),
+		).ServeHTTP,
+	)
 	logger.Info().Msg("get info endpoint setup")
 	return ctx, r
 }

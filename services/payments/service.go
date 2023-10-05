@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -147,10 +148,8 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 
 	// use kms encrypt key arn on service to decrypt
 	input := &s3.GetObjectInput{
-		Bucket:               aws.String(bucket),
-		Key:                  aws.String(object),
-		SSECustomerAlgorithm: aws.String("AES256"),           // kms algorithm
-		SSECustomerKey:       aws.String(s.kmsDecryptKeyArn), // kms key to use for decrypt
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
 	}
 
 	secretsResponse, err := client.GetObject(ctx, input)
@@ -158,13 +157,41 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		return fmt.Errorf("failed to get object: %w", err)
 	}
 
-	data, err := ioutil.ReadAll(secretsResponse.Body)
+	data, err := io.ReadAll(secretsResponse.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read object: %w", err)
 	}
 
-	s.configCiphertext = data
+	// perform enclave attestation for recipient
+	nonce := make([]byte, 64)
+	_, err = rand.Read(nonce)
+	if err != nil {
+		return fmt.Errorf("failed to create nonce for attestation: %w", err)
+	}
+
+	document, err := nitro.Attest(ctx, nonce, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create attestation document: %w", err)
+	}
+
+	// decrypt with kms key
+	kmsClient := kms.NewFromConfig(awsCfg)
+
+	decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
+		CiphertextBlob:      data,
+		EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
+		KeyId:               aws.String(s.kmsDecryptKeyArn),
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument:    document,
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to decrypt object with kms: %w", err)
+	}
+
 	// store the ciphertext on the service as []byte for later
+	s.configCiphertext = decryptOutput.Plaintext
 	return nil
 }
 
@@ -212,6 +239,7 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 	client := s3.NewFromConfig(awsCfg)
 
 	shareObjects, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Prefix: aws.String("operator-share"),
 		Bucket: aws.String(bucket),
 	})
 
@@ -220,10 +248,8 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		// download all objects from operator shares s3 bucket
 		// use kms encrypt key arn on service to decrypt
 		input := &s3.GetObjectInput{
-			Bucket:               aws.String(bucket),
-			Key:                  shareObject.Key,                // the share object key for this iteration
-			SSECustomerAlgorithm: aws.String("AES256"),           // kms algorithm
-			SSECustomerKey:       aws.String(s.kmsDecryptKeyArn), // kms key to use for decrypt
+			Bucket: aws.String(bucket),
+			Key:    shareObject.Key, // the share object key for this iteration
 		}
 		// use kms encrypt key arn on service to decrypt each file
 		shareResponse, err := client.GetObject(ctx, input)
@@ -234,8 +260,36 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		if err != nil {
 			return fmt.Errorf("failed to read object: %w", err)
 		}
+		// decrypt with kms key
+		// perform enclave attestation for recipient
+		nonce := make([]byte, 64)
+		_, err = rand.Read(nonce)
+		if err != nil {
+			return fmt.Errorf("failed to create nonce for attestation: %w", err)
+		}
+
+		document, err := nitro.Attest(ctx, nonce, nil, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create attestation document: %w", err)
+		}
+
+		// decrypt with kms key
+		kmsClient := kms.NewFromConfig(awsCfg)
+
+		decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
+			CiphertextBlob:      data,
+			EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
+			KeyId:               aws.String(s.kmsDecryptKeyArn),
+			Recipient: &kmsTypes.RecipientInfo{
+				AttestationDocument: document,
+			},
+		})
+
+		if err != nil {
+			return fmt.Errorf("failed to decrypt object with kms: %w", err)
+		}
 		// store the decrypted keyShares on the service as [][]byte for later
-		s.keyShares = append(s.keyShares, data)
+		s.keyShares = append(s.keyShares, decryptOutput.Plaintext)
 	}
 
 	return nil
@@ -283,7 +337,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -368,9 +422,17 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 				return nil, nil, errors.New("no configuration object name for payments service")
 			}
 
-			// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
-			if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
-				return nil, nil, fmt.Errorf("failed to fetch configuration: %w", err)
+			for {
+				logger.Info().Msgf("enclave-config-bucket-name: %s", configBucketName)
+				logger.Info().Msgf("enclave-config-object-name: %s", configObjectName)
+				// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
+				if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
+					// log the error, we will retry again
+					logger.Error().Err(err).Msg("failed to fetch configuration, will retry shortly")
+					<-time.After(30 * time.Second)
+					continue
+				}
+				break
 			}
 
 			// operator shares files
@@ -378,6 +440,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 			if !ok {
 				return nil, nil, errors.New("no operator shares bucket name for payments service")
 			}
+			logger.Info().Msgf("enclave-operator-shares-bucket-name: %s", operatorSharesBucketName)
 
 			for {
 				// do we have enough shares to attempt to reconstitute the key?
@@ -395,6 +458,11 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 				// no - poll for operator shares until we can attempt to decrypt the file
 				<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
 			}
+			// at this point we should have our config loaded, lets print out the keys
+			for k := range service.config {
+				logger.Info().Msgf("%s is loaded in configuration!", k)
+			}
+
 			return nil, nil, nil
 		}()
 		if err != nil {
