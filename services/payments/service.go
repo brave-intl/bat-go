@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -171,7 +173,17 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		return fmt.Errorf("failed to create nonce for attestation: %w", err)
 	}
 
-	document, err := nitro.Attest(ctx, nonce, nil, nil)
+	rPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return fmt.Errorf("failed to create request keypair for attestation: %w", err)
+	}
+	rPubKey := rPrivKey.Public()
+	pubkeyBytes, err := x509.MarshalPKIXPublicKey(rPubKey)
+	if err != nil {
+		return fmt.Errorf("failed to encode public key bytes for attestation: %w", err)
+	}
+
+	document, err := nitro.Attest(ctx, nonce, nil, pubkeyBytes)
 	if err != nil {
 		return fmt.Errorf("failed to create attestation document: %w", err)
 	}
@@ -194,8 +206,14 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		return fmt.Errorf("failed to decrypt object with kms: %w", err)
 	}
 
+	configCiphertext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader,
+		rPrivKey, decryptOutput.CiphertextForRecipient, []byte{})
+	if err != nil {
+		return fmt.Errorf("failed to decrypt object with public key: %w", err)
+	}
+
 	// store the ciphertext on the service as []byte for later
-	s.configCiphertext = decryptOutput.Plaintext
+	s.configCiphertext = configCiphertext
 	return nil
 }
 
