@@ -182,7 +182,8 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
 		KeyId:               aws.String(s.kmsDecryptKeyArn),
 		Recipient: &kmsTypes.RecipientInfo{
-			AttestationDocument: document,
+			AttestationDocument:    document,
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
 		},
 	})
 	if err != nil {
