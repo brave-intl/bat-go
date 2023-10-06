@@ -242,9 +242,8 @@ func StartConsumer(ctx context.Context, streamClient StreamClient, stream, consu
 		// Another identical consumer is already running
 		return nil
 	}
-	if err != nil {
-		return err
-	}
+	defer ConsumerSet.Remove(consumerUID)
+
 	ctx, logger = logging.UpdateContext(ctx, logger.With().Str("stream", stream).Str("consumerGroup", consumerGroup).Str("consumerID", consumerID).Logger())
 
 	logger.Info().Msg("consumer started")

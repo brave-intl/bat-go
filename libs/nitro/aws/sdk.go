@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"golang.org/x/net/http2"
 
+	smithy "github.com/aws/smithy-go/logging"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
 )
@@ -43,9 +46,17 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 		Transport: tr,
 	}
 
+	var applicationLogger smithy.Logger
+
+	if logWriter, ok := ctx.Value(appctx.LogWriterCTXKey).(io.Writer); ok {
+		applicationLogger = smithy.NewStandardLogger(logWriter)
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithHTTPClient(&client),
 		config.WithRegion("us-west-2"),
+		config.WithLogger(applicationLogger),
+		config.WithClientLogMode(aws.LogRetries|aws.LogRequest),
 	)
 	if err != nil {
 		return aws.Config{}, fmt.Errorf("unable to load SDK config, %v", err)
@@ -59,5 +70,7 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 		config.WithHTTPClient(&client),
 		config.WithRegion(region),
 		config.WithCredentialsProvider(provider),
+		config.WithLogger(applicationLogger),
+		config.WithClientLogMode(aws.LogRetries|aws.LogRequest),
 	)
 }

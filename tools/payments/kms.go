@@ -8,7 +8,7 @@ type KeyStatement struct {
 	Sid       string
 	Effect    string
 	Principal KeyStatementPrincipal
-	Action    []string
+	Action    interface{}
 	Condition map[string]interface{}
 }
 

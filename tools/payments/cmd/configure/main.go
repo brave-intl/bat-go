@@ -23,6 +23,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -32,12 +33,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"filippo.io/age"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go/aws"
 )
 
@@ -52,6 +53,9 @@ func main() {
 	s3Bucket := flag.String(
 		"b", "",
 		"the s3 bucket to upload to")
+	s3Object := flag.String(
+		"o", "",
+		"the s3 object name for output")
 	verbose := flag.Bool(
 		"v", false,
 		"view verbose logging")
@@ -63,25 +67,29 @@ func main() {
 	if *verbose {
 		// print out the configuration
 		log.Printf("Public Key: %s\n", *publicKey)
+		log.Printf("EnclaveBaseURI: %s\n", *enclaveBaseURI)
 		log.Printf("Configuration Files: %s\n", files)
 	}
 
 	// get the info endpoint to key kms arn
-	resp, err := http.Get(enclaveBaseURI + "/v1/info")
+	resp, err := http.Get(*enclaveBaseURI + "/v1/payments/info")
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	resp.Body.Close()
 
 	data := make(map[string]string)
-	err := json.Unmarshal(body, data)
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-	encryptKeyARN = data["encryptionKeyArn"]
+	resp.Body.Close()
+	ctx := context.Background()
+
+	encryptKeyArn := data["encryptionKeyArn"]
+
+	fmt.Println("keyid: ", encryptKeyArn)
+
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -137,20 +145,19 @@ func main() {
 		s3Client := s3.NewFromConfig(cfg)
 		h := md5.New()
 		h.Write(out.CiphertextBlob)
-		configObjectName := fmt.Sprintf("configuration_%s.json", time.Now().Format(time.RFC3339))),
 
 		// put the enclave configuration up in s3
 		_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket: aws.String(*b),
-			Key: aws.String(configObjectName),
+			Bucket:                    aws.String(*s3Bucket),
+			Key:                       aws.String(*s3Object),
 			Body:                      bytes.NewBuffer(out.CiphertextBlob),
 			ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 			ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 		})
 		if err != nil {
-			log.Fatalf("failed to encrypt configuration share: %v", err)
+			log.Fatalf("failed to encrypt configuration: %v", err)
 		}
-		log.Printf("payments enclave to use configuration: %s\n", configObjectName)
+		log.Printf("payments enclave to use configuration: %s/%s\n", *s3Bucket, *s3Object)
 	}
 
 	if *verbose {
