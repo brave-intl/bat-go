@@ -34,7 +34,7 @@ import (
 	"crypto/des"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
+	"crypto/sha256"
 	"encoding/asn1"
 	"errors"
 	"fmt"
@@ -47,19 +47,19 @@ var ErrUnsupportedAlgorithm = errors.New("pkcs7: cannot decrypt data: only RSA, 
 var ErrNotEncryptedContent = errors.New("pkcs7: content data is a decryptable data type")
 
 // Decrypt decrypts encrypted content info for recipient cert and private key
-func (p7 *PKCS7) Decrypt(cert *x509.Certificate, pkey crypto.PrivateKey) ([]byte, error) {
+func (p7 *PKCS7) Decrypt(pkey crypto.PrivateKey) ([]byte, error) {
 	data, ok := p7.raw.(envelopedData)
 	if !ok {
 		return nil, ErrNotEncryptedContent
 	}
-	recipient := selectRecipientForCertificate(data.RecipientInfos, cert)
+	recipient := data.RecipientInfos[0]
 	if recipient.EncryptedKey == nil {
-		return nil, errors.New("pkcs7: no enveloped recipient for provided certificate")
+		return nil, errors.New("pkcs7: no enveloped recipient")
 	}
 	switch pkey := pkey.(type) {
 	case *rsa.PrivateKey:
 		var contentKey []byte
-		contentKey, err := rsa.DecryptPKCS1v15(rand.Reader, pkey, recipient.EncryptedKey)
+		contentKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, pkey, recipient.EncryptedKey, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -191,13 +191,4 @@ func unpad(data []byte, blocklen int) ([]byte, error) {
 	}
 
 	return data[:len(data)-padlen], nil
-}
-
-func selectRecipientForCertificate(recipients []recipientInfo, cert *x509.Certificate) recipientInfo {
-	for _, recp := range recipients {
-		if isCertMatchForIssuerAndSerial(cert, recp.IssuerAndSerialNumber) {
-			return recp
-		}
-	}
-	return recipientInfo{}
 }

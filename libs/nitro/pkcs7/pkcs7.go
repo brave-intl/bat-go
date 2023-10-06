@@ -28,33 +28,20 @@ SOFTWARE.
 */
 
 import (
-	"bytes"
-	"crypto"
-	"crypto/dsa"
-	"crypto/ecdsa"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
-	"fmt"
-	"sort"
 
 	_ "crypto/sha1" // for crypto.SHA1
 )
 
 // PKCS7 Represents a PKCS7 structure
 type PKCS7 struct {
-	Content      []byte
-	Certificates []*x509.Certificate
-	CRLs         []pkix.CertificateList
-	Signers      []signerInfo
-	raw          interface{}
+	raw interface{}
 }
 
 type contentInfo struct {
 	ContentType asn1.ObjectIdentifier
-	Content     asn1.RawValue `asn1:"explicit,optional,tag:0"`
+	Content     envelopedData `asn1:"explicit,optional,tag:0"`
 }
 
 // ErrUnsupportedContentType is returned when a PKCS7 content is not supported.
@@ -108,210 +95,13 @@ var (
 	OIDEncryptionAlgorithmAES256GCM  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 1, 46}
 )
 
-func getHashForOID(oid asn1.ObjectIdentifier) (crypto.Hash, error) {
-	switch {
-	case oid.Equal(OIDDigestAlgorithmSHA1), oid.Equal(OIDDigestAlgorithmECDSASHA1),
-		oid.Equal(OIDDigestAlgorithmDSA), oid.Equal(OIDDigestAlgorithmDSASHA1),
-		oid.Equal(OIDEncryptionAlgorithmRSA):
-		return crypto.SHA1, nil
-	case oid.Equal(OIDDigestAlgorithmSHA256), oid.Equal(OIDDigestAlgorithmECDSASHA256):
-		return crypto.SHA256, nil
-	case oid.Equal(OIDDigestAlgorithmSHA384), oid.Equal(OIDDigestAlgorithmECDSASHA384):
-		return crypto.SHA384, nil
-	case oid.Equal(OIDDigestAlgorithmSHA512), oid.Equal(OIDDigestAlgorithmECDSASHA512):
-		return crypto.SHA512, nil
-	}
-	return crypto.Hash(0), ErrUnsupportedAlgorithm
-}
-
-// getDigestOIDForSignatureAlgorithm takes an x509.SignatureAlgorithm
-// and returns the corresponding OID digest algorithm
-func getDigestOIDForSignatureAlgorithm(digestAlg x509.SignatureAlgorithm) (asn1.ObjectIdentifier, error) {
-	switch digestAlg {
-	case x509.SHA1WithRSA, x509.ECDSAWithSHA1:
-		return OIDDigestAlgorithmSHA1, nil
-	case x509.SHA256WithRSA, x509.ECDSAWithSHA256:
-		return OIDDigestAlgorithmSHA256, nil
-	case x509.SHA384WithRSA, x509.ECDSAWithSHA384:
-		return OIDDigestAlgorithmSHA384, nil
-	case x509.SHA512WithRSA, x509.ECDSAWithSHA512:
-		return OIDDigestAlgorithmSHA512, nil
-	}
-	return nil, fmt.Errorf("pkcs7: cannot convert hash to oid, unknown hash algorithm")
-}
-
-// getOIDForEncryptionAlgorithm takes the private key type of the signer and
-// the OID of a digest algorithm to return the appropriate signerInfo.DigestEncryptionAlgorithm
-func getOIDForEncryptionAlgorithm(pkey crypto.PrivateKey, OIDDigestAlg asn1.ObjectIdentifier) (asn1.ObjectIdentifier, error) {
-	switch pkey.(type) {
-	case *rsa.PrivateKey:
-		switch {
-		default:
-			return OIDEncryptionAlgorithmRSA, nil
-		case OIDDigestAlg.Equal(OIDEncryptionAlgorithmRSA):
-			return OIDEncryptionAlgorithmRSA, nil
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA1):
-			return OIDEncryptionAlgorithmRSASHA1, nil
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA256):
-			return OIDEncryptionAlgorithmRSASHA256, nil
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA384):
-			return OIDEncryptionAlgorithmRSASHA384, nil
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA512):
-			return OIDEncryptionAlgorithmRSASHA512, nil
-		}
-	case *ecdsa.PrivateKey:
-		switch {
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA1):
-			return OIDDigestAlgorithmECDSASHA1, nil
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA256):
-			return OIDDigestAlgorithmECDSASHA256, nil
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA384):
-			return OIDDigestAlgorithmECDSASHA384, nil
-		case OIDDigestAlg.Equal(OIDDigestAlgorithmSHA512):
-			return OIDDigestAlgorithmECDSASHA512, nil
-		}
-	case *dsa.PrivateKey:
-		return OIDDigestAlgorithmDSA, nil
-	}
-	return nil, fmt.Errorf("pkcs7: cannot convert encryption algorithm to oid, unknown private key type %T", pkey)
-
-}
-
-// Parse decodes a DER encoded PKCS7 package
-func Parse(data []byte) (p7 *PKCS7, err error) {
-	if len(data) == 0 {
-		return nil, errors.New("pkcs7: input data is empty")
-	}
-	var info contentInfo
-	der, err := ber2der(data)
-	if err != nil {
-		return nil, err
-	}
-	rest, err := asn1.Unmarshal(der, &info)
-	if len(rest) > 0 {
-		err = asn1.SyntaxError{Msg: "trailing data"}
-		return
-	}
-	if err != nil {
-		return
-	}
-
-	// fmt.Printf("--> Content Type: %s", info.ContentType)
-	switch {
-	case info.ContentType.Equal(OIDSignedData):
-		return parseSignedData(info.Content.Bytes)
-	case info.ContentType.Equal(OIDEnvelopedData):
-		return parseEnvelopedData(info.Content.Bytes)
-	case info.ContentType.Equal(OIDEncryptedData):
-		return parseEncryptedData(info.Content.Bytes)
-	}
-	return nil, ErrUnsupportedContentType
-}
-
-func parseEnvelopedData(data []byte) (*PKCS7, error) {
-	var ed envelopedData
-	if _, err := asn1.Unmarshal(data, &ed); err != nil {
+// Parse the der bytes of the pkcs7 structure
+func Parse(der []byte) (*PKCS7, error) {
+	var ci contentInfo
+	if _, err := asn1.Unmarshal(der, &ci); err != nil {
 		return nil, err
 	}
 	return &PKCS7{
-		raw: ed,
+		raw: ci.Content,
 	}, nil
-}
-
-func parseEncryptedData(data []byte) (*PKCS7, error) {
-	var ed encryptedData
-	if _, err := asn1.Unmarshal(data, &ed); err != nil {
-		return nil, err
-	}
-	return &PKCS7{
-		raw: ed,
-	}, nil
-}
-
-func (raw rawCertificates) Parse() ([]*x509.Certificate, error) {
-	if len(raw.Raw) == 0 {
-		return nil, nil
-	}
-
-	var val asn1.RawValue
-	if _, err := asn1.Unmarshal(raw.Raw, &val); err != nil {
-		return nil, err
-	}
-
-	return x509.ParseCertificates(val.Bytes)
-}
-
-func isCertMatchForIssuerAndSerial(cert *x509.Certificate, ias issuerAndSerial) bool {
-	return cert.SerialNumber.Cmp(ias.SerialNumber) == 0 && bytes.Equal(cert.RawIssuer, ias.IssuerName.FullBytes)
-}
-
-// Attribute represents a key value pair attribute. Value must be marshalable byte
-// `encoding/asn1`
-type Attribute struct {
-	Type  asn1.ObjectIdentifier
-	Value interface{}
-}
-
-type attributes struct {
-	types  []asn1.ObjectIdentifier
-	values []interface{}
-}
-
-// Add adds the attribute, maintaining insertion order
-func (attrs *attributes) Add(attrType asn1.ObjectIdentifier, value interface{}) {
-	attrs.types = append(attrs.types, attrType)
-	attrs.values = append(attrs.values, value)
-}
-
-type sortableAttribute struct {
-	SortKey   []byte
-	Attribute attribute
-}
-
-type attributeSet []sortableAttribute
-
-func (sa attributeSet) Len() int {
-	return len(sa)
-}
-
-func (sa attributeSet) Less(i, j int) bool {
-	return bytes.Compare(sa[i].SortKey, sa[j].SortKey) < 0
-}
-
-func (sa attributeSet) Swap(i, j int) {
-	sa[i], sa[j] = sa[j], sa[i]
-}
-
-func (sa attributeSet) Attributes() []attribute {
-	attrs := make([]attribute, len(sa))
-	for i, attr := range sa {
-		attrs[i] = attr.Attribute
-	}
-	return attrs
-}
-
-func (attrs *attributes) ForMarshalling() ([]attribute, error) {
-	sortables := make(attributeSet, len(attrs.types))
-	for i := range sortables {
-		attrType := attrs.types[i]
-		attrValue := attrs.values[i]
-		asn1Value, err := asn1.Marshal(attrValue)
-		if err != nil {
-			return nil, err
-		}
-		attr := attribute{
-			Type:  attrType,
-			Value: asn1.RawValue{Tag: 17, IsCompound: true, Bytes: asn1Value}, // 17 == SET tag
-		}
-		encoded, err := asn1.Marshal(attr)
-		if err != nil {
-			return nil, err
-		}
-		sortables[i] = sortableAttribute{
-			SortKey:   encoded,
-			Attribute: attr,
-		}
-	}
-	sort.Sort(sortables)
-	return sortables.Attributes(), nil
 }
