@@ -52,10 +52,10 @@ func (p7 *PKCS7) Decrypt(pkey crypto.PrivateKey) ([]byte, error) {
 	if !ok {
 		return nil, ErrNotEncryptedContent
 	}
-	recipient := data.RecipientInfos[0]
-	if recipient.EncryptedKey == nil {
+	if len(data.RecipientInfos) < 1 {
 		return nil, errors.New("pkcs7: no enveloped recipient")
 	}
+	recipient := data.RecipientInfos[0]
 	switch pkey := pkey.(type) {
 	case *rsa.PrivateKey:
 		var contentKey []byte
