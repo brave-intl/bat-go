@@ -206,10 +206,12 @@ func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string)
 		return fmt.Errorf("failed to decrypt object with kms: %w", err)
 	}
 
+	logger.Info().Msgf("decryptOutput: %+v", decryptOutput)
+
 	configCiphertext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader,
-		rPrivKey, decryptOutput.CiphertextForRecipient, []byte{})
+		rPrivKey, decryptOutput.CiphertextForRecipient, nil)
 	if err != nil {
-		return fmt.Errorf("failed to decrypt object with public key: %w", err)
+		return fmt.Errorf("failed to decrypt object with private key: %w", err)
 	}
 
 	// store the ciphertext on the service as []byte for later
