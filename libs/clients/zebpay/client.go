@@ -111,11 +111,11 @@ var (
 
 const (
 	// TransferPendingCode is the status code for pending status
-	TransferPendingCode = iota
+	TransferPendingCode = 1
 	// TransferSuccessCode is the status code for successful transfer
-	TransferSuccessCode
+	TransferSuccessCode = 2
 	// TransferFailedCode is the status code for failed transfer
-	TransferFailedCode
+	TransferFailedCode = 3
 
 	// TransferPendingStatus is the status code for pending status
 	TransferPendingStatus = "Pending"
