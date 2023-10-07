@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -56,14 +58,45 @@ func NewSettlementClient(ctx context.Context, env string, config map[string]stri
 	sp.KeyID = "primary"
 	sp.Headers = []string{"digest"}
 
-	// FIXME
-	pcrs := map[uint][]byte{
-		12: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	pcrs, err := pcrsFromFile(config["pcr"])
+	if err != nil {
+		return ctx, nil, fmt.Errorf("failed to open pcr file: %w", err)
 	}
+
 	verifier := httpsignature.NewNitroVerifier(pcrs)
 
 	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], sp, verifier)
 	return ctx, client, err
+}
+
+// pcrsFromFile reads in the JSON file at the provided path, unmarshalls it, and base64 decodes the
+// values of the keys, returning them as bytes.
+func pcrsFromFile(filePath string) (map[uint][]byte, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open pcr file: %w", err)
+	}
+	defer f.Close()
+
+	pcrJson, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read pcr file: %w", err)
+	}
+	var (
+		pcrs64 map[uint][]byte
+		pcrs   map[uint][]byte
+	)
+	if err := json.Unmarshal(pcrJson, &pcrs); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %v", err)
+	}
+	for k, v := range pcrs64 {
+		pcr := make([]byte, base64.StdEncoding.DecodedLen(len(v)))
+		_, err := base64.StdEncoding.Decode(pcr, v)
+		if err != nil {
+			return nil, fmt.Errorf("error: %w", err)
+		}
+		pcrs[k] = pcr
+	}
 }
 
 // redisClient is an implementation of settlement client using clustered redis client

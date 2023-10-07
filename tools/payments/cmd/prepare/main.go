@@ -62,6 +62,10 @@ func main() {
 		"ru", "",
 		"redis username")
 
+	pcrPath := flag.String(
+		"pcr", "test/pcrs.json",
+		"path to a file containing pcr values for the currently running enclave in a JSON file with base64 encoded values")
+
 	payoutID := flag.String(
 		"p", "",
 		"payout id")
@@ -79,11 +83,12 @@ func main() {
 		// print out the configuration
 		log.Printf("Environment: %s\n", *env)
 		log.Printf("Operator Key File Location: %s\n", *key)
+		log.Printf("PCR File Location: %s\n", *pcrPath)
 	}
 
 	// setup the settlement redis client
 	ctx, client, err := paymentscli.NewSettlementClient(ctx, *env, map[string]string{
-		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, // client specific configurations
+		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, "pcr": *pcrPath, // client specific configurations
 	})
 	if err != nil {
 		log.Fatalf("failed to create settlement client: %v\n", err)
