@@ -93,7 +93,7 @@ func pcrsFromFile(filePath string) (map[uint][]byte, error) {
 		pcr := make([]byte, base64.StdEncoding.DecodedLen(len(v)))
 		_, err := base64.StdEncoding.Decode(pcr, v)
 		if err != nil {
-			return nil, fmt.Errorf("error: %w", err)
+			return nil, fmt.Errorf("failed to decode PCR value: %w", err)
 		}
 		pcrs[k] = pcr
 	}
