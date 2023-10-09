@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -207,7 +208,12 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		}
 
 		// store the decrypted keyShares on the service as [][]byte for later
-		s.keyShares = append(s.keyShares, plaintext)
+		share, err := base64.StdEncoding.DecodeString(plaintext)
+		if err != nil {
+			return fmt.Errorf("failed to base64 decode operator key share: %w", err)
+		}
+
+		s.keyShares = append(s.keyShares, share)
 	}
 
 	return nil
@@ -222,9 +228,6 @@ func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to combine keyShares: %w", err)
 	}
-	logger.Info().Msgf("share 1: %s", string(s.keyShares[0]))
-
-	logger.Info().Msgf("share 2: %s", string(s.keyShares[1]))
 
 	logger.Info().Msgf("age identity key: %+v", string(privateKey))
 
