@@ -263,110 +263,98 @@ func TestZebPayStateMachineAuthorizedToPendingTransition(t *testing.T) {
 
 // TestBitflyerStateMachine500FailureToPaidTransition tests for a failure to progress status
 // after a 500 error response while attempting to transfer from Pending to Paid
-//func TestZebPayStateMachine500FailureToPaidTransition(t *testing.T) {
-//	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
-//	must.Nil(t, err)
-//
-//	zebpayStateMachine := ZebpayMachine{
-//		client:     zebpayClient,
-//		zebpayHost: mockZebpayHost,
-//	}
-//	httpmock.Activate()
-//	defer httpmock.DeactivateAndReset()
-//
-//	// Mock transaction commit that will fail
-//	jsonResponse, err := json.Marshal(zebpayTransactionSubmitFailureResponse)
-//	must.Equal(t, nil, err)
-//	httpmock.RegisterResponder(
-//		"POST",
-//		fmt.Sprintf(
-//			"%s/api/bulktransfer",
-//			mockZebpayHost,
-//		),
-//		httpmock.NewStringResponder(200, string(jsonResponse)),
-//	)
-//
-//	ctx := context.Background()
-//	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-//	id := ""
-//	transaction := paymentLib.AuthenticatedPaymentState{
-//		Status:     paymentLib.Authorized,
-//		DocumentID: id,
-//		PaymentDetails: paymentLib.PaymentDetails{
-//			Amount:    decimal.NewFromFloat(13.736461457342187),
-//			To:        "512",
-//			From:      "c6911095-ba83-4aa1-b0fb-15934568a65a",
-//			Custodian: "zebpay",
-//			PayoutID:  "123456",
-//			Currency:  "BAT",
-//		},
-//	}
-//	zebpayStateMachine.setTransaction(
-//		&transaction,
-//	)
-//
-//	newState, err := Drive(ctx, &zebpayStateMachine)
-//	must.Nil(t, err)
-//	should.Equal(t, paymentLib.Failed, newState.Status)
-//}
+func TestZebPayStateMachine500FailureToPaidTransition(t *testing.T) {
+	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
+	must.Nil(t, err)
 
-//// TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
-//// Failure with 404 error when attempting to transfer from Pending to Paid
-//func TestZebPayStateMachine404FailureToPaidTransition(t *testing.T) {
-//	err := os.Setenv("ZEBPAY_ENVIRONMENT", "test")
-//	must.Equal(t, nil, err)
-//	err = os.Setenv("ZEBPAY_SERVER", mockZebpayHost)
-//	must.Equal(t, nil, err)
-//	httpmock.Activate()
-//	defer httpmock.DeactivateAndReset()
-//
-//	// Mock transaction commit that will fail
-//	jsonResponse, err := json.Marshal(bitflyerTransactionCheckStatusFailureResponse)
-//	must.Equal(t, nil, err)
-//	httpmock.RegisterResponder(
-//		"POST",
-//		fmt.Sprintf(
-//			"%s/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
-//			mockZebpayHost,
-//		),
-//		httpmock.NewStringResponder(404, string(jsonResponse)),
-//	)
-//	jsonTokenRefreshResponse, err := json.Marshal(bitflyerTransactionTokenRefreshResponse)
-//	must.Equal(t, nil, err)
-//	httpmock.RegisterResponder(
-//		"POST",
-//		fmt.Sprintf(
-//			"%s/api/link/v1/token",
-//			mockZebpayHost,
-//		),
-//		httpmock.NewStringResponder(200, string(jsonTokenRefreshResponse)),
-//	)
-//
-//	ctx := context.Background()
-//	//mockDriver := new(mockDriver)
-//	//service := Service{
-//	//datastore: mockDriver,
-//	//baseCtx: context.Background(),
-//	//}
-//	id := ""
-//	transaction := paymentLib.AuthenticatedPaymentState{Status: paymentLib.Pending, DocumentID: id}
-//	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-//	zebpayStateMachine := ZebpayMachine{}
-//	//bitflyerStateMachine.setPersistenceConfigValues(
-//	//service.datastore,
-//	//service.sdkClient,
-//	//service.kmsSigningClient,
-//	//service.kmsSigningKeyID,
-//	zebpayStateMachine.setTransaction(
-//		&transaction,
-//	)
-//	// When the implementation is in place, this Version value will not be necessary.
-//	// However, it's set here to allow the placeholder implementation to return the
-//	// correct value and allow this test to pass in the meantime.
-//	// @TODO: Make this test fail
-//	// currentVersion := 404
-//
-//	newState, err := Drive(ctx, &zebpayStateMachine)
-//	must.Nil(t, err)
-//	should.Equal(t, paymentLib.Pending, newState.Status)
-//}
+	zebpayStateMachine := ZebpayMachine{
+		client:     zebpayClient,
+		zebpayHost: mockZebpayHost,
+	}
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	// Mock transaction commit that will fail
+	jsonResponse, err := json.Marshal(zebpayTransactionSubmitFailureResponse)
+	must.Equal(t, nil, err)
+	httpmock.RegisterResponder(
+		"POST",
+		fmt.Sprintf(
+			"%s/api/bulktransfer",
+			mockZebpayHost,
+		),
+		httpmock.NewStringResponder(500, string(jsonResponse)),
+	)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
+	id := ""
+	transaction := paymentLib.AuthenticatedPaymentState{
+		Status:     paymentLib.Authorized,
+		DocumentID: id,
+		PaymentDetails: paymentLib.PaymentDetails{
+			Amount:    decimal.NewFromFloat(13.736461457342187),
+			To:        "512",
+			From:      "c6911095-ba83-4aa1-b0fb-15934568a65a",
+			Custodian: "zebpay",
+			PayoutID:  "123456",
+			Currency:  "BAT",
+		},
+	}
+	zebpayStateMachine.setTransaction(
+		&transaction,
+	)
+
+	newState, err := Drive(ctx, &zebpayStateMachine)
+	must.NotNil(t, err)
+	must.Nil(t, newState)
+}
+
+// TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
+// Failure with 404 error when attempting to transfer from Pending to Paid
+func TestZebPayStateMachine404FailureToPaidTransition(t *testing.T) {
+	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
+	must.Nil(t, err)
+
+	zebpayStateMachine := ZebpayMachine{
+		client:     zebpayClient,
+		zebpayHost: mockZebpayHost,
+	}
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	// Mock transaction commit that will fail
+	jsonResponse, err := json.Marshal(zebpayTransactionSubmitFailureResponse)
+	must.Equal(t, nil, err)
+	httpmock.RegisterResponder(
+		"POST",
+		fmt.Sprintf(
+			"%s/api/bulktransfer",
+			mockZebpayHost,
+		),
+		httpmock.NewStringResponder(404, string(jsonResponse)),
+	)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
+	id := ""
+	transaction := paymentLib.AuthenticatedPaymentState{
+		Status:     paymentLib.Authorized,
+		DocumentID: id,
+		PaymentDetails: paymentLib.PaymentDetails{
+			Amount:    decimal.NewFromFloat(13.736461457342187),
+			To:        "512",
+			From:      "c6911095-ba83-4aa1-b0fb-15934568a65a",
+			Custodian: "zebpay",
+			PayoutID:  "123456",
+			Currency:  "BAT",
+		},
+	}
+	zebpayStateMachine.setTransaction(
+		&transaction,
+	)
+
+	newState, err := Drive(ctx, &zebpayStateMachine)
+	must.NotNil(t, err)
+	must.Nil(t, newState)
+}
