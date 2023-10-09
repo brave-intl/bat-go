@@ -12,6 +12,7 @@ replace github.com/brave-intl/bat-go/tools => ../tools
 
 require (
 	github.com/brave-intl/bat-go/cmd v1.0.2
+	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/services v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
 )
@@ -22,6 +23,7 @@ require (
 	cloud.google.com/go/iam v0.11.0 // indirect
 	cloud.google.com/go/kms v1.6.0 // indirect
 	cloud.google.com/go/monitoring v1.8.0 // indirect
+	filippo.io/age v1.1.1 // indirect
 	github.com/Azure/azure-sdk-for-go v67.0.0+incompatible // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/Azure/go-autorest/autorest v0.11.28 // indirect
@@ -72,7 +74,6 @@ require (
 	github.com/awslabs/amazon-qldb-driver-go/v3 v3.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
-	github.com/brave-intl/bat-go/libs v1.0.2 // indirect
 	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -225,7 +226,6 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/crypto v0.8.0 // indirect
-	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd // indirect
 	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect

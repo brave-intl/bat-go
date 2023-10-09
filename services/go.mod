@@ -9,6 +9,7 @@ replace github.com/brave-intl/bat-go/libs => ../libs
 replace github.com/brave-intl/bat-go/tools => ../tools
 
 require (
+	filippo.io/age v1.1.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/amazon-ion/ion-go v1.2.0
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
@@ -41,7 +42,6 @@ require (
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mdlayher/vsock v1.2.0
 	github.com/prometheus/client_golang v1.13.0
-	github.com/redis/go-redis/v9 v9.2.1
 	github.com/rs/zerolog v1.28.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/segmentio/kafka-go v0.4.35
@@ -115,6 +115,7 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
+	github.com/redis/go-redis/v9 v9.2.1 // indirect
 	github.com/rs/xid v1.4.0 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
@@ -129,7 +130,6 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
