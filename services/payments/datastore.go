@@ -181,13 +181,13 @@ func (s *Service) configureDatastore(ctx context.Context) error {
 		return fmt.Errorf("failed to create new qldb datastore: %w", err)
 	}
 	s.datastore = driver
-	return s.setupLedger(ctx)
+	return driver.setupLedger(ctx)
 }
 
-func (s *Service) setupLedger(ctx context.Context) error {
+func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
 	logger := logging.Logger(ctx, "payments.setupLedger")
 	// create the tables needed in the ledger
-	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+	_, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		var (
 			ae smithy.APIError
 			ok bool
