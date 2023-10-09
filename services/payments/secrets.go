@@ -208,7 +208,7 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		}
 
 		// store the decrypted keyShares on the service as [][]byte for later
-		share, err := base64.StdEncoding.DecodeString(plaintext)
+		share, err := base64.StdEncoding.DecodeString(string(plaintext))
 		if err != nil {
 			return fmt.Errorf("failed to base64 decode operator key share: %w", err)
 		}
