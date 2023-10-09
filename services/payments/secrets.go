@@ -20,7 +20,6 @@ import (
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/hashicorp/vault/shamir"
@@ -222,14 +221,11 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 // decryptSecrets combines the shamir shares stored on the service instance and decrypts the ciphertext
 // returning a map of secret values from the configuration
 func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error) {
-	var logger = logging.Logger(ctx, "payments")
 	// combine the service configured key shares
 	privateKey, err := shamir.Combine(s.keyShares)
 	if err != nil {
 		return nil, fmt.Errorf("failed to combine keyShares: %w", err)
 	}
-
-	logger.Info().Msgf("age identity key: %+v", string(privateKey))
 
 	identity, err := age.ParseX25519Identity(string(privateKey))
 	if err != nil {
@@ -244,7 +240,7 @@ func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error)
 	}
 
 	var output = map[string]string{}
-	if err := json.NewDecoder(r).Decode(output); err != nil {
+	if err := json.NewDecoder(r).Decode(&output); err != nil {
 		return nil, fmt.Errorf("failed to json decode the secrets: %w", err)
 	}
 
