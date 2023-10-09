@@ -21,6 +21,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"flag"
@@ -59,6 +60,8 @@ func main() {
 		log.Printf("Public Key: %s\n", *publicKey)
 		log.Printf("Configuration Files: %s\n", files)
 	}
+
+	ctx := context.Background()
 
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
