@@ -21,7 +21,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
-	"github.com/brave-intl/bat-go/libs/nitro/pkcs7"
 	"github.com/hashicorp/vault/shamir"
 )
 
@@ -201,15 +200,9 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 			return fmt.Errorf("failed to decrypt object with kms: %w", err)
 		}
 
-		// decrypt the ciphertext for
-		ciphertext, err := pkcs7.Parse(decryptOutput.CiphertextForRecipient)
+		plaintext, err := nitro.Decrypt(privateKey.(*rsa.PrivateKey), decryptOutput.CiphertextForRecipient)
 		if err != nil {
-			return fmt.Errorf("failed to parse the ciphertext for recipient from kms: %w", err)
-		}
-
-		plaintext, err := ciphertext.Decrypt(privateKey)
-		if err != nil {
-			return fmt.Errorf("failed to decrypt object with pkcs7 and private key: %w", err)
+			return fmt.Errorf("failed to decrypt the ciphertext for recipient from kms: %w", err)
 		}
 
 		// store the decrypted keyShares on the service as [][]byte for later
