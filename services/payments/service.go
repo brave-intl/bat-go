@@ -4,13 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
@@ -19,19 +15,15 @@ import (
 	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
 
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
-	"github.com/hashicorp/vault/shamir"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/logging"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
@@ -50,18 +42,24 @@ type Service struct {
 	custodians map[string]provider.Custodian
 	awsCfg     aws.Config
 
-	baseCtx          context.Context
-	secretMgr        appsrv.SecretManager
-	keyShares        [][]byte
-	configCiphertext []byte
-	config           map[string]string
-	kmsDecryptKeyArn string
-	sdkClient        wrappedQldbSDKClient
+	baseCtx           context.Context
+	secretMgr         appsrv.SecretManager
+	keyShares         [][]byte
+	secretsCiphertext []byte
+	secrets           map[string]string
+	kmsDecryptKeyArn  string
+	sdkClient         wrappedQldbSDKClient
 
 	publicKey []byte
 	signer    paymentLib.Signator
 	verifier  paymentLib.Verifier
 }
+
+var (
+	errNoSecretsBucketConfigured        = errors.New("no secrets bucket name for payments service")
+	errNoSecretsObjectConfigured        = errors.New("no secrets object name for payments service")
+	errNoOperatorSharesBucketConfigured = errors.New("no secrets operator shares bucket name for payments service")
+)
 
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, string, error) {
 	// perform enclave attestation
@@ -128,196 +126,6 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 }
 
 type serviceNamespaceContextKey struct{}
-
-// fetchConfiguration will take an s3 bucket/object and fetch the configuration and store the
-// ciphertext on the service for decryption later
-func (s *Service) fetchConfiguration(ctx context.Context, bucket, object string) error {
-	var logger = logging.Logger(ctx, "payments.fetchConfiguration")
-
-	// get proxy address for outbound
-	egressAddr, _ := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
-
-	// download the configuration from s3 bucket/object
-	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	if !ok {
-		region = "us-west-2"
-	}
-
-	awsCfg, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
-	if err != nil {
-		return errors.New("no egress addr for payments service")
-	}
-
-	client := s3.NewFromConfig(awsCfg)
-
-	// use kms encrypt key arn on service to decrypt
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(object),
-	}
-
-	secretsResponse, err := client.GetObject(ctx, input)
-	if err != nil {
-		return fmt.Errorf("failed to get object: %w", err)
-	}
-
-	data, err := io.ReadAll(secretsResponse.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read object: %w", err)
-	}
-
-	// perform enclave attestation for recipient
-	nonce := make([]byte, 64)
-	_, err = rand.Read(nonce)
-	if err != nil {
-		return fmt.Errorf("failed to create nonce for attestation: %w", err)
-	}
-
-	rPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		return fmt.Errorf("failed to create request keypair for attestation: %w", err)
-	}
-	rPubKey := rPrivKey.Public()
-	pubkeyBytes, err := x509.MarshalPKIXPublicKey(rPubKey)
-	if err != nil {
-		return fmt.Errorf("failed to encode public key bytes for attestation: %w", err)
-	}
-
-	document, err := nitro.Attest(ctx, nonce, nil, pubkeyBytes)
-	if err != nil {
-		return fmt.Errorf("failed to create attestation document: %w", err)
-	}
-
-	logger.Info().Msgf("attestation document for config decrypt: %s", document)
-
-	// decrypt with kms key
-	kmsClient := kms.NewFromConfig(awsCfg)
-
-	decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
-		CiphertextBlob:      data,
-		EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
-		KeyId:               aws.String(s.kmsDecryptKeyArn),
-		Recipient: &kmsTypes.RecipientInfo{
-			AttestationDocument:    document,
-			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to decrypt object with kms: %w", err)
-	}
-
-	logger.Info().Msgf("decryptOutput: %+v", decryptOutput)
-
-	configCiphertext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader,
-		rPrivKey, decryptOutput.CiphertextForRecipient, nil)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt object with private key: %w", err)
-	}
-
-	// store the ciphertext on the service as []byte for later
-	s.configCiphertext = configCiphertext
-	return nil
-}
-
-// enoughShares informs the caller if there are enough operator shares present to attempt a decrypt
-func (s *Service) enoughShares(ctx context.Context) bool {
-	if len(s.keyShares) > 1 { // TODO: configurable in future, right now need two shares
-		return true
-	}
-	return false
-}
-
-// configureService takes the ciphertext configuration from fetchConfiguration, then decrypts it with the keyshares
-// from fetchOperatorShares then stores the values in the configuration map
-func (s *Service) configureService(ctx context.Context) error {
-	if len(s.configCiphertext) < 1 {
-		return fmt.Errorf("failed to get service configuration ciphertext")
-	}
-	config, err := s.DecryptBootstrap(ctx, s.configCiphertext)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt bootstrap configuration: %w", err)
-	}
-	// store conf on service
-	s.config = config
-	return nil
-}
-
-// fetchOperatorShares will take an s3 bucket and fetch all of the operator shares and store them
-func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error {
-	s.keyShares = [][]byte{} // clear out old keyshares
-
-	// get proxy address for outbound
-	egressAddr, _ := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
-
-	// download the configuration from s3 bucket/object
-	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	if !ok {
-		region = "us-west-2"
-	}
-
-	awsCfg, err := nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
-	if err != nil {
-		return errors.New("no egress addr for payments service")
-	}
-
-	client := s3.NewFromConfig(awsCfg)
-
-	shareObjects, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Prefix: aws.String("operator-share"),
-		Bucket: aws.String(bucket),
-	})
-
-	// for each share object, get it and append to keyShares
-	for _, shareObject := range shareObjects.Contents {
-		// download all objects from operator shares s3 bucket
-		// use kms encrypt key arn on service to decrypt
-		input := &s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    shareObject.Key, // the share object key for this iteration
-		}
-		// use kms encrypt key arn on service to decrypt each file
-		shareResponse, err := client.GetObject(ctx, input)
-		if err != nil {
-			return fmt.Errorf("failed to get object: %w", err)
-		}
-		data, err := ioutil.ReadAll(shareResponse.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read object: %w", err)
-		}
-		// decrypt with kms key
-		// perform enclave attestation for recipient
-		nonce := make([]byte, 64)
-		_, err = rand.Read(nonce)
-		if err != nil {
-			return fmt.Errorf("failed to create nonce for attestation: %w", err)
-		}
-
-		document, err := nitro.Attest(ctx, nonce, nil, nil)
-		if err != nil {
-			return fmt.Errorf("failed to create attestation document: %w", err)
-		}
-
-		// decrypt with kms key
-		kmsClient := kms.NewFromConfig(awsCfg)
-
-		decryptOutput, err := kmsClient.Decrypt(ctx, &kms.DecryptInput{
-			CiphertextBlob:      data,
-			EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
-			KeyId:               aws.String(s.kmsDecryptKeyArn),
-			Recipient: &kmsTypes.RecipientInfo{
-				AttestationDocument: document,
-			},
-		})
-
-		if err != nil {
-			return fmt.Errorf("failed to decrypt object with kms: %w", err)
-		}
-		// store the decrypted keyShares on the service as [][]byte for later
-		s.keyShares = append(s.keyShares, decryptOutput.Plaintext)
-	}
-
-	return nil
-}
 
 // configureKMSEncryptionKey creates the enclave kms key which is only decrypt capable with enclave
 // attestation.
@@ -427,32 +235,30 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		}),
 	}
 
+	// create the kms encryption key for this service for bootstrap operator shares
 	if err := service.configureKMSEncryptionKey(ctx); err != nil {
-		logger.Error().Err(err).Msg("could not create kms secret encryption key")
-		return nil, nil, errors.New("could not create kms secret encryption key")
+		return nil, nil, fmt.Errorf("could not create kms secret encryption key: %w", err)
 	}
 
 	go func() {
 		_, _, err := func() (interface{}, interface{}, error) {
-			// get the config object key and bucket name from environment
-			configBucketName, ok := ctx.Value(appctx.EnclaveConfigBucketNameCTXKey).(string)
+			// get the secrets object key and bucket name from environment
+			secretsBucketName, ok := ctx.Value(appctx.EnclaveSecretsBucketNameCTXKey).(string)
 			if !ok {
-				return nil, nil, errors.New("no configuration bucket name for payments service")
+				return nil, nil, errNoSecretsBucketConfigured
 			}
 
 			// download the configuration file, kms decrypt the file
-			configObjectName, ok := ctx.Value(appctx.EnclaveConfigObjectNameCTXKey).(string)
+			secretsObjectName, ok := ctx.Value(appctx.EnclaveSecretsObjectNameCTXKey).(string)
 			if !ok {
-				return nil, nil, errors.New("no configuration object name for payments service")
+				return nil, nil, errNoSecretsObjectConfigured
 			}
 
 			for {
-				logger.Info().Msgf("enclave-config-bucket-name: %s", configBucketName)
-				logger.Info().Msgf("enclave-config-object-name: %s", configObjectName)
-				// fetch the configuration, result will store the configuration (age ciphertext) on the service instance
-				if err := service.fetchConfiguration(ctx, configBucketName, configObjectName); err != nil {
+				// fetch the secrets, result will store the secrets (age ciphertext) on the service instance
+				if err := service.fetchSecrets(ctx, secretsBucketName, secretsObjectName); err != nil {
 					// log the error, we will retry again
-					logger.Error().Err(err).Msg("failed to fetch configuration, will retry shortly")
+					logger.Error().Err(err).Msg("failed to fetch secrets, will retry shortly")
 					<-time.After(30 * time.Second)
 					continue
 				}
@@ -462,29 +268,31 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 			// operator shares files
 			operatorSharesBucketName, ok := ctx.Value(appctx.EnclaveOperatorSharesBucketNameCTXKey).(string)
 			if !ok {
-				return nil, nil, errors.New("no operator shares bucket name for payments service")
+				return nil, nil, errNoOperatorSharesBucketConfigured
 			}
-			logger.Info().Msgf("enclave-operator-shares-bucket-name: %s", operatorSharesBucketName)
 
 			for {
 				// do we have enough shares to attempt to reconstitute the key?
 				if err := service.fetchOperatorShares(ctx, operatorSharesBucketName); err != nil {
-					return nil, nil, fmt.Errorf("failed to fetch operator shares: %w", err)
+					logger.Error().Err(err).Msg("failed to fetch operator shares, will retry shortly")
+					<-time.After(60 * time.Second)
+					continue
 				}
-				if ok := service.enoughShares(ctx); ok {
+				if ok := service.enoughOperatorShares(ctx, 2); ok { // 2 is the number of shares required
 					// yes - attempt to decrypt the file
-					if err := service.configureService(ctx); err != nil {
+					if err := service.configureSecrets(ctx); err != nil {
 						// fail to decrypt?  panic loudly
-						return nil, nil, fmt.Errorf("failed to configure payments service: %w", err)
+						return nil, nil, fmt.Errorf("failed to configure payments service secrets: %w", err)
 					}
 					break
 				}
+				logger.Error().Err(err).Msg("need more operator shares to decrypt secrets")
 				// no - poll for operator shares until we can attempt to decrypt the file
 				<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
 			}
 			// at this point we should have our config loaded, lets print out the keys
-			for k := range service.config {
-				logger.Info().Msgf("%s is loaded in configuration!", k)
+			for k := range service.secrets {
+				logger.Info().Msgf("%s is loaded in secrets!", k)
 			}
 
 			return nil, nil, nil
@@ -500,41 +308,6 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	}
 
 	return ctx, service, nil
-}
-
-// DecryptBootstrap - use service keyShares to reconstruct the decryption key.
-func (s *Service) DecryptBootstrap(
-	ctx context.Context,
-	ciphertext []byte,
-) (map[string]string, error) {
-	// combine the service configured key shares
-	key, err := shamir.Combine(s.keyShares)
-	if err != nil {
-		return nil, fmt.Errorf("failed to combine keyShares: %w", err)
-	}
-
-	// pull nonce off ciphertext blob
-	var nonce [32]byte
-	copy(nonce[:], ciphertext[:32]) // nonce is in first 32 bytes of ciphertext
-
-	// shove key into array
-	var k [32]byte
-	copy(k[:], key) // nonce is in first 32 bytes of ciphertext
-
-	// decrypted is the encryption key used to decrypt secrets now
-	v, err := cryptography.DecryptMessage(k, ciphertext[32:], nonce[:])
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt secrets: %w", err)
-	}
-
-	// then unmarshal the json configuration file and load the secrets in memory
-	var output = map[string]string{}
-	err = json.Unmarshal([]byte(v), &output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to json decode secrets: %w", err)
-	}
-
-	return output, nil
 }
 
 func isQLDBReady(ctx context.Context) bool {
