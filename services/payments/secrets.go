@@ -223,7 +223,9 @@ func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error)
 		return nil, fmt.Errorf("failed to combine keyShares: %w", err)
 	}
 	logger.Info().Msgf("share 1: %s", string(s.keyShares[0]))
+
 	logger.Info().Msgf("share 2: %s", string(s.keyShares[1]))
+
 	logger.Info().Msgf("age identity key: %+v", string(privateKey))
 
 	identity, err := age.ParseX25519Identity(string(privateKey))
