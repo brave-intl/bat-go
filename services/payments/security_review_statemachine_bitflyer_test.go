@@ -106,8 +106,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 		httpmock.NewStringResponder(200, string(jsonPriceFetchResponse)),
 	)
 
-	namespaceUUID, err := uuid.Parse("7478bd8a-2247-493d-b419-368f1a1d7a6c")
-	must.Equal(t, nil, err)
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Equal(t, nil, err)
 
@@ -174,7 +172,6 @@ func TestBitflyerStateMachineHappyPathTransitions(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, serviceNamespaceContextKey{}, namespaceUUID)
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 
 	// First call in order is to insertPayment and should return a fake document ID
