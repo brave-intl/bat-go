@@ -3,8 +3,6 @@ package payments
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"os"
@@ -12,10 +10,7 @@ import (
 	"text/template"
 	"time"
 
-	nitro_eclave_attestation_document "github.com/veracruz-project/go-nitro-enclave-attestation-document"
-
 	"encoding/hex"
-	"encoding/pem"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -30,15 +25,10 @@ import (
 	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
-type compatDatastore interface {
-	Datastore
-	wrappedQldbDriverAPI
-}
-
 // Service struct definition of payments service.
 type Service struct {
 	// concurrent safe
-	datastore  compatDatastore
+	datastore  Datastore
 	custodians map[string]provider.Custodian
 	awsCfg     aws.Config
 
@@ -48,7 +38,6 @@ type Service struct {
 	secretsCiphertext []byte
 	secrets           map[string]string
 	kmsDecryptKeyArn  string
-	sdkClient         wrappedQldbSDKClient
 
 	publicKey []byte
 	signer    paymentLib.Signator
@@ -62,37 +51,13 @@ var (
 )
 
 func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, string, error) {
-	// perform enclave attestation
-	nonce := make([]byte, 64)
-	_, err := rand.Read(nonce)
+	var logger = logging.Logger(ctx, "payments.parseKeyPolicyTemplate")
+
+	pcrs, err := nitro.GetPCRs()
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create nonce for attestation: %w", err)
+		return "", "", fmt.Errorf("failed to get PCR values: %w", err)
 	}
-
-	document, err := nitro.Attest(ctx, nonce, nil, nil)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to create attestation document: %w", err)
-	}
-
-	var logger = logging.Logger(ctx, "payments.configureKMSKey")
-	logger.Info().Msgf("document: %+v", document)
-
-	// parse the root certificate
-	block, _ := pem.Decode([]byte(nitro.RootAWSNitroCert))
-
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to parse certificate: %w", err)
-	}
-
-	// parse document
-	ad, err := nitro_eclave_attestation_document.AuthenticateDocument(document, *cert, true)
-	if err != nil {
-		logger.Error().Err(err).Msgf("failed to parse template attestation document: %+v", ad)
-		return "", "", err
-	}
-	logger.Info().Msgf("digest: %+v", ad.Digest)
-	logger.Info().Msgf("pcrs: %+v", ad.PCRs)
+	logger.Info().Msgf("pcrs: %+v", pcrs)
 
 	t, err := template.ParseFiles(templateFile)
 	if err != nil {
@@ -109,9 +74,9 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 
 	buf := bytes.NewBuffer([]byte{})
 	if err := t.Execute(buf, keyTemplateData{
-		PCR0:       hex.EncodeToString(ad.PCRs[0]),
-		PCR1:       hex.EncodeToString(ad.PCRs[1]),
-		PCR2:       hex.EncodeToString(ad.PCRs[2]),
+		PCR0:       hex.EncodeToString(pcrs[0]),
+		PCR1:       hex.EncodeToString(pcrs[1]),
+		PCR2:       hex.EncodeToString(pcrs[2]),
 		AWSAccount: os.Getenv("AWS_ACCOUNT"),
 	}); err != nil {
 		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)
@@ -122,7 +87,7 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 
 	logger.Info().Msgf("key policy: %+v", policy)
 
-	return policy, hex.EncodeToString(ad.PCRs[2]), nil
+	return policy, hex.EncodeToString(pcrs[2]), nil
 }
 
 type serviceNamespaceContextKey struct{}
