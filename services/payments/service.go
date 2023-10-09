@@ -278,7 +278,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 					<-time.After(60 * time.Second)
 					continue
 				}
-				if ok := service.enoughOperatorShares(ctx, 2); ok { // 2 is the number of shares required
+				if ok := service.enoughOperatorShares(ctx, 1); ok { // 2 is the number of shares required
 					// yes - attempt to decrypt the file
 					if err := service.configureSecrets(ctx); err != nil {
 						// fail to decrypt?  panic loudly
