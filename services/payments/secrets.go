@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 
 	"filippo.io/age"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -144,7 +145,15 @@ func (s *Service) configureSecrets(ctx context.Context) error {
 
 	// store conf on service
 	s.secrets = secrets
+
+	s.setEnvFromSecrets(secrets)
 	return nil
+}
+
+// setEnvFromSecrets takes a secrets map and loads the secrets as environment variables
+func (s *Service) setEnvFromSecrets(secrets map[string]string) {
+	os.Setenv("ZEBPAY_API_KEY", secrets["zebpayApiKey"])
+	os.Setenv("ZEBPAY_SIGNING_KEY", secrets["zebpayPrivateKey"])
 }
 
 // fetchOperatorShares will take an s3 bucket and fetch all of the operator shares and store them
