@@ -16,7 +16,7 @@ type PaymentDetails struct {
 	Amount    decimal.Decimal `json:"amount" valid:"required"`
 	To        string          `json:"to" valid:"required"`
 	From      string          `json:"from" valid:"required"`
-	Custodian string          `json:"custodian" valid:"in(uphold|gemini|bitflyer)"`
+	Custodian string          `json:"custodian" valid:"in(uphold|gemini|bitflyer|zebpay)"`
 	PayoutID  string          `json:"payoutId" valid:"required"`
 	Currency  string          `json:"currency" valid:"required"`
 }
