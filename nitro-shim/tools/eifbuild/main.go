@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 )
@@ -184,7 +185,18 @@ func BuildEif(blobsPath string, image string, cmds []string, envs map[string]str
 	for _, c := range cmds {
 		fmt.Fprintf(cmd, "%s\n", c)
 	}
-	for k, v := range envs {
+
+	// sort the env vars to ensure they are reproducible
+	keys := make([]string, len(envs))
+	i := 0
+	for k := range envs {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := envs[k]
 		fmt.Fprintf(env, "%s=%s\n", k, v)
 	}
 
