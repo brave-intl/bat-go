@@ -16,13 +16,13 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
@@ -1291,7 +1291,7 @@ type credential interface {
 }
 
 // verifyCredential - given a credential, verify it.
-func (s *Service) verifyCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
+func (s *Service) verifyCredential(ctx context.Context, cred credential, w http.ResponseWriter) *handlers.AppError {
 	logger := logging.Logger(ctx, "verifyCredential")
 
 	merchant, err := GetMerchant(ctx)
@@ -1304,9 +1304,9 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 
 	caveats := GetCaveats(ctx)
 
-	if req.GetMerchantID(ctx) != merchant {
+	if cred.GetMerchantID(ctx) != merchant {
 		logger.Warn().
-			Str("req.MerchantID", req.GetMerchantID(ctx)).
+			Str("req.MerchantID", cred.GetMerchantID(ctx)).
 			Str("merchant", merchant).
 			Msg("merchant does not match the key's merchant")
 		return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
@@ -1316,9 +1316,9 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 
 	if caveats != nil {
 		if sku, ok := caveats["sku"]; ok {
-			if req.GetSku(ctx) != sku {
+			if cred.GetSku(ctx) != sku {
 				logger.Warn().
-					Str("req.SKU", req.GetSku(ctx)).
+					Str("req.SKU", cred.GetSku(ctx)).
 					Str("sku", sku).
 					Msg("sku caveat does not match")
 				return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
@@ -1327,12 +1327,12 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 	}
 	logger.Debug().Msg("caveats validated")
 
-	kind := req.GetType(ctx)
+	kind := cred.GetType(ctx)
 	switch kind {
 	case singleUse, timeLimitedV2:
-		return s.verifyBlindedTokenCredential(ctx, req, w)
+		return s.verifyBlindedTokenCredential(ctx, cred, w)
 	case timeLimited:
-		return s.verifyTimeLimitedV1Credential(ctx, req, w)
+		return s.verifyTimeLimitedV1Credential(ctx, cred, w)
 	default:
 		return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
 	}
