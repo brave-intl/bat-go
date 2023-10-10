@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -169,9 +170,14 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 
 	s3Client := s3.NewFromConfig(awsCfg)
 
+	pcrs, err := nitro.GetPCRs()
+	if err != nil {
+		return fmt.Errorf("failed to get PCR values: %w", err)
+	}
+
 	// list all objects in the bucket prefixed with operator-share
 	shareObjects, err := s3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Prefix: aws.String("operator-share"),
+		Prefix: aws.String(hex.EncodeToString(pcrs[2]) + "/operator-share"),
 		Bucket: aws.String(bucket),
 	})
 
