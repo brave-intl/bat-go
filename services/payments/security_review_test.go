@@ -51,7 +51,7 @@ func (m *mockResult) GetCurrentData() []byte {
 	args := m.Called()
 	return args.Get(0).([]byte)
 }
-func (m *mockResult) Next(txn wrappedQldbTxnAPI) bool {
+func (m *mockResult) Next(txn qldbdriver.Transaction) bool {
 	args := m.Called(txn)
 	return args.Get(0).(bool)
 }
