@@ -53,7 +53,7 @@ files:
 
 func printusage() {
 	fmt.Println("Usage:\n")
-	fmt.Println("eifbuild -pass-envs ENVS -docker-uri IMAGE -output-file OUTPUT -- COMMAND...\n")
+	fmt.Println("eifbuild [-blobs-path BLOBS_PATH] -pass-envs ENVS -docker-uri IMAGE -output-file OUTPUT -- COMMAND...\n")
 
 	flag.PrintDefaults()
 }
@@ -69,6 +69,7 @@ func main() {
 	passEnvPtr := flag.String("pass-env", "", "Comma separated list of env vars to pass to the build")
 	imagePtr := flag.String("docker-uri", "", "Docker image URI")
 	outPtr := flag.String("output-file", "", "Output file for built EIF")
+	blobsPath := flag.String("blobs-path", "/usr/share/nitro_enclaves/blobs/", "Path to aws nitro cli blobs")
 	flag.BoolVar(&help, "help", false, "Show help")
 	flag.BoolVar(&help, "h", false, "Show help (shorthand)")
 	flag.Usage = printusage
@@ -118,7 +119,7 @@ func main() {
 
 	fmt.Println("\nBuilding...")
 
-	err := BuildEif("/usr/share/nitro_enclaves/blobs/", *imagePtr, cmd, envs, *outPtr)
+	err := BuildEif(*blobsPath, *imagePtr, cmd, envs, *outPtr)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -226,7 +227,7 @@ func BuildEif(blobsPath string, image string, cmds []string, envs map[string]str
 	if err != nil {
 		return err
 	}
-	command = execCommand("/root/.cargo/bin/eif_build",
+	command = execCommand("eif_build",
 		"--kernel",
 		filepath.Join(blobsPath, "bzImage"),
 		"--kernel_config",
