@@ -51,6 +51,7 @@ type SettlementClient interface {
 func NewSettlementClient(ctx context.Context, env string, config map[string]string) (context.Context, SettlementClient, error) {
 	ctx, _ = logging.SetupLogger(ctx)
 
+	// FIXME should have PCR2 as an argument to this function and pass it here
 	sp, verifier, err := NewNitroVerifier(nil)
 	if err != nil {
 		return ctx, nil, err
