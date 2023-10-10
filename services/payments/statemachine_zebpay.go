@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/google/uuid"
 )
 
@@ -26,22 +26,22 @@ type ZebpayMachine struct {
 }
 
 // Pay implements TxStateMachine for the Zebpay machine.
-func (zm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, error) {
+func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	err := ctx.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
 		return zm.transaction, err
 	}
 
 	// Do nothing if the state is already final
-	if zm.transaction.Status == Paid || zm.transaction.Status == Failed {
+	if zm.transaction.Status == paymentLib.Paid || zm.transaction.Status == paymentLib.Failed {
 		return zm.transaction, nil
 	}
 
 	var (
-		entry *AuthenticatedPaymentState
+		entry *paymentLib.AuthenticatedPaymentState
 	)
 
-	if zm.transaction.Status == Pending {
+	if zm.transaction.Status == paymentLib.Pending {
 		// We don't want to check status too fast
 		time.Sleep(zm.backoffFactor * time.Millisecond)
 		// Get status of transaction and update the state accordingly
@@ -54,7 +54,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 		switch ctr.Code {
 		case zebpay.TransferSuccessCode:
 			// Write the Paid status and end the loop by not calling Drive
-			entry, err = zm.SetNextState(ctx, Paid)
+			entry, err = zm.SetNextState(ctx, paymentLib.Paid)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -70,7 +70,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 			}
 		default:
 			// Status unknown. includes TransferFailedCode
-			entry, err = zm.SetNextState(ctx, Failed)
+			entry, err = zm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -106,7 +106,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 
 		if strings.ToUpper(btr.Data) != "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED" {
 			// Status unknown. Fail
-			entry, err = zm.SetNextState(ctx, Failed)
+			entry, err = zm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -116,7 +116,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 			)
 		}
 
-		entry, err = zm.SetNextState(ctx, Pending)
+		entry, err = zm.SetNextState(ctx, paymentLib.Pending)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write next state: %w", err)
 		}
@@ -135,6 +135,6 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 }
 
 // Fail implements TxStateMachine for the Zebpay machine.
-func (bm *ZebpayMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return bm.SetNextState(ctx, Failed)
+func (bm *ZebpayMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return bm.SetNextState(ctx, paymentLib.Failed)
 }
