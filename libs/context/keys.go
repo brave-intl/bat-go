@@ -53,10 +53,10 @@ const (
 	BuildTimeCTXKey CTXKey = "build_time"
 	// ReputationClientCTXKey - context key for the build time of code
 	ReputationClientCTXKey CTXKey = "reputation_client"
-	// XyzAbcLinkingKeyCTXKey - context key for the build time of code
-	XyzAbcLinkingKeyCTXKey CTXKey = "xyzabc_linking_key"
-	// DisableXyzAbcLinkingCTXKey - context key for the build time of code
-	DisableXyzAbcLinkingCTXKey CTXKey = "disable_xyzabc_linking"
+	// ZebPayLinkingKeyCTXKey - context key for the build time of code
+	ZebPayLinkingKeyCTXKey CTXKey = "zebpay_linking_key"
+	// DisableZebPayLinkingCTXKey - context key for the build time of code
+	DisableZebPayLinkingCTXKey CTXKey = "disable_zebpay_linking"
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
 	// GeminiBrowserClientIDCTXKey - context key for the gemini browser client id
@@ -146,6 +146,17 @@ const (
 	DisableGeminiLinkingCTXKey CTXKey = "disable_gemini_linking"
 	// DisableBitflyerLinkingCTXKey - this informs if bitflyer linking is enabled
 	DisableBitflyerLinkingCTXKey CTXKey = "disable_bitflyer_linking"
+
+	// RadomWebhookSecretCTXKey - the webhook secret key for radom integration
+	RadomWebhookSecretCTXKey CTXKey = "radom_webhook_secret"
+	// RadomEnabledCTXKey - this informs if radom is enabled
+	RadomEnabledCTXKey CTXKey = "radom_enabled"
+	// RadomSellerAddressCTXKey is the seller address on radom
+	RadomSellerAddressCTXKey CTXKey = "radom_seller_address"
+	// RadomServerCTXKey is the server address on radom
+	RadomServerCTXKey CTXKey = "radom_server"
+	// RadomSecretCTXKey is the server secret on radom
+	RadomSecretCTXKey CTXKey = "radom_secret"
 
 	// stripe related keys
 
@@ -238,6 +249,12 @@ const (
 	EgressProxyAddrCTXKey CTXKey = "egress_proxy_addr"
 	// EnclaveDecryptKeyTemplateSecretIDCTXKey - the context key for getting the key template for key creation
 	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
+	// EnclaveConfigObjectNameCTXKey specifies the config object name for nitro enclave payments service
+	EnclaveSecretsObjectNameCTXKey CTXKey = "enclave_config_object_name"
+	// EnclaveConfigBucketNameCTXKey specifies the config bucket name for nitro enclave payments service
+	EnclaveSecretsBucketNameCTXKey CTXKey = "enclave_config_bucket_name"
+	// EnclaveOperatorSharesBucketNameCTXKey specifies the operator shares bucket name for nitro enclave payments service
+	EnclaveOperatorSharesBucketNameCTXKey CTXKey = "enclave_operator_shares_bucket_name"
 )
 
 var (

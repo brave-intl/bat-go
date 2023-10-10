@@ -2,28 +2,21 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AllowKeyAdminAccess",
-      "Effect": "Allow",
-      "Action": [
-        "kms:Update*",
-        "kms:UntagResource",
-        "kms:TagResource",
-        "kms:ScheduleKeyDeletion",
-        "kms:Revoke*",
-        "kms:Put*",
-        "kms:List*",
-        "kms:Get*",
-        "kms:Enable*",
-        "kms:Disable*",
-        "kms:Describe*",
-        "kms:Delete*",
-        "kms:Create*",
-        "kms:CancelKeyDeletion"
-      ],
-      "Resource": "*",
-      "Principal": {
-      "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eks-payments-dev-nitro-shim"
-      }
+        "Sid": "AllowHostNodeAccess",
+        "Effect": "Allow",
+        "Principal": {
+        "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+        },
+        "Action": [
+            "kms:TagResource",
+            "kms:List*",
+            "kms:Get*",
+            "kms:Enable*",
+            "kms:Describe*",
+            "kms:CreateKey",
+            "kms:CreateAlias"
+        ],
+        "Resource": "*"
     },
     {
       "Sid": "AllowDevOpsReadOnlyAccess",
@@ -75,6 +68,7 @@
       "Action": [
         "kms:UntagResource",
         "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
         "kms:Revoke*",
         "kms:List*",
         "kms:Get*",
@@ -132,14 +126,16 @@
       ],
       "Resource": "*",
       "Principal": {
-        "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eks-payments-dev-nitro-shim"
+        "AWS": "*"
       },
       "Condition": {
         "StringLike": {
-            "kms:RecipientAttestation:ImageSha384": "{{.ImageSHA}}",
             "kms:RecipientAttestation:PCR0": "{{.PCR0}}",
             "kms:RecipientAttestation:PCR1": "{{.PCR1}}",
             "kms:RecipientAttestation:PCR2": "{{.PCR2}}"
+        },
+        "ArnLike": {
+            "aws:PrincipalArn": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
         }
       }
     },

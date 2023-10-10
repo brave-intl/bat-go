@@ -4,7 +4,9 @@ package main
 
 import (
 	// pull in tool module. setup code is in init
+
 	"github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/libs/logging"
 	_ "github.com/brave-intl/bat-go/tools/cmd"
 
 	// pull in settlement module. setup code is in init
@@ -41,5 +43,10 @@ var (
 )
 
 func main() {
+	defer func() {
+		if logging.Writer != nil {
+			logging.Writer.Close()
+		}
+	}()
 	cmd.Execute(version, commit, buildTime)
 }

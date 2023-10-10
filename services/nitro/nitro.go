@@ -10,14 +10,10 @@ import (
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	srvcmd "github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/payments"
-	chiware "github.com/go-chi/chi/middleware"
-	"github.com/rs/zerolog/hlog"
 
 	"github.com/go-chi/chi"
 	"github.com/mdlayher/vsock"
@@ -43,6 +39,13 @@ func init() {
 	// qldb-ledger-arn - sets the AWS ARN for the QLDB ledger
 	NitroServeCmd.PersistentFlags().String("qldb-ledger-arn", "", "the AWS ARN for the QLDB ledger")
 
+	// enclave-config-object-name is the config object name in s3 (from configure command)
+	NitroServeCmd.PersistentFlags().String("enclave-config-object-name", "", "the configuration object name in s3")
+	// enclave-config-bucket-name is the config bucket name in s3 (from configure command)
+	NitroServeCmd.PersistentFlags().String("enclave-config-bucket-name", "", "the configuration bucket name in s3")
+	// enclave-operator-shares-bucket-name is the operator-shares bucket name in s3 (from bootstrap command)
+	NitroServeCmd.PersistentFlags().String("enclave-operator-shares-bucket-name", "", "the operator shares bucket name in s3")
+
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
 	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
 	rootcmd.Must(viper.BindEnv("upstream-url", "UPSTREAM_URL"))
@@ -61,6 +64,13 @@ func init() {
 	rootcmd.Must(viper.BindEnv("qldb-ledger-name", "QLDB_LEDGER_NAME"))
 	rootcmd.Must(viper.BindPFlag("qldb-ledger-arn", NitroServeCmd.PersistentFlags().Lookup("qldb-ledger-arn")))
 	rootcmd.Must(viper.BindEnv("qldb-ledger-arn", "QLDB_LEDGER_ARN"))
+
+	rootcmd.Must(viper.BindPFlag("enclave-config-object-name", NitroServeCmd.PersistentFlags().Lookup("enclave-config-object-name")))
+	rootcmd.Must(viper.BindEnv("enclave-config-object-name", "ENCLAVE_CONFIG_OBJECT_NAME"))
+	rootcmd.Must(viper.BindPFlag("enclave-config-bucket-name", NitroServeCmd.PersistentFlags().Lookup("enclave-config-bucket-name")))
+	rootcmd.Must(viper.BindEnv("enclave-config-bucket-name", "ENCLAVE_CONFIG_BUCKET_NAME"))
+	rootcmd.Must(viper.BindPFlag("enclave-operator-shares-bucket-name", NitroServeCmd.PersistentFlags().Lookup("enclave-operator-shares-bucket-name")))
+	rootcmd.Must(viper.BindEnv("enclave-operator-shares-bucket-name", "ENCLAVE_OPERATOR_SHARES_BUCKET_NAME"))
 
 	// enclave decrypt key template used to create decryption key in enclave
 	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
@@ -105,6 +115,10 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerNameCTXKey, viper.GetString("qldb-ledger-name"))
 	ctx = context.WithValue(ctx, appctx.PaymentsQLDBLedgerARNCTXKey, viper.GetString("qldb-ledger-arn"))
 	ctx = context.WithValue(ctx, appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey, viper.GetString("enclave-decrypt-key-template-secret"))
+
+	ctx = context.WithValue(ctx, appctx.EnclaveSecretsObjectNameCTXKey, viper.GetString("enclave-config-object-name"))
+	ctx = context.WithValue(ctx, appctx.EnclaveSecretsBucketNameCTXKey, viper.GetString("enclave-config-bucket-name"))
+	ctx = context.WithValue(ctx, appctx.EnclaveOperatorSharesBucketNameCTXKey, viper.GetString("enclave-operator-shares-bucket-name"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
 	logger.Info().Msg("starting payments service")
@@ -115,7 +129,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	}
 	logger.Info().Msg("payments service setup")
 	// setup router
-	ctx, r := setupRouter(ctx, s)
+	ctx, r := payments.SetupRouter(ctx, s)
 	logger.Info().Msg("payments routes setup")
 
 	// setup listener
@@ -142,49 +156,6 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// run the server in another routine
 	logger.Fatal().Err(srv.Serve(l)).Msg("server shutdown")
 	return nil
-}
-
-func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *chi.Mux) {
-	// base service logger
-	logger := logging.Logger(ctx, "payments")
-	// base router
-	r := chi.NewRouter()
-	// middlewares
-	r.Use(chiware.RequestID)
-	r.Use(middleware.RequestIDTransfer)
-	r.Use(hlog.NewHandler(*logger))
-	r.Use(hlog.UserAgentHandler("user_agent"))
-	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
-	r.Use(middleware.RequestLogger(logger))
-	r.Use(chiware.Timeout(15 * time.Second))
-	r.Use(s.ConfigurationMiddleware)
-	logger.Info().Msg("configuration middleware setup")
-	// routes
-	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
-	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
-	// setup payments routes
-	// prepare inserts transactions into qldb, returning a document which needs to be submitted by
-	// an authorizer
-	r.Post(
-		"/v1/payments/prepare",
-		middleware.InstrumentHandler(
-			"PrepareHandler",
-			payments.PrepareHandler(s),
-		).ServeHTTP,
-	)
-	logger.Info().Msg("prepare endpoint setup")
-	// submit will have an http signature from a known list of public keys
-	r.Post(
-		"/v1/payments/submit",
-		middleware.InstrumentHandler(
-			"SubmitHandler",
-			s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s)),
-		).ServeHTTP)
-	logger.Info().Msg("submit endpoint setup")
-
-	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
-	logger.Info().Msg("get config endpoint setup")
-	return ctx, r
 }
 
 // RunNitroServerOutsideEnclave - start up all the services which are outside

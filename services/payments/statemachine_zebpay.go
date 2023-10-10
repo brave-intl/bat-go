@@ -47,14 +47,14 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 		// Get status of transaction and update the state accordingly
 		ctr, err := bm.client.CheckTransfer(ctx, &zebpay.ClientOpts{
 			APIKey: bm.apiKey, SigningKey: bm.signingKey,
-		}, bm.transaction.GenerateIdempotencyKey())
+		}, bm.transaction.IdempotencyKey())
 		if err != nil {
 			return nil, fmt.Errorf("failed to check transaction status: %w", err)
 		}
 		switch ctr.Code {
 		case zebpay.TransferSuccessCode:
 			// Write the Paid status and end the loop by not calling Drive
-			entry, err = bm.writeNextState(ctx, Paid)
+			entry, err = bm.SetNextState(ctx, Paid)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -70,7 +70,7 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 			}
 		default:
 			// Status unknown. includes TransferFailedCode
-			entry, err = bm.writeNextState(ctx, Failed)
+			entry, err = bm.SetNextState(ctx, Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -89,7 +89,7 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 			APIKey: bm.apiKey, SigningKey: bm.signingKey,
 		}, zebpay.NewBulkTransferRequest(
 			zebpay.NewTransfer(
-				bm.transaction.GenerateIdempotencyKey(),
+				bm.transaction.IdempotencyKey(),
 				uuid.MustParse(bm.transaction.From),
 				bm.transaction.Amount,
 				to)))
@@ -99,7 +99,7 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 
 		if strings.ToUpper(btr.Data) != "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED" {
 			// Status unknown. Fail
-			entry, err = bm.writeNextState(ctx, Failed)
+			entry, err = bm.SetNextState(ctx, Failed)
 			if err != nil {
 				return nil, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -109,7 +109,7 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 			)
 		}
 
-		entry, err = bm.writeNextState(ctx, Pending)
+		entry, err = bm.SetNextState(ctx, Pending)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write next state: %w", err)
 		}
@@ -129,5 +129,5 @@ func (bm *ZebpayMachine) Pay(ctx context.Context) (*AuthenticatedPaymentState, e
 
 // Fail implements TxStateMachine for the Zebpay machine.
 func (bm *ZebpayMachine) Fail(ctx context.Context) (*AuthenticatedPaymentState, error) {
-	return bm.writeNextState(ctx, Failed)
+	return bm.SetNextState(ctx, Failed)
 }

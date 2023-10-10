@@ -140,6 +140,10 @@ func (sp *SignatureParams) BuildSigningStringForResponse(resp *http.Response) (o
 	return sp.buildSigningString(nil, resp.Header, resp.Request)
 }
 
+func formatRequestTarget(req *http.Request) string {
+	return fmt.Sprintf("%s %s", strings.ToLower(req.Method), req.URL.RequestURI())
+}
+
 func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, req *http.Request) (out []byte, err error) {
 	if sp.IsMalformed() {
 		return nil, errors.New("refusing to build signing string with malformed params")
@@ -156,7 +160,7 @@ func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, 
 				return nil, fmt.Errorf("request must be present to use the %s pseudo-header", RequestTargetHeader)
 			}
 			if req.URL != nil && len(req.Method) > 0 {
-				out = append(out, []byte(fmt.Sprintf("%s: %s %s", RequestTargetHeader, strings.ToLower(req.Method), req.URL.RequestURI()))...)
+				out = append(out, []byte(fmt.Sprintf("%s: %s", RequestTargetHeader, formatRequestTarget(req)))...)
 			} else {
 				return nil, fmt.Errorf("request must have a URL and Method to use the %s pseudo-header", RequestTargetHeader)
 			}
@@ -280,7 +284,9 @@ func (psrw *ParameterizedSignatorResponseWriter) Write(body []byte) (int, error)
 		return -1, err
 	}
 
-	psrw.w.WriteHeader(psrw.statusCode)
+	if psrw.statusCode != -1 {
+		psrw.w.WriteHeader(psrw.statusCode)
+	}
 	return psrw.w.Write(body)
 }
 

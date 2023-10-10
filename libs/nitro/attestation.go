@@ -1,13 +1,37 @@
 package nitro
 
 import (
+	"bytes"
 	"context"
+	"crypto"
+	"crypto/x509"
 	"errors"
+	"fmt"
+	"io"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/hf/nitrite"
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
 )
+
+// RootAWSNitroCert is the root certificate for the nitro enclaves in aws,
+// retrieved from https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
+var RootAWSNitroCert = `-----BEGIN CERTIFICATE-----
+MIICETCCAZagAwIBAgIRAPkxdWgbkK/hHUbMtOTn+FYwCgYIKoZIzj0EAwMwSTEL
+MAkGA1UEBhMCVVMxDzANBgNVBAoMBkFtYXpvbjEMMAoGA1UECwwDQVdTMRswGQYD
+VQQDDBJhd3Mubml0cm8tZW5jbGF2ZXMwHhcNMTkxMDI4MTMyODA1WhcNNDkxMDI4
+MTQyODA1WjBJMQswCQYDVQQGEwJVUzEPMA0GA1UECgwGQW1hem9uMQwwCgYDVQQL
+DANBV1MxGzAZBgNVBAMMEmF3cy5uaXRyby1lbmNsYXZlczB2MBAGByqGSM49AgEG
+BSuBBAAiA2IABPwCVOumCMHzaHDimtqQvkY4MpJzbolL//Zy2YlES1BR5TSksfbb
+48C8WBoyt7F2Bw7eEtaaP+ohG2bnUs990d0JX28TcPQXCEPZ3BABIeTPYwEoCWZE
+h8l5YoQwTcU/9KNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUkCW1DdkF
+R+eWw5b6cp3PmanfS5YwDgYDVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMDA2kAMGYC
+MQCjfy+Rocm9Xue4YnwWmNJVA44fA0P5W2OpYow9OYCVRaEevL8uO1XYru5xtMPW
+rfMCMQCi85sWBbJwKKXdS6BptQFuZbT73o/gBh1qUxl/nNr12UO8Yfwr6wPLb+6N
+IwLz3/Y=
+-----END CERTIFICATE-----`
 
 // Attest takes as input a nonce, user-provided data and a public key, and then
 // asks the Nitro hypervisor to return a signed attestation document that
@@ -41,19 +65,90 @@ func Attest(ctx context.Context, nonce, userData, publicKey []byte) ([]byte, err
 	return res.Attestation.Document, nil
 }
 
-// RootAWSNitroCert is the root certificate for the nitro enclaves in aws,
-// retrieved from https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
-var RootAWSNitroCert = `-----BEGIN CERTIFICATE-----
-MIICETCCAZagAwIBAgIRAPkxdWgbkK/hHUbMtOTn+FYwCgYIKoZIzj0EAwMwSTEL
-MAkGA1UEBhMCVVMxDzANBgNVBAoMBkFtYXpvbjEMMAoGA1UECwwDQVdTMRswGQYD
-VQQDDBJhd3Mubml0cm8tZW5jbGF2ZXMwHhcNMTkxMDI4MTMyODA1WhcNNDkxMDI4
-MTQyODA1WjBJMQswCQYDVQQGEwJVUzEPMA0GA1UECgwGQW1hem9uMQwwCgYDVQQL
-DANBV1MxGzAZBgNVBAMMEmF3cy5uaXRyby1lbmNsYXZlczB2MBAGByqGSM49AgEG
-BSuBBAAiA2IABPwCVOumCMHzaHDimtqQvkY4MpJzbolL//Zy2YlES1BR5TSksfbb
-48C8WBoyt7F2Bw7eEtaaP+ohG2bnUs990d0JX28TcPQXCEPZ3BABIeTPYwEoCWZE
-h8l5YoQwTcU/9KNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUkCW1DdkF
-R+eWw5b6cp3PmanfS5YwDgYDVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMDA2kAMGYC
-MQCjfy+Rocm9Xue4YnwWmNJVA44fA0P5W2OpYow9OYCVRaEevL8uO1XYru5xtMPW
-rfMCMQCi85sWBbJwKKXdS6BptQFuZbT73o/gBh1qUxl/nNr12UO8Yfwr6wPLb+6N
-IwLz3/Y=
------END CERTIFICATE-----`
+// GetPCRs returns the PCR values for the currently running enclave by
+// performing an attestation and parsing the result
+func GetPCRs() (map[uint][]byte, error) {
+	sig, err := Attest(context.Background(), nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	verifier := NewVerifier(nil)
+	_, pcrs, err := verifier.verifySigOnlyNotPCRs(nil, sig, crypto.Hash(0))
+	return pcrs, err
+}
+
+// Signer is a placeholder struct to sign using a nitro attestation
+type Signer struct{}
+
+// Sign the message using the nitro signer
+func (s Signer) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+	return Attest(context.Background(), nil, message, nil)
+}
+
+// Verifier specifies the PCR values required for verification
+type Verifier struct {
+	PCRs map[uint][]byte
+	now  func() time.Time
+}
+
+// NewVerifier returns a new verifier for nitro attestations
+func NewVerifier(pcrs map[uint][]byte) Verifier {
+	return Verifier{
+		PCRs: pcrs,
+		now:  time.Now,
+	}
+}
+
+// verifySigOnlyNotPCRs verifies that a signature is good but does not check the PCR values
+func (v Verifier) verifySigOnlyNotPCRs(message, sig []byte, opts crypto.SignerOpts) (bool, map[uint][]byte, error) {
+	pool := x509.NewCertPool()
+	ok := pool.AppendCertsFromPEM([]byte(RootAWSNitroCert))
+	if !ok {
+		return false, nil, errors.New("could not create a valid root cert pool")
+	}
+
+	res, err := nitrite.Verify(
+		sig,
+		nitrite.VerifyOptions{
+			Roots:       pool,
+			CurrentTime: v.now(),
+		},
+	)
+	if nil != err {
+		return false, nil, err
+	}
+
+	if !bytes.Equal(res.Document.UserData, message) {
+		return false, nil, nil
+	}
+
+	return true, res.Document.PCRs, nil
+}
+
+// Verify the signature sig for message using the nitro verifier
+func (v Verifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
+	valid, pcrs, err := v.verifySigOnlyNotPCRs(message, sig, opts)
+	if err != nil || !valid {
+		return valid, err
+	}
+
+	if len(v.PCRs) == 0 {
+		return false, nil
+	}
+
+	for pcr, expectedV := range v.PCRs {
+		v, exists := pcrs[pcr]
+		if !exists {
+			return false, nil
+		}
+		if !bytes.Equal(expectedV, v) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// String returns the stringified PCR values we are checking against
+func (v Verifier) String() string {
+	return fmt.Sprint(v.PCRs)
+}

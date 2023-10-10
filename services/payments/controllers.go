@@ -1,26 +1,91 @@
 package payments
 
 import (
+	"context"
 	"crypto"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/go-chi/chi"
+	chiware "github.com/go-chi/chi/middleware"
+	"github.com/rs/zerolog/hlog"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/nitro"
-	. "github.com/brave-intl/bat-go/libs/payments"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
 type getConfResponse struct {
-	AttestationDocument string `json:"attestation"`
-	PublicKey           string
+	EncryptionKeyARN string `json:"encryptionKeyArn"`
+}
+
+func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
+	// base service logger
+	logger := logging.Logger(ctx, "payments")
+	// base router
+	r := chi.NewRouter()
+
+	nitroKey := httpsignature.NitroSigner{}
+
+	var sp httpsignature.SignatureParams
+	sp.Algorithm = httpsignature.AWSNITRO
+	sp.KeyID = "primary"
+	sp.Headers = []string{"digest"}
+
+	ps := httpsignature.ParameterizedSignator{
+		SignatureParams: sp,
+		Signator:        nitroKey,
+		Opts:            crypto.Hash(0),
+	}
+
+	// middlewares
+	r.Use(chiware.RequestID)
+	r.Use(middleware.RequestIDTransfer)
+	r.Use(hlog.NewHandler(*logger))
+	r.Use(hlog.UserAgentHandler("user_agent"))
+	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
+	r.Use(middleware.RequestLogger(logger))
+	r.Use(middleware.SignResponse(ps))
+	r.Use(chiware.Timeout(15 * time.Second))
+	logger.Info().Msg("configuration middleware setup")
+	// routes
+	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
+	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
+	// setup payments routes
+	// prepare inserts transactions into qldb, returning a document which needs to be submitted by
+	// an authorizer
+	r.Post(
+		"/v1/payments/prepare",
+		middleware.InstrumentHandler(
+			"PrepareHandler",
+			PrepareHandler(s),
+		).ServeHTTP,
+	)
+	logger.Info().Msg("prepare endpoint setup")
+	// submit will have an http signature from a known list of public keys
+	r.Post(
+		"/v1/payments/submit",
+		middleware.InstrumentHandler(
+			"SubmitHandler",
+			s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
+		).ServeHTTP)
+	logger.Info().Msg("submit endpoint setup")
+
+	r.Get(
+		"/v1/payments/info",
+		middleware.InstrumentHandler(
+			"InfoHandler",
+			GetConfigurationHandler(s),
+		).ServeHTTP,
+	)
+	logger.Info().Msg("get info endpoint setup")
+	return ctx, r
 }
 
 // GetConfigurationHandler gets important payments configuration information, attested by nitro.
@@ -28,22 +93,9 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 		logger := logging.Logger(ctx, "GetConfigurationHandler")
-		nonce := make([]byte, 64)
-		_, err := rand.Read(nonce)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create random nonce")
-			return handlers.WrapError(err, "failed to create random nonce", http.StatusBadRequest)
-		}
-
-		attestationDocument, err := nitro.Attest(ctx, nonce, []byte{}, []byte{})
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to get attestation from nitro")
-			return handlers.WrapError(err, "failed to get attestation from nitro", http.StatusBadRequest)
-		}
 
 		resp := &getConfResponse{
-			// return the attestation document
-			AttestationDocument: base64.StdEncoding.EncodeToString(attestationDocument),
+			EncryptionKeyARN: service.kmsDecryptKeyArn,
 		}
 
 		logger.Debug().Msg("handling configuration request")
@@ -57,26 +109,12 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 // will fail..
 func PrepareHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		nitroKey := httpsignature.NitroSigner{}
-
-		var sp httpsignature.SignatureParams
-		sp.Algorithm = httpsignature.AWSNITRO
-		sp.KeyID = "primary"
-		sp.Headers = []string{"digest"}
-
-		ps := httpsignature.ParameterizedSignator{
-			SignatureParams: sp,
-			Signator:        nitroKey,
-			Opts:            crypto.Hash(0),
-		}
-		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
-
 		// get context from request
 		ctx := r.Context()
 
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
-			req    = new(PrepareRequest)
+			req    = new(paymentLib.PrepareRequest)
 		)
 
 		// read the transactions in the body
@@ -94,26 +132,38 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
 		}
 
-		// returns an enriched list of transactions, which includes the document metadata
+		authenticatedState := req.ToAuthenticatedPaymentState()
 
-		documentID, err := service.insertPayment(ctx, req.PaymentDetails)
+		// Ensure that prepare succeeds ( i.e. we are not using a failing dry-run state machine )
+		stateMachine, err := service.StateMachineFromTransaction(authenticatedState)
 		if err != nil {
-			return handlers.WrapError(err, "failed to insert payment", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to create stateMachine", http.StatusBadRequest)
 		}
-		resp := PrepareResponse{
+		_, err = stateMachine.Prepare(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "could not put transaction into the prepared state", http.StatusBadRequest)
+		}
+
+		paymentState, err := authenticatedState.ToPaymentState()
+		if err != nil {
+			return handlers.WrapError(err, "could not create a payment state", http.StatusBadRequest)
+		}
+
+		err = paymentState.Sign(service.signer, service.publicKey)
+		if err != nil {
+			return handlers.WrapError(err, "failed to sign payment state", http.StatusInternalServerError)
+		}
+
+		documentID, err := service.datastore.InsertPaymentState(ctx, paymentState)
+		if err != nil {
+			return handlers.WrapError(err, "failed to insert payment state", http.StatusInternalServerError)
+		}
+		resp := paymentLib.PrepareResponse{
 			PaymentDetails: req.PaymentDetails,
 			DocumentID:     documentID,
 		}
 
 		logger.Debug().Str("transaction", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
-
-		// create a random nonce for nitro attestation
-		nonce := make([]byte, 64)
-		_, err = rand.Read(nonce)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create random nonce")
-			return handlers.WrapError(err, "failed to create random nonce", http.StatusInternalServerError)
-		}
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	}
@@ -122,26 +172,12 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 // SubmitHandler performs submission of transactions to custodian.
 func SubmitHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		nitroKey := httpsignature.NitroSigner{}
-
-		var sp httpsignature.SignatureParams
-		sp.Algorithm = httpsignature.AWSNITRO
-		sp.KeyID = "primary"
-		sp.Headers = []string{"digest"}
-
-		ps := httpsignature.ParameterizedSignator{
-			SignatureParams: sp,
-			Signator:        nitroKey,
-			Opts:            crypto.Hash(0),
-		}
-		w = httpsignature.NewParameterizedSignatorResponseWriter(ps, w)
 		// get context from request
 		ctx := r.Context()
 
 		var (
-			logger         = logging.Logger(ctx, "SubmitHandler")
-			submitRequest  = &SubmitRequest{}
-			submitResponse = SubmitResponse{}
+			logger        = logging.Logger(ctx, "SubmitHandler")
+			submitRequest = &paymentLib.SubmitRequest{}
 		)
 
 		// read the transactions in the body
@@ -163,31 +199,42 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error getting identity of transaction authorizer", http.StatusInternalServerError)
 		}
 
-		// get the current state of the transaction from qldb
-		authenticatedState, _, err := service.GetTransactionFromDocumentID(ctx, submitRequest.DocumentID)
+		// get the history of the transaction from qldb
+		history, err := service.datastore.GetPaymentStateHistory(ctx, submitRequest.DocumentID)
 		if err != nil {
-			return handlers.WrapError(err, "failed to get transaction from document id", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to get history from document id", http.StatusInternalServerError)
+		}
+
+		// validate the history of the transaction
+		authenticatedState, err := history.GetAuthenticatedPaymentState(service.verifier, submitRequest.DocumentID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to validate payment state history", http.StatusInternalServerError)
 		}
 
 		// attempt authorization on the transaction
-		err = service.AuthorizeTransaction(ctx, keyID, *authenticatedState)
+		err = service.AuthorizeTransaction(ctx, keyID, authenticatedState)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
-		submitResponse.Status = authenticatedState.Status
+		err = service.DriveTransaction(ctx, authenticatedState)
+		status := authenticatedState.Status
 
-		// TODO: check if business logic was met from authorizers table in qldb for this transaction
-		// TODO: state machine handling for custodian submissions
-		// TODO: if error is temporary, return non-200
+		// Paid and Failed are final states, we don't want the worker to retry.
+		// additionally, if we are still in prepared but there is no error,
+		// it indicates we did not have sufficient authorizations and should not retry
+		code := http.StatusInternalServerError
+		if status == paymentLib.Paid || status == paymentLib.Failed || (status == paymentLib.Prepared && err == nil) {
+			code = http.StatusOK
+		}
 
 		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
 		// "permanent" errors indiciating a transaction state machine has reached an end state
 		return &handlers.AppError{
-			Cause:   nil,
-			Message: "dry-run succeeded",
-			Code:    http.StatusOK,
-			Data:    submitResponse,
+			Cause:   err,
+			Message: "submitted",
+			Code:    code,
+			Data:    paymentLib.SubmitResponse{Status: status},
 		}
 	}
 }

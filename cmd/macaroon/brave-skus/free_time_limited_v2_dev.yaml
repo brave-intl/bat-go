@@ -1,0 +1,14 @@
+tokens:
+  - id: "free-time-limited-v2-dev"
+    version: 1
+    location: "free.time.limited.v2.brave.software"
+    first_party_caveats:
+      - sku: "free-time-limited-v2-dev"
+      - price: 0
+      - currency: "USD"
+      - description: "free-time-limited-v2-dev"
+      - credential_type: "time-limited-v2"
+      - credential_valid_duration: "P1M"
+      - issuer_token_buffer: "30"
+      - issuer_token_overlap: "1"
+      - allowed_payment_methods: "stripe"

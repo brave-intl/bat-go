@@ -152,7 +152,7 @@ The flags are:
 		The environment to which the operator is sending transactions to be put in prepared state.
 		The environment is specified as the base URI of the payments service running in the
 		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
-			https://payments.bsg.brave.software
+			https://nitro-payments.bsg.brave.software
 	-ra
 		The redis cluster addresses comma seperated
 	-rp
@@ -245,7 +245,7 @@ The flags are:
 		The environment to which the operator is sending approval for transactions.
 		The environment is specified as the base URI of the payments service running in the
 		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
-			https://payments.bsg.brave.software
+			https://nitro-payments.bsg.brave.software
 	-ra
 		The redis cluster addresses comma seperated
 	-rp

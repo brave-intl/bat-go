@@ -5,19 +5,25 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof" // Enable profiling.
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/asaskevich/govalidator"
+	sentry "github.com/getsentry/sentry-go"
+	"github.com/go-chi/chi"
+	chiware "github.com/go-chi/chi/middleware"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-
-	// needed for profiling
-	_ "net/http/pprof"
-	// re-using viper bind-env for wallet env variables
-	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
-
-	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -29,16 +35,10 @@ import (
 	"github.com/brave-intl/bat-go/services/grant"
 	"github.com/brave-intl/bat-go/services/promotion"
 	"github.com/brave-intl/bat-go/services/skus"
+	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/wallet"
-	sentry "github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
-	chiware "github.com/go-chi/chi/middleware"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/hlog"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	_ "github.com/brave-intl/bat-go/services/wallet/cmd" // Reuse Wallet env variables bound by Viper bind-env.
 )
 
 var (
@@ -85,6 +85,11 @@ func init() {
 		Bind("disable-bitflyer-linking").
 		Env("DISABLE_BITFLYER_LINKING")
 
+	flagBuilder.Flag().Bool("disable-zebpay-linking", false,
+		"disable custodial linking for zebpay").
+		Bind("disable-zebpay-linking").
+		Env("DISABLE_ZEBPAY_LINKING")
+
 	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
 		"brave vg deposit destination promotion id").
 		Bind("brave-transfer-promotion-ids").
@@ -129,6 +134,37 @@ func init() {
 		"check wallet withdrawal reputation on drain").
 		Bind("reputation-withdrawal-on-drain").
 		Env("REPUTATION_WITHDRAWAL_ON_DRAIN")
+
+	// Configuration for Radom.
+	flagBuilder.Flag().Bool(
+		"radom-enabled",
+		false,
+		"is radom enabled for skus",
+	).Bind("radom-enabled").Env("RADOM_ENABLED")
+
+	flagBuilder.Flag().String(
+		"radom-seller-address",
+		"",
+		"the seller address for radom",
+	).Bind("radom-seller-address").Env("RADOM_SELLER_ADDRESS")
+
+	flagBuilder.Flag().String(
+		"radom-server",
+		"",
+		"the server address for radom",
+	).Bind("radom-server").Env("RADOM_SERVER")
+
+	flagBuilder.Flag().String(
+		"radom-secret",
+		"",
+		"the server token for radom",
+	).Bind("radom-secret").Env("RADOM_SECRET")
+
+	flagBuilder.Flag().String(
+		"radom-webhook-secret",
+		"",
+		"the server webhook secret for radom",
+	).Bind("radom-webhook-secret").Env("RADOM_WEBHOOK_SECRET")
 
 	// stripe configurations
 	flagBuilder.Flag().Bool("stripe-enabled", false,
@@ -208,10 +244,10 @@ func init() {
 		Bind("gemini-client-secret").
 		Env("GEMINI_CLIENT_SECRET")
 
-	flagBuilder.Flag().String("xyzabc-linking-key", "",
-		"the linking key for xyzabc custodian").
-		Bind("xyzabc-linking-key").
-		Env("XYZABC_LINKING_KEY")
+	flagBuilder.Flag().String("zebpay-linking-key", "",
+		"the linking key for zebpay custodian").
+		Bind("zebpay-linking-key").
+		Env("ZEBPAY_LINKING_KEY")
 
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
@@ -268,19 +304,10 @@ func init() {
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
-	buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
-	commit := ctx.Value(appctx.CommitCTXKey).(string)
-	version := ctx.Value(appctx.VersionCTXKey).(string)
-	env := ctx.Value(appctx.EnvironmentCTXKey).(string)
-
-	// health check status of all services
-	serviceStatus := map[string]interface{}{}
-
-	serviceStatus["wallet"] = map[string]bool{
-		"uphold":   !(ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool)),
-		"gemini":   !(ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)),
-		"bitflyer": !(ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)),
-	}
+	buildTime, _ := ctx.Value(appctx.BuildTimeCTXKey).(string)
+	commit, _ := ctx.Value(appctx.CommitCTXKey).(string)
+	version, _ := ctx.Value(appctx.VersionCTXKey).(string)
+	env, _ := ctx.Value(appctx.EnvironmentCTXKey).(string)
 
 	// runnable jobs for the services created
 	jobs := []srv.Job{}
@@ -389,8 +416,15 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skuOrderRepo := repository.NewOrder()
 	skuOrderItemRepo := repository.NewOrderItem()
 	skuOrderPayHistRepo := repository.NewOrderPayHistory()
+	skuIssuerRepo := repository.NewIssuer()
 
-	skusPG, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "skus_db")
+	skusPG, err := skus.NewPostgres(
+		skuOrderRepo,
+		skuOrderItemRepo,
+		skuOrderPayHistRepo,
+		skuIssuerRepo,
+		"", true, "skus_db",
+	)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -404,7 +438,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientIDCTXKey, viper.GetString("skus-gemini-client-id"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientSecretCTXKey, viper.GetString("skus-gemini-client-secret"))
 
-	skusService, err := skus.InitService(skuCtx, skusPG, walletService)
+	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuIssuerRepo)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("SKUs service initialization failed")
@@ -416,21 +450,65 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// initialize skus service keys for credentials to use
 	skus.InitEncryptionKeys()
 
-	r.Mount("/v1/credentials", skus.CredentialRouter(skusService))
-	r.Mount("/v2/credentials", skus.CredentialV2Router(skusService))
-	r.Mount("/v1/orders", skus.Router(skusService, middleware.InstrumentHandler))
-	// for skus webhook integrations
+	{
+		origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+		dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
+		corsOpts := skus.NewCORSOpts(origins, dbg)
+
+		authMwr := skus.NewAuthMwr(skusService)
+
+		r.Mount("/v1/credentials", skus.CredentialRouter(skusService, authMwr))
+		r.Mount("/v2/credentials", skus.CredentialV2Router(skusService, authMwr))
+		r.Mount("/v1/orders", skus.Router(skusService, authMwr, middleware.InstrumentHandler, corsOpts))
+
+		subr := chi.NewRouter()
+		orderh := handler.NewOrder(skusService)
+
+		if os.Getenv("ENV") == "local" {
+			corsMwrPost := skus.NewCORSMwr(corsOpts, http.MethodPost)
+
+			subr.Method(
+				http.MethodOptions,
+				"/",
+				middleware.InstrumentHandler("CreateOrderNewOptions", corsMwrPost(nil)),
+			)
+
+			subr.Method(
+				http.MethodPost,
+				"/",
+				middleware.InstrumentHandler(
+					"CreateOrderNew",
+					corsMwrPost(handlers.AppHandler(orderh.Create)),
+				),
+			)
+		} else {
+			subr.Method(
+				http.MethodPost,
+				"/",
+				middleware.InstrumentHandler("CreateOrderNew", authMwr(handlers.AppHandler(orderh.CreateNew))),
+			)
+		}
+
+		r.Mount("/v1/orders-new", subr)
+	}
+
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgres(skuOrderRepo, skuOrderItemRepo, skuOrderPayHistRepo, "", true, "merch_skus_db")
+		skusDB, err := skus.NewPostgres(
+			skuOrderRepo,
+			skuOrderItemRepo,
+			skuOrderPayHistRepo,
+			skuIssuerRepo,
+			"", true, "merch_skus_db",
+		)
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 
-		skusService, err := skus.InitService(ctx, skusDB, walletService)
+		skusService, err := skus.InitService(ctx, skusDB, walletService, skuOrderRepo, skuIssuerRepo)
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("SKUs service initialization failed")
@@ -453,7 +531,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		Str("buildTime", buildTime).
 		Msg("server starting up")
 
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, serviceStatus, nil))
+	{
+		status := newSrvStatusFromCtx(ctx)
+		r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit, status, nil))
+	}
 
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
@@ -537,11 +618,11 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
 
-	// xyzabc wallet linking signing key
-	ctx = context.WithValue(ctx, appctx.XyzAbcLinkingKeyCTXKey, viper.GetString("xyzabc-linking-key"))
+	// zebpay wallet linking signing key
+	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, viper.GetString("zebpay-linking-key"))
 
 	// linking variables
-	ctx = context.WithValue(ctx, appctx.DisableXyzAbcLinkingCTXKey, viper.GetBool("disable-xyzabc-linking"))
+	ctx = context.WithValue(ctx, appctx.DisableZebPayLinkingCTXKey, viper.GetBool("disable-zebpay-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableUpholdLinkingCTXKey, viper.GetBool("disable-uphold-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, viper.GetBool("disable-gemini-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, viper.GetBool("disable-bitflyer-linking"))
@@ -550,6 +631,13 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
 	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
+
+	// Variables for Radom.
+	ctx = context.WithValue(ctx, appctx.RadomEnabledCTXKey, viper.GetBool("radom-enabled"))
+	ctx = context.WithValue(ctx, appctx.RadomWebhookSecretCTXKey, viper.GetString("radom-webhook-secret"))
+	ctx = context.WithValue(ctx, appctx.RadomSecretCTXKey, viper.GetString("radom-secret"))
+	ctx = context.WithValue(ctx, appctx.RadomServerCTXKey, viper.GetString("radom-server"))
+	ctx = context.WithValue(ctx, appctx.RadomSellerAddressCTXKey, viper.GetString("radom-seller-address"))
 
 	// require country present from uphold txs
 	ctx = context.WithValue(ctx, appctx.RequireUpholdCountryCTXKey, viper.GetBool("require-uphold-destination-country"))
@@ -641,4 +729,22 @@ func GrantServer(
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 	return nil
+}
+
+func newSrvStatusFromCtx(ctx context.Context) map[string]any {
+	uh, _ := ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool)
+	g, _ := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)
+	bf, _ := ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)
+	zp, _ := ctx.Value(appctx.DisableZebPayLinkingCTXKey).(bool)
+
+	result := map[string]interface{}{
+		"wallet": map[string]bool{
+			"uphold":   !uh,
+			"gemini":   !g,
+			"bitflyer": !bf,
+			"zebpay":   !zp,
+		},
+	}
+
+	return result
 }
