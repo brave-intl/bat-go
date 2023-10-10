@@ -111,11 +111,11 @@ var (
 
 const (
 	// TransferPendingCode is the status code for pending status
-	TransferPendingCode = iota
+	TransferPendingCode = 1
 	// TransferSuccessCode is the status code for successful transfer
-	TransferSuccessCode
+	TransferSuccessCode = 2
 	// TransferFailedCode is the status code for failed transfer
-	TransferFailedCode
+	TransferFailedCode = 3
 
 	// TransferPendingStatus is the status code for pending status
 	TransferPendingStatus = "Pending"
@@ -155,6 +155,20 @@ func New() (Client, error) {
 	}
 	proxy := os.Getenv("HTTP_PROXY")
 	client, err := clients.NewWithProxy("zebpay", serverURL, "", proxy) // authentication bearer token is set per api call
+	if err != nil {
+		return nil, err
+	}
+	return NewClientWithPrometheus(&HTTPClient{client}, "zebpay_client"), err
+}
+
+// New returns a new HTTPClient, retrieving the base URL from the environment
+func NewWithHTTPClient(httpClient http.Client) (Client, error) {
+	serverEnvKey := "ZEBPAY_SERVER"
+	serverURL := os.Getenv(serverEnvKey)
+	if len(serverURL) == 0 {
+		return nil, errors.New(serverEnvKey + " was empty")
+	}
+	client, err := clients.NewWithHTTPClient(serverURL, "", &httpClient) // authentication bearer token is set per api call
 	if err != nil {
 		return nil, err
 	}
@@ -240,6 +254,9 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 
 	var resp = new(CheckTransferResponse)
 	_, err = c.client.Do(ctx, req, resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do status check request: %w", err)
+	}
 
 	return resp, err
 }
@@ -279,12 +296,12 @@ func (c *HTTPClient) BulkTransfer(ctx context.Context, opts *ClientOpts, transfe
 	// /api/bulktransfercheckstatus
 	req, err := c.client.NewRequest(ctx, "POST", "/api/bulktransfer", transfers, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to construct new request: %w", err)
 	}
 
 	body, err := json.Marshal(transfers)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	// populate the access token
@@ -292,6 +309,9 @@ func (c *HTTPClient) BulkTransfer(ctx context.Context, opts *ClientOpts, transfe
 
 	var resp = new(BulkTransferResponse)
 	_, err = c.client.Do(ctx, req, resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do transfer request: %w", err)
+	}
 
 	return resp, err
 }
