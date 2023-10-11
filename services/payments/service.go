@@ -39,9 +39,9 @@ type Service struct {
 	secrets           map[string]string
 	kmsDecryptKeyArn  string
 
-	publicKey []byte
-	signer    paymentLib.Signator
-	verifier  paymentLib.Verifier
+	publicKey     string
+	signer        paymentLib.Signator
+	verifierStore paymentLib.Keystore
 }
 
 var (
@@ -134,7 +134,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy:                         aws.String(policy),
+		Policy: aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -186,18 +186,18 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Fatal().Err(err).Msg("could not retrieve nitro PCRs")
 		return nil, nil, errors.New("could not retrieve nitro PCRs")
 	}
+	store, err := NewVerifierStore()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("could not create verifier store")
+		return nil, nil, errors.New("could not create verifier store")
+	}
 
 	service := &Service{
-		baseCtx:   ctx,
-		awsCfg:    awsCfg,
-		publicKey: pcrs[2],
-		signer:    nitro.Signer{},
-		// FIXME need to handle past valid PCRs
-		verifier: nitro.NewVerifier(map[uint][]byte{
-			0: pcrs[0],
-			1: pcrs[1],
-			2: pcrs[2],
-		}),
+		baseCtx:       ctx,
+		awsCfg:        awsCfg,
+		publicKey:     hex.EncodeToString(pcrs[2]),
+		signer:        nitro.Signer{},
+		verifierStore: store,
 	}
 
 	// create the kms encryption key for this service for bootstrap operator shares

@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"encoding/json"
@@ -47,7 +48,7 @@ type PaymentState struct {
 	// which does all of the needed validation of the state
 	UnsafePaymentState []byte    `ion:"data"`
 	Signature          []byte    `ion:"signature"`
-	PublicKey          []byte    `ion:"publicKey"`
+	PublicKey          string    `ion:"publicKey"`
 	ID                 uuid.UUID `ion:"idempotencyKey"`
 }
 
@@ -114,7 +115,7 @@ func statusListContainsStatus(s []PaymentStatus, e PaymentStatus) bool {
 }
 
 // Sign this payment state, authenticating the contents of UnsafePaymentState
-func (p *PaymentState) Sign(signer Signator, publicKey []byte) error {
+func (p *PaymentState) Sign(signer Signator, publicKey string) error {
 	var err error
 	p.Signature, err = signer.Sign(rand.Reader, p.UnsafePaymentState, crypto.Hash(0))
 	if err != nil {
@@ -125,15 +126,20 @@ func (p *PaymentState) Sign(signer Signator, publicKey []byte) error {
 }
 
 // GetAuthenticatedPaymentState by performing the appropriate validation.
-func (p PaymentStateHistory) GetAuthenticatedPaymentState(verifier Verifier, documentID string) (*AuthenticatedPaymentState, error) {
+func (p PaymentStateHistory) GetAuthenticatedPaymentState(keystore Keystore, documentID string) (*AuthenticatedPaymentState, error) {
 	// iterate through our payment states checking:
 	// 1. the signature
 	// 2. the documentID matches any internal documentIDs
 	// 3. the transition was valid
 	var authenticatedState AuthenticatedPaymentState
 	for i, state := range []PaymentState(p) {
+		_, verifier, err := keystore.LookupVerifier(context.Background(), state.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("signature validation for state with document ID %s failed: %w", documentID, err)
+		}
+
 		var unsafeState AuthenticatedPaymentState
-		valid, err := verifier.Verify(state.UnsafePaymentState, state.Signature, crypto.Hash(0))
+		valid, err := (*verifier).Verify(state.UnsafePaymentState, state.Signature, crypto.Hash(0))
 		if err != nil {
 			return nil, fmt.Errorf("signature validation for state with document ID %s failed: %w", documentID, err)
 		}
