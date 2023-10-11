@@ -98,10 +98,10 @@ func (service *Service) StateMachineFromTransaction(
 			return nil, fmt.Errorf("failed to create zebpay client", err)
 		}
 		block, rest := pem.Decode([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
-		if block == nil || block.Type != "PRIVATE KEY" || rest != nil {
+		if block == nil || block.Type != "PRIVATE KEY" || len(rest) != 0 {
 			return nil, fmt.Errorf("failed to decode zebpay signing key", err)
 		}
-		signingKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		signingKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse zebpay signing key", err)
 		}
