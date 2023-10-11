@@ -23,7 +23,7 @@ func NewVerifierStore() (*VerifierStore, error) {
 		return nil, errors.New("could not retrieve nitro PCRs")
 	}
 
-	s := VerifierStore{}
+	s := VerifierStore{verifiers: map[string]payments.Verifier{}}
 
 	// always accept attestations matching our own
 	pubKey := hex.EncodeToString(pcrs[2])
