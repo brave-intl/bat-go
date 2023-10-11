@@ -209,6 +209,9 @@ func (s *Service) DriveTransaction(
 		}
 		return nil
 	} else {
+		if lastErr != nil {
+			return fmt.Errorf("failed to progress transaction: %w", lastErr)
+		}
 		return errors.New("failed to progress transaction, no state returned")
 	}
 }
