@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -130,7 +129,7 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 	// So client makes HTTP/2 requests
 	err := http2.ConfigureTransport(tr)
 	if err != nil {
-		log.Panic(err)
+		return aws.Config{}, fmt.Errorf("failed to configure transport for HTTP/2, %v", err)
 	}
 
 	client = http.Client{
