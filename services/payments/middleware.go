@@ -2,6 +2,7 @@ package payments
 
 import (
 	"net/http"
+	"time"
 
 	"crypto"
 
@@ -35,6 +36,8 @@ func (s *Service) AuthorizerSignedMiddleware() func(http.Handler) http.Handler {
 	// the actual middleware
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// allow which are requests up to 30 days old and 1 minute in the future
+			next = middleware.VerifyDateIsRecent(30*24*time.Hour, 1*time.Minute)(next)
 			middleware.VerifyHTTPSignedOnly(authorizerVerifier)(next).ServeHTTP(w, r)
 		})
 	}
