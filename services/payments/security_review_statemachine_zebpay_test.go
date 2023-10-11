@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"os"
@@ -33,11 +34,11 @@ var (
 type ctxAuthKey struct{}
 
 /*
-TestBitflyerStateMachineHappyPathTransitions tests for correct state progression from
+TestMockedZebpayStateMachineHappyPathTransitions tests for correct state progression from
 Initialized to Paid. Additionally, Paid status should be final and Failed status should
 be permanent.
 */
-func TestZebPayStateMachineHappyPathTransitions(t *testing.T) {
+func TestMockedZebpayStateMachineHappyPathTransitions(t *testing.T) {
 	err := os.Setenv("ZEBPAY_ENVIRONMENT", "test")
 	must.Nil(t, err)
 	err = os.Setenv("ZEBPAY_SERVER", mockZebpayHost)
@@ -204,10 +205,10 @@ func TestZebPayStateMachineHappyPathTransitions(t *testing.T) {
 	should.Equal(t, paymentLib.Paid, newTransaction.Status)
 }
 
-// TestZebPayStateMachineAuthorizedToPendingTransition tests the progression from Prepared to
+// TestMockedZebpayStateMachineAuthorizedToPendingTransition tests the progression from Prepared to
 // Authorized when sufficient authorizers are present. When an authorization is missing it also
 // tests waiting for a new authorization.
-func TestZebPayStateMachineAuthorizedToPendingTransition(t *testing.T) {
+func TestMockedZebpayStateMachineAuthorizedToPendingTransition(t *testing.T) {
 	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
 	must.Nil(t, err)
 
@@ -261,9 +262,9 @@ func TestZebPayStateMachineAuthorizedToPendingTransition(t *testing.T) {
 	should.Equal(t, paymentLib.Authorized, newState.Status)
 }
 
-// TestBitflyerStateMachine500FailureToPendingTransition tests for a failure to progress status
+// TestMockedZebpayStateMachine500FailureToPendingTransition tests for a failure to progress status
 // after a 500 error response while attempting to transfer from Pending to Paid
-func TestZebPayStateMachine500FailureToPendingTransition(t *testing.T) {
+func TestMockedZebpayStateMachine500FailureToPendingTransition(t *testing.T) {
 	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
 	must.Nil(t, err)
 
@@ -310,9 +311,9 @@ func TestZebPayStateMachine500FailureToPendingTransition(t *testing.T) {
 	must.Equal(t, paymentLib.Authorized, newState.Status)
 }
 
-// TestBitflyerStateMachine500FailureToPaidTransition tests for a failure to progress status
+// TestMockedZebpayStateMachine500FailureToPaidTransition tests for a failure to progress status
 // after a 500 error response while attempting to transfer from Pending to Paid
-func TestZebPayStateMachine500FailureToPaidTransition(t *testing.T) {
+func TestMockedZebpayStateMachine500FailureToPaidTransition(t *testing.T) {
 	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
 	must.Nil(t, err)
 
@@ -361,9 +362,9 @@ func TestZebPayStateMachine500FailureToPaidTransition(t *testing.T) {
 	must.Equal(t, paymentLib.Authorized, newState.Status)
 }
 
-// TestBitflyerStateMachine404FailureToPendingTransition tests for a failure to progress status
+// TestMockedZebpayStateMachine404FailureToPendingTransition tests for a failure to progress status
 // Failure with 404 error when attempting to transfer from Pending to Paid
-func TestZebPayStateMachine404FailureToPendingTransition(t *testing.T) {
+func TestMockedZebpayStateMachine404FailureToPendingTransition(t *testing.T) {
 	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
 	must.Nil(t, err)
 
@@ -410,9 +411,9 @@ func TestZebPayStateMachine404FailureToPendingTransition(t *testing.T) {
 	must.Equal(t, paymentLib.Authorized, newState.Status)
 }
 
-// TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
+// TestMockedZebpayStateMachine404FailureToPaidTransition tests for a failure to progress status
 // Failure with 404 error when attempting to transfer from Pending to Paid
-func TestZebPayStateMachine404FailureToPaidTransition(t *testing.T) {
+func TestMockedZebpayStateMachine404FailureToPaidTransition(t *testing.T) {
 	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
 	must.Nil(t, err)
 
@@ -464,4 +465,122 @@ func TestZebPayStateMachine404FailureToPaidTransition(t *testing.T) {
 	newState, err = Drive(ctx, &zebpayStateMachine)
 	must.NotNil(t, err)
 	must.Equal(t, paymentLib.Pending, newState.Status)
+}
+
+/*
+TestLiveZebpayStateMachineHappyPathTransitions tests for correct state progression from
+Initialized to Paid. Additionally, Paid status should be final and Failed status should
+be permanent.
+*/
+func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
+	zebpayHost := "https://rewards.zebpay.co"
+	err := os.Setenv("ZEBPAY_ENVIRONMENT", "test")
+	must.Nil(t, err)
+	err = os.Setenv("ZEBPAY_SERVER", zebpayHost)
+	must.Nil(t, err)
+
+	zebpayClient, err := zebpay.NewWithHTTPClient(http.Client{})
+	must.Nil(t, err)
+	signingKeyString := os.Getenv("ZEBPAY_TEST_SECRET")
+	block, rest := pem.Decode([]byte(signingKeyString))
+	if block == nil || block.Type != "PRIVATE KEY" || len(rest) != 0 {
+		t.Log("failed pem decode")
+	}
+	signingKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		t.Log("failed key parse")
+	}
+
+	zebpayStateMachine := ZebpayMachine{
+		client:     zebpayClient,
+		zebpayHost: zebpayHost,
+		apiKey:     os.Getenv("ZEBPAY_TEST_API_KEY"),
+		signingKey: signingKey,
+	}
+
+	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
+	must.Nil(t, err)
+
+	testState := paymentLib.AuthenticatedPaymentState{
+		Status: paymentLib.Prepared,
+		PaymentDetails: paymentLib.PaymentDetails{
+			Amount:    decimal.NewFromFloat(1.1),
+			To:        "512", //"13460",
+			From:      "c6911095-ba83-4aa1-b0fb-15934568a65a",
+			Custodian: "zebpay",
+			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
+			Currency:  "BAT",
+		},
+		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
+	}
+
+	marshaledData, _ := json.Marshal(testState)
+	must.Nil(t, err)
+	privkey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	must.Nil(t, err)
+	marshalledPubkey, err := x509.MarshalPKIXPublicKey(&privkey.PublicKey)
+	must.Nil(t, err)
+	mockTransitionHistory := QLDBPaymentTransitionHistoryEntry{
+		BlockAddress: QLDBPaymentTransitionHistoryEntryBlockAddress{
+			StrandID:   "test",
+			SequenceNo: 1,
+		},
+		Hash: []byte("test"),
+		Data: paymentLib.PaymentState{
+			UnsafePaymentState: marshaledData,
+			Signature:          []byte{},
+			ID:                 idempotencyKey,
+			PublicKey:          string(marshalledPubkey),
+		},
+		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
+			ID:      "test",
+			Version: 1,
+			TxTime:  time.Now(),
+			TxID:    "test",
+		},
+	}
+	zebpayStateMachine.setTransaction(
+		&testState,
+	)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
+
+	// Should transition transaction into the Authorized state
+	testState.Status = paymentLib.Prepared
+	marshaledData, _ = json.Marshal(testState)
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
+	zebpayStateMachine.setTransaction(&testState)
+	newTransaction, err := Drive(ctx, &zebpayStateMachine)
+	must.Nil(t, err)
+	// Ensure that our Bitflyer calls are going through the mock and not anything else.
+	//must.Equal(t, info[tokenInfoKey], 1)
+	should.Equal(t, paymentLib.Authorized, newTransaction.Status)
+
+	// Should transition transaction into the Pending state
+	testState.Status = paymentLib.Authorized
+	marshaledData, _ = json.Marshal(testState)
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
+	zebpayStateMachine.setTransaction(&testState)
+	timeout, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
+	defer cancel()
+	// For this test, we will return Pending status forever, so we need it to time out
+	// in order to capture and verify that pending status.
+	newTransaction, err = Drive(timeout, &zebpayStateMachine)
+	// The only tolerable error is a timeout, and that's what we expect here
+	must.ErrorIs(t, err, context.DeadlineExceeded)
+	should.Equal(t, paymentLib.Pending, newTransaction.Status)
+
+	// Should transition transaction into the Paid state
+	testState.Status = paymentLib.Pending
+	marshaledData, _ = json.Marshal(testState)
+	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
+	zebpayStateMachine.setTransaction(&testState)
+	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
+	// is 5 minutes and we don't want the test to run that long even if it's broken.
+	timeout, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	newTransaction, err = Drive(timeout, &zebpayStateMachine)
+	must.Equal(t, nil, err)
+	should.Equal(t, paymentLib.Paid, newTransaction.Status)
 }

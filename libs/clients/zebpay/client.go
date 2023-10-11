@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"strings"
+	"io"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/go-jose/go-jose/v3"
@@ -307,9 +309,17 @@ func (c *HTTPClient) BulkTransfer(ctx context.Context, opts *ClientOpts, transfe
 	// populate the access token
 	affixAccessToken(req, opts, body)
 
+	gotBody, err := req.GetBody()
+	buf := new(strings.Builder)
+	_, err = io.Copy(buf, gotBody)
+
 	var resp = new(BulkTransferResponse)
-	_, err = c.client.Do(ctx, req, resp)
+	response, err := c.client.Do(ctx, req, resp)
 	if err != nil {
+		fmt.Printf("REQUEST: %#v\n", req)
+		fmt.Printf("REQUEST BODY: %s\n", buf)
+		fmt.Printf("TRANSFER: %#v\n", response)
+		fmt.Printf("ERROR: %#v\n", err)
 		return nil, fmt.Errorf("failed to do transfer request: %w", err)
 	}
 
