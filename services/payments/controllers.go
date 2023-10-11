@@ -140,7 +140,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		authenticatedState := req.ToAuthenticatedPaymentState()
 
 		// Ensure that prepare succeeds ( i.e. we are not using a failing dry-run state machine )
-		stateMachine, err := service.StateMachineFromTransaction(authenticatedState)
+		stateMachine, err := service.StateMachineFromTransaction(ctx, authenticatedState)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create stateMachine", http.StatusBadRequest)
 		}

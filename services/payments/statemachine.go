@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
@@ -77,9 +78,14 @@ func (s *baseStateMachine) getTransaction() *paymentLib.AuthenticatedPaymentStat
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
 func (service *Service) StateMachineFromTransaction(
+	ctx context.Context,
 	authenticatedState *paymentLib.AuthenticatedPaymentState,
 ) (TxStateMachine, error) {
 	var machine TxStateMachine
+
+	client := http.Client{
+		Transport: nitro.NewProxyRoundTripper(ctx, service.egressAddr).(*http.Transport),
+	}
 
 	switch authenticatedState.PaymentDetails.Custodian {
 	case "uphold":
@@ -93,7 +99,7 @@ func (service *Service) StateMachineFromTransaction(
 	case "gemini":
 		machine = &GeminiMachine{}
 	case "zebpay":
-		client, err := zebpay.New()
+		client, err := zebpay.NewWithHTTPClient(client)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create zebpay client: %w", err)
 		}
@@ -163,7 +169,7 @@ func (s *Service) DriveTransaction(
 	ctx context.Context,
 	transaction *paymentLib.AuthenticatedPaymentState,
 ) error {
-	stateMachine, err := s.StateMachineFromTransaction(transaction)
+	stateMachine, err := s.StateMachineFromTransaction(ctx, transaction)
 	if err != nil {
 		return fmt.Errorf("failed to create stateMachine: %w", err)
 	}
