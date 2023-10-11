@@ -2,13 +2,15 @@ package payments
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
-	"encoding/json"
 
+	"github.com/brave-intl/bat-go/libs/clients/zebpay"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
@@ -89,6 +91,21 @@ func (service *Service) StateMachineFromTransaction(
 		}
 	case "gemini":
 		machine = &GeminiMachine{}
+	case "zebpay":
+		client, err := zebpay.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create zebpay client", err)
+		}
+		signingKey, err := x509.ParsePKCS1PrivateKey([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse zebpay signing key", err)
+		}
+		machine = &ZebpayMachine{
+			client:        client,
+			apiKey:        os.Getenv("ZEBPAY_API_KEY"),
+			signingKey:    signingKey,
+			zebpayHost:    os.Getenv("ZEBPAY_SERVER"),
+		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
 	case "dryrun-prepare-fails":
