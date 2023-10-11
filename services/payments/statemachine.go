@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
@@ -27,7 +28,7 @@ type TxStateMachine interface {
 }
 
 type baseStateMachine struct {
-	transaction      *paymentLib.AuthenticatedPaymentState
+	transaction *paymentLib.AuthenticatedPaymentState
 }
 
 func (s *baseStateMachine) SetNextState(
@@ -86,7 +87,7 @@ func (service *Service) StateMachineFromTransaction(
 	case "bitflyer":
 		// Set Bitflyer-specific properties
 		machine = &BitflyerMachine{
-			client: *http.DefaultClient,
+			client:       *http.DefaultClient,
 			bitflyerHost: os.Getenv("BITFLYER_SERVER"),
 		}
 	case "gemini":
@@ -96,15 +97,19 @@ func (service *Service) StateMachineFromTransaction(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create zebpay client", err)
 		}
-		signingKey, err := x509.ParsePKCS1PrivateKey([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
+		block, rest := pem.Decode([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
+		if block == nil || block.Type != "PRIVATE KEY" || rest != nil {
+			return nil, fmt.Errorf("failed to decode zebpay signing key", err)
+		}
+		signingKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse zebpay signing key", err)
 		}
 		machine = &ZebpayMachine{
-			client:        client,
-			apiKey:        os.Getenv("ZEBPAY_API_KEY"),
-			signingKey:    signingKey,
-			zebpayHost:    os.Getenv("ZEBPAY_SERVER"),
+			client:     client,
+			apiKey:     os.Getenv("ZEBPAY_API_KEY"),
+			signingKey: signingKey,
+			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
 		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
@@ -128,7 +133,7 @@ func Drive[T TxStateMachine](
 	// Drive is called recursively, so we need to check whether a deadline has been set
 	// by a prior caller and only set the default deadline if not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		ctx, _ = context.WithTimeout(ctx, 5 * time.Minute)
+		ctx, _ = context.WithTimeout(ctx, 5*time.Minute)
 	}
 	err := ctx.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
