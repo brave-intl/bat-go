@@ -2,13 +2,16 @@ package payments
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
-	"encoding/json"
 
+	"github.com/brave-intl/bat-go/libs/clients/zebpay"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
@@ -25,7 +28,7 @@ type TxStateMachine interface {
 }
 
 type baseStateMachine struct {
-	transaction      *paymentLib.AuthenticatedPaymentState
+	transaction *paymentLib.AuthenticatedPaymentState
 }
 
 func (s *baseStateMachine) SetNextState(
@@ -84,11 +87,30 @@ func (service *Service) StateMachineFromTransaction(
 	case "bitflyer":
 		// Set Bitflyer-specific properties
 		machine = &BitflyerMachine{
-			client: *http.DefaultClient,
+			client:       *http.DefaultClient,
 			bitflyerHost: os.Getenv("BITFLYER_SERVER"),
 		}
 	case "gemini":
 		machine = &GeminiMachine{}
+	case "zebpay":
+		client, err := zebpay.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create zebpay client", err)
+		}
+		block, rest := pem.Decode([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
+		if block == nil || block.Type != "PRIVATE KEY" || len(rest) != 0 {
+			return nil, fmt.Errorf("failed to decode zebpay signing key", err)
+		}
+		signingKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse zebpay signing key", err)
+		}
+		machine = &ZebpayMachine{
+			client:     client,
+			apiKey:     os.Getenv("ZEBPAY_API_KEY"),
+			signingKey: signingKey,
+			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
+		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
 	case "dryrun-prepare-fails":
@@ -111,7 +133,7 @@ func Drive[T TxStateMachine](
 	// Drive is called recursively, so we need to check whether a deadline has been set
 	// by a prior caller and only set the default deadline if not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		ctx, _ = context.WithTimeout(ctx, 5 * time.Minute)
+		ctx, _ = context.WithTimeout(ctx, 5*time.Minute)
 	}
 	err := ctx.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
