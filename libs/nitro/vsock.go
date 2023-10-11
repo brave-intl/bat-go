@@ -57,7 +57,7 @@ func parseVsockAddr(addr string) (uint32, uint32, error) {
 // DialContext is a net.Dial wrapper which additionally allows connecting to vsock networks
 func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	logger := logging.Logger(ctx, "nitro.DialContext")
-	logger.Info().
+	logger.Debug().
 		Str("network", fmt.Sprintf("%v", network)).
 		Str("addr", fmt.Sprintf("%v", addr)).
 		Msg("DialContext")
@@ -66,16 +66,16 @@ func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	if err != nil {
 		if _, ok := err.(NotVsockAddrError); ok {
 			// fallback to net.Dial
-			logger.Error().Err(err).
-				Str("cid", fmt.Sprintf("%v", cid)).
-				Str("port", fmt.Sprintf("%v", port)).
-				Msg("vsock dialing now")
 			return net.Dial(network, addr)
 		}
+		logger.Error().Err(err).
+			Str("cid", fmt.Sprintf("%v", cid)).
+			Str("port", fmt.Sprintf("%v", port)).
+			Msg("error in vsock dial")
 		return nil, err
 	}
 
-	logger.Info().
+	logger.Debug().
 		Str("cid", fmt.Sprintf("%v", cid)).
 		Str("port", fmt.Sprintf("%v", port)).
 		Msg("vsock dialing now")
@@ -89,7 +89,7 @@ type proxyClientConfig struct {
 
 func (p *proxyClientConfig) Proxy(*http.Request) (*url.URL, error) {
 	logger := logging.Logger(p.Ctx, "nitro.Proxy")
-	logger.Info().
+	logger.Debug().
 		Str("addr", p.Addr).
 		Msg("performing proxy")
 	v, err := url.Parse(p.Addr)
