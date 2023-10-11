@@ -49,6 +49,8 @@ func VerifyDateIsRecent(validFrom, validTo time.Duration) func(http.Handler) htt
 				ae.ServeHTTP(w, r)
 				return
 			}
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }
