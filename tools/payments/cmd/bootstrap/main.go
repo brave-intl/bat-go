@@ -23,6 +23,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -52,6 +53,8 @@ func main() {
 		"the enclave base uri in order to get the key arn for encrypting")
 	b := flag.String(
 		"b", "", "the s3 bucket to upload ciphertext to")
+	pcr2 := flag.String(
+		"pcr2", "", "the hex PCR2 value for this enclave")
 	verbose := flag.Bool(
 		"v", false,
 		"view verbose logging")
@@ -69,6 +72,19 @@ func main() {
 	resp, err := http.Get(*enclaveBaseURI + "/v1/payments/info")
 	if err != nil {
 		log.Fatalln(err)
+	}
+
+	sp, verifier, err := payments.NewNitroVerifier(pcr2)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if !valid {
+		log.Fatalln("http signature was not valid, nitro attestation failed")
 	}
 
 	data := make(map[string]string)
@@ -145,7 +161,7 @@ func main() {
 	_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(*b),
 		Key: aws.String(
-			fmt.Sprintf("operator-share_%s.json", time.Now().Format(time.RFC3339))),
+			fmt.Sprintf("%s/operator-share_%s.json", *pcr2, time.Now().Format(time.RFC3339))),
 		Body:                      bytes.NewBuffer(out.CiphertextBlob),
 		ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 		ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,

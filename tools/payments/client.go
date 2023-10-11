@@ -51,16 +51,11 @@ type SettlementClient interface {
 func NewSettlementClient(ctx context.Context, env string, config map[string]string) (context.Context, SettlementClient, error) {
 	ctx, _ = logging.SetupLogger(ctx)
 
-	var sp httpsignature.SignatureParams
-	sp.Algorithm = httpsignature.AWSNITRO
-	sp.KeyID = "primary"
-	sp.Headers = []string{"digest"}
-
-	// FIXME
-	pcrs := map[uint][]byte{
-		12: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	// FIXME should have PCR2 as an argument to this function and pass it here
+	sp, verifier, err := NewNitroVerifier(nil)
+	if err != nil {
+		return ctx, nil, err
 	}
-	verifier := httpsignature.NewNitroVerifier(pcrs)
 
 	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], sp, verifier)
 	return ctx, client, err
@@ -71,11 +66,11 @@ type redisClient struct {
 	env             string
 	paymentsAPIBase string
 	redis           *redisconsumer.RedisClient
-	sp              httpsignature.SignatureParams
+	sp              *httpsignature.SignatureParams
 	verifier        httpsignature.Verifier
 }
 
-func newRedisClient(ctx context.Context, env, addr, username, pass string, sp httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
+func newRedisClient(ctx context.Context, env, addr, username, pass string, sp *httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
 	redis, err := redisconsumer.NewStreamClient(ctx, env, addr, username, pass, false)
 	if err != nil {
 		return nil, err
