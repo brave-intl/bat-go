@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -121,6 +122,18 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.EnclaveOperatorSharesBucketNameCTXKey, viper.GetString("enclave-operator-shares-bucket-name"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
+
+	// setup panic handler so we send details to our remote logger
+	defer func() {
+		if rec := recover(); rec != nil {
+			// report the reason for the panic
+			logger.Error().
+				Str("panic", fmt.Sprintf("%+v", rec)).
+				Str("stacktrace", string(debug.Stack())).
+				Msg("panic recovered")
+		}
+	}()
+
 	logger.Info().Msg("starting payments service")
 	// setup the service now
 	ctx, s, err := payments.NewService(ctx)
@@ -128,6 +141,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 		logger.Fatal().Err(err).Msg("failed to initialize payments service")
 	}
 	logger.Info().Msg("payments service setup")
+
 	// setup router
 	ctx, r := payments.SetupRouter(ctx, s)
 	logger.Info().Msg("payments routes setup")
