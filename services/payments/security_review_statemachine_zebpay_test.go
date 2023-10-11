@@ -112,7 +112,7 @@ func TestZebPayStateMachineHappyPathTransitions(t *testing.T) {
 			UnsafePaymentState: marshaledData,
 			Signature:          []byte{},
 			ID:                 idempotencyKey,
-			PublicKey:          marshalledPubkey,
+			PublicKey:          string(marshalledPubkey),
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",
@@ -306,8 +306,8 @@ func TestZebPayStateMachine500FailureToPendingTransition(t *testing.T) {
 	)
 
 	newState, err := Drive(ctx, &zebpayStateMachine)
-	must.NotNil(t, err)
-	must.Nil(t, newState)
+	should.NotNil(t, err)
+	must.Equal(t, paymentLib.Authorized, newState.Status)
 }
 
 // TestBitflyerStateMachine500FailureToPaidTransition tests for a failure to progress status
@@ -358,7 +358,7 @@ func TestZebPayStateMachine500FailureToPaidTransition(t *testing.T) {
 
 	newState, err := Drive(ctx, &zebpayStateMachine)
 	must.NotNil(t, err)
-	must.Nil(t, newState)
+	must.Equal(t, paymentLib.Authorized, newState.Status)
 }
 
 // TestBitflyerStateMachine404FailureToPendingTransition tests for a failure to progress status
@@ -407,7 +407,7 @@ func TestZebPayStateMachine404FailureToPendingTransition(t *testing.T) {
 
 	newState, err := Drive(ctx, &zebpayStateMachine)
 	must.NotNil(t, err)
-	must.Nil(t, newState)
+	must.Equal(t, paymentLib.Authorized, newState.Status)
 }
 
 // TestBitflyerStateMachine404FailureToPaidTransition tests for a failure to progress status
@@ -458,10 +458,10 @@ func TestZebPayStateMachine404FailureToPaidTransition(t *testing.T) {
 
 	newState, err := Drive(ctx, &zebpayStateMachine)
 	must.NotNil(t, err)
-	must.Nil(t, newState)
+	must.Equal(t, paymentLib.Authorized, newState.Status)
 
 	transaction.Status = paymentLib.Pending
 	newState, err = Drive(ctx, &zebpayStateMachine)
 	must.NotNil(t, err)
-	must.Nil(t, newState)
+	must.Equal(t, paymentLib.Pending, newState.Status)
 }
