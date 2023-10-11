@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"context"
 	"crypto"
 	"io"
 )
@@ -14,4 +15,10 @@ type Signator interface {
 // Verifier is an interface for verifying signatures
 type Verifier interface {
 	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
+}
+
+// Keystore provides a way to lookup a public key based on the keyID a request was signed with
+type Keystore interface {
+	// LookupVerifier based on the keyID
+	LookupVerifier(ctx context.Context, keyID string) (context.Context, *Verifier, error)
 }
