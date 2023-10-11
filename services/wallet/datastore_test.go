@@ -226,7 +226,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 			go func() {
 				defer wg.Done()
 				err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-					walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.AnonymousAddress, walletInfo.Provider, "")
+					walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.Provider)
 			}()
 		}
 
@@ -260,7 +260,7 @@ func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUI
 		suite.Require().NoError(err, "save wallet should succeed")
 
 		err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-			walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.AnonymousAddress, "uphold", "")
+			walletInfo.ID, userDepositDestination, providerLinkingID, "uphold")
 		suite.Require().NoError(err, "link wallet should succeed")
 	}
 
@@ -303,7 +303,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 		go func(index int) {
 			defer wg.Done()
 			err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-				wallets[index].ID, userDepositDestination, providerLinkingID, wallets[index].AnonymousAddress, wallets[index].Provider, "")
+				wallets[index].ID, userDepositDestination, providerLinkingID, wallets[index].Provider)
 		}(i)
 	}
 

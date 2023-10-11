@@ -22,7 +22,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
@@ -71,7 +71,7 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	datastore.Datastore
-	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error
+	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, depositProvider string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (bool, error)
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
@@ -561,7 +561,7 @@ var (
 )
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error {
+func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, depositProvider string) error {
 	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
 	sublogger.Debug().Msg("linking wallet")
 
