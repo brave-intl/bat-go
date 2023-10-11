@@ -300,6 +300,13 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 			return nil, err
 		}
 
+		// TODO: we ultimately need to figure out how to provision numPerInterval and numIntervals
+		// on the order item instead of the order itself to support multiple orders with
+		// different time limited v2 issuers.  For now leo sku needs 192 as num per interval
+		if orderItem.SKU == "brave-leo-premium" {
+			numPerInterval = 192 // 192 credentials per day for leo
+		}
+
 		// Create issuer for sku. This only happens when a new sku is created.
 		switch orderItem.CredentialType {
 		case singleUse:
