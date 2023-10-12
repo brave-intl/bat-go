@@ -37,6 +37,6 @@ share-0.gpg
 
 fetch-quote.json
 main/main
-zebpay_test_env.sh
+zebpay_test.env
 zebpay_stage.pem
 prepare-*response.log
