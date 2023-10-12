@@ -81,6 +81,12 @@ func (service *Service) StateMachineFromTransaction(
 	ctx context.Context,
 	authenticatedState *paymentLib.AuthenticatedPaymentState,
 ) (TxStateMachine, error) {
+
+	// check if service is configured, if not error
+	if !service.AreSecretsLoaded() {
+		return nil, errSecretsNotLoaded
+	}
+
 	var machine TxStateMachine
 
 	client := http.Client{
