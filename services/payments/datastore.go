@@ -49,7 +49,7 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 			// For the transaction, check if this transaction has already existed. If not, perform
 			// the insertion.
 			existingPaymentState, err := txn.Execute(
-				"SELECT metadata.id as documentID FROM _ql_committed_transactions WHERE data.idempotencyKey = ?",
+				"SELECT d_id as documentID FROM transactions BY d_id where idempotencyKey = ?",
 				state.ID,
 			)
 			if err != nil {
