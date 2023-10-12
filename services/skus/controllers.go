@@ -841,48 +841,54 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 
 // VerifyCredentialV2 - version 2 of verify credential
 func VerifyCredentialV2(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
 		ctx := r.Context()
-		logger := logging.Logger(ctx, "VerifyCredentialV2")
-		logger.Debug().Msg("starting VerifyCredentialV2 controller")
+		l := logging.Logger(ctx, "VerifyCredentialV2")
 
 		var req = new(VerifyCredentialRequestV2)
 		if err := inputs.DecodeAndValidateReader(ctx, req, r.Body); err != nil {
-			logger.Error().Err(err).Msg("failed to read request")
+			l.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		return service.verifyCredential(ctx, req, w)
-	})
+		appErr := service.verifyCredential(ctx, req, w)
+		if appErr != nil {
+			l.Error().Err(appErr).Msg("failed to verify credential")
+		}
+
+		return appErr
+	}
 }
 
 // VerifyCredentialV1 is the handler for verifying subscription credentials
 func VerifyCredentialV1(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-
-		logger := logging.Logger(r.Context(), "VerifyCredentialV1")
-		logger.Debug().Msg("starting VerifyCredentialV1 controller")
+		l := logging.Logger(r.Context(), "VerifyCredentialV1")
 
 		var req = new(VerifyCredentialRequestV1)
 
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to read request")
+			l.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
-		logger.Debug().Msg("read verify credential post body")
+		l.Debug().Msg("read verify credential post body")
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to validate request")
+			l.Error().Err(err).Msg("failed to validate request")
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
-		logger.Debug().Msg("validated verify credential post body")
+		appErr := service.verifyCredential(ctx, req, w)
+		if appErr != nil {
+			l.Error().Err(appErr).Msg("failed to verify credential")
+		}
 
-		return service.verifyCredential(ctx, req, w)
-	})
+		return appErr
+	}
 }
 
 // WebhookRouter - handles calls from various payment method webhooks informing payments of completion
