@@ -12,18 +12,31 @@ import (
 	"os"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	uuid "github.com/satori/go.uuid"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
-// EncryptionKey for encrypting secrets
-var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
-var byteEncryptionKey [32]byte
+const (
+	// What the merchant key length should be.
+	keyLength = 24
 
-// What the merchant key length should be
-var keyLength = 24
+	errInvalidMerchant  model.Error = "merchant was missing from context"
+	errMerchantMismatch model.Error = "Order merchant does not match authentication"
+	errLocationMismatch model.Error = "Order location does not match authentication"
+	errUnexpectedSKUCvt model.Error = "SKU caveat is not supported on order endpoints"
+)
+
+var (
+	// EncryptionKey for encrypting secrets.
+	EncryptionKey = os.Getenv("ENCRYPTION_KEY")
+
+	byteEncryptionKey [32]byte
+)
 
 type caveatsCtxKey struct{}
 type merchantCtxKey struct{}
@@ -66,9 +79,9 @@ func (key *Key) GetSecretKey() (*string, error) {
 
 func randomString(n int) (string, error) {
 	b := make([]byte, n)
-	_, err := rand.Read(b)
+
 	// Note that err == nil only if we read len(b) bytes.
-	if err != nil {
+	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 
@@ -130,54 +143,44 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 	return ctx, &verifier, nil
 }
 
-// GetCaveats returns any authorized caveats that have been stored in the context
-func GetCaveats(ctx context.Context) map[string]string {
+// caveatsFromCtx returns authorized caveats from ctx.
+func caveatsFromCtx(ctx context.Context) map[string]string {
 	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
 	if !ok {
 		return nil
 	}
+
 	return caveats
 }
 
-// GetMerchant returns any authorized merchant that has been stored in the context
-func GetMerchant(ctx context.Context) (string, error) {
+// merchantFromCtx returns an authorized merchant from ctx.
+func merchantFromCtx(ctx context.Context) (string, error) {
 	merchant, ok := ctx.Value(merchantCtxKey{}).(string)
 	if !ok {
-		return "", errors.New("merchant was missing from context")
+		return "", errInvalidMerchant
 	}
+
 	return merchant, nil
 }
 
-// ValidateOrderMerchantAndCaveats checks that the current authentication of the request has
-// permissions to this order by cross-checking the merchant and caveats in context
-func (s *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.UUID) error {
-	merchant, err := GetMerchant(r.Context())
+// validateOrderMerchantAndCaveats checks that the current authentication of the request has
+// permissions to this order by cross-checking the merchant and caveats in context.
+func (s *Service) validateOrderMerchantAndCaveats(ctx context.Context, oid uuid.UUID) error {
+	merchant, err := merchantFromCtx(ctx)
 	if err != nil {
 		return err
 	}
-	caveats := GetCaveats(r.Context())
 
-	order, err := s.Datastore.GetOrder(orderID)
+	order, err := s.orderRepo.Get(ctx, s.Datastore.RawDB(), oid)
 	if err != nil {
 		return err
 	}
 
 	if order.MerchantID != merchant {
-		return errors.New("Order merchant does not match authentication")
+		return errMerchantMismatch
 	}
 
-	if caveats != nil {
-		if location, ok := caveats["location"]; ok {
-			if order.Location.Valid && order.Location.String != location {
-				return errors.New("Order location does not match authentication")
-			}
-		}
-
-		if _, ok := caveats["sku"]; ok {
-			return errors.New("SKU caveat is not supported on order endpoints")
-		}
-	}
-	return nil
+	return validateOrderCvt(order, caveatsFromCtx(ctx))
 }
 
 // NewAuthMwr returns a handler that authorises requests via http signature or simple tokens.
@@ -211,4 +214,18 @@ func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
 		})
 	}
+}
+
+func validateOrderCvt(ord *model.Order, cvt map[string]string) error {
+	if loc, ok := cvt["location"]; ok && ord.Location.Valid {
+		if ord.Location.String != loc {
+			return errLocationMismatch
+		}
+	}
+
+	if _, ok := cvt["sku"]; ok {
+		return errUnexpectedSKUCvt
+	}
+
+	return nil
 }
