@@ -36,7 +36,7 @@ const (
 type Datastore interface {
 	datastore.Datastore
 
-	CreateOrder(ctx context.Context, dbi sqlx.ExtContext, req *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error)
 	// SetOrderTrialDays - set the number of days of free trial for this order
 	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
@@ -101,7 +101,7 @@ type Datastore interface {
 type orderStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
-	Create(ctx context.Context, dbi sqlx.QueryerContext, req *model.OrderNew) (*model.Order, error)
+	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID, ndays int64) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
@@ -295,13 +295,13 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 }
 
 // CreateOrder creates an order from the given prototype, and inserts items.
-func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, req *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
-	result, err := pg.orderRepo.Create(ctx, dbi, req)
+func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	result, err := pg.orderRepo.Create(ctx, dbi, oreq)
 	if err != nil {
 		return nil, err
 	}
 
-	if req.Status == OrderStatusPaid {
+	if oreq.Status == OrderStatusPaid {
 		if err := pg.recordOrderPayment(ctx, dbi, result.ID, time.Now()); err != nil {
 			return nil, fmt.Errorf("failed to record order payment: %w", err)
 		}

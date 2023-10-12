@@ -60,7 +60,7 @@ func (r *Order) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, ex
 }
 
 // Create creates an order with the data in req.
-func (r *Order) Create(ctx context.Context, dbi sqlx.QueryerContext, req *model.OrderNew) (*model.Order, error) {
+func (r *Order) Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error) {
 	const q = `INSERT INTO orders
 		(total_price, merchant_id, status, currency, location, allowed_payment_methods, valid_for)
 	VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -70,13 +70,13 @@ func (r *Order) Create(ctx context.Context, dbi sqlx.QueryerContext, req *model.
 	if err := dbi.QueryRowxContext(
 		ctx,
 		q,
-		req.TotalPrice,
-		req.MerchantID,
-		req.Status,
-		req.Currency,
-		req.Location,
-		req.AllowedPaymentMethods,
-		req.ValidFor,
+		oreq.TotalPrice,
+		oreq.MerchantID,
+		oreq.Status,
+		oreq.Currency,
+		oreq.Location,
+		oreq.AllowedPaymentMethods,
+		oreq.ValidFor,
 	).StructScan(result); err != nil {
 		return nil, err
 	}
