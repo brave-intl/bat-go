@@ -9,6 +9,8 @@ authorize [flags] filename...
 
 The flags are:
 
+	-pr
+		Location on file system of the original prepared report
 	-v
 		verbose logging enabled
 	-k
@@ -39,6 +41,11 @@ import (
 
 func main() {
 	ctx := context.Background()
+
+	// original report
+	preparedReportFilename := flag.String(
+		"pr", "",
+		"the location on disk of the original payout report")
 
 	// command line flags
 	key := flag.String(
@@ -109,6 +116,30 @@ func main() {
 				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
 			}
 
+			preparedReportFile, err := os.Open(*preparedReportFilename)
+			if err != nil {
+				log.Fatalf("failed to open prepared report file: %v\n", err)
+			}
+			defer preparedReportFile.Close()
+
+			// parse the original prepared report
+			preparedReport := paymentscli.PreparedReport{}
+			if err := paymentscli.ReadReport(&preparedReport, preparedReportFile); err != nil {
+				log.Fatalf("failed to read prepared report: %v\n", err)
+			}
+
+			if *verbose {
+				log.Printf("attested report stats: %d transactions; %s total bat\n",
+					len(report), report.SumBAT())
+				log.Printf("prepared report stats: %d transactions; %s total bat\n",
+					len(preparedReport), preparedReport.SumBAT())
+			}
+
+			// compare performs automated checks to validate reports
+			if err := paymentscli.Compare(preparedReport, report); err != nil {
+				log.Fatalf("failed to compare reports: %v\n", err)
+			}
+
 			if *verbose {
 				log.Printf("report stats: %d transactions; %s total bat\n", len(report), report.SumBAT())
 			}
@@ -117,6 +148,8 @@ func main() {
 			if err != nil {
 				log.Fatalf("failed to parse operator key file: %v\n", err)
 			}
+
+			// validate the report
 
 			if err := report.Submit(ctx, priv, client); err != nil {
 				log.Fatalf("failed to submit report: %v\n", err)
