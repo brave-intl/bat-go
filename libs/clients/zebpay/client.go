@@ -1,12 +1,15 @@
 package zebpay
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -154,7 +157,7 @@ func New() (Client, error) {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
 	proxy := os.Getenv("HTTP_PROXY")
-	client, err := clients.NewWithProxy("zebpay", serverURL, "", proxy) // authentication bearer token is set per api call
+	client, err := clients.NewWithProxy("zebpay", serverURL, "", proxy) // authorization bearer token is set per api call
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +171,7 @@ func NewWithHTTPClient(httpClient http.Client) (Client, error) {
 	if len(serverURL) == 0 {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
-	client, err := clients.NewWithHTTPClient(serverURL, "", &httpClient) // authentication bearer token is set per api call
+	client, err := clients.NewWithHTTPClient(serverURL, "", &httpClient) // authorization bearer token is set per api call
 	if err != nil {
 		return nil, err
 	}
@@ -229,8 +232,8 @@ func affixAccessToken(req *http.Request, opts *ClientOpts, body []byte) error {
 		return fmt.Errorf("failed to create jwt: %w", err)
 	}
 
-	// add the authentication bearer token we created
-	req.Header.Set("Authentication", "Bearer "+accessToken)
+	// add the authorization bearer token we created
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	return nil
 }
@@ -299,10 +302,13 @@ func (c *HTTPClient) BulkTransfer(ctx context.Context, opts *ClientOpts, transfe
 		return nil, fmt.Errorf("failed to construct new request: %w", err)
 	}
 
-	body, err := json.Marshal(transfers)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		return nil, fmt.Errorf("failed to construct read request body to hash bytes: %w", err)
 	}
+
+	// replace the request body, cause we read it
+	req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 
 	// populate the access token
 	affixAccessToken(req, opts, body)
