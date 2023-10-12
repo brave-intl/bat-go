@@ -1,20 +1,20 @@
 package zebpay
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
-	"strings"
-	"io"
 
 	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/go-jose/go-jose/v3"
+	"github.com/brave-intl/bat-go/libs/requestutils"
+	jose "github.com/go-jose/go-jose/v3"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -188,9 +188,18 @@ type claims struct {
 
 // affixAccessToken will take a request and generate a zebpay access token and affix it to the
 // headers of the request
-func affixAccessToken(req *http.Request, opts *ClientOpts, body []byte) error {
+func affixAccessToken(req *http.Request, opts *ClientOpts) error {
 	if opts == nil {
 		return errBadClientOpts
+	}
+	var body []byte
+	var err error
+	if req.Body != nil {
+		body, err = requestutils.Read(context.Background(), req.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read request body: %w", err)
+		}
+		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 	}
 
 	// sha body bytes
@@ -232,7 +241,7 @@ func affixAccessToken(req *http.Request, opts *ClientOpts, body []byte) error {
 	}
 
 	// add the authentication bearer token we created
-	req.Header.Set("Authentication", "Bearer "+accessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	return nil
 }
@@ -252,7 +261,7 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	}
 
 	// populate the access token
-	affixAccessToken(req, opts, []byte{})
+	affixAccessToken(req, opts)
 
 	var resp = new(CheckTransferResponse)
 	_, err = c.client.Do(ctx, req, resp)
@@ -275,13 +284,8 @@ func (c *HTTPClient) BulkCheckTransfer(ctx context.Context, opts *ClientOpts, id
 		return nil, err
 	}
 
-	body, err := json.Marshal(ids)
-	if err != nil {
-		return nil, err
-	}
-
 	// populate the access token
-	affixAccessToken(req, opts, body)
+	affixAccessToken(req, opts)
 
 	var resp = BulkCheckTransferResponse{}
 	_, err = c.client.Do(ctx, req, &resp)
@@ -301,25 +305,12 @@ func (c *HTTPClient) BulkTransfer(ctx context.Context, opts *ClientOpts, transfe
 		return nil, fmt.Errorf("failed to construct new request: %w", err)
 	}
 
-	body, err := json.Marshal(transfers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %w", err)
-	}
-
 	// populate the access token
-	affixAccessToken(req, opts, body)
-
-	gotBody, err := req.GetBody()
-	buf := new(strings.Builder)
-	_, err = io.Copy(buf, gotBody)
+	affixAccessToken(req, opts)
 
 	var resp = new(BulkTransferResponse)
-	response, err := c.client.Do(ctx, req, resp)
+	_, err = c.client.Do(ctx, req, resp)
 	if err != nil {
-		fmt.Printf("REQUEST: %#v\n", req)
-		fmt.Printf("REQUEST BODY: %s\n", buf)
-		fmt.Printf("TRANSFER: %#v\n", response)
-		fmt.Printf("ERROR: %#v\n", err)
 		return nil, fmt.Errorf("failed to do transfer request: %w", err)
 	}
 
