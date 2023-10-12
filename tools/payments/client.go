@@ -104,11 +104,11 @@ type redisClient struct {
 	env             string
 	paymentsAPIBase string
 	redis           *redisconsumer.RedisClient
-	sp              httpsignature.SignatureParams
+	sp              *httpsignature.SignatureParams
 	verifier        httpsignature.Verifier
 }
 
-func newRedisClient(ctx context.Context, env, addr, username, pass string, sp httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
+func newRedisClient(ctx context.Context, env, addr, username, pass string, sp *httpsignature.SignatureParams, verifier httpsignature.Verifier) (*redisClient, error) {
 	redis, err := redisconsumer.NewStreamClient(ctx, env, addr, username, pass, false)
 	if err != nil {
 		return nil, err

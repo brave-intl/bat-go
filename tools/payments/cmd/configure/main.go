@@ -12,8 +12,6 @@ The flags are:
 
 	-k
 		The public key of the payments service (output from create command)
-	-u
-		The enclave services' base uri to get the key id from
 	-b
 		The s3 uri to upload the configuration to
 
@@ -26,17 +24,13 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
-	"encoding/json"
 	"flag"
-	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 
 	"filippo.io/age"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go/aws"
@@ -47,9 +41,6 @@ func main() {
 	publicKey := flag.String(
 		"k", "",
 		"the public key of the payment service (from create command)")
-	enclaveBaseURI := flag.String(
-		"u", "",
-		"the enclave base URI")
 	s3Bucket := flag.String(
 		"b", "",
 		"the s3 bucket to upload to")
@@ -67,37 +58,16 @@ func main() {
 	if *verbose {
 		// print out the configuration
 		log.Printf("Public Key: %s\n", *publicKey)
-		log.Printf("EnclaveBaseURI: %s\n", *enclaveBaseURI)
 		log.Printf("Configuration Files: %s\n", files)
 	}
 
-	// get the info endpoint to key kms arn
-	resp, err := http.Get(*enclaveBaseURI + "/v1/payments/info")
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	data := make(map[string]string)
-	err = json.NewDecoder(resp.Body).Decode(&data)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	resp.Body.Close()
 	ctx := context.Background()
-
-	encryptKeyArn := data["encryptionKeyArn"]
-
-	fmt.Println("keyid: ", encryptKeyArn)
 
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Fatalf("failed to load default aws config: %v", err)
 	}
-
-	// get kms client from config
-	kmsClient := kms.NewFromConfig(cfg)
 
 	recipient, err := age.ParseX25519Recipient(*publicKey)
 	if err != nil {
@@ -133,29 +103,20 @@ func main() {
 			log.Fatalf("Failed to close file: %v", err)
 		}
 
-		// perform encryption of the operator's shamir share
-		out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{
-			KeyId:     aws.String(encryptKeyArn),
-			Plaintext: buf.Bytes(),
-		})
-		if err != nil {
-			log.Fatalf("failed to encrypt configuration: %v", err)
-		}
-
 		s3Client := s3.NewFromConfig(cfg)
 		h := md5.New()
-		h.Write(out.CiphertextBlob)
+		h.Write(buf.Bytes())
 
 		// put the enclave configuration up in s3
 		_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:                    aws.String(*s3Bucket),
 			Key:                       aws.String(*s3Object),
-			Body:                      bytes.NewBuffer(out.CiphertextBlob),
+			Body:                      buf,
 			ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 			ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 		})
 		if err != nil {
-			log.Fatalf("failed to encrypt configuration: %v", err)
+			log.Fatalf("failed to upload configuration: %v", err)
 		}
 		log.Printf("payments enclave to use configuration: %s/%s\n", *s3Bucket, *s3Object)
 	}

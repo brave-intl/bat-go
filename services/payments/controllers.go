@@ -50,41 +50,46 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 	r.Use(hlog.NewHandler(*logger))
 	r.Use(hlog.UserAgentHandler("user_agent"))
 	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
-	r.Use(middleware.RequestLogger(logger))
-	r.Use(middleware.SignResponse(ps))
 	r.Use(chiware.Timeout(15 * time.Second))
 	logger.Info().Msg("configuration middleware setup")
 	// routes
 	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	// setup payments routes
-	// prepare inserts transactions into qldb, returning a document which needs to be submitted by
-	// an authorizer
-	r.Post(
-		"/v1/payments/prepare",
-		middleware.InstrumentHandler(
-			"PrepareHandler",
-			PrepareHandler(s),
-		).ServeHTTP,
-	)
-	logger.Info().Msg("prepare endpoint setup")
-	// submit will have an http signature from a known list of public keys
-	r.Post(
-		"/v1/payments/submit",
-		middleware.InstrumentHandler(
-			"SubmitHandler",
-			s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
-		).ServeHTTP)
-	logger.Info().Msg("submit endpoint setup")
+	r.Route("/v1/payments", func(r chi.Router) {
+		// Sign all payments responses
+		r.Use(middleware.SignResponse(ps))
+		// Log all payments requests
+		r.Use(middleware.RequestLogger(logger))
 
-	r.Get(
-		"/v1/payments/info",
-		middleware.InstrumentHandler(
-			"InfoHandler",
-			GetConfigurationHandler(s),
-		).ServeHTTP,
-	)
-	logger.Info().Msg("get info endpoint setup")
+		// prepare inserts transactions into qldb, returning a document which needs to be submitted by
+		// an authorizer
+		r.Post(
+			"/prepare",
+			middleware.InstrumentHandler(
+				"PrepareHandler",
+				PrepareHandler(s),
+			).ServeHTTP,
+		)
+		logger.Info().Msg("prepare endpoint setup")
+		// submit will have an http signature from a known list of public keys
+		r.Post(
+			"/submit",
+			middleware.InstrumentHandler(
+				"SubmitHandler",
+				s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("submit endpoint setup")
+
+		r.Get(
+			"/info",
+			middleware.InstrumentHandler(
+				"InfoHandler",
+				GetConfigurationHandler(s),
+			).ServeHTTP,
+		)
+		logger.Info().Msg("get info endpoint setup")
+	})
 	return ctx, r
 }
 
@@ -135,7 +140,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		authenticatedState := req.ToAuthenticatedPaymentState()
 
 		// Ensure that prepare succeeds ( i.e. we are not using a failing dry-run state machine )
-		stateMachine, err := service.StateMachineFromTransaction(authenticatedState)
+		stateMachine, err := service.StateMachineFromTransaction(ctx, authenticatedState)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create stateMachine", http.StatusBadRequest)
 		}
@@ -206,7 +211,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		}
 
 		// validate the history of the transaction
-		authenticatedState, err := history.GetAuthenticatedPaymentState(service.verifier, submitRequest.DocumentID)
+		authenticatedState, err := history.GetAuthenticatedPaymentState(service.verifierStore, submitRequest.DocumentID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to validate payment state history", http.StatusInternalServerError)
 		}

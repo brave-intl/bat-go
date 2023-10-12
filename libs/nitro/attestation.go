@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -15,6 +18,16 @@ import (
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
 )
+
+// per https://docs.aws.amazon.com/enclaves/latest/user/set-up-attestation.html
+// PCR1 is a contiguous measurement of the kernel and boot ramfs data.
+// the kernel and boot ramfs are present in /usr/share/nitro_enclaves/blobs/
+// and shipped as part of the official nitro cli tooling. as a result, they
+// do not vary based on the docker image we provide and are consistent across
+// all images that we produce. for simplicity, we hardcode the current PCR1 value
+// corresponding to the latest nitro cli tooling release.
+// NOTE: this will need to be changed if the nitro cli tools are updated
+const pcr1Hex = "dc9f5af64d83079f2fddca94016f1cba17eb95eb78638eaff32c75517274f05537aabfcbe8e02cb8837906197cf58506"
 
 // RootAWSNitroCert is the root certificate for the nitro enclaves in aws,
 // retrieved from https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
@@ -32,6 +45,17 @@ MQCjfy+Rocm9Xue4YnwWmNJVA44fA0P5W2OpYow9OYCVRaEevL8uO1XYru5xtMPW
 rfMCMQCi85sWBbJwKKXdS6BptQFuZbT73o/gBh1qUxl/nNr12UO8Yfwr6wPLb+6N
 IwLz3/Y=
 -----END CERTIFICATE-----`
+
+// ExpectedPCR1 is the expected PCR1 value for all images built with the official nitro cli tooling
+var ExpectedPCR1 []byte
+
+func init() {
+	var err error
+	ExpectedPCR1, err = hex.DecodeString(pcr1Hex)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 // Attest takes as input a nonce, user-provided data and a public key, and then
 // asks the Nitro hypervisor to return a signed attestation document that
@@ -82,7 +106,8 @@ type Signer struct{}
 
 // Sign the message using the nitro signer
 func (s Signer) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	return Attest(context.Background(), nil, message, nil)
+	hash := sha256.Sum256(message)
+	return Attest(context.Background(), nil, hash[:], nil)
 }
 
 // Verifier specifies the PCR values required for verification
@@ -118,7 +143,12 @@ func (v Verifier) verifySigOnlyNotPCRs(message, sig []byte, opts crypto.SignerOp
 		return false, nil, err
 	}
 
-	if !bytes.Equal(res.Document.UserData, message) {
+	var userdata []byte = nil
+	if message != nil {
+		hash := sha256.Sum256(message)
+		userdata = hash[:]
+	}
+	if !bytes.Equal(res.Document.UserData, userdata) {
 		return false, nil, nil
 	}
 
