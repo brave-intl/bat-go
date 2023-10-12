@@ -92,6 +92,14 @@ func nitroAwsCfg(ctx context.Context) (aws.Config, error) {
 	return nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
 }
 
+// AreSecretsLoaded will tell you if we have successfully loaded secrets on the service
+func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
+	if len(s.secrets) > 0 {
+		return true
+	}
+	return false
+}
+
 // fetchSecrets will take an s3 bucket/object and fetch the configuration and store the
 // ciphertext on the service for decryption later
 func (s *Service) fetchSecrets(ctx context.Context, bucket, object string) error {
