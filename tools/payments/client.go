@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hex"
 	"io"
 	"net/http"
 	"os"
@@ -58,9 +59,14 @@ func NewSettlementClient(ctx context.Context, env string, config map[string]stri
 	sp.KeyID = "primary"
 	sp.Headers = []string{"digest"}
 
-	verifier := httpsignature.NewNitroVerifier(map[uint][]byte{2: []byte(config["pcr2"])})
+	pcr2, err := hex.DecodeString(config["pcr2"])
+	if err != nil {
+		return nil, nil, err
+	}
 
-	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], sp, verifier)
+	verifier := httpsignature.NewNitroVerifier(map[uint][]byte{2: []byte(pcr2)})
+
+	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], &sp, verifier)
 	return ctx, client, err
 }
 
