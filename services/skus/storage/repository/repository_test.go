@@ -689,7 +689,7 @@ func TestOrder_CreateGet(t *testing.T) {
 	}()
 
 	type tcGiven struct {
-		order *model.Order
+		req *model.OrderNew
 	}
 
 	type tcExpected struct {
@@ -707,15 +707,13 @@ func TestOrder_CreateGet(t *testing.T) {
 		{
 			name: "nil_allowed_payment_methods",
 			given: tcGiven{
-				order: &model.Order{
+				req: &model.OrderNew{
 					MerchantID: "brave.com",
 					Currency:   "USD",
 					Status:     "pending",
-					Location: datastore.NullString{
-						NullString: sql.NullString{
-							Valid:  true,
-							String: "https://somewhere.brave.software",
-						},
+					Location: sql.NullString{
+						Valid:  true,
+						String: "https://somewhere.brave.software",
 					},
 					TotalPrice: mustDecimalFromString("5"),
 				},
@@ -739,15 +737,13 @@ func TestOrder_CreateGet(t *testing.T) {
 		{
 			name: "empty_allowed_payment_methods",
 			given: tcGiven{
-				order: &model.Order{
+				req: &model.OrderNew{
 					MerchantID: "brave.com",
 					Currency:   "USD",
 					Status:     "pending",
-					Location: datastore.NullString{
-						NullString: sql.NullString{
-							Valid:  true,
-							String: "https://somewhere.brave.software",
-						},
+					Location: sql.NullString{
+						Valid:  true,
+						String: "https://somewhere.brave.software",
 					},
 					TotalPrice:            mustDecimalFromString("5"),
 					AllowedPaymentMethods: pq.StringArray{},
@@ -773,15 +769,13 @@ func TestOrder_CreateGet(t *testing.T) {
 		{
 			name: "single_allowed_payment_methods",
 			given: tcGiven{
-				order: &model.Order{
+				req: &model.OrderNew{
 					MerchantID: "brave.com",
 					Currency:   "USD",
 					Status:     "pending",
-					Location: datastore.NullString{
-						NullString: sql.NullString{
-							Valid:  true,
-							String: "https://somewhere.brave.software",
-						},
+					Location: sql.NullString{
+						Valid:  true,
+						String: "https://somewhere.brave.software",
 					},
 					TotalPrice:            mustDecimalFromString("5"),
 					AllowedPaymentMethods: pq.StringArray{"stripe"},
@@ -807,15 +801,13 @@ func TestOrder_CreateGet(t *testing.T) {
 		{
 			name: "many_allowed_payment_methods",
 			given: tcGiven{
-				order: &model.Order{
+				req: &model.OrderNew{
 					MerchantID: "brave.com",
 					Currency:   "USD",
 					Status:     "pending",
-					Location: datastore.NullString{
-						NullString: sql.NullString{
-							Valid:  true,
-							String: "https://somewhere.brave.software",
-						},
+					Location: sql.NullString{
+						Valid:  true,
+						String: "https://somewhere.brave.software",
 					},
 					TotalPrice:            mustDecimalFromString("5"),
 					AllowedPaymentMethods: pq.StringArray{"stripe", "cash"},
@@ -837,6 +829,28 @@ func TestOrder_CreateGet(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "empty_location",
+			given: tcGiven{
+				req: &model.OrderNew{
+					MerchantID:            "brave.com",
+					Currency:              "USD",
+					Status:                "pending",
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+				},
+			},
+			exp: tcExpected{
+				result: &model.Order{
+					MerchantID:            "brave.com",
+					Currency:              "USD",
+					Status:                "pending",
+					TotalPrice:            mustDecimalFromString("5"),
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+				},
+			},
+		},
 	}
 
 	repo := repository.NewOrder()
@@ -852,44 +866,35 @@ func TestOrder_CreateGet(t *testing.T) {
 
 			t.Cleanup(func() { _ = tx.Rollback() })
 
-			act1, err := repo.Create(
-				ctx,
-				tx,
-				tc.given.order.TotalPrice,
-				tc.given.order.MerchantID,
-				tc.given.order.Status,
-				tc.given.order.Currency,
-				tc.given.order.Location.String,
-				tc.given.order.AllowedPaymentMethods,
-				tc.given.order.ValidFor,
-			)
+			actual1, err := repo.Create(ctx, tx, tc.given.req)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
 			if tc.exp.err != nil {
 				return
 			}
 
-			should.Equal(t, tc.exp.result.MerchantID, act1.MerchantID)
-			should.Equal(t, tc.exp.result.Currency, act1.Currency)
-			should.Equal(t, tc.exp.result.Status, act1.Status)
-			should.Equal(t, tc.exp.result.Location, act1.Location)
-			should.Equal(t, true, tc.exp.result.TotalPrice.Equal(act1.TotalPrice))
-			should.Equal(t, tc.exp.result.AllowedPaymentMethods, act1.AllowedPaymentMethods)
-			should.Equal(t, tc.exp.result.ValidFor, act1.ValidFor)
+			should.Equal(t, tc.exp.result.MerchantID, actual1.MerchantID)
+			should.Equal(t, tc.exp.result.Currency, actual1.Currency)
+			should.Equal(t, tc.exp.result.Status, actual1.Status)
+			should.Equal(t, tc.exp.result.Location.Valid, actual1.Location.Valid)
+			should.Equal(t, tc.exp.result.Location.String, actual1.Location.String)
+			should.Equal(t, true, tc.exp.result.TotalPrice.Equal(actual1.TotalPrice))
+			should.Equal(t, tc.exp.result.AllowedPaymentMethods, actual1.AllowedPaymentMethods)
+			should.Equal(t, tc.exp.result.ValidFor, actual1.ValidFor)
 
-			act2, err := repo.Get(ctx, tx, act1.ID)
+			actual2, err := repo.Get(ctx, tx, actual1.ID)
 			must.Equal(t, nil, err)
 
-			should.Equal(t, act1.ID, act2.ID)
-			should.Equal(t, act1.MerchantID, act2.MerchantID)
-			should.Equal(t, act1.Currency, act2.Currency)
-			should.Equal(t, act1.Status, act2.Status)
-			should.Equal(t, act1.Location, act2.Location)
-			should.Equal(t, true, act1.TotalPrice.Equal(act2.TotalPrice))
-			should.Equal(t, act1.AllowedPaymentMethods, act2.AllowedPaymentMethods)
-			should.Equal(t, act1.ValidFor, act2.ValidFor)
-			should.Equal(t, act1.CreatedAt, act2.CreatedAt)
-			should.Equal(t, act1.UpdatedAt, act2.UpdatedAt)
+			should.Equal(t, actual1.ID, actual2.ID)
+			should.Equal(t, actual1.MerchantID, actual2.MerchantID)
+			should.Equal(t, actual1.Currency, actual2.Currency)
+			should.Equal(t, actual1.Status, actual2.Status)
+			should.Equal(t, actual1.Location, actual2.Location)
+			should.Equal(t, true, actual1.TotalPrice.Equal(actual2.TotalPrice))
+			should.Equal(t, actual1.AllowedPaymentMethods, actual2.AllowedPaymentMethods)
+			should.Equal(t, actual1.ValidFor, actual2.ValidFor)
+			should.Equal(t, actual1.CreatedAt, actual2.CreatedAt)
+			should.Equal(t, actual1.UpdatedAt, actual2.UpdatedAt)
 		})
 	}
 }

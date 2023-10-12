@@ -4,6 +4,7 @@ package skus
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	must "github.com/stretchr/testify/require"
@@ -471,16 +473,21 @@ func createOrderAndIssuer(t *testing.T, ctx context.Context, storage Datastore, 
 	}
 
 	validFor := 3600 * time.Second * 24
-	order, err := storage.CreateOrder(
-		decimal.NewFromInt32(int32(test.RandomInt())),
-		test.RandomString(),
-		OrderStatusPaid,
-		test.RandomString(),
-		test.RandomString(),
-		&validFor,
-		orderItems,
-		methods,
-	)
+
+	oreq := &model.OrderNew{
+		MerchantID: test.RandomString(),
+		Currency:   test.RandomString(),
+		Status:     model.OrderStatusPaid,
+		TotalPrice: decimal.NewFromInt(int64(test.RandomInt())),
+		Location: sql.NullString{
+			Valid:  true,
+			String: test.RandomString(),
+		},
+		AllowedPaymentMethods: pq.StringArray(methods),
+		ValidFor:              &validFor,
+	}
+
+	order, err := storage.CreateOrder(ctx, storage.RawDB(), oreq, orderItems)
 	must.NoError(t, err)
 
 	{
@@ -514,16 +521,19 @@ func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx 
 		methods = append(methods, method...)
 	}
 
-	order, err := suite.storage.CreateOrder(
-		decimal.NewFromInt32(int32(test.RandomInt())),
-		test.RandomString(),
-		OrderStatusPaid,
-		test.RandomString(),
-		test.RandomString(),
-		nil,
-		orderItems,
-		methods,
-	)
+	oreq := &model.OrderNew{
+		MerchantID: test.RandomString(),
+		Currency:   test.RandomString(),
+		Status:     model.OrderStatusPaid,
+		TotalPrice: decimal.NewFromInt(int64(test.RandomInt())),
+		Location: sql.NullString{
+			Valid:  true,
+			String: test.RandomString(),
+		},
+		AllowedPaymentMethods: pq.StringArray(methods),
+	}
+
+	order, err := suite.storage.CreateOrder(ctx, suite.storage.RawDB(), oreq, orderItems)
 	must.NoError(t, err)
 
 	repo := repository.NewIssuer()
@@ -595,16 +605,19 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 		methods = append(methods, method...)
 	}
 
-	order, err := suite.storage.CreateOrder(
-		decimal.NewFromInt32(int32(test.RandomInt())),
-		test.RandomString(),
-		OrderStatusPaid,
-		test.RandomString(),
-		test.RandomString(),
-		nil,
-		orderItems,
-		methods,
-	)
+	oreq := &model.OrderNew{
+		MerchantID: test.RandomString(),
+		Currency:   test.RandomString(),
+		Status:     model.OrderStatusPaid,
+		TotalPrice: decimal.NewFromInt(int64(test.RandomInt())),
+		Location: sql.NullString{
+			Valid:  true,
+			String: test.RandomString(),
+		},
+		AllowedPaymentMethods: pq.StringArray(methods),
+	}
+
+	order, err := suite.storage.CreateOrder(ctx, suite.storage.RawDB(), oreq, orderItems)
 	must.NoError(t, err)
 
 	pk := test.RandomString()

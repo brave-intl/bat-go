@@ -18,6 +18,7 @@ import (
 	"github.com/awa/go-iap/appstore"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
@@ -279,17 +280,17 @@ func (s *Service) ExternalIDExists(ctx context.Context, externalID string) (bool
 
 // CreateOrderFromRequest creates an order from the request
 func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*Order, error) {
-	totalPrice := decimal.New(0, 0)
+	const merchantID = "brave.com"
+
 	var (
+		totalPrice            = decimal.New(0, 0)
 		currency              string
 		orderItems            []OrderItem
 		location              string
 		validFor              *time.Duration
 		stripeSuccessURI      string
 		stripeCancelURI       string
-		status                string
 		allowedPaymentMethods []string
-		merchantID            = "brave.com"
 		numIntervals          int
 		numPerInterval        = 2 // two per interval credentials to be submitted for signing
 	)
@@ -302,8 +303,9 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 
 		// TODO: we ultimately need to figure out how to provision numPerInterval and numIntervals
 		// on the order item instead of the order itself to support multiple orders with
-		// different time limited v2 issuers.  For now leo sku needs 192 as num per interval
-		if orderItem.SKU == "brave-leo-premium" {
+		// different time limited v2 issuers.
+		// For now leo sku needs 192 as num per interval.
+		if orderItem.IsLeo() {
 			numPerInterval = 192 // 192 credentials per day for leo
 		}
 
@@ -378,25 +380,38 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	// If order consists entirely of zero cost items ( e.g. trials ), we can consider it paid
-	if totalPrice.IsZero() {
-		status = OrderStatusPaid
-	} else {
-		status = OrderStatusPending
+	oreq := &model.OrderNew{
+		MerchantID:            merchantID,
+		Currency:              currency,
+		Status:                OrderStatusPending,
+		TotalPrice:            totalPrice,
+		AllowedPaymentMethods: pq.StringArray(allowedPaymentMethods),
+		ValidFor:              validFor,
 	}
 
-	order, err := s.Datastore.CreateOrder(
-		totalPrice,
-		merchantID,
-		status,
-		currency,
-		location,
-		validFor,
-		orderItems,
-		allowedPaymentMethods,
-	)
+	// Consider the order paid if it consists entirely of zero cost items (e.g. trials).
+	if oreq.TotalPrice.IsZero() {
+		oreq.Status = OrderStatusPaid
+	}
+
+	if location != "" {
+		oreq.Location.Valid = true
+		oreq.Location.String = location
+	}
+
+	tx, err := s.Datastore.BeginTx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	order, err := s.Datastore.CreateOrder(ctx, tx, oreq, orderItems)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	if !order.IsPaid() {
@@ -1633,12 +1648,12 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	// Check for number of items to be at least one.
+	// Check for number of items to be above 0.
 	//
 	// Validation should already have taken care of this.
-	// However, this method does not know about it.
-	// Therefore, an explicit check is necessary.
-	if len(items) == 0 {
+	// This method does not know about it, hence the explicit check.
+	nitems := len(items)
+	if nitems == 0 {
 		return nil, model.ErrInvalidOrderRequest
 	}
 
@@ -1655,56 +1670,59 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	// TODO: Gradually use this tx for other database operations.
-	// Eventually, move this call to the end of the method.
-	if err := tx.Commit(); err != nil {
-		return nil, err
+	oreq := &model.OrderNew{
+		MerchantID:            merchID,
+		Currency:              req.Currency,
+		Status:                model.OrderStatusPending,
+		TotalPrice:            model.OrderItemList(items).TotalCost(),
+		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
 	}
 
-	totalCost := model.OrderItemList(items).TotalCost()
-
-	status := model.OrderStatusPending
-	if totalCost.IsZero() {
-		status = model.OrderStatusPaid
+	if oreq.TotalPrice.IsZero() {
+		oreq.Status = model.OrderStatusPaid
 	}
 
-	// Use validFor from the first item.
+	// Location on the order is only defined when there is only one item.
 	//
-	// TODO: Deprecate the use of valid_for:
-	// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
-	//
-	// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
-	// It does not make any sense, but it's working because there is only one item normally.
-	var validFor time.Duration
-	if items[0].ValidFor != nil {
-		validFor = *items[0].ValidFor
+	// Multi-item orders have NULL location.
+	if nitems == 1 && items[0].Location.Valid {
+		oreq.Location.Valid = true
+		oreq.Location.String = items[0].Location.String
 	}
 
-	order, err := s.Datastore.CreateOrder(
-		totalCost,
-		merchID,
-		status,
-		req.Currency,
-		// FIXME: Location.
+	{
+		// Use validFor from the first item.
 		//
-		// The old code in CreateOrderFromRequest contradictory things:
-		// - it looks as though it supports multiple items (mind the loop)
-		// - it requires all items to have the same location, at the same time.
-		// For this to work with bundles, this has to change.
-		// At this stage (i.e. just adding this new endpoint and switching over to it)
-		// using the location of the first (and the only) item accomplishes the same result.
-		items[0].Location.String,
-		&validFor,
-		items,
-		req.PaymentMethods,
-	)
+		// TODO: Deprecate the use of valid_for:
+		// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
+		//
+		// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
+		// It does not make any sense, but it's working because there is only one item normally.
+		var vf time.Duration
+		if items[0].ValidFor != nil {
+			vf = *items[0].ValidFor
+		}
+
+		oreq.ValidFor = &vf
+	}
+
+	order, err := s.Datastore.CreateOrder(ctx, tx, oreq, items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
 	if !order.IsPaid() && order.IsStripePayable() {
-		if err := s.createStripeSessID(ctx, req, order); err != nil {
+		ssid, err := s.createStripeSessID(ctx, req, order)
+		if err != nil {
 			return nil, err
+		}
+
+		if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", ssid); err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
 	}
 
@@ -1714,8 +1732,16 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		}
 	}
 
-	if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", 2); err != nil {
-		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	// Backporting changes from https://github.com/brave-intl/bat-go/pull/1998.
+	{
+		numPerInterval := 2
+		if nitems == 1 && items[0].IsLeo() {
+			numPerInterval = 192
+		}
+
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", numPerInterval); err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
 	}
 
 	return order, nil
@@ -1746,30 +1772,25 @@ func (s *Service) createOrderIssuers(ctx context.Context, dbi sqlx.QueryerContex
 	return numIntervals, nil
 }
 
-func (s *Service) createStripeSessID(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) error {
+func (s *Service) createStripeSessID(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
 	oid := order.ID.String()
 
-	// This should not happen, but enforce the check anyway.
 	surl, err := req.StripeMetadata.SuccessURL(oid)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	curl, err := req.StripeMetadata.CancelURL(oid)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	sess, err := order.CreateStripeCheckoutSession(req.Email, surl, curl, order.GetTrialDays())
+	sess, err := model.CreateStripeCheckoutSession(oid, req.Email, surl, curl, order.GetTrialDays(), order.Items)
 	if err != nil {
-		return fmt.Errorf("failed to create checkout session: %w", err)
+		return "", fmt.Errorf("failed to create checkout session: %w", err)
 	}
 
-	if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", sess.SessionID); err != nil {
-		return fmt.Errorf("failed to update order metadata: %w", err)
-	}
-
-	return nil
+	return sess.SessionID, nil
 }
 
 func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, kind string, cred *cbr.CredentialRedemption) *handlers.AppError {
