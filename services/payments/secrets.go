@@ -92,6 +92,8 @@ func nitroAwsCfg(ctx context.Context) (aws.Config, error) {
 	return nitroawsutils.NewAWSConfig(ctx, egressAddr, region)
 }
 
+var errSecretsNotLoaded = errors.New("secrets are not yet loaded")
+
 // AreSecretsLoaded will tell you if we have successfully loaded secrets on the service
 func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
 	if len(s.secrets) > 0 {
