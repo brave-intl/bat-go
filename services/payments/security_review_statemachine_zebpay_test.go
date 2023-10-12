@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/jarcoal/httpmock"
 	should "github.com/stretchr/testify/assert"
@@ -473,6 +475,8 @@ Initialized to Paid. Additionally, Paid status should be final and Failed status
 be permanent.
 */
 func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
+	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
+
 	zebpayHost := "https://rewards.zebpay.co"
 	err := os.Setenv("ZEBPAY_ENVIRONMENT", "test")
 	must.Nil(t, err)
@@ -543,7 +547,6 @@ func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
 		&testState,
 	)
 
-	ctx := context.Background()
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 
 	// Should transition transaction into the Authorized state
