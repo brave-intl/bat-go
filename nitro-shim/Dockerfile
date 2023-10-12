@@ -5,6 +5,7 @@ WORKDIR /src
 COPY tools/ ./
 RUN make -C ./viproxy/ viproxy
 RUN make -C ./gvproxy/ gvproxy
+RUN make -C ./eifbuild/ eifbuild
 
 FROM amazonlinux:2.0.20230207.0
 
@@ -20,5 +21,6 @@ WORKDIR /enclave
 
 COPY --from=builder /src/viproxy/viproxy /enclave/
 COPY --from=builder /src/gvproxy/gvproxy /enclave/
+COPY --from=builder /src/eifbuild/eifbuild /enclave/
 
 COPY scripts/ /enclave/

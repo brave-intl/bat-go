@@ -1,0 +1,22 @@
+tokens:
+  - id: "brave-leo-premium"
+    version: 1
+    location: "leo.bravesoftware.com"
+    first_party_caveats:
+      - sku: "brave-leo-premium"
+      - price: 15.00
+      - currency: "USD"
+      - description: "brave-leo-premium"
+      - credential_type: "time-limited-v2"
+      - credential_valid_duration: "P1M"
+      - each_credential_valid_duration: "P1D"
+      - issuer_token_buffer: "3"
+      - issuer_token_overlap: "0"
+      - allowed_payment_methods: "stripe"
+      - metadata: '
+{
+  "stripe_product_id": "prod_OKRYJ77wYOk771",
+  "stripe_item_id": "price_1NXmfTBSm1mtrN9nYjSNMs4X",
+  "stripe_success_uri": "https://account.bravesoftware.com/account/?intent=provision",
+  "stripe_cancel_uri": "https://account.bravesoftware.com/plans/?intent=checkout"
+}'

@@ -11,19 +11,23 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/golang/mock/gomock"
+	"github.com/jmoiron/sqlx"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	must "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/brave-intl/bat-go/libs/test"
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
-	"github.com/golang/mock/gomock"
-	"github.com/jmoiron/sqlx"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 type PostgresTestSuite struct {
@@ -37,7 +41,14 @@ func TestPostgresTestSuite(t *testing.T) {
 
 func (suite *PostgresTestSuite) SetupSuite() {
 	skustest.Migrate(suite.T())
-	storage, _ := NewPostgres("", false, "")
+	storage, _ := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
+
 	suite.storage = storage
 }
 
@@ -59,8 +70,13 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 			}
 		}
 	}()
-	// inject our mock db into our postgres
-	pg := &Postgres{Postgres: datastore.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")}}
+
+	pg := &Postgres{
+		Postgres:        datastore.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")},
+		orderRepo:       repository.NewOrder(),
+		orderItemRepo:   repository.NewOrderItem(),
+		orderPayHistory: repository.NewOrderPayHistory(),
+	}
 
 	// setup inputs
 	merchantID := uuid.NewV4()
@@ -440,70 +456,92 @@ func (suite *PostgresTestSuite) TestInsertSigningOrderRequestOutbox() {
 
 //nolint:typecheck
 func createOrderAndIssuer(t *testing.T, ctx context.Context, storage Datastore, sku ...string) (*Order, *Issuer) {
-	service := Service{}
-	var orderItems []OrderItem
-	var methods Methods
+	var (
+		svc        = &Service{}
+		orderItems []OrderItem
+		methods    []string
+	)
 
 	for _, s := range sku {
-		orderItem, method, _, err := service.CreateOrderItemFromMacaroon(ctx, s, 1)
-		assert.NoError(t, err)
+		orderItem, method, _, err := svc.CreateOrderItemFromMacaroon(ctx, s, 1)
+		must.NoError(t, err)
+
 		orderItems = append(orderItems, *orderItem)
-		methods = append(methods, *method...)
+		methods = append(methods, method...)
 	}
 
 	validFor := 3600 * time.Second * 24
-	order, err := storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
-		test.RandomString(), test.RandomString(), &validFor, orderItems, &methods)
-	assert.NoError(t, err)
+	order, err := storage.CreateOrder(
+		decimal.NewFromInt32(int32(test.RandomInt())),
+		test.RandomString(),
+		OrderStatusPaid,
+		test.RandomString(),
+		test.RandomString(),
+		&validFor,
+		orderItems,
+		methods,
+	)
+	must.NoError(t, err)
 
-	err = storage.UpdateOrder(order.ID, OrderStatusPaid)
-	assert.NoError(t, err)
+	{
+		err := storage.UpdateOrder(order.ID, OrderStatusPaid)
+		must.NoError(t, err)
+	}
 
-	// create issuer
-	issuer := &Issuer{
+	repo := repository.NewIssuer()
+	issuer, err := repo.Create(ctx, storage.RawDB(), model.IssuerNew{
 		MerchantID: test.RandomString(),
 		PublicKey:  test.RandomString(),
-	}
-	issuer, err = storage.InsertIssuer(issuer)
-	assert.NoError(t, err)
+	})
+	must.NoError(t, err)
 
 	return order, issuer
 }
 
 // helper to setup a paid order, order items, issuer and insert time limited v2 order credentials
 func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx context.Context, sku ...string) []TimeAwareSubIssuedCreds {
-	// create the order and the order items from our skus
-	service := Service{}
-	var orderItems []OrderItem
-	var methods Methods
+	var (
+		svc        = Service{}
+		orderItems []OrderItem
+		methods    []string
+	)
 
 	for _, s := range sku {
-		orderItem, method, _, err := service.CreateOrderItemFromMacaroon(ctx, s, 1)
-		assert.NoError(t, err)
+		orderItem, method, _, err := svc.CreateOrderItemFromMacaroon(ctx, s, 1)
+		must.NoError(t, err)
+
 		orderItems = append(orderItems, *orderItem)
-		methods = append(methods, *method...)
+		methods = append(methods, method...)
 	}
 
-	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
-		test.RandomString(), test.RandomString(), nil, orderItems, &methods)
-	assert.NoError(t, err)
+	order, err := suite.storage.CreateOrder(
+		decimal.NewFromInt32(int32(test.RandomInt())),
+		test.RandomString(),
+		OrderStatusPaid,
+		test.RandomString(),
+		test.RandomString(),
+		nil,
+		orderItems,
+		methods,
+	)
+	must.NoError(t, err)
 
-	// create issuer
-	issuer := &Issuer{
+	repo := repository.NewIssuer()
+
+	issuer, err := repo.Create(ctx, suite.storage.RawDB(), model.IssuerNew{
 		MerchantID: test.RandomString(),
 		PublicKey:  test.RandomString(),
-	}
-	issuer, err = suite.storage.InsertIssuer(issuer)
-	assert.NoError(t, err)
+	})
+	must.NoError(t, err)
 
 	// create the time limited order credentials for each of the order items in our order
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
 	validTo, err := time.Parse(time.RFC3339, to)
-	assert.NoError(t, err)
+	must.NoError(t, err)
 
 	from := time.Now().Local().Format(time.RFC3339)
 	validFrom, err := time.Parse(time.RFC3339, from)
-	assert.NoError(t, err)
+	must.NoError(t, err)
 
 	signedCreds := jsonutils.JSONStringArray([]string{test.RandomString()})
 
@@ -527,45 +565,57 @@ func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx 
 			ValidFrom:    validFrom,
 		}
 
-		err = suite.storage.InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2)
-		assert.NoError(t, err)
+		err := suite.storage.InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2)
+		must.NoError(t, err)
 
 		orderCredentials = append(orderCredentials, tlv2)
 	}
 
-	err = commit()
-	suite.Require().NoError(err)
+	{
+		err := commit()
+		suite.Require().NoError(err)
+	}
 
 	return orderCredentials
 }
 
 // helper to setup a paid order, order items, issuer and insert unsigned order credentials
 func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Context, sku ...string) []*OrderCreds {
-	service := Service{}
-	var orderItems []OrderItem
-	var methods Methods
+	var (
+		svc        = Service{}
+		orderItems []OrderItem
+		methods    []string
+	)
 
 	for _, s := range sku {
-		orderItem, method, _, err := service.CreateOrderItemFromMacaroon(ctx, s, 1)
-		assert.NoError(t, err)
+		orderItem, method, _, err := svc.CreateOrderItemFromMacaroon(ctx, s, 1)
+		must.NoError(t, err)
+
 		orderItems = append(orderItems, *orderItem)
-		methods = append(methods, *method...)
+		methods = append(methods, method...)
 	}
 
-	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
-		test.RandomString(), test.RandomString(), nil, orderItems, &methods)
-	assert.NoError(t, err)
+	order, err := suite.storage.CreateOrder(
+		decimal.NewFromInt32(int32(test.RandomInt())),
+		test.RandomString(),
+		OrderStatusPaid,
+		test.RandomString(),
+		test.RandomString(),
+		nil,
+		orderItems,
+		methods,
+	)
+	must.NoError(t, err)
 
-	// create issuer
 	pk := test.RandomString()
 
-	issuer := &Issuer{
+	repo := repository.NewIssuer()
+
+	issuer, err := repo.Create(ctx, suite.storage.RawDB(), model.IssuerNew{
 		MerchantID: test.RandomString(),
 		PublicKey:  pk,
-	}
-
-	issuer, err = suite.storage.InsertIssuer(issuer)
-	assert.NoError(t, err)
+	})
+	must.NoError(t, err)
 
 	signedCreds := jsonutils.JSONStringArray([]string{test.RandomString()})
 
@@ -587,13 +637,17 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 			BatchProof:   ptr.FromString(test.RandomString()),
 			PublicKey:    ptr.FromString(pk),
 		}
-		err = suite.storage.InsertOrderCredsTx(ctx, tx, oc)
-		assert.NoError(t, err)
+
+		err := suite.storage.InsertOrderCredsTx(ctx, tx, oc)
+		must.NoError(t, err)
+
 		orderCredentials = append(orderCredentials, oc)
 	}
 
-	err = commit()
-	suite.Require().NoError(err)
+	{
+		err := commit()
+		suite.Require().NoError(err)
+	}
 
 	return orderCredentials
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
+	"github.com/brave-intl/bat-go/libs/clients/stripe"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
@@ -17,10 +18,16 @@ import (
 )
 
 // NewService - create a new ratios service structure
-func NewService(ctx context.Context, coingecko coingecko.Client, redis *redis.Pool) *Service {
+func NewService(
+	ctx context.Context,
+	coingecko coingecko.Client,
+	stripe stripe.Client,
+	redis *redis.Pool,
+) *Service {
 	return &Service{
 		jobs:      []srv.Job{},
 		coingecko: coingecko,
+		stripe:    stripe,
 		redis:     redis,
 	}
 }
@@ -30,6 +37,7 @@ type Service struct {
 	jobs []srv.Job
 	// coingecko client
 	coingecko coingecko.Client
+	stripe    stripe.Client
 	redis     *redis.Pool
 }
 
@@ -69,12 +77,19 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		return ctx, nil, fmt.Errorf("failed to initialize redis client: %w", err)
 	}
 
-	client, err := coingecko.NewWithContext(ctx, redis)
+	coingecko, err := coingecko.NewWithContext(ctx, redis)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko client: %w", err)
 	}
-	service := NewService(ctx, client, redis)
+
+	stripe, err := stripe.NewWithContext(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize the stripe client")
+		return ctx, nil, fmt.Errorf("failed to initialize stripe client: %w", err)
+	}
+
+	service := NewService(ctx, coingecko, stripe, redis)
 
 	ctx, err = service.initializeCoingeckoCurrencies(ctx)
 	if err != nil {
@@ -263,4 +278,34 @@ func (s *Service) GetCoinMarkets(
 		Payload:     *payload,
 		LastUpdated: updated,
 	}, nil
+}
+
+// CreateStripeOnrampSessionsHandler - respond to caller with an onramp URL
+func (s *Service) CreateStripeOnrampSessionsHandler(
+	ctx context.Context,
+	walletAddress string,
+	sourceCurrency string,
+	sourceExchangeAmount string,
+	destinationNetwork string,
+	destinationCurrency string,
+	supportedDestinationNetworks []string,
+) (string, error) {
+	logger := logging.Logger(ctx, "ratios.CreateStripeOnrampSessionsHandler")
+	payload, err := s.stripe.CreateOnrampSession(
+		ctx,
+		"redirect",
+		walletAddress,
+		sourceCurrency,
+		sourceExchangeAmount,
+		destinationNetwork,
+		destinationCurrency,
+		supportedDestinationNetworks,
+	)
+
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create onramp session with stripe")
+		return "", fmt.Errorf("error creating onramp session with stripe: %w", err)
+	}
+
+	return payload.RedirectURL, nil
 }

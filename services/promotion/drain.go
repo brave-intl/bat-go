@@ -348,6 +348,12 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 	// get quote, make sure we dont go over 100K JPY
 	quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
 	if err != nil {
+		var eb *errorutils.ErrorBundle
+		if errors.As(err, &eb) {
+			logger.Error().
+				Str("error bundle", eb.DataToString()).
+				Msg("failed to fetch quote")
+		}
 		// if this was a bitflyer error and the error is due to a 401 response, refresh the token
 		var bfe *clients.BitflyerError
 		if errors.As(err, &bfe) {

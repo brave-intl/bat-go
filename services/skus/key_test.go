@@ -13,13 +13,15 @@ import (
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/jmoiron/sqlx"
+	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/jmoiron/sqlx"
-	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/assert"
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 func TestGenerateSecret(t *testing.T) {
@@ -124,12 +126,15 @@ func TestSecretKey(t *testing.T) {
 
 func TestMerchantSignedMiddleware(t *testing.T) {
 	db, mock, _ := sqlmock.New()
-	service := Service{}
+	service := &Service{}
 	service.Datastore = Datastore(
 		&Postgres{
-			datastore.Postgres{
+			Postgres: datastore.Postgres{
 				DB: sqlx.NewDb(db, "postgres"),
 			},
+			orderRepo:       repository.NewOrder(),
+			orderItemRepo:   repository.NewOrderItem(),
+			orderPayHistory: repository.NewOrderPayHistory(),
 		},
 	)
 
@@ -140,7 +145,9 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 	fn1 := func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("Should not have gotten here")
 	}
-	handler := middleware.BearerToken(service.MerchantSignedMiddleware()(http.HandlerFunc(fn1)))
+
+	authMwr := NewAuthMwr(service)
+	handler := middleware.BearerToken(authMwr((http.HandlerFunc(fn1))))
 
 	req, err := http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
@@ -160,7 +167,7 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, merchant, "brave.com")
 	}
-	handler = middleware.BearerToken(service.MerchantSignedMiddleware()(http.HandlerFunc(fn2)))
+	handler = middleware.BearerToken(authMwr(http.HandlerFunc(fn2)))
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
@@ -184,7 +191,7 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, merchant, expectedMerchant)
 	}
-	handler = middleware.BearerToken(service.MerchantSignedMiddleware()(http.HandlerFunc(fn3)))
+	handler = middleware.BearerToken(authMwr(http.HandlerFunc(fn3)))
 
 	rootID := "a74b1c17-6e29-4bea-a3d7-fc70aebdfc02"
 	encSecret, hexNonce, err := GenerateSecret()
@@ -249,12 +256,15 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 
 func TestValidateOrderMerchantAndCaveats(t *testing.T) {
 	db, mock, _ := sqlmock.New()
-	service := Service{}
+	service := &Service{}
 	service.Datastore = Datastore(
 		&Postgres{
-			datastore.Postgres{
+			Postgres: datastore.Postgres{
 				DB: sqlx.NewDb(db, "postgres"),
 			},
+			orderRepo:       repository.NewOrder(),
+			orderItemRepo:   repository.NewOrderItem(),
+			orderPayHistory: repository.NewOrderPayHistory(),
 		},
 	)
 	expectedOrderID := uuid.NewV4()
@@ -312,7 +322,7 @@ func TestValidateOrderMerchantAndCaveats(t *testing.T) {
 			WithArgs(expectedOrderID).
 			WillReturnRows(itemRows)
 
-		ValidateOrderMerchantAndCaveats(t, &service, testCase)
+		ValidateOrderMerchantAndCaveats(t, service, testCase)
 	}
 }
 

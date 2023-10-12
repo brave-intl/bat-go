@@ -6,29 +6,31 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"net/http"
-
 	"sync"
 	"testing"
 	"time"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/services/skus/skustest"
+	"github.com/golang/mock/gomock"
+	"github.com/jmoiron/sqlx"
+	"github.com/linkedin/goavro"
+	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
+	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	mock_cbr "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/brave-intl/bat-go/libs/test"
-	"github.com/golang/mock/gomock"
-	"github.com/linkedin/goavro"
-	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/skustest"
+
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 type CredentialsTestSuite struct {
@@ -42,7 +44,13 @@ func TestCredentialsTestSuite(t *testing.T) {
 
 func (suite *CredentialsTestSuite) SetupSuite() {
 	skustest.Migrate(suite.T())
-	storage, _ := NewPostgres("", false, "")
+	storage, _ := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.storage = storage
 }
 
@@ -192,10 +200,9 @@ func TestCreateIssuer_NewIssuer(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
+	const merchantID = "brave.com"
 
-	merchantID := "brave.com"
-
-	orderItem := OrderItem{
+	orderItem := &OrderItem{
 		ID:                        uuid.NewV4(),
 		SKU:                       test.RandomString(),
 		ValidForISO:               ptr.FromString("P1M"),
@@ -203,46 +210,43 @@ func TestCreateIssuer_NewIssuer(t *testing.T) {
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
-	assert.NoError(t, err)
+	must.Equal(t, nil, err)
 
-	// mock issuer calls
 	cbrClient := mock_cbr.NewMockClient(ctrl)
-	cbrClient.EXPECT().
-		CreateIssuer(ctx, issuerID, defaultMaxTokensPerIssuer).
-		Return(nil)
+	cbrClient.EXPECT().CreateIssuer(ctx, issuerID, defaultMaxTokensPerIssuer).Return(nil)
 
 	issuerResponse := &cbr.IssuerResponse{
 		Name:      issuerID,
 		PublicKey: test.RandomString(),
 	}
-	cbrClient.EXPECT().
-		GetIssuer(ctx, issuerID).
-		Return(issuerResponse, nil)
 
-	// mock datastore
-	datastore := NewMockDatastore(ctrl)
-
-	datastore.EXPECT().
-		GetIssuer(issuerID).
-		Return(nil, nil)
+	cbrClient.EXPECT().GetIssuer(ctx, issuerID).Return(issuerResponse, nil)
 
 	issuer := &Issuer{
 		MerchantID: issuerResponse.Name,
 		PublicKey:  issuerResponse.PublicKey,
 	}
-	datastore.EXPECT().
-		InsertIssuer(issuer).
-		Return(issuer, nil)
 
-	// act, assert
-	s := Service{
-		cbClient:  cbrClient,
-		Datastore: datastore,
-		retry:     backoff.Retry,
+	issuerRepo := &repository.MockIssuer{
+		FnGetByMerchID: func(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error) {
+			return nil, model.ErrIssuerNotFound
+		},
+
+		FnCreate: func(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error) {
+			return issuer, nil
+		},
 	}
 
-	err = s.CreateIssuer(ctx, merchantID, orderItem)
-	assert.NoError(t, err)
+	svc := &Service{
+		issuerRepo: issuerRepo,
+		cbClient:   cbrClient,
+		retry:      backoff.Retry,
+	}
+
+	{
+		err := svc.CreateIssuer(ctx, nil, merchantID, orderItem)
+		should.Equal(t, nil, err)
+	}
 }
 
 func TestCreateIssuerV3_NewIssuer(t *testing.T) {
@@ -250,10 +254,9 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
+	const merchantID = "brave.com"
 
-	merchantID := "brave.com"
-
-	orderItem := OrderItem{
+	orderItem := &OrderItem{
 		ID:                        uuid.NewV4(),
 		SKU:                       test.RandomString(),
 		ValidForISO:               ptr.FromString("P1M"),
@@ -261,15 +264,12 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
-	assert.NoError(t, err)
+	must.Equal(t, nil, err)
 
-	issuerConfig := IssuerConfig{
-		buffer:  test.RandomInt(),
-		overlap: test.RandomInt(),
+	issuerConfig := model.IssuerConfig{
+		Buffer:  test.RandomInt(),
+		Overlap: test.RandomInt(),
 	}
-
-	// mock issuer calls
-	cbrClient := mock_cbr.NewMockClient(ctrl)
 
 	createIssuerV3 := cbr.IssuerRequest{
 		Name:      issuerID,
@@ -277,45 +277,45 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 		MaxTokens: defaultMaxTokensPerIssuer,
 		ValidFrom: ptr.FromTime(time.Now()),
 		Duration:  *orderItem.EachCredentialValidForISO,
-		Buffer:    issuerConfig.buffer,
-		Overlap:   issuerConfig.overlap,
+		Buffer:    issuerConfig.Buffer,
+		Overlap:   issuerConfig.Overlap,
 	}
-	cbrClient.EXPECT().
-		CreateIssuerV3(ctx, isCreateIssuerV3(createIssuerV3)).
-		Return(nil)
+
+	cbrClient := mock_cbr.NewMockClient(ctrl)
+	cbrClient.EXPECT().CreateIssuerV3(ctx, isCreateIssuerV3(createIssuerV3)).Return(nil)
 
 	issuerResponse := &cbr.IssuerResponse{
 		Name:      issuerID,
 		PublicKey: test.RandomString(),
 	}
-	cbrClient.EXPECT().
-		GetIssuerV3(ctx, createIssuerV3.Name).
-		Return(issuerResponse, nil)
 
-	// mock datastore
-	datastore := NewMockDatastore(ctrl)
-
-	datastore.EXPECT().
-		GetIssuer(issuerID).
-		Return(nil, nil)
+	cbrClient.EXPECT().GetIssuerV3(ctx, createIssuerV3.Name).Return(issuerResponse, nil)
 
 	issuer := &Issuer{
 		MerchantID: issuerResponse.Name,
 		PublicKey:  issuerResponse.PublicKey,
 	}
-	datastore.EXPECT().
-		InsertIssuer(issuer).
-		Return(issuer, nil)
 
-	// act, assert
-	s := Service{
-		cbClient:  cbrClient,
-		Datastore: datastore,
-		retry:     backoff.Retry,
+	issuerRepo := &repository.MockIssuer{
+		FnGetByMerchID: func(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error) {
+			return nil, model.ErrIssuerNotFound
+		},
+
+		FnCreate: func(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error) {
+			return issuer, nil
+		},
 	}
 
-	err = s.CreateIssuerV3(ctx, merchantID, orderItem, issuerConfig)
-	assert.NoError(t, err)
+	svc := &Service{
+		issuerRepo: issuerRepo,
+		cbClient:   cbrClient,
+		retry:      backoff.Retry,
+	}
+
+	{
+		err := svc.CreateIssuerV3(ctx, nil, merchantID, orderItem, issuerConfig)
+		should.Equal(t, nil, err)
+	}
 }
 
 func TestCreateIssuer_AlreadyExists(t *testing.T) {
@@ -323,10 +323,9 @@ func TestCreateIssuer_AlreadyExists(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
+	const merchantID = "brave.com"
 
-	merchantID := "brave.com"
-
-	orderItem := OrderItem{
+	orderItem := &OrderItem{
 		ID:                        uuid.NewV4(),
 		SKU:                       test.RandomString(),
 		ValidForISO:               ptr.FromString("P1M"),
@@ -334,25 +333,31 @@ func TestCreateIssuer_AlreadyExists(t *testing.T) {
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
-	assert.NoError(t, err)
-
-	// mock datastore
-	datastore := NewMockDatastore(ctrl)
+	must.Equal(t, nil, err)
 
 	issuer := &Issuer{
-		MerchantID: test.RandomString(),
+		MerchantID: issuerID,
 		PublicKey:  test.RandomString(),
 	}
-	datastore.EXPECT().
-		GetIssuer(issuerID).
-		Return(issuer, nil)
 
-	s := Service{
-		Datastore: datastore,
+	issuerRepo := &repository.MockIssuer{
+		FnGetByMerchID: func(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error) {
+			return issuer, nil
+		},
+
+		FnCreate: func(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error) {
+			return nil, errors.New("unexpected")
+		},
 	}
 
-	err = s.CreateIssuer(ctx, merchantID, orderItem)
-	assert.NoError(t, err)
+	svc := &Service{
+		issuerRepo: issuerRepo,
+	}
+
+	{
+		err := svc.CreateIssuer(ctx, nil, merchantID, orderItem)
+		should.Equal(t, nil, err)
+	}
 }
 
 func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
@@ -360,10 +365,9 @@ func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
+	const merchantID = "brave.com"
 
-	merchantID := "brave.com"
-
-	orderItem := OrderItem{
+	orderItem := &OrderItem{
 		ID:                        uuid.NewV4(),
 		SKU:                       test.RandomString(),
 		ValidForISO:               ptr.FromString("P1M"),
@@ -371,44 +375,64 @@ func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
-	assert.NoError(t, err)
-
-	issuerConfig := IssuerConfig{
-		buffer:  test.RandomInt(),
-		overlap: test.RandomInt(),
-	}
-
-	// mock datastore
-	datastore := NewMockDatastore(ctrl)
+	must.Equal(t, nil, err)
 
 	issuer := &Issuer{
-		MerchantID: test.RandomString(),
+		MerchantID: issuerID,
 		PublicKey:  test.RandomString(),
 	}
-	datastore.EXPECT().
-		GetIssuer(issuerID).
-		Return(issuer, nil)
 
-	s := Service{
-		Datastore: datastore,
+	issuerRepo := &repository.MockIssuer{
+		FnGetByMerchID: func(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error) {
+			return issuer, nil
+		},
+
+		FnCreate: func(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error) {
+			return nil, errors.New("unexpected")
+		},
 	}
 
-	err = s.CreateIssuerV3(ctx, merchantID, orderItem, issuerConfig)
-	assert.NoError(t, err)
+	svc := &Service{
+		issuerRepo: issuerRepo,
+	}
+
+	issuerConfig := model.IssuerConfig{
+		Buffer:  test.RandomInt(),
+		Overlap: test.RandomInt(),
+	}
+
+	{
+		err := svc.CreateIssuerV3(ctx, nil, merchantID, orderItem, issuerConfig)
+		should.Equal(t, nil, err)
+	}
 }
 
-func TestCanRetry_True(t *testing.T) {
-	httpError := clients.NewHTTPError(errors.New(test.RandomString()), test.RandomString(),
-		test.RandomString(), http.StatusRequestTimeout, nil)
-	f := canRetry(nonRetriableErrors)
-	assert.True(t, f(httpError))
-}
+func TestCanRetry(t *testing.T) {
+	t.Run("true", func(t *testing.T) {
+		err := clients.NewHTTPError(
+			errors.New(test.RandomString()),
+			test.RandomString(),
+			test.RandomString(),
+			http.StatusRequestTimeout,
+			nil,
+		)
 
-func TestCanRetry_False(t *testing.T) {
-	httpError := clients.NewHTTPError(errors.New(test.RandomString()), test.RandomString(),
-		test.RandomString(), http.StatusForbidden, nil)
-	f := canRetry(nonRetriableErrors)
-	assert.False(t, f(httpError))
+		fn := canRetry(dontRetryCodes)
+		should.Equal(t, true, fn(err))
+	})
+
+	t.Run("false", func(t *testing.T) {
+		err := clients.NewHTTPError(
+			errors.New(test.RandomString()),
+			test.RandomString(),
+			test.RandomString(),
+			http.StatusForbidden,
+			nil,
+		)
+
+		fn := canRetry(dontRetryCodes)
+		should.Equal(t, false, fn(err))
+	})
 }
 
 func TestCreateOrderCredentials(t *testing.T) {
@@ -416,10 +440,9 @@ func TestCreateOrderCredentials(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx := context.Background()
+	const merchantID = "brave.com"
 
-	merchantID := "brave.com"
-
-	orderItem := OrderItem{
+	orderItem := &OrderItem{
 		ID:                        uuid.NewV4(),
 		SKU:                       test.RandomString(),
 		ValidForISO:               ptr.FromString("P1M"),
@@ -427,30 +450,36 @@ func TestCreateOrderCredentials(t *testing.T) {
 	}
 
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
-	assert.NoError(t, err)
-
-	issuerConfig := IssuerConfig{
-		buffer:  test.RandomInt(),
-		overlap: test.RandomInt(),
-	}
-
-	// mock datastore
-	datastore := NewMockDatastore(ctrl)
+	must.Equal(t, nil, err)
 
 	issuer := &Issuer{
-		MerchantID: test.RandomString(),
+		MerchantID: issuerID,
 		PublicKey:  test.RandomString(),
 	}
-	datastore.EXPECT().
-		GetIssuer(issuerID).
-		Return(issuer, nil)
 
-	s := Service{
-		Datastore: datastore,
+	issuerRepo := &repository.MockIssuer{
+		FnGetByMerchID: func(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error) {
+			return issuer, nil
+		},
+
+		FnCreate: func(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error) {
+			return nil, errors.New("unexpected")
+		},
 	}
 
-	err = s.CreateIssuerV3(ctx, merchantID, orderItem, issuerConfig)
-	assert.NoError(t, err)
+	svc := &Service{
+		issuerRepo: issuerRepo,
+	}
+
+	issuerConfig := model.IssuerConfig{
+		Buffer:  test.RandomInt(),
+		Overlap: test.RandomInt(),
+	}
+
+	{
+		err := svc.CreateIssuerV3(ctx, nil, merchantID, orderItem, issuerConfig)
+		should.Equal(t, nil, err)
+	}
 }
 
 func TestDeduplicateCredentialBindings(t *testing.T) {
@@ -534,7 +563,7 @@ func TestIssuerID(t *testing.T) {
 
 func TestDecodeSignedOrderCredentials_Success(t *testing.T) {
 	codec, err := goavro.NewCodec(signingOrderResultSchema)
-	require.NoError(t, err)
+	must.NoError(t, err)
 
 	msg := &SigningOrderResult{
 		RequestID: test.RandomString(),
@@ -553,13 +582,13 @@ func TestDecodeSignedOrderCredentials_Success(t *testing.T) {
 	}
 
 	textual, err := json.Marshal(msg)
-	require.NoError(t, err)
+	must.NoError(t, err)
 
 	native, _, err := codec.NativeFromTextual(textual)
-	require.NoError(t, err)
+	must.NoError(t, err)
 
 	binary, err := codec.BinaryFromNative(nil, native)
-	require.NoError(t, err)
+	must.NoError(t, err)
 
 	message := kafka.Message{
 		Key:   []byte(uuid.NewV4().String()),
@@ -571,9 +600,9 @@ func TestDecodeSignedOrderCredentials_Success(t *testing.T) {
 	}
 
 	actual, err := d.Decode(message)
-	require.NoError(t, err)
+	must.NoError(t, err)
 
-	assert.Equal(t, msg, actual)
+	should.Equal(t, msg, actual)
 }
 
 func (suite *CredentialsTestSuite) makeMsg(requestID, orderID, itemID, issuerID uuid.UUID,

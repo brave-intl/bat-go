@@ -71,6 +71,20 @@ func (_d DatastoreWithPrometheus) AppendOrderMetadataInt(ctx context.Context, up
 	return _d.base.AppendOrderMetadataInt(ctx, up1, s1, i1)
 }
 
+// AppendOrderMetadataInt64 implements Datastore
+func (_d DatastoreWithPrometheus) AppendOrderMetadataInt64(ctx context.Context, up1 *uuid.UUID, s1 string, i1 int64) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AppendOrderMetadataInt64", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.AppendOrderMetadataInt64(ctx, up1, s1, i1)
+}
+
 // AreTimeLimitedV2CredsSubmitted implements Datastore
 func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (b1 bool, err error) {
 	_since := time.Now()
@@ -142,7 +156,7 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 }
 
 // CreateOrder implements Datastore
-func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (op1 *Order, err error) {
+func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (op1 *Order, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -237,20 +251,6 @@ func (_d DatastoreWithPrometheus) ExternalIDExists(ctx context.Context, s1 strin
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ExternalIDExists", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.ExternalIDExists(ctx, s1)
-}
-
-// GetIssuer implements Datastore
-func (_d DatastoreWithPrometheus) GetIssuer(merchantID string) (ip1 *Issuer, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetIssuer", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetIssuer(merchantID)
 }
 
 // GetIssuerByPublicKey implements Datastore
@@ -517,20 +517,6 @@ func (_d DatastoreWithPrometheus) GetUncommittedVotesForUpdate(ctx context.Conte
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetUncommittedVotesForUpdate", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetUncommittedVotesForUpdate(ctx)
-}
-
-// InsertIssuer implements Datastore
-func (_d DatastoreWithPrometheus) InsertIssuer(issuer *Issuer) (ip1 *Issuer, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertIssuer", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.InsertIssuer(issuer)
 }
 
 // InsertOrderCredsTx implements Datastore

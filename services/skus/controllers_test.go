@@ -14,12 +14,19 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/handlers"
-
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
+	"github.com/golang/mock/gomock"
+	"github.com/linkedin/goavro"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
@@ -30,6 +37,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
@@ -38,15 +46,13 @@ import (
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/skus/handler"
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
-	"github.com/linkedin/goavro"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 var (
@@ -77,6 +83,7 @@ type ControllersTestSuite struct {
 	mockCtrl *gomock.Controller
 	storage  Datastore
 	suite.Suite
+	orderh *handler.Order
 }
 
 func TestControllersTestSuite(t *testing.T) {
@@ -88,7 +95,14 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast for cbr http requests
 	govalidator.SetFieldsRequiredByDefault(true)
 
-	storage, _ := NewPostgres("", false, "")
+	storage, _ := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
+
 	suite.storage = storage
 
 	AnonCardC := macaroon.Caveats{
@@ -215,7 +229,13 @@ func (suite *ControllersTestSuite) SetupSuite() {
 }
 
 func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	suite.mockCtrl = gomock.NewController(suite.T())
@@ -228,13 +248,16 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	InitEncryptionKeys()
 
 	suite.service = &Service{
-		Datastore: pg,
-		cbClient:  suite.mockCB,
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  pg,
+		cbClient:   suite.mockCB,
 		wallet: &wallet.Service{
 			Datastore: walletDB,
 		},
 		retry: backoff.Retry,
 	}
+
+	suite.orderh = handler.NewOrder(suite.service)
 
 	// encrypt merchant key
 	cipher, nonce, err := cryptography.EncryptMessage(byteEncryptionKey, []byte("testing123"))
@@ -254,27 +277,23 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	issuerID, err := encodeIssuerID(token.Location, token.FirstPartyCaveats[0]["sku"])
 	suite.Require().NoError(err)
 
-	// mock out create issuer calls before we create the order
-	if credType, ok := token.FirstPartyCaveats[0]["credential_type"]; ok {
-		if credType == singleUse {
-			suite.mockCB.EXPECT().
-				CreateIssuer(gomock.Any(), issuerID, gomock.Any()).
-				Return(nil)
-			issuerResponse := &cbr.IssuerResponse{
-				Name:      issuerID,
-				PublicKey: base64.StdEncoding.EncodeToString([]byte(test.RandomString())),
-			}
-			suite.mockCB.EXPECT().
-				GetIssuer(gomock.Any(), gomock.Any()).
-				Return(issuerResponse, nil)
+	// Mock out create issuer calls before we create the order.
+	credType, ok := token.FirstPartyCaveats[0]["credential_type"]
+	if ok && credType == singleUse {
+		suite.mockCB.EXPECT().CreateIssuer(gomock.Any(), issuerID, gomock.Any()).Return(nil)
+
+		resp := &cbr.IssuerResponse{
+			Name:      issuerID,
+			PublicKey: base64.StdEncoding.EncodeToString([]byte(test.RandomString())),
 		}
+
+		suite.mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Any()).Return(resp, nil)
 	}
 
 	// create order this will also create the issuer
-	handler := CreateOrder(suite.service)
 
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
+	createRequest := &model.CreateOrderRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      skuToken,
 				Quantity: quantity,
@@ -291,15 +310,26 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	handlers.AppHandler(suite.orderh.Create).ServeHTTP(rr, req)
 
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
 	var order Order
-	err = json.Unmarshal(rr.Body.Bytes(), &order)
-	suite.Require().NoError(err)
+	{
+		err := json.Unmarshal(rr.Body.Bytes(), &order)
+		suite.Require().NoError(err)
+	}
 
-	issuer, _ := suite.storage.GetIssuer(issuerID)
+	repo := repository.NewIssuer()
+
+	var exp error
+	if credType == timeLimited {
+		exp = model.ErrIssuerNotFound
+	}
+
+	issuer, err := repo.GetByMerchID(context.TODO(), suite.storage.RawDB(), issuerID)
+	suite.Require().Equal(exp, err)
 
 	return order, issuer
 }
@@ -330,7 +360,6 @@ func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
 	handler.ServeHTTP(rr, req)
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-
 }
 
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
@@ -430,10 +459,8 @@ func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
 }
 
 func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
-	handler := CreateOrder(suite.service)
-
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
+	createRequest := &model.CreateOrderRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      InvalidFreeTestSkuToken,
 				Quantity: 1,
@@ -449,7 +476,8 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	handlers.AppHandler(suite.orderh.Create).ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
 
 	suite.Require().Contains(rr.Body.String(), "Invalid SKU Token provided in request")
@@ -500,7 +528,13 @@ func (suite *ControllersTestSuite) TestGetMissingOrder() {
 }
 
 func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -983,11 +1017,13 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	err := suite.service.InitKafka(ctx)
 	suite.Require().NoError(err)
 
-	// setup router and server with mock instrument handler
+	authMwr := NewAuthMwr(suite.service)
 	instrumentHandler := func(name string, h http.Handler) http.Handler {
 		return h
 	}
-	router := Router(suite.service, instrumentHandler)
+
+	router := Router(suite.service, authMwr, instrumentHandler, newCORSOptsEnv())
+
 	router.Mount("/vote", VoteRouter(suite.service, instrumentHandler))
 	server := &http.Server{Addr: ":8080", Handler: router}
 
@@ -1309,7 +1345,13 @@ func (suite *ControllersTestSuite) TestDeleteKey() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeys() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
@@ -1339,7 +1381,13 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeysFiltered() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres(
+		repository.NewOrder(),
+		repository.NewOrderItem(),
+		repository.NewOrderPayHistory(),
+		repository.NewIssuer(),
+		"", false, "",
+	)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
@@ -1436,9 +1484,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{FreeTestSkuToken})
 
 	// create order with order items
-	request := CreateOrderRequest{
+	request := model.CreateOrderRequest{
 		Email: test.RandomString(),
-		Items: []OrderItemRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
 				Quantity: 3,
@@ -1451,8 +1499,13 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
-	// Create order and issuer
-	service := Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	service := &Service{
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  suite.storage,
+		cbClient:   client,
+		retry:      backoff.Retry,
+	}
+
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
@@ -1475,18 +1528,19 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	rw := httptest.NewRecorder()
 
-	instrumentHandler := func(name string, h http.Handler) http.Handler {
-		return h
-	}
-
 	// Enable store signed order creds consumer
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil)
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer())
 	suite.Require().NoError(err)
 
-	router := Router(skuService, instrumentHandler)
+	authMwr := NewAuthMwr(skuService)
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1573,9 +1627,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{token})
 
 	// create order with order items
-	request := CreateOrderRequest{
+	request := model.CreateOrderRequest{
 		Email: test.RandomString(),
-		Items: []OrderItemRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      token,
 				Quantity: 1,
@@ -1588,8 +1642,13 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
-	// Create order and issuer
-	service := Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	service := &Service{
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  suite.storage,
+		cbClient:   client,
+		retry:      backoff.Retry,
+	}
+
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
@@ -1615,18 +1674,19 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	rw := httptest.NewRecorder()
 
-	instrumentHandler := func(name string, h http.Handler) http.Handler {
-		return h
-	}
-
 	// Enable store signed order creds consumer
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil)
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer())
 	suite.Require().NoError(err)
 
-	router := Router(skuService, instrumentHandler)
+	authMwr := NewAuthMwr(skuService)
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1694,9 +1754,9 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{FreeTestSkuToken})
 
 	// create order with order items
-	request := CreateOrderRequest{
+	request := model.CreateOrderRequest{
 		Email: test.RandomString(),
-		Items: []OrderItemRequest{
+		Items: []model.OrderItemRequest{
 			{
 				SKU:      FreeTestSkuToken,
 				Quantity: 3,
@@ -1709,8 +1769,13 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
-	// create order and also create issuer
-	service := &Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	service := &Service{
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  suite.storage,
+		cbClient:   client,
+		retry:      backoff.Retry,
+	}
+
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
@@ -1733,11 +1798,13 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 
 	rw := httptest.NewRecorder()
 
+	authMwr := NewAuthMwr(service)
 	instrumentHandler := func(name string, h http.Handler) http.Handler {
 		return h
 	}
 
-	router := Router(service, instrumentHandler)
+	router := Router(service, authMwr, instrumentHandler, newCORSOptsEnv())
+
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
 	suite.Require().Equal(http.StatusOK, rw.Code)
@@ -1815,4 +1882,11 @@ func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string 
 	skuMap["development"][mac] = true
 
 	return mac
+}
+
+func newCORSOptsEnv() cors.Options {
+	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
+
+	return NewCORSOpts(origins, dbg)
 }

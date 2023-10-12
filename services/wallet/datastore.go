@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/services/wallet/model"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
@@ -113,10 +114,8 @@ type ReadOnlyDatastore interface {
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
 	GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error)
-	// GetWalletByPublicKey
+	// GetWalletByPublicKey retrieves a wallet by its public key.
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
-	// GetCustodianLinkByWalletID - get the current custodian link by wallet id
-	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
 	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
 	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error)
 }
@@ -172,6 +171,8 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 var (
 	// ErrTooManyCardsLinked denotes when more than 3 cards have been linked to a single wallet
 	ErrTooManyCardsLinked = errors.New("unable to add too many wallets to a single user")
+	// ErrNoReputationClient is returned when no reputation client is in the ctx.
+	ErrNoReputationClient = errors.New("wallet: no reputation client")
 )
 
 // UpsertWallet upserts the given wallet
@@ -424,6 +425,10 @@ func getEnvMaxCards(custodian string) int {
 		if v, err := strconv.Atoi(os.Getenv("GEMINI_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
+	case "zebpay":
+		if v, err := strconv.Atoi(os.Getenv("ZEBPAY_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
 	}
 	return 4
 }
@@ -548,9 +553,6 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 	return infos, nil
 }
 
-// ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
-var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
-
 var (
 	// ErrUnusualActivity - error for wallets with unusual activity
 	ErrUnusualActivity = errors.New("unusual activity")
@@ -636,14 +638,28 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	if VerifiedWalletEnable {
 		err := pg.InsertVerifiedWalletOutboxTx(ctx, tx, id, true)
 		if err != nil {
-			return fmt.Errorf("error updating reputation summary verified wallet status: %w", err)
+			return fmt.Errorf("failed to update verified wallet: %w", err)
+		}
+	}
+
+	if directVerifiedWalletEnable {
+		client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+		if !ok {
+			return ErrNoReputationClient
+		}
+		upsertReputationSummary := func() (interface{}, error) {
+			return nil, client.UpdateReputationSummary(ctx, ID, true)
+		}
+		_, err = backoff.Retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
 	}
 
 	err = commit()
 	if err != nil {
-		sublogger.Error().Err(err).
-			Msg("error committing tx")
+		sublogger.Error().Err(err).Msg("error committing tx")
+		sentry.CaptureException(fmt.Errorf("error failed to commit link wallet transaction: %w", err))
 		return fmt.Errorf("error committing tx: %w", err)
 	}
 
@@ -764,30 +780,9 @@ func getTx(ctx context.Context, datastore Datastore) (context.Context, *sqlx.Tx,
 	return ctx, tx, func() {}, func() error { return nil }, nil
 }
 
-// GetCustodianLinkByWalletID - get the wallet custodian record by id
+// GetCustodianLinkByWalletID retrieves the currently linked wallet custodian by walletID.
 func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
-	var (
-		cl  = new(CustodianLink)
-		err error
-	)
-	// create a sublogger
-	sublogger := logger(ctx).With().
-		Str("wallet_id", ID.String()).
-		Logger()
-
-	sublogger.Debug().
-		Msg("starting GetCustodianLinkByWalletID")
-
-	// get tx
-	_, tx, rollback, commit, err := getTx(ctx, pg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create db transaction GetCustodianLinkByWalletID: %w", err)
-	}
-	// will rollback if tx created at this scope
-	defer rollback()
-
-	// query
-	stmt := `
+	const q = `
 		select
 			wc.wallet_id, wc.custodian, wc.linking_id,
 			wc.created_at, wc.disconnected_at, wc.linked_at
@@ -798,18 +793,15 @@ func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID
 			wc.disconnected_at is null and
 			wc.unlinked_at is null
 	`
-	err = tx.Get(cl, stmt, ID)
-	if err != nil {
-		sublogger.Error().Err(err).
-			Msg("failed to get CustodianLink from DB")
-		return nil, fmt.Errorf("failed to get CustodianLink from DB: %w", err)
+	result := &CustodianLink{}
+	if err := pg.GetContext(ctx, result, q, ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, model.ErrNoWalletCustodian
+		}
+		return nil, err
 	}
 
-	// if the tx was created in this scope we will commit here
-	if err := commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit GetCustodianByWalletID transaction: %w", err)
-	}
-	return cl, nil
+	return result, nil
 }
 
 // DisconnectCustodialWallet - disconnect the wallet's custodial id
@@ -973,7 +965,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		) values (
 			$1, $2, $3
 		)
-		on conflict (wallet_id, custodian, linking_id) 
+		on conflict (wallet_id, custodian, linking_id)
 		do update set updated_at=now(), disconnected_at=null, unlinked_at=null, linked_at=now()
 		returning *
 	`
@@ -1019,7 +1011,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 
 // InsertVerifiedWalletOutboxTx inserts a verifiedWalletOutbox for processing.
 func (pg *Postgres) InsertVerifiedWalletOutboxTx(ctx context.Context, tx *sqlx.Tx, walletID uuid.UUID, verifiedWallet bool) error {
-	_, err := tx.ExecContext(ctx, `insert into verified_wallet_outbox(payment_id, verified_wallet) 
+	_, err := tx.ExecContext(ctx, `insert into verified_wallet_outbox(payment_id, verified_wallet)
 											values ($1, $2)`, walletID, verifiedWallet)
 	if err != nil {
 		return fmt.Errorf("error inserting values into vefified wallet outbox: %w", err)
@@ -1041,7 +1033,7 @@ func (pg *Postgres) SendVerifiedWalletOutbox(ctx context.Context, client reputat
 	}
 	defer rollback()
 
-	err = tx.Get(&vw, `select id, payment_id, verified_wallet from verified_wallet_outbox 
+	err = tx.Get(&vw, `select id, payment_id, verified_wallet from verified_wallet_outbox
                                    order by created_at asc for update skip locked limit 1`)
 	if err != nil {
 		return false, fmt.Errorf("error get verified wallet: %w", err)

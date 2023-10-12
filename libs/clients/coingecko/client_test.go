@@ -152,8 +152,8 @@ func (suite *CoingeckoTestSuite) TestFetchCoinMarkets() {
 	resp1, t1, err := suite.client.FetchCoinMarkets(suite.ctx, "usd", 10)
 	suite.Require().NoError(err, "should be able to fetch the coin markets")
 	suite.Require().Equal(10, len(*resp1), "should have a response length of 10 for limit=10")
-	suite.Require().Equal(t, t1, "the lastUpdated time should be equal because of cache usage")
+	suite.Require().Equal(t.Unix(), t1.Unix(), "the lastUpdated time should be equal because of cache usage")
 	u, err := url.Parse((*resp1)[0].Image)
 	suite.Require().NoError(err)
-	suite.Require().Equal(u.Host, "api.cgproxy.brave.com", "image host should be the brave proxy")
+	suite.Require().Equal(u.Host, "assets.cgproxy.brave.com", "image host should be the brave proxy")
 }

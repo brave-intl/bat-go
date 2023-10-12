@@ -6,31 +6,37 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
+	// needed for magic migration
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/jmoiron/sqlx"
+	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
+	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/ptr"
-	"github.com/getsentry/sentry-go"
-	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 
-	// needed for magic migration
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/brave-intl/bat-go/services/skus/model"
+)
+
+const (
+	signingRequestBatchSize = 10
+
+	errNotFound = model.Error("not found")
 )
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
 	datastore.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error)
 	// SetOrderTrialDays - set the number of days of free trial for this order
 	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
@@ -53,8 +59,7 @@ type Datastore interface {
 	GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (*[]Transaction, int, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
-	InsertIssuer(issuer *Issuer) (*Issuer, error)
-	GetIssuer(merchantID string) (*Issuer, error)
+
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
 	DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
@@ -88,13 +93,51 @@ type Datastore interface {
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
+	AppendOrderMetadataInt64(context.Context, *uuid.UUID, string, int64) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
 	ExternalIDExists(context.Context, string) (bool, error)
 }
 
-const signingRequestBatchSize = 10
+type orderStore interface {
+	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	Create(
+		ctx context.Context,
+		dbi sqlx.QueryerContext,
+		totalPrice decimal.Decimal,
+		merchantID, status, currency, location string,
+		paymentMethods []string,
+		validFor *time.Duration,
+	) (*model.Order, error)
+	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID, ndays int64) (*model.Order, error)
+	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	GetExpiresAtAfterISOPeriod(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (time.Time, error)
+	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	UpdateMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, data datastore.Metadata) error
+	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
+	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
+	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
+	GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
+	HasExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (bool, error)
+	GetMetadata(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (datastore.Metadata, error)
+}
 
-var errNotFound = errors.New("not found")
+type orderItemStore interface {
+	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
+	InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+}
+
+type orderPayHistoryStore interface {
+	Insert(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+}
+
+type issuerStore interface {
+	GetByMerchID(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error)
+	GetByPubKey(ctx context.Context, dbi sqlx.QueryerContext, pubKey string) (*model.Issuer, error)
+	Create(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error)
+}
 
 // VoteRecord - how the ac votes are stored in the queue
 type VoteRecord struct {
@@ -109,17 +152,44 @@ type VoteRecord struct {
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
 	datastore.Postgres
+
+	orderRepo       orderStore
+	orderItemRepo   orderItemStore
+	orderPayHistory orderPayHistoryStore
+	issuerRepo      issuerStore
 }
 
-// NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := datastore.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
-	if pg != nil {
-		return &DatastoreWithPrometheus{
-			base: &Postgres{*pg}, instanceName: "payment_datastore",
-		}, err
+// NewPostgres creates a new Postgres Datastore.
+func NewPostgres(
+	orderRepo orderStore,
+	orderItemRepo orderItemStore,
+	orderPayHistory orderPayHistoryStore,
+	issuerRepo issuerStore,
+	databaseURL string,
+	performMigration bool,
+	migrationTrack string,
+	dbStatsPrefix ...string,
+) (Datastore, error) {
+	pg, err := newPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
+
+	pg.orderRepo = orderRepo
+	pg.orderItemRepo = orderItemRepo
+	pg.orderPayHistory = orderPayHistory
+	pg.issuerRepo = issuerRepo
+
+	return &DatastoreWithPrometheus{base: pg, instanceName: "payment_datastore"}, nil
+}
+
+func newPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (*Postgres, error) {
+	pg, err := datastore.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Postgres{Postgres: *pg}, nil
 }
 
 // CreateKey creates an encrypted key in the database based on the merchant
@@ -206,7 +276,7 @@ func (pg *Postgres) GetKey(id uuid.UUID, showExpired bool) (*Key, error) {
 	return &key, nil
 }
 
-// SetOrderTrialDays - set the number of days of free trial for this order
+// SetOrderTrialDays sets the number of days of free trial for this order and returns the updated result.
 func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error) {
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
@@ -214,132 +284,80 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 	}
 	defer pg.RollbackTx(tx)
 
-	order := Order{}
-
-	// update the order with the right expires at
-	err = tx.Get(&order, `
-		UPDATE orders
-		SET
-			trial_days = $1,
-			updated_at = now()
-		WHERE 
-			id = $2
-		RETURNING
-			id, created_at, currency, updated_at, total_price,
-			merchant_id, location, status, allowed_payment_methods,
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-	`, days, orderID)
-
+	result, err := pg.orderRepo.SetTrialDays(ctx, tx, *orderID, days)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute tx: %w", err)
 	}
 
-	foundOrderItems := []OrderItem{}
-	statement := `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso
-		FROM order_items WHERE order_id = $1`
-	err = tx.Select(&foundOrderItems, statement, orderID)
-
-	order.Items = foundOrderItems
+	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, tx, *orderID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &order, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
-// CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
-	tx := pg.RawDB().MustBegin()
+// CreateOrder creates an order with the given total price, merchant ID, status and orderItems.
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error) {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer pg.RollbackTx(tx)
 
-	var order Order
-	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency, location, allowed_payment_methods, valid_for)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods, valid_for
-		`,
-		totalPrice, merchantID, status, currency, location, pq.Array(*allowedPaymentMethods), validFor)
+	ctx := context.TODO()
 
+	result, err := pg.orderRepo.Create(ctx, tx, totalPrice, merchantID, status, currency, location, allowedPaymentMethods, validFor)
 	if err != nil {
 		return nil, err
 	}
 
 	if status == OrderStatusPaid {
-		// record the order payment
-		if err := recordOrderPayment(context.Background(), tx, order.ID, time.Now()); err != nil {
+		if err := pg.recordOrderPayment(ctx, tx, result.ID, time.Now()); err != nil {
 			return nil, fmt.Errorf("failed to record order payment: %w", err)
 		}
 	}
 
-	// TODO: We should make a generalized helper to handle bulk inserts
-	query := `
-		insert into order_items 
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval)
-		values `
-	params := []interface{}{}
-	for i := 0; i < len(orderItems); i++ {
-		// put all our params together
-		params = append(params,
-			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
-			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
-			orderItems[i].Location, orderItems[i].Description,
-			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor,
-			orderItems[i].ValidForISO,
-			orderItems[i].IssuanceIntervalISO,
-		)
-		numFields := 13 // the number of fields you are inserting
-		n := i * numFields
+	model.OrderItemList(orderItems).SetOrderID(result.ID)
 
-		query += `(`
-		for j := 0; j < numFields; j++ {
-			query += `$` + strconv.Itoa(n+j+1) + `,`
-		}
-		query = query[:len(query)-1] + `),`
-	}
-	query = query[:len(query)-1] // remove the trailing comma
-	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for`
-
-	order.Items = []OrderItem{}
-
-	err = tx.Select(&order.Items, query, params...)
-	if err != nil {
-		return nil, err
-	}
-	err = tx.Commit()
+	result.Items, err = pg.orderItemRepo.InsertMany(ctx, tx, orderItems...)
 	if err != nil {
 		return nil, err
 	}
 
-	return &order, nil
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
-// GetOrderByExternalID by the external id from the purchase vendor
+// GetOrderByExternalID returns an order by the external id from the purchase vendor.
 func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
-	statement := `
-		SELECT 
-			id, created_at, currency, updated_at, total_price, 
-			merchant_id, location, status, allowed_payment_methods, 
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE metadata->>'externalID' = $1`
-	order := Order{}
-	err := pg.RawDB().Get(&order, statement, externalID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
+	ctx := context.TODO()
+	dbi := pg.RawDB()
+
+	result, err := pg.orderRepo.GetByExternalID(ctx, dbi, externalID)
+	if err != nil {
+		// Preserve the legacy behaviour.
+		// TODO: Propagate the sentinel error, and handle in the business logic properly.
+		if errors.Is(err, model.ErrOrderNotFound) {
+			return nil, nil
+		}
+
 		return nil, err
 	}
 
-	foundOrderItems := []OrderItem{}
-	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-		FROM order_items WHERE order_id = $1`
-	err = pg.RawDB().Select(&foundOrderItems, statement, order.ID)
-
-	order.Items = foundOrderItems
+	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, dbi, result.ID)
 	if err != nil {
 		return nil, err
 	}
-	return &order, nil
+
+	return result, nil
 }
 
 // GetOutboxMovAvgDurationSeconds - get the number of seconds it takes to clear the last 20 outbox messages
@@ -361,46 +379,46 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 	return seconds, nil
 }
 
-// GetOrder queries the database and returns an order
+// GetOrder returns an order from the database.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	statement := `
-		SELECT 
-			id, created_at, currency, updated_at, total_price, 
-			merchant_id, location, status, allowed_payment_methods, 
-			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE id = $1`
-	order := Order{}
-	err := pg.RawDB().Get(&order, statement, orderID)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
+	ctx := context.TODO()
+	dbi := pg.RawDB()
+
+	result, err := pg.orderRepo.Get(ctx, dbi, orderID)
+	if err != nil {
+		// Preserve the legacy behaviour.
+		// TODO: Propagate the sentinel error, and handle in the business logic properly.
+		if errors.Is(err, model.ErrOrderNotFound) {
+			return nil, nil
+		}
+
 		return nil, err
 	}
 
-	foundOrderItems := []OrderItem{}
-	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
-		FROM order_items WHERE order_id = $1`
-	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
-
-	order.Items = foundOrderItems
+	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, dbi, orderID)
 	if err != nil {
 		return nil, err
 	}
-	return &order, nil
+
+	return result, nil
 }
 
 // GetOrderItem retrieves the order item for the given identifier.
-// This function will return sql.ErrNoRows if the result set is empty.
+//
+// It returns sql.ErrNoRows if the item is not found.
 func (pg *Postgres) GetOrderItem(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
-	var orderItem OrderItem
-	err := pg.GetContext(ctx, &orderItem, `SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, 
-       (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval 
-			from order_items where id = $1`, itemID)
+	result, err := pg.orderItemRepo.Get(ctx, pg.RawDB(), itemID)
 	if err != nil {
+		// Preserve the legacy behaviour.
+		// TODO: Propagate the sentinel error, and handle in the business logic properly.
+		if errors.Is(err, model.ErrOrderItemNotFound) {
+			return nil, sql.ErrNoRows
+		}
+
 		return nil, err
 	}
-	return &orderItem, nil
+
+	return result, nil
 }
 
 // GetPagedMerchantTransactions - get a paginated list of transactions for a merchant
@@ -504,215 +522,78 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 	return &transaction, nil
 }
 
-// CheckExpiredCheckoutSession - check order metadata for an expired checkout session id
+// CheckExpiredCheckoutSession indicates whether a Stripe checkout session is expired with its id for the given orderID.
+//
+// TODO(pavelb): The boolean return value is unnecessary, and can be removed.
+// If there is experied session, the session id is present.
+// If there is no session, or it has not expired, the result is the same – no session id.
+// It's the caller's responsibility (the business logic layer) to interpret the result.
 func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string, error) {
-	var (
-		// can be nil in db
-		checkoutSession *string
-		err             error
-	)
+	ctx := context.TODO()
 
-	err = pg.RawDB().Get(&checkoutSession, `
-		SELECT metadata->>'stripeCheckoutSessionId' as checkout_session
-		FROM orders
-		WHERE id = $1 
-			AND metadata is not null
-			AND status='pending'
-			AND updated_at<now() - interval '1 hour'
-	`, orderID)
-
-	// handle error
+	sessID, err := pg.orderRepo.GetExpiredStripeCheckoutSessionID(ctx, pg.RawDB(), orderID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// no records,
+		if errors.Is(err, model.ErrExpiredStripeCheckoutSessionIDNotFound) {
 			return false, "", nil
 		}
+
 		return false, "", fmt.Errorf("failed to check expired state of checkout session: %w", err)
 	}
-	// handle checkout session being nil, which is possible
-	if checkoutSession == nil {
+
+	if sessID == "" {
 		return false, "", nil
 	}
-	// there is a checkout session that is expired
-	return true, *checkoutSession, nil
+
+	return true, sessID, nil
 }
 
 func (pg *Postgres) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
-	var (
-		ok  bool
-		err error
-	)
-
-	err = pg.RawDB().Get(&ok, `
-		SELECT true
-		FROM orders
-		WHERE metadata->>'externalID' = $1 AND metadata is not null
-	`, externalID)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-
-	return ok, err
+	return pg.orderRepo.HasExternalID(ctx, pg.RawDB(), externalID)
 }
 
-// IsStripeSub - is this order related to a stripe subscription, if so, true, subscription id returned
+// IsStripeSub reports whether the order is associated with a stripe subscription, if true, subscription id is returned.
+//
+// TODO(pavelb): This is a piece of business logic that leaked to the storage layer.
+// Also, it unsuccessfully mimics the Go comma, ok idiom – bool and string should be swapped.
+// But that's not necessary.
+// If metadata was found, but there was no stripeSubscriptionId, it's known not to be a Stripe order.
 func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
-	var (
-		ok  bool
-		md  datastore.Metadata
-		err error
-	)
+	ctx := context.TODO()
 
-	err = pg.RawDB().Get(&md, `
-		SELECT metadata
-		FROM orders
-		WHERE id = $1 AND metadata is not null
-	`, orderID)
-
-	if err == nil {
-		if v, ok := md["stripeSubscriptionId"].(string); ok {
-			return ok, v, err
-		}
-	}
-	return ok, "", err
-}
-
-// UpdateOrderExpiresAt - set the expires_at attribute of the order, based on now (or last paid_at if exists) and valid_for from db
-func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
-	if tx == nil {
-		return fmt.Errorf("need to pass in tx to update order expiry")
-	}
-
-	// how long should the order be valid for?
-	var orderTimeBounds = struct {
-		ValidFor *time.Duration `db:"valid_for"`
-		LastPaid sql.NullTime   `db:"last_paid_at"`
-	}{}
-
-	err := tx.GetContext(ctx, &orderTimeBounds, `
-		SELECT valid_for, last_paid_at
-		FROM orders
-		WHERE id = $1
-	`, orderID)
+	data, err := pg.orderRepo.GetMetadata(ctx, pg.RawDB(), orderID)
 	if err != nil {
-		return fmt.Errorf("unable to get order time bounds: %w", err)
+		return false, "", err
 	}
 
-	// default to last paid now
-	lastPaid := time.Now()
+	sid, ok := data["stripeSubscriptionId"].(string)
 
-	// if there is a valid last paid, use that from the order
-	if orderTimeBounds.LastPaid.Valid {
-		lastPaid = orderTimeBounds.LastPaid.Time
-	}
-
-	var expiresAt time.Time
-
-	if orderTimeBounds.ValidFor != nil {
-		// compute expiry based on valid for
-		expiresAt = lastPaid.Add(*orderTimeBounds.ValidFor)
-	}
-
-	// update the order with the right expires at
-	result, err := tx.ExecContext(ctx, `
-		UPDATE orders
-		SET
-			updated_at = CURRENT_TIMESTAMP,
-			expires_at = $1
-		WHERE 
-			id = $2
-	`, expiresAt, orderID)
-
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
-	}
-
-	return nil
-}
-
-func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.Time) error {
-
-	// record the order payment
-	// on renewal and initial payment
-	result, err := tx.ExecContext(ctx, `
-		INSERT INTO order_payment_history
-			(order_id, last_paid)
-		VALUES
-			( $1, $2 )
-	`, id, t)
-
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
-	}
-
-	if err != nil {
-		return err
-	}
-
-	// record on order as well
-	result, err = tx.ExecContext(ctx, `
-		update orders set last_paid_at = $1
-		where id = $2
-	`, t, id)
-
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err = result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
-	}
-
-	if err != nil {
-		return err
-	}
-	return nil
+	return ok, sid, nil
 }
 
 // UpdateOrder updates the orders status.
 //
-//	Status should either be one of pending, paid, fulfilled, or canceled.
+// Status should either be one of pending, paid, fulfilled, or canceled.
+//
+// TODO: rename it to better reflect the behaviour.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	ctx := context.Background()
-	// create tx
+
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer pg.RollbackTx(tx)
 
-	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
-
-	if err != nil {
+	if err := pg.orderRepo.SetStatus(ctx, tx, orderID, status); err != nil {
 		return err
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
-	}
-
 	if status == OrderStatusPaid {
-		// record the order payment
-		if err := recordOrderPayment(ctx, tx, orderID, time.Now()); err != nil {
+		if err := pg.recordOrderPayment(ctx, tx, orderID, time.Now()); err != nil {
 			return fmt.Errorf("failed to record order payment: %w", err)
 		}
 
-		// set the expires at value
-		err = pg.updateOrderExpiresAt(ctx, tx, orderID)
-		if err != nil {
+		if err := pg.updateOrderExpiresAt(ctx, tx, orderID); err != nil {
 			return fmt.Errorf("failed to set order expires_at: %w", err)
 		}
 	}
@@ -785,49 +666,23 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	return sum, err
 }
 
-// InsertIssuer inserts the given issuer
-func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
-	statement := `
-	INSERT INTO order_cred_issuers (merchant_id, public_key)
-	VALUES ($1, $2)
-	RETURNING id, created_at, merchant_id, public_key`
-	var issuers []Issuer
-	err := pg.RawDB().Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
+// GetIssuerByPublicKey returns an issuer by the pubKey.
+//
+// Deprecated: Use the corresponding repository directly with GetByPubKey.
+func (pg *Postgres) GetIssuerByPublicKey(pubKey string) (*Issuer, error) {
+	result, err := pg.issuerRepo.GetByPubKey(context.TODO(), pg.RawDB(), pubKey)
 	if err != nil {
+		// Preserve the old behaviour.
+		// TODO: Fix this as it defeats the purpose of multiple returns and has risks for callers.
+		// Thankfully, there is only one caller, but that coller, hypothetically, might panic.
+		if errors.Is(err, model.ErrIssuerNotFound) {
+			return nil, nil
+		}
+
 		return nil, err
 	}
 
-	if len(issuers) != 1 {
-		return nil, errors.New("unexpected number of issuers returned")
-	}
-
-	return &issuers[0], nil
-}
-
-// GetIssuer retrieves the given issuer
-func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where merchant_id = $1"
-	var issuer Issuer
-	err := pg.RawDB().Get(&issuer, statement, merchantID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &issuer, nil
-}
-
-// GetIssuerByPublicKey or return an error
-func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where public_key = $1"
-	var issuer Issuer
-	err := pg.RawDB().Get(&issuer, statement, publicKey)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	return &issuer, nil
+	return result, nil
 }
 
 // InsertOrderCredsTx inserts the given order creds.
@@ -1082,27 +937,11 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 	return nil
 }
 
-// UpdateOrderMetadata sets a key value pair to an order's metadata
+// UpdateOrderMetadata sets the order's metadata to the key and value.
 func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
-	// create order
-	om := datastore.Metadata{
-		key: value,
-	}
+	data := datastore.Metadata{key: value}
 
-	stmt := `update orders set metadata = $1, updated_at = current_timestamp where id = $2`
-
-	result, err := pg.RawDB().Exec(stmt, om, orderID.String())
-
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("No rows updated")
-	}
-
-	return nil
+	return pg.orderRepo.UpdateMetadata(context.TODO(), pg.RawDB(), orderID, data)
 }
 
 // TimeLimitedV2Creds represent all the
@@ -1239,7 +1078,7 @@ type SigningOrderRequestOutbox struct {
 func (pg *Postgres) GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where order_id = $1`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
@@ -1252,7 +1091,7 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrder(ctx context.Context, ord
 func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where item_id = $1`, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing requests from outbox: %w", err)
@@ -1265,7 +1104,7 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context,
 func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox SigningOrderRequestOutbox
 	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where request_id = $1`, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
@@ -1278,7 +1117,7 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context,
 func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox SigningOrderRequestOutbox
 	err := tx.GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data 
+		`select request_id, order_id, item_id, completed_at, message_data
 				from signing_order_request_outbox where request_id = $1 for update`, requestID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
@@ -1305,7 +1144,7 @@ func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, request
 		return fmt.Errorf("error marshalling signing order request: %w", err)
 	}
 
-	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(request_id, order_id, item_id, message_data) 
+	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(request_id, order_id, item_id, message_data)
 											values ($1, $2, $3, $4)`, requestID, orderID, itemID, message)
 	if err != nil {
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
@@ -1335,8 +1174,8 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	defer rollback()
 
 	var soro []SigningOrderRequestOutbox
-	err = tx.SelectContext(ctx, &soro, `select request_id, order_id, item_id, message_data from signing_order_request_outbox 
-													where submitted_at is null order by created_at asc 
+	err = tx.SelectContext(ctx, &soro, `select request_id, order_id, item_id, message_data from signing_order_request_outbox
+													where submitted_at is null order by created_at asc
 													for update skip locked limit $1`, signingRequestBatchSize)
 	if err != nil {
 		return fmt.Errorf("error could not get signing order request outbox: %w", err)
@@ -1374,7 +1213,7 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 		soroIDs[i] = soro[i].RequestID
 	}
 
-	qry, args, err := sqlx.In(`update signing_order_request_outbox 
+	qry, args, err := sqlx.In(`update signing_order_request_outbox
 										set submitted_at = now() where request_id IN (?)`, soroIDs)
 	if err != nil {
 		return fmt.Errorf("error creating sql update statement: %w", err)
@@ -1518,80 +1357,87 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 	return nil
 }
 
-// AppendOrderMetadataInt appends a key value pair to an order's metadata
+// AppendOrderMetadataInt64 appends the key and int64 value to an order's metadata.
+func (pg *Postgres) AppendOrderMetadataInt64(ctx context.Context, orderID *uuid.UUID, key string, value int64) error {
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
+	if err != nil {
+		return err
+	}
+	defer rollback()
+
+	if err := pg.orderRepo.AppendMetadataInt64(ctx, tx, *orderID, key, value); err != nil {
+		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
+	}
+
+	return commit()
+}
+
+// AppendOrderMetadataInt appends the key and int value to an order's metadata.
 func (pg *Postgres) AppendOrderMetadataInt(ctx context.Context, orderID *uuid.UUID, key string, value int) error {
-	// get the db tx from context if exists, if not create it
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	defer rollback()
 	if err != nil {
 		return err
 	}
-	stmt := `update orders set metadata = coalesce(metadata||jsonb_build_object($1::text, $2::integer), metadata, jsonb_build_object($1::text, $2::integer)), updated_at = current_timestamp where id = $3`
+	defer rollback()
 
-	result, err := tx.Exec(stmt, key, value, orderID.String())
-	if err != nil {
+	if err := pg.orderRepo.AppendMetadataInt(ctx, tx, *orderID, key, value); err != nil {
 		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
 	}
 
 	return commit()
 }
 
-// AppendOrderMetadata appends a key value pair to an order's metadata
+// AppendOrderMetadata appends the key and string value to an order's metadata.
 func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key string, value string) error {
-	// get the db tx from context if exists, if not create it
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	defer rollback()
 	if err != nil {
 		return err
 	}
-	stmt := `update orders set metadata = coalesce(metadata||jsonb_build_object($1::text, $2::text), metadata, jsonb_build_object($1::text, $2::text)), updated_at = current_timestamp where id = $3`
+	defer rollback()
 
-	result, err := tx.Exec(stmt, key, value, orderID.String())
-	if err != nil {
+	if err := pg.orderRepo.AppendMetadata(ctx, tx, *orderID, key, value); err != nil {
 		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
 	}
 
 	return commit()
 }
 
-// SetOrderPaid - set the order as paid
+// SetOrderPaid sets status to paid for the order, updates last paid and expiration.
 func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error {
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	defer rollback() // doesnt hurt to rollback incase we panic
 	if err != nil {
 		return fmt.Errorf("failed to get db transaction: %w", err)
 	}
+	defer rollback()
 
-	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, OrderStatusPaid, *orderID)
-	if err != nil {
+	if err := pg.orderRepo.SetStatus(ctx, tx, *orderID, OrderStatusPaid); err != nil {
 		return fmt.Errorf("error updating order %s: %w", orderID, err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
-	}
-
-	// record the order payment
-	if err := recordOrderPayment(ctx, tx, *orderID, time.Now()); err != nil {
+	if err := pg.recordOrderPayment(ctx, tx, *orderID, time.Now()); err != nil {
 		return fmt.Errorf("failed to record order payment: %w", err)
 	}
 
-	// set the expires at value
-	err = pg.updateOrderExpiresAt(ctx, tx, *orderID)
-	if err != nil {
+	if err := pg.updateOrderExpiresAt(ctx, tx, *orderID); err != nil {
 		return fmt.Errorf("failed to set order expires_at: %w", err)
 	}
 
 	return commit()
+}
+
+func (pg *Postgres) recordOrderPayment(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+	if err := pg.orderPayHistory.Insert(ctx, dbi, id, when); err != nil {
+		return err
+	}
+
+	return pg.orderRepo.SetLastPaidAt(ctx, dbi, id, when)
+}
+
+func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) error {
+	expiresAt, err := pg.orderRepo.GetExpiresAtAfterISOPeriod(ctx, dbi, orderID)
+	if err != nil {
+		return fmt.Errorf("unable to get order time bounds: %w", err)
+	}
+
+	return pg.orderRepo.SetExpiresAt(ctx, dbi, orderID, expiresAt)
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"os"
 	"testing"
@@ -86,7 +87,7 @@ func (nc nopCloser) Close() error {
 	return nil
 }
 
-func (suite *BitflyerTestSuite) TestHandleBitflyerError() {
+func TestHandleBitflyerError(t *testing.T) {
 	buf := bytes.NewBufferString(`
 {
 	"status": -1,
@@ -103,13 +104,12 @@ func (suite *BitflyerTestSuite) TestHandleBitflyerError() {
 		Body:       body,
 	}
 
-	err := handleBitflyerError(errors.New("failed"), nil, &resp)
+	err := handleBitflyerError(context.Background(), errors.New("failed"), &resp)
 	var bfError *clients.BitflyerError
 	if errors.As(err, &bfError) {
-		suite.Require().Equal(bfError.HTTPStatusCode, http.StatusUnauthorized, "status should match")
-		suite.Require().Equal(bfError.Status, -1, "status should match")
+		assert.Equal(t, bfError.HTTPStatusCode, http.StatusUnauthorized, "status should match")
+		assert.Equal(t, bfError.Status, -1, "status should match")
 	} else {
-		suite.Require().True(false, "should not be another type of error")
+		assert.Fail(t, "should not be another type of error")
 	}
-
 }

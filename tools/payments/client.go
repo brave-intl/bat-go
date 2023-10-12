@@ -3,7 +3,6 @@ package payments
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -21,23 +20,25 @@ import (
 
 const (
 	preparePrefix = "prepare-"
-	submitPrefix  = "authorize-"
+	submitPrefix  = "submit-"
 
 	// headers
-	hostHeader          = "Host"
-	digestHeader        = "Digest"
+	hostHeader   = "Host"
+	digestHeader = "Digest"
+	// dateHeader needs to be lowercase to pass the signing verifier validation.
+	dateHeader          = "date"
 	contentLengthHeader = "Content-Length"
-	contentTypeHeader   = "Content-type"
+	contentTypeHeader   = "Content-Type"
 	signatureHeader     = "Signature"
 )
 
 var (
 	payout        = strconv.FormatInt(time.Now().Unix(), 10)
-	prepareStream = preparePrefix + payout
-	submitStream  = preparePrefix + payout
+	PrepareStream = preparePrefix + payout
+	SubmitStream  = submitPrefix + payout
 
-	prepareConfigStream = preparePrefix + "configure"
-	submitConfigStream  = submitPrefix + "configure"
+	PrepareConfigStream = preparePrefix + "config"
+	SubmitConfigStream  = submitPrefix + "config"
 )
 
 // redisClient is an implementation of settlement client using clustered redis client
@@ -46,9 +47,8 @@ type redisClient struct {
 	redis *redis.ClusterClient
 }
 
-func newRedisClient(ctx context.Context, env, addrs, pass, username string) (*redisClient, error) {
+func newRedisClient(env, addrs, pass, username string) (*redisClient, error) {
 	tlsConfig := &tls.Config{
-		ServerName: "redis",
 		MinVersion: tls.VersionTLS12,
 		ClientAuth: 0,
 	}
@@ -79,10 +79,6 @@ func newRedisClient(ctx context.Context, env, addrs, pass, username string) (*re
 				TLSConfig:       tlsConfig,
 			}),
 	}
-	err := rc.redis.Ping(ctx).Err()
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping redis: %w", err)
-	}
 	return rc, nil
 }
 
@@ -99,7 +95,7 @@ func (rc *redisClient) ConfigureWorker(ctx context.Context, stream string, confi
 		Body:      string(body),
 	}
 
-	_, err := rc.redis.XAdd(
+	_, err = rc.redis.XAdd(
 		ctx, &redis.XAddArgs{
 			Stream: stream,
 			Values: map[string]interface{}{
@@ -129,16 +125,19 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, t ...*PrepareTx)
 		}
 
 		// add to stream
-		_, err = pipe.XAdd(
+		pipe.XAdd(
 			ctx, &redis.XAddArgs{
-				Stream: prepareStream,
+				Stream: PrepareStream,
 				Values: map[string]interface{}{
 					"data": message}},
-		).Result()
-		if err != nil {
-			return fmt.Errorf("failed to prepare transaction: %w", err)
-		}
+		)
 	}
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to exec prepare transaction commands: %w", err)
+	}
+
 	return nil
 }
 
@@ -147,20 +146,22 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 	pipe := rc.redis.Pipeline()
 
 	for _, v := range at {
+
 		buf := bytes.NewBuffer([]byte{})
 		err := json.NewEncoder(buf).Encode(v)
 		body := buf.Bytes()
 		if err != nil {
 			return fmt.Errorf("failed to marshal attested transaction body: %w", err)
 		}
-		// create a request
-		req, err := http.NewRequest("POST", rc.env+"/authorize", buf)
+
+		// Create a request and set the headers we require for signing. The Digest header is added
+		// during the signing call and the request.Host is set during the new request creation so,
+		// we don't need to explicitly set them here.
+		req, err := http.NewRequest(http.MethodPost, rc.env+"/v1/payments/submit", buf)
 		if err != nil {
 			return fmt.Errorf("failed to create request to sign: %w", err)
 		}
-		// we will be signing, need all these headers for it to go through
-		req.Header.Set(hostHeader, rc.env)
-		req.Header.Set(digestHeader, fmt.Sprintf("%x", sha256.Sum256(body)))
+		req.Header.Set(dateHeader, time.Now().Format(time.RFC1123))
 		req.Header.Set(contentLengthHeader, fmt.Sprintf("%d", len(body)))
 		req.Header.Set(contentTypeHeader, "application/json")
 
@@ -175,7 +176,8 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 			ID:        uuid.New(),
 			Timestamp: time.Now(),
 			Headers: map[string]string{
-				hostHeader:          req.Header.Get(hostHeader),
+				hostHeader:          req.Host,
+				dateHeader:          req.Header.Get(dateHeader),
 				digestHeader:        req.Header.Get(digestHeader),
 				signatureHeader:     req.Header.Get(signatureHeader),
 				contentLengthHeader: req.Header.Get(contentLengthHeader),
@@ -184,16 +186,19 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 			Body: string(body),
 		}
 
-		_, err = pipe.XAdd(
+		pipe.XAdd(
 			ctx, &redis.XAddArgs{
-				Stream: submitStream,
+				Stream: SubmitStream,
 				Values: map[string]interface{}{
 					"data": message}},
-		).Result()
-		if err != nil {
-			return fmt.Errorf("failed to submit transaction: %w", err)
-		}
+		)
 	}
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to exec submit transaction commands: %w", err)
+	}
+
 	return nil
 }
 
@@ -204,7 +209,7 @@ type SettlementClient interface {
 	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...*AttestedTx) error
 }
 
-// NewSettlementClient instanciates a new SettlementClient for use by tooling
-func NewSettlementClient(ctx context.Context, env string, config map[string]string) (SettlementClient, error) {
-	return newRedisClient(ctx, env, config["addrs"], config["pass"], config["username"])
+// NewSettlementClient instantiates a new SettlementClient for use by tooling
+func NewSettlementClient(env string, config map[string]string) (SettlementClient, error) {
+	return newRedisClient(env, config["addrs"], config["pass"], config["username"])
 }

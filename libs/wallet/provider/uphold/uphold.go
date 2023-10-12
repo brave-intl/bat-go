@@ -58,8 +58,8 @@ const (
 
 const (
 	// The Intermediate Certificates
-	sandboxFingerprint = "Y9mvm0exBk1JoQ57f9Vm28jKo5lFm/woKcVxrYxu80o="
-	prodFingerprint    = "Y9mvm0exBk1JoQ57f9Vm28jKo5lFm/woKcVxrYxu80o="
+	sandboxFingerprint = "kJqLxbJ8/oYCPhA6n13q+s2dh53zGifWjEghNUNpAP8="
+	prodFingerprint    = "kJqLxbJ8/oYCPhA6n13q+s2dh53zGifWjEghNUNpAP8="
 )
 
 var (
@@ -81,6 +81,7 @@ var (
 	upholdProxy            = os.Getenv("UPHOLD_HTTP_PROXY")
 	upholdAPIBase          = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
+		"test":    "https://mock.uphold.com",
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
 	}[environment]
@@ -843,7 +844,8 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.Transacti
 }
 
 // SubmitTransaction submits the base64 encoded transaction for verification but does not move funds
-//   unless confirm is set to true.
+//
+//	unless confirm is set to true.
 func (w *Wallet) SubmitTransaction(ctx context.Context, transactionB64 string, confirm bool) (*walletutils.TransactionInfo, error) {
 	logger := logging.FromContext(ctx)
 
