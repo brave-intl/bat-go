@@ -49,14 +49,14 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			APIKey: zm.apiKey, SigningKey: zm.signingKey,
 		}, zm.transaction.IdempotencyKey())
 		if err != nil {
-			return nil, fmt.Errorf("failed to check transaction status: %w", err)
+			return zm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 		}
 		switch ctr.Code {
 		case zebpay.TransferSuccessCode:
 			// Write the Paid status and end the loop by not calling Drive
 			entry, err = zm.SetNextState(ctx, paymentLib.Paid)
 			if err != nil {
-				return nil, fmt.Errorf("failed to write next state: %w", err)
+				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 			}
 		case zebpay.TransferPendingCode:
 			// Set backoff without changing status
@@ -72,7 +72,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			// Status unknown. includes TransferFailedCode
 			entry, err = zm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
-				return nil, fmt.Errorf("failed to write next state: %w", err)
+				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 			}
 			return nil, fmt.Errorf(
 				"received unknown status from zebpay for transaction: %v",
@@ -82,7 +82,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	} else {
 		to, err := strconv.ParseInt(zm.transaction.To, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("transaction to is not well formed: %w", err)
+			return zm.transaction, fmt.Errorf("transaction to is not well formed: %w", err)
 		}
 		// submit the transaction
 		btr, err := zm.client.BulkTransfer(
@@ -101,14 +101,14 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			),
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to check transaction status: %w", err)
+			return zm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 		}
 
 		if strings.ToUpper(btr.Data) != "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED" {
 			// Status unknown. Fail
 			entry, err = zm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
-				return nil, fmt.Errorf("failed to write next state: %w", err)
+				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 			}
 			return nil, fmt.Errorf(
 				"received unknown status from zebpay for transaction: %v",
@@ -118,7 +118,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 
 		entry, err = zm.SetNextState(ctx, paymentLib.Pending)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write next state: %w", err)
+			return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 		}
 
 		// Set initial backoff

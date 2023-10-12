@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +14,8 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/go-jose/go-jose/v3"
+	"github.com/brave-intl/bat-go/libs/requestutils"
+	jose "github.com/go-jose/go-jose/v3"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -189,9 +189,18 @@ type claims struct {
 
 // affixAccessToken will take a request and generate a zebpay access token and affix it to the
 // headers of the request
-func affixAccessToken(req *http.Request, opts *ClientOpts, body []byte) error {
+func affixAccessToken(req *http.Request, opts *ClientOpts) error {
 	if opts == nil {
 		return errBadClientOpts
+	}
+	var body []byte
+	var err error
+	if req.Body != nil {
+		body, err = requestutils.Read(context.Background(), req.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read request body: %w", err)
+		}
+		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 	}
 
 	// sha body bytes
@@ -253,7 +262,7 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	}
 
 	// populate the access token
-	affixAccessToken(req, opts, []byte{})
+	affixAccessToken(req, opts)
 
 	var resp = new(CheckTransferResponse)
 	_, err = c.client.Do(ctx, req, resp)
@@ -276,13 +285,8 @@ func (c *HTTPClient) BulkCheckTransfer(ctx context.Context, opts *ClientOpts, id
 		return nil, err
 	}
 
-	body, err := json.Marshal(ids)
-	if err != nil {
-		return nil, err
-	}
-
 	// populate the access token
-	affixAccessToken(req, opts, body)
+	affixAccessToken(req, opts)
 
 	var resp = BulkCheckTransferResponse{}
 	_, err = c.client.Do(ctx, req, &resp)
@@ -311,7 +315,7 @@ func (c *HTTPClient) BulkTransfer(ctx context.Context, opts *ClientOpts, transfe
 	req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 
 	// populate the access token
-	affixAccessToken(req, opts, body)
+	affixAccessToken(req, opts)
 
 	var resp = new(BulkTransferResponse)
 	_, err = c.client.Do(ctx, req, resp)

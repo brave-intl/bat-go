@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 )
 
@@ -77,9 +78,14 @@ func (s *baseStateMachine) getTransaction() *paymentLib.AuthenticatedPaymentStat
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
 func (service *Service) StateMachineFromTransaction(
+	ctx context.Context,
 	authenticatedState *paymentLib.AuthenticatedPaymentState,
 ) (TxStateMachine, error) {
 	var machine TxStateMachine
+
+	client := http.Client{
+		Transport: nitro.NewProxyRoundTripper(ctx, service.egressAddr).(*http.Transport),
+	}
 
 	switch authenticatedState.PaymentDetails.Custodian {
 	case "uphold":
@@ -93,17 +99,17 @@ func (service *Service) StateMachineFromTransaction(
 	case "gemini":
 		machine = &GeminiMachine{}
 	case "zebpay":
-		client, err := zebpay.New()
+		client, err := zebpay.NewWithHTTPClient(client)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create zebpay client", err)
+			return nil, fmt.Errorf("failed to create zebpay client: %w", err)
 		}
 		block, rest := pem.Decode([]byte(os.Getenv("ZEBPAY_SIGNING_KEY")))
 		if block == nil || block.Type != "PRIVATE KEY" || len(rest) != 0 {
-			return nil, fmt.Errorf("failed to decode zebpay signing key", err)
+			return nil, fmt.Errorf("failed to decode zebpay signing key: %w", err)
 		}
 		signingKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse zebpay signing key", err)
+			return nil, fmt.Errorf("failed to parse zebpay signing key: %w", err)
 		}
 		machine = &ZebpayMachine{
 			client:     client,
@@ -163,7 +169,7 @@ func (s *Service) DriveTransaction(
 	ctx context.Context,
 	transaction *paymentLib.AuthenticatedPaymentState,
 ) error {
-	stateMachine, err := s.StateMachineFromTransaction(transaction)
+	stateMachine, err := s.StateMachineFromTransaction(ctx, transaction)
 	if err != nil {
 		return fmt.Errorf("failed to create stateMachine: %w", err)
 	}
@@ -209,6 +215,9 @@ func (s *Service) DriveTransaction(
 		}
 		return nil
 	} else {
+		if lastErr != nil {
+			return fmt.Errorf("failed to progress transaction: %w", lastErr)
+		}
 		return errors.New("failed to progress transaction, no state returned")
 	}
 }

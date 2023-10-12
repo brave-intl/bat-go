@@ -31,6 +31,7 @@ type Service struct {
 	datastore  Datastore
 	custodians map[string]provider.Custodian
 	awsCfg     aws.Config
+	egressAddr string
 
 	baseCtx           context.Context
 	secretMgr         appsrv.SecretManager
@@ -198,6 +199,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		publicKey:     hex.EncodeToString(pcrs[2]),
 		signer:        nitro.Signer{},
 		verifierStore: store,
+		egressAddr:    egressAddr,
 	}
 
 	// create the kms encryption key for this service for bootstrap operator shares

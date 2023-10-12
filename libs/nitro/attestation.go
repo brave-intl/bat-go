@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
@@ -105,7 +106,8 @@ type Signer struct{}
 
 // Sign the message using the nitro signer
 func (s Signer) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) (signature []byte, err error) {
-	return Attest(context.Background(), nil, message, nil)
+	hash := sha256.Sum256(message)
+	return Attest(context.Background(), nil, hash[:], nil)
 }
 
 // Verifier specifies the PCR values required for verification
@@ -141,7 +143,12 @@ func (v Verifier) verifySigOnlyNotPCRs(message, sig []byte, opts crypto.SignerOp
 		return false, nil, err
 	}
 
-	if !bytes.Equal(res.Document.UserData, message) {
+	var userdata []byte = nil
+	if message != nil {
+		hash := sha256.Sum256(message)
+		userdata = hash[:]
+	}
+	if !bytes.Equal(res.Document.UserData, userdata) {
 		return false, nil, nil
 	}
 
