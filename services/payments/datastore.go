@@ -49,7 +49,7 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 			// For the transaction, check if this transaction has already existed. If not, perform
 			// the insertion.
 			existingPaymentState, err := txn.Execute(
-				"SELECT * FROM transactions WHERE idempotencyKey = ?",
+				"SELECT d_id as documentID FROM transactions BY d_id where idempotencyKey = ?",
 				state.ID,
 			)
 			if err != nil {
@@ -60,9 +60,15 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 				)
 			}
 
-			// Check if there are any results. There should not be. If there are, we should not
-			// insert.
-			if !existingPaymentState.Next(txn) {
+			// Check if there are any results. If there are, we should skip insert.
+			if existingPaymentState.Next(txn) {
+				documentIDResult := new(qldbDocumentIDResult)
+				err = ion.Unmarshal(existingPaymentState.GetCurrentData(), &documentIDResult)
+				if err != nil {
+					return nil, err
+				}
+				return documentIDResult.DocumentID, nil
+			} else {
 				documentIDResultBinary, err := txn.Execute(
 					"INSERT INTO transactions ?",
 					state,
@@ -85,19 +91,12 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 				}
 
 				err = documentIDResultBinary.Err()
-				if err != nil {
-					return nil, fmt.Errorf(
-						"failed to insert tx: %s due to: %w",
-						state.ID,
-						err,
-					)
-				}
+				return nil, fmt.Errorf(
+					"failed to insert tx: %s due to: %w",
+					state.ID,
+					err,
+				)
 			}
-
-			return nil, fmt.Errorf(
-				"failed to insert transaction because id already exists: %s",
-				state.ID,
-			)
 		},
 	)
 	if err != nil {
