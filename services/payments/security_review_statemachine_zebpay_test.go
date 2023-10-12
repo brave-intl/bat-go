@@ -469,12 +469,20 @@ func TestMockedZebpayStateMachine404FailureToPaidTransition(t *testing.T) {
 	must.Equal(t, paymentLib.Pending, newState.Status)
 }
 
+// Skip live tests if they're not explicitly enabled
+func skipLive(t *testing.T) {
+	if os.Getenv("LIVE") == "" {
+		t.Skip("Skipping live tests")
+	}
+}
+
 /*
 TestLiveZebpayStateMachineHappyPathTransitions tests for correct state progression from
 Initialized to Paid. Additionally, Paid status should be final and Failed status should
 be permanent.
 */
 func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
+	skipLive(t)
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	zebpayHost := "https://rewards.zebpay.co"
@@ -509,7 +517,7 @@ func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
 			Amount:    decimal.NewFromFloat(1.1),
-			To:        "512", //"13460",
+			To:        "13460",
 			From:      "c6911095-ba83-4aa1-b0fb-15934568a65a",
 			Custodian: "zebpay",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
