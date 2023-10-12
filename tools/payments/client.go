@@ -39,12 +39,22 @@ var (
 	}
 )
 
+type PayoutReportStatus struct {
+	PrepareCount   int64
+	PrepareLag     int64
+	PreparePending int64
+	SubmitCount    int64
+	SubmitLag      int64
+	SubmitPending  int64
+}
+
 // SettlementClient describes functionality of the settlement client
 type SettlementClient interface {
 	ConfigureWorker(context.Context, string, *payments.WorkerConfig) error
 	PrepareTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.PrepareRequest) error
 	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.SubmitRequest) error
 	WaitForResponses(ctx context.Context, payoutID string, numTransactions int) error
+	GetStatus(ctx context.Context, payoutID string) (*PayoutReportStatus, error)
 }
 
 // NewSettlementClient instantiates a new SettlementClient for use by tooling
@@ -282,4 +292,42 @@ wait:
 	}
 	cancelFunc()
 	return nil
+}
+
+func (rc *redisClient) GetStatus(ctx context.Context, payoutID string) (*PayoutReportStatus, error) {
+	status := PayoutReportStatus{}
+
+	stream := payments.PreparePrefix + payoutID
+	consumerGroup := stream + "-cg"
+
+	count, err := rc.redis.GetStreamLength(ctx, stream)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stream length: %v", err)
+	}
+	status.PrepareCount = count
+
+	lag, pending, err := rc.redis.UnacknowledgedCounts(ctx, stream, consumerGroup)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unacknowledged count: %v", err)
+	}
+	status.PrepareLag = lag
+	status.PreparePending = pending
+
+	stream = payments.SubmitPrefix + payoutID
+	consumerGroup = stream + "-cg"
+
+	count, err = rc.redis.GetStreamLength(ctx, stream)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stream length: %v", err)
+	}
+	status.SubmitCount = count
+
+	lag, pending, err = rc.redis.UnacknowledgedCounts(ctx, stream, consumerGroup)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unacknowledged count: %v", err)
+	}
+	status.SubmitLag = lag
+	status.SubmitPending = pending
+
+	return &status, nil
 }
