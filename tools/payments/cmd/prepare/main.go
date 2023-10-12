@@ -104,55 +104,51 @@ func main() {
 	}
 
 	totalTransactions := 0
-	for _, name := range files {
-		func() {
-			f, err := os.Open(name)
-			if err != nil {
-				log.Fatalf("failed to open report file: %v\n", err)
-			}
-			defer f.Close()
+	f, err := os.Open(files[0])
+	if err != nil {
+		log.Fatalf("failed to open report file: %v\n", err)
+	}
+	defer f.Close()
 
-			report := paymentscli.PreparedReport{}
-			if err := paymentscli.ReadReport(&report, f); err != nil {
-				log.Fatalf("failed to read report from stdin: %v\n", err)
-			}
-			if err := report.Validate(); err != nil {
-				log.Fatalf("failed to validate report: %v\n", err)
-			}
+	report := paymentscli.PreparedReport{}
+	if err := paymentscli.ReadReport(&report, f); err != nil {
+		log.Fatalf("failed to read report from stdin: %v\n", err)
+	}
+	if err := report.Validate(); err != nil {
+		log.Fatalf("failed to validate report: %v\n", err)
+	}
 
-			if report[0].PayoutID != *payoutID {
-				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
-			}
+	if report[0].PayoutID != *payoutID {
+		log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
+	}
 
-			totalTransactions += len(report)
-			if !firstRun && !*resubmit {
-				return
-			}
+	totalTransactions += len(report)
+	if !firstRun && !*resubmit {
+		return
+	}
 
-			priv, err := paymentscli.GetOperatorPrivateKey(*key)
-			if err != nil {
-				log.Fatalf("failed to parse operator key file: %v\n", err)
-			}
+	priv, err := paymentscli.GetOperatorPrivateKey(*key)
+	if err != nil {
+		log.Fatalf("failed to parse operator key file: %v\n", err)
+	}
 
-			if err := report.Prepare(ctx, priv, client); err != nil {
-				log.Fatalf("failed to read report from stdin: %v\n", err)
-			}
+	if err := report.Prepare(ctx, priv, client); err != nil {
+		log.Fatalf("failed to read report from stdin: %v\n", err)
+	}
 
-			wc := &payments.WorkerConfig{
-				PayoutID:      *payoutID,
-				ConsumerGroup: payments.PreparePrefix + *payoutID + "-cg",
-				Stream:        payments.PreparePrefix + *payoutID,
-				Count:         len(report),
-			}
+	wc := &payments.WorkerConfig{
+		PayoutID:      *payoutID,
+		ConsumerGroup: payments.PreparePrefix + *payoutID + "-cg",
+		Stream:        payments.PreparePrefix + *payoutID,
+		Count:         len(report),
+	}
 
-			err = client.ConfigureWorker(ctx, payments.PrepareConfigStream, wc)
-			if err != nil {
-				log.Fatalf("failed to write to prepare config stream: %v\n", err)
-			}
-			if *verbose {
-				log.Printf("prepare transactions loaded for %+v\n", payoutID)
-			}
-		}()
+	err = client.ConfigureWorker(ctx, payments.PrepareConfigStream, wc)
+	if err != nil {
+		log.Fatalf("failed to write to prepare config stream: %v\n", err)
+	}
+	if *verbose {
+		log.Printf("prepare transactions loaded for %+v\n", payoutID)
 	}
 
 	os.Create(responseFile)
@@ -160,6 +156,33 @@ func main() {
 	err = client.WaitForResponses(ctx, *payoutID, totalTransactions)
 	if err != nil {
 		log.Fatalf("failed to wait for prepare responses: %v\n", err)
+	}
+
+	// perform validations
+
+	// read in responseFile as attested report
+	attestedReportFile, err := os.Open(responseFile)
+	if err != nil {
+		log.Fatalf("failed to open attested report file: %v\n", err)
+	}
+	defer attestedReportFile.Close()
+
+	// parse the attested report
+	attestedReport := paymentscli.AttestedReport{}
+	if err := paymentscli.ReadReportFromResponses(&attestedReport, attestedReportFile); err != nil {
+		log.Fatalf("failed to read attested report: %v\n", err)
+	}
+
+	if *verbose {
+		log.Printf("attested report stats: %d transactions; %s total bat\n",
+			len(attestedReport), attestedReport.SumBAT())
+		log.Printf("prepared report stats: %d transactions; %s total bat\n",
+			len(report), report.SumBAT())
+	}
+
+	// compare performs automated checks to validate reports
+	if err := paymentscli.Compare(report, attestedReport); err != nil {
+		log.Fatalf("failed to compare reports: %v\n", err)
 	}
 
 	if *verbose {
