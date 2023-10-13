@@ -9,7 +9,7 @@ go 1.20
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/brave-intl/bat-go/libs v0.0.0-00010101000000-000000000000 // indirect
+	github.com/brave-intl/bat-go/libs v0.0.0-20230403164253-ad445ff37512 // indirect
 	github.com/brave-intl/bat-go/tools/payments v0.0.0-20231012115000-3de8c63b05ca // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -36,6 +36,7 @@ require (
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/term v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
