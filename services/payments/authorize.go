@@ -11,10 +11,10 @@ import (
 
 // validAuthorizers is the list of payment authorizers, mapping to individuals in payments-ops.
 var validAuthorizers = map[string]bool{
-	// test/private.pem
-	"a5700b95f77fa0fc078cd923ad5075a100d6b995ecc86e49919a0f6ee45ee983": true,
-	// test/private2.pem
-	"732afdb29da6d5ab8481b247d9b2724d79c3652dddc64eb5ad251a2679e6210d": true,
+	// @evq
+	"7cc23f59ff7055fe6d0aa2fc04e024691a7f347898ff366bcbc83c1e622e62ec": true,
+	// @sneagan
+	"1dadd1382d26dd10442b7981d18334327deb143fcd19ff1c98ed38fbf3ca5d8a": true
 }
 
 // LookupVerifier implements keystore for httpsignature.
