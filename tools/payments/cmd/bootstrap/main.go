@@ -45,12 +45,12 @@ import (
 func main() {
 	ctx := context.Background()
 	// command line flags
+	env := flag.String(
+		"e", "local",
+		"the environment to which the tool will interact")
 	s := flag.String(
 		"s", "",
 		"the operators shamir key share")
-	enclaveBaseURI := flag.String(
-		"u", "",
-		"the enclave base uri in order to get the key arn for encrypting")
 	b := flag.String(
 		"b", "", "the s3 bucket to upload ciphertext to")
 	pcr2 := flag.String(
@@ -63,13 +63,18 @@ func main() {
 
 	if *verbose {
 		// print out the configuration
+		log.Printf("Environment: %s\n", *env)
 		log.Printf("Operator Shamir Share: %s\n", *s)
-		log.Printf("enclave base uri: %s\n", *enclaveBaseURI)
 		log.Printf("S3 Bucket URI: %s\n", *b)
 	}
 
+	enclaveBaseURI, ok := payments.PaymentsAPIBase[*env]
+	if !ok {
+		log.Fatalln("Invalid env:", *env)
+	}
+
 	// get the info endpoint to key kms arn
-	resp, err := http.Get(*enclaveBaseURI + "/v1/payments/info")
+	resp, err := http.Get(enclaveBaseURI + "/v1/payments/info")
 	if err != nil {
 		log.Fatalln(err)
 	}

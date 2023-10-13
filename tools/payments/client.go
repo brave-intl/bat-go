@@ -33,10 +33,11 @@ const (
 )
 
 var (
-	paymentsAPIBase = map[string]string{
-		"":      "https://nitro-payments.bsg.brave.software",
-		"local": "https://nitro-payments.bsg.brave.software",
-		"dev":   "https://nitro-payments.bsg.brave.software",
+	PaymentsAPIBase = map[string]string{
+		"":        "https://nitro-payments.bsg.brave.software",
+		"local":   "https://nitro-payments.bsg.brave.software",
+		"dev":     "https://nitro-payments.bsg.brave.software",
+		"staging": "https://nitro-payments-staging.bsg.brave.com",
 	}
 )
 
@@ -95,7 +96,7 @@ func newRedisClient(ctx context.Context, env, addr, username, pass string, sp *h
 
 	rc := &redisClient{
 		env:             env,
-		paymentsAPIBase: paymentsAPIBase[env],
+		paymentsAPIBase: PaymentsAPIBase[env],
 		redis:           redis,
 		sp:              sp,
 		verifier:        verifier,
