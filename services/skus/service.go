@@ -1829,7 +1829,11 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
 	}
 
-	return handlers.RenderContent(ctx, &blindedCredVrfResult{ID: cred.TokenPreimage}, w, http.StatusOK)
+	// TODO(clD11): cleanup after quick fix
+	if kind == timeLimitedV2 {
+		return handlers.RenderContent(ctx, &blindedCredVrfResult{ID: cred.TokenPreimage}, w, http.StatusOK)
+	}
+	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
 }
 
 func createOrderItems(req *model.CreateOrderRequestNew) ([]model.OrderItem, error) {
