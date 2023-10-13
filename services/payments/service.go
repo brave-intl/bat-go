@@ -67,18 +67,22 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 	}
 
 	type keyTemplateData struct {
-		PCR0       string
-		PCR1       string
-		PCR2       string
-		AWSAccount string
+		PCR0                     string
+		PCR1                     string
+		PCR2                     string
+		AWSAccount               string
+		NodeGroupRole            string
+		SettlementsDeveloperRole string
 	}
 
 	buf := bytes.NewBuffer([]byte{})
 	if err := t.Execute(buf, keyTemplateData{
-		PCR0:       hex.EncodeToString(pcrs[0]),
-		PCR1:       hex.EncodeToString(pcrs[1]),
-		PCR2:       hex.EncodeToString(pcrs[2]),
-		AWSAccount: os.Getenv("AWS_ACCOUNT"),
+		PCR0:                     hex.EncodeToString(pcrs[0]),
+		PCR1:                     hex.EncodeToString(pcrs[1]),
+		PCR2:                     hex.EncodeToString(pcrs[2]),
+		AWSAccount:               os.Getenv("AWS_ACCOUNT"),
+		NodeGroupRole:            os.Getenv("NODE_GROUP_ROLE"),
+		SettlementsDeveloperRole: os.Getenv("SETTLEMENTS_DEVELOPER_ROLE"),
 	}); err != nil {
 		logger.Error().Err(err).Msgf("failed to execute template file: %+v", templateFile)
 		return "", "", err

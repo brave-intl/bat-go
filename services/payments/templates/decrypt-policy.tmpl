@@ -5,7 +5,7 @@
         "Sid": "AllowHostNodeAccess",
         "Effect": "Allow",
         "Principal": {
-        "AWS": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+        "AWS": "{{.NodeGroupRole}}"
         },
         "Action": [
             "kms:TagResource",
@@ -113,7 +113,7 @@
       ],
       "Resource": "*",
       "Principal": {
-      "AWS": "arn:aws:iam::{{.AWSAccount}}:role/settlements-sandbox-developer-role"
+      "AWS": "{{.SettlementsDeveloperRole}}"
       }
     },
     {
@@ -135,7 +135,7 @@
             "kms:RecipientAttestation:PCR2": "{{.PCR2}}"
         },
         "ArnLike": {
-            "aws:PrincipalArn": "arn:aws:iam::{{.AWSAccount}}:role/eksctl-bsg-sandbox-nodegroup-hms-NodeInstanceRole-1APU3IYRX9HPQ"
+            "aws:PrincipalArn": "{{.NodeGroupRole}}"
         }
       }
     },
