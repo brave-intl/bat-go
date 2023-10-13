@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/concurrent"
@@ -140,7 +141,7 @@ func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consu
 			Group:    consumerGroup,
 			Consumer: consumerID,
 			Streams:  []string{stream, id},
-			Count:    5,
+			Count:    10,
 			Block:    100 * time.Millisecond,
 			NoAck:    false,
 		}).Result()
@@ -149,6 +150,7 @@ func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consu
 		}
 
 		if len(entries) > 0 {
+			var wg sync.WaitGroup
 			for i := 0; i < len(entries[0].Messages); i++ {
 				messageID := entries[0].Messages[i].ID
 				values := entries[0].Messages[i].Values
@@ -165,15 +167,20 @@ func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consu
 				logger = &tmp
 				ctx = logger.WithContext(ctx)
 
-				err := handle(ctx, stream, messageID, []byte(sData))
-				if err != nil {
-					if !strings.Contains(err.Error(), "retry-after") {
-						logger.Warn().Err(err).Msg("message handler returned an error")
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					err := handle(ctx, stream, messageID, []byte(sData))
+					if err != nil {
+						if !strings.Contains(err.Error(), "retry-after") {
+							logger.Warn().Err(err).Msg("message handler returned an error")
+						}
+					} else {
+						redisClient.XAck(ctx, stream, consumerGroup, messageID)
 					}
-				} else {
-					redisClient.XAck(ctx, stream, consumerGroup, messageID)
-				}
+				}()
 			}
+			wg.Wait()
 		}
 
 		return len(entries)
