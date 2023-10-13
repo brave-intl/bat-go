@@ -16,7 +16,7 @@ var validAuthorizerKeys = []string{
 	// @evq
 	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
 	// @sneagan
-	"1dadd1382d26dd10442b7981d18334327deb143fcd19ff1c98ed38fbf3ca5d8a",
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
 }
 
 // validAuthorizers is the list of payment authorizers, mapping to individuals in payments-ops.
