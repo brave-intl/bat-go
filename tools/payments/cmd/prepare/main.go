@@ -69,6 +69,10 @@ func main() {
 		"p", "",
 		"payout id")
 
+	cg := flag.String(
+		"cg", "cli",
+		"consumer group suffix")
+
 	resubmit := flag.Bool(
 		"resubmit", false,
 		"resubmit to prepare stream")
@@ -126,37 +130,36 @@ func main() {
 	}
 
 	totalTransactions += len(report)
-	if !firstRun && !*resubmit {
-		return
+	if firstRun || *resubmit {
+		priv, err := paymentscli.GetOperatorPrivateKey(*key)
+		if err != nil {
+			log.Fatalf("failed to parse operator key file: %v\n", err)
+		}
+
+		if err := report.Prepare(ctx, priv, client); err != nil {
+			log.Fatalf("failed to read report from stdin: %v\n", err)
+		}
+
+		wc := &payments.WorkerConfig{
+			PayoutID:      *payoutID,
+			ConsumerGroup: payments.PreparePrefix + *payoutID + "-cg",
+			Stream:        payments.PreparePrefix + *payoutID,
+			Count:         len(report),
+		}
+
+		err = client.ConfigureWorker(ctx, payments.PrepareConfigStream, wc)
+		if err != nil {
+			log.Fatalf("failed to write to prepare config stream: %v\n", err)
+		}
+		if *verbose {
+			log.Printf("prepare transactions loaded for %+v\n", payoutID)
+		}
+
+		os.Create(responseFile)
 	}
 
-	priv, err := paymentscli.GetOperatorPrivateKey(*key)
-	if err != nil {
-		log.Fatalf("failed to parse operator key file: %v\n", err)
-	}
-
-	if err := report.Prepare(ctx, priv, client); err != nil {
-		log.Fatalf("failed to read report from stdin: %v\n", err)
-	}
-
-	wc := &payments.WorkerConfig{
-		PayoutID:      *payoutID,
-		ConsumerGroup: payments.PreparePrefix + *payoutID + "-cg",
-		Stream:        payments.PreparePrefix + *payoutID,
-		Count:         len(report),
-	}
-
-	err = client.ConfigureWorker(ctx, payments.PrepareConfigStream, wc)
-	if err != nil {
-		log.Fatalf("failed to write to prepare config stream: %v\n", err)
-	}
-	if *verbose {
-		log.Printf("prepare transactions loaded for %+v\n", payoutID)
-	}
-
-	os.Create(responseFile)
-
-	err = client.WaitForResponses(ctx, *payoutID, totalTransactions)
+	// FIXME default to public key as consumer group?
+	err = client.WaitForResponses(ctx, *payoutID, totalTransactions, *cg)
 	if err != nil {
 		log.Fatalf("failed to wait for prepare responses: %v\n", err)
 	}
