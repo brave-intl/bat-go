@@ -14,7 +14,7 @@ var validAuthorizers = map[string]bool{
 	// @evq
 	"7cc23f59ff7055fe6d0aa2fc04e024691a7f347898ff366bcbc83c1e622e62ec": true,
 	// @sneagan
-	"1dadd1382d26dd10442b7981d18334327deb143fcd19ff1c98ed38fbf3ca5d8a": true
+	"1dadd1382d26dd10442b7981d18334327deb143fcd19ff1c98ed38fbf3ca5d8a": true,
 }
 
 // LookupVerifier implements keystore for httpsignature.
