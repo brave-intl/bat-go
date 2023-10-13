@@ -32,15 +32,6 @@ const (
 	signatureHeader     = "Signature"
 )
 
-var (
-	PaymentsAPIBase = map[string]string{
-		"":        "https://nitro-payments.bsg.brave.software",
-		"local":   "https://nitro-payments.bsg.brave.software",
-		"dev":     "https://nitro-payments.bsg.brave.software",
-		"staging": "https://nitro-payments-staging.bsg.brave.com",
-	}
-)
-
 type PayoutReportStatus struct {
 	PrepareCount   int64
 	PrepareLag     int64
@@ -96,7 +87,7 @@ func newRedisClient(ctx context.Context, env, addr, username, pass string, sp *h
 
 	rc := &redisClient{
 		env:             env,
-		paymentsAPIBase: PaymentsAPIBase[env],
+		paymentsAPIBase: payments.APIBase[env],
 		redis:           redis,
 		sp:              sp,
 		verifier:        verifier,

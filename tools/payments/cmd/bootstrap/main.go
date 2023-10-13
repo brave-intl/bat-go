@@ -39,6 +39,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	paymentslib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/tools/payments"
 )
 
@@ -68,7 +69,7 @@ func main() {
 		log.Printf("S3 Bucket URI: %s\n", *b)
 	}
 
-	enclaveBaseURI, ok := payments.PaymentsAPIBase[*env]
+	enclaveBaseURI, ok := paymentslib.APIBase[*env]
 	if !ok {
 		log.Fatalln("Invalid env:", *env)
 	}

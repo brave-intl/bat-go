@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -30,7 +31,16 @@ func NewWorker(rc redisconsumer.StreamClient) *Worker {
 
 // HandlePrepareMessage by sending it to the payments service
 func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, data []byte) error {
-	client, err := client.New("https://nitro-payments.bsg.brave.software", "")
+	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
+	if err != nil {
+		return err
+	}
+	baseURI, ok := payments.APIBase[env]
+	if !ok {
+		return fmt.Errorf("no api base uri for env: %s", env)
+	}
+
+	client, err := client.New(baseURI, "")
 	if err != nil {
 		return err
 	}
@@ -39,7 +49,16 @@ func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, da
 
 // HandleSubmitMessage by sending it to the payments service
 func (w *Worker) HandleSubmitMessage(ctx context.Context, stream, id string, data []byte) error {
-	client, err := client.New("https://nitro-payments.bsg.brave.software", "")
+	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
+	if err != nil {
+		return err
+	}
+	baseURI, ok := payments.APIBase[env]
+	if !ok {
+		return fmt.Errorf("no api base uri for env: %s", env)
+	}
+
+	client, err := client.New(baseURI, "")
 	if err != nil {
 		return err
 	}
