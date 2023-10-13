@@ -112,15 +112,20 @@ func ReadReport(report any, reader io.Reader) error {
 // ReadReportFromResponses reads a report from the reader
 func ReadReportFromResponses(report *AttestedReport, reader io.Reader) error {
 	scanner := bufio.NewScanner(reader)
+	tmp := make(map[string]payments.PrepareResponse)
 	for scanner.Scan() {
 		var resp payments.PrepareResponse
 		if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
 			return err
 		}
-		*report = append(*report, resp)
+		// dedupe by idempotency key
+		tmp[resp.IdempotencyKey().String()] = resp
 	}
 	if err := scanner.Err(); err != nil {
 		return err
+	}
+	for _, resp := range tmp {
+		*report = append(*report, resp)
 	}
 	return nil
 }

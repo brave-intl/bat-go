@@ -46,7 +46,7 @@ type SettlementClient interface {
 	ConfigureWorker(context.Context, string, *payments.WorkerConfig) error
 	PrepareTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.PrepareRequest) error
 	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.SubmitRequest) error
-	WaitForResponses(ctx context.Context, payoutID string, numTransactions int) error
+	WaitForResponses(ctx context.Context, payoutID string, numTransactions int, cg string) error
 	GetStatus(ctx context.Context, payoutID string) (*PayoutReportStatus, error)
 }
 
@@ -253,15 +253,14 @@ func (rc *redisClient) HandlePrepareResponse(ctx context.Context, stream, id str
 	return nil
 }
 
-func (rc *redisClient) WaitForResponses(ctx context.Context, payoutID string, numTransactions int) error {
+func (rc *redisClient) WaitForResponses(ctx context.Context, payoutID string, numTransactions int, cg string) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
 	}
 
 	stream := payments.PreparePrefix + payoutID + payments.ResponseSuffix
-	// FIXME use public key as consumer group
-	consumerGroup := stream + "-cli"
+	consumerGroup := stream + "-" + cg
 	consumerID := "0"
 
 	consumerCtx, cancelFunc := context.WithCancel(ctx)
@@ -281,10 +280,10 @@ wait:
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to get unacknowledged count")
 			}
+			logger.Info().Int64("lag", lag).Int64("pending", pending).Msg("waiting for responses to be processed")
 			if lag+pending == 0 {
 				break wait
 			}
-			logger.Info().Int64("lag", lag).Int64("pending", pending).Msg("waiting for responses to be processed")
 
 		}
 		time.Sleep(10 * time.Second)
