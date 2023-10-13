@@ -275,81 +275,70 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 	return r
 }
 
-// SetOrderTrialDaysInput - SetOrderTrialDays handler input
-type SetOrderTrialDaysInput struct {
+type setTrialDaysRequest struct {
 	TrialDays int64 `json:"trialDays" valid:"int"`
 }
 
-// SetOrderTrialDays is the handler for cancelling an order
+// SetOrderTrialDays handles requests for setting trial days on orders.
 func SetOrderTrialDays(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			ctx     = r.Context()
-			orderID = new(inputs.ID)
-		)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		ctx := r.Context()
+		orderID := &inputs.ID{}
+
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
+				map[string]interface{}{"orderID": err.Error()},
 			)
 		}
 
 		// validate order merchant and caveats (to make sure this is the right merch)
-		if err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID()); err != nil {
+		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
 			return handlers.ValidationError(
 				"Error validating request merchant and caveats",
-				map[string]interface{}{
-					"orderMerchantAndCaveats": err.Error(),
-				},
+				map[string]interface{}{"orderMerchantAndCaveats": err.Error()},
 			)
 		}
 
-		var input SetOrderTrialDaysInput
-		err := requestutils.ReadJSON(r.Context(), r.Body, &input)
-		if err != nil {
+		req := &setTrialDaysRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(input)
-		if err != nil {
+		if _, err := govalidator.ValidateStruct(req); err != nil {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.SetOrderTrialDays(ctx, orderID.UUID(), input.TrialDays)
-		if err != nil {
+		if err := service.SetOrderTrialDays(ctx, orderID.UUID(), req.TrialDays); err != nil {
 			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	})
 }
 
-// CancelOrder is the handler for cancelling an order
+// CancelOrder handles requests for cancelling orders.
 func CancelOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		ctx := r.Context()
+		orderID := &inputs.ID{}
+
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
+				map[string]interface{}{"orderID": err.Error()},
 			)
 		}
 
-		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
-		if err != nil {
+		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
-		err = service.CancelOrder(*orderID.UUID())
-		if err != nil {
+		if err := service.CancelOrder(*orderID.UUID()); err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	})
 }
 
@@ -656,33 +645,28 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 	}
 }
 
-// DeleteOrderCreds is the handler for deleting order credentials
+// DeleteOrderCreds handles requests for deleting order credentials.
 func DeleteOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		ctx := r.Context()
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
+				map[string]interface{}{"orderID": err.Error()},
 			)
 		}
 
-		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
-		if err != nil {
+		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
-		// is signed param
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-
-		err = service.DeleteOrderCreds(r.Context(), *orderID.UUID(), isSigned)
-		if err != nil {
+		if err := service.DeleteOrderCreds(ctx, *orderID.UUID(), isSigned); err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(r.Context(), "Order credentials successfully deleted", w, http.StatusOK)
+		return handlers.RenderContent(ctx, "Order credentials successfully deleted", w, http.StatusOK)
 	}
 }
 

@@ -32,11 +32,11 @@ const (
 	errNotFound = model.Error("not found")
 )
 
-// Datastore abstracts over the underlying datastore
+// Datastore abstracts over the underlying datastore.
 type Datastore interface {
 	datastore.Datastore
-	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error)
+
+	CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error)
 	// SetOrderTrialDays - set the number of days of free trial for this order
 	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
@@ -101,14 +101,7 @@ type Datastore interface {
 type orderStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
-	Create(
-		ctx context.Context,
-		dbi sqlx.QueryerContext,
-		totalPrice decimal.Decimal,
-		merchantID, status, currency, location string,
-		paymentMethods []string,
-		validFor *time.Duration,
-	) (*model.Order, error)
+	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID, ndays int64) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
@@ -301,35 +294,23 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 	return result, nil
 }
 
-// CreateOrder creates an order with the given total price, merchant ID, status and orderItems.
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error) {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return nil, err
-	}
-	defer pg.RollbackTx(tx)
-
-	ctx := context.TODO()
-
-	result, err := pg.orderRepo.Create(ctx, tx, totalPrice, merchantID, status, currency, location, allowedPaymentMethods, validFor)
+// CreateOrder creates an order from the given prototype, and inserts items.
+func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	result, err := pg.orderRepo.Create(ctx, dbi, oreq)
 	if err != nil {
 		return nil, err
 	}
 
-	if status == OrderStatusPaid {
-		if err := pg.recordOrderPayment(ctx, tx, result.ID, time.Now()); err != nil {
+	if oreq.Status == OrderStatusPaid {
+		if err := pg.recordOrderPayment(ctx, dbi, result.ID, time.Now()); err != nil {
 			return nil, fmt.Errorf("failed to record order payment: %w", err)
 		}
 	}
 
-	model.OrderItemList(orderItems).SetOrderID(result.ID)
+	model.OrderItemList(items).SetOrderID(result.ID)
 
-	result.Items, err = pg.orderItemRepo.InsertMany(ctx, tx, orderItems...)
+	result.Items, err = pg.orderItemRepo.InsertMany(ctx, dbi, items...)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
