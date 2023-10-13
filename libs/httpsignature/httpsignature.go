@@ -299,7 +299,7 @@ func (sp *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req
 	return sp.verify(verifier, opts, signingStr, req.Header)
 }
 
-// VerifyResponse by verify the HTTP signature over HTTP response resp using verifier with options opts
+// VerifyResponse by verifying the HTTP signature over HTTP response resp using verifier with options opts
 func (sp *SignatureParams) VerifyResponse(verifier Verifier, opts crypto.SignerOpts, resp *http.Response) (bool, error) {
 	signingStr, err := sp.BuildSigningStringForResponse(resp)
 	if err != nil {

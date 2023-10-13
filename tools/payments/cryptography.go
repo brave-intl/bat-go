@@ -15,6 +15,7 @@ func GetOperatorPrivateKey(filename string) (ed25519.PrivateKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open key file: %w", err)
 	}
+	defer f.Close()
 
 	privateKeyPEM, err := io.ReadAll(f)
 	if err != nil {

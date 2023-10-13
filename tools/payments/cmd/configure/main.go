@@ -71,7 +71,7 @@ func main() {
 
 	recipient, err := age.ParseX25519Recipient(*publicKey)
 	if err != nil {
-		log.Fatalf("Failed to parse public key %q: %v", publicKey, err)
+		log.Fatalf("Failed to parse public key %q: %v", *publicKey, err)
 	}
 
 	for _, f := range files {
@@ -90,7 +90,7 @@ func main() {
 		}
 
 		if _, err := io.Copy(w, in); err != nil {
-			log.Fatalf("Failed to write encrypted file: %v")
+			log.Fatalf("Failed to write encrypted file: %v", err)
 		}
 
 		// close encrypted file

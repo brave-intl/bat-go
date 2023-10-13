@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hex"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -51,13 +54,19 @@ type SettlementClient interface {
 func NewSettlementClient(ctx context.Context, env string, config map[string]string) (context.Context, SettlementClient, error) {
 	ctx, _ = logging.SetupLogger(ctx)
 
-	// FIXME should have PCR2 as an argument to this function and pass it here
-	sp, verifier, err := NewNitroVerifier(nil)
+	var sp httpsignature.SignatureParams
+	sp.Algorithm = httpsignature.AWSNITRO
+	sp.KeyID = "primary"
+	sp.Headers = []string{"digest"}
+
+	pcr2, err := hex.DecodeString(config["pcr2"])
 	if err != nil {
-		return ctx, nil, err
+		return nil, nil, err
 	}
 
-	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], sp, verifier)
+	verifier := httpsignature.NewNitroVerifier(map[uint][]byte{2: []byte(pcr2)})
+
+	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], &sp, verifier)
 	return ctx, client, err
 }
 
