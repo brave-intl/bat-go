@@ -2,36 +2,74 @@ package payments
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
+	"golang.org/x/crypto/ssh"
 )
 
-// validAuthorizers is the list of payment authorizers, mapping to individuals in payments-ops.
-var validAuthorizers = map[string]bool{
+var validAuthorizerKeys = []string{
 	// @evq
-	"7cc23f59ff7055fe6d0aa2fc04e024691a7f347898ff366bcbc83c1e622e62ec": true,
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
 	// @sneagan
-	"1dadd1382d26dd10442b7981d18334327deb143fcd19ff1c98ed38fbf3ca5d8a": true,
+	"1dadd1382d26dd10442b7981d18334327deb143fcd19ff1c98ed38fbf3ca5d8a",
+}
+
+// validAuthorizers is the list of payment authorizers, mapping to individuals in payments-ops.
+var validAuthorizers = make(map[string]httpsignature.Ed25519PubKey)
+
+func init() {
+	for _, key := range validAuthorizerKeys {
+		pub, err := DecodePublicKey(key)
+		if err != nil {
+			panic(err)
+		}
+		validAuthorizers[hex.EncodeToString(pub)] = pub
+	}
+	fmt.Println(validAuthorizers)
+}
+
+// DecodePublicKey decodes the public key which can either be a raw hex encoded ed25519 public key or an ssh-ed25519 public key
+func DecodePublicKey(key string) (httpsignature.Ed25519PubKey, error) {
+	if strings.HasPrefix(key, "ssh-ed25519") {
+		pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse ssh public key: %w", err)
+		}
+
+		if pubKey.Type() != "ssh-ed25519" {
+			return nil, fmt.Errorf("public key is not ed25519 public key")
+		}
+		cPubKey, ok := pubKey.(ssh.CryptoPublicKey)
+		if !ok {
+			return nil, fmt.Errorf("public key is not ed25519 public key")
+		}
+		edKey, ok := cPubKey.CryptoPublicKey().(ed25519.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("public key is not ed25519 public key")
+		}
+		return httpsignature.Ed25519PubKey(edKey), nil
+	} else {
+		var (
+			edKey httpsignature.Ed25519PubKey
+			err   error
+		)
+
+		edKey, err = hex.DecodeString(key)
+		return edKey, err
+	}
 }
 
 // LookupVerifier implements keystore for httpsignature.
 func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
 	// keyID is the public key, we need to see if this exists in our verifier map
-	if allowed, exists := validAuthorizers[keyID]; !exists || !allowed {
+	publicKey, exists := validAuthorizers[keyID]
+	if !exists {
 		return nil, nil, &ErrInvalidAuthorizer{}
-	}
-
-	var (
-		publicKey httpsignature.Ed25519PubKey
-		err       error
-	)
-
-	publicKey, err = hex.DecodeString(keyID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode verifier public key: %w", err)
 	}
 
 	verifier := httpsignature.Verifier(publicKey)
