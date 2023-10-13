@@ -83,7 +83,7 @@ func (service *Service) StateMachineFromTransaction(
 ) (TxStateMachine, error) {
 
 	// check if service is configured, if not error
-	if !service.AreSecretsLoaded() {
+	if !service.AreSecretsLoaded(ctx) {
 		return nil, errSecretsNotLoaded
 	}
 

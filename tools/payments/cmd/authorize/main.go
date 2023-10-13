@@ -92,7 +92,7 @@ func main() {
 
 	// setup the settlement redis client
 	ctx, client, err := paymentscli.NewSettlementClient(ctx, *env, map[string]string{
-		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, "pcr2": *pcr2 // client specific configurations
+		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, "pcr2": *pcr2, // client specific configurations
 	})
 	if err != nil {
 		log.Fatalf("failed to create settlement client: %v\n", err)
