@@ -30,7 +30,7 @@ func TestVerifyNitroAttestation(t *testing.T) {
 		t.Fatal("error reading sample attestation doc:", err)
 	}
 
-	verifier := NitroVerifier{PCRs: pcrs, now: now}
+	verifier := NitroVerifier{PCRs: pcrs, Now: now}
 
 	valid, err := verifier.Verify([]byte{}, doc, crypto.Hash(0))
 	if err != nil {

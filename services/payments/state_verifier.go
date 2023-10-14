@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/payments"
@@ -14,7 +15,7 @@ import (
 var previousPCR2Values = []string{}
 
 type VerifierStore struct {
-	verifiers map[string]payments.Verifier
+	verifiers map[string]nitro.Verifier
 }
 
 func NewVerifierStore() (*VerifierStore, error) {
@@ -23,7 +24,7 @@ func NewVerifierStore() (*VerifierStore, error) {
 		return nil, errors.New("could not retrieve nitro PCRs")
 	}
 
-	s := VerifierStore{verifiers: map[string]payments.Verifier{}}
+	s := VerifierStore{verifiers: map[string]nitro.Verifier{}}
 
 	// always accept attestations matching our own
 	pubKey := hex.EncodeToString(pcrs[2])
@@ -48,10 +49,12 @@ func NewVerifierStore() (*VerifierStore, error) {
 
 }
 
-func (s *VerifierStore) LookupVerifier(ctx context.Context, keyID string) (context.Context, *payments.Verifier, error) {
+func (s *VerifierStore) LookupVerifier(ctx context.Context, keyID string, updatedAt time.Time) (context.Context, *payments.Verifier, error) {
 	for k, v := range s.verifiers {
 		if k == keyID {
-			return ctx, &v, nil
+			v.Now = func() time.Time { return updatedAt }
+			vv := (payments.Verifier)(v)
+			return ctx, &vv, nil
 		}
 	}
 	return ctx, nil, fmt.Errorf("unknown key: %s", keyID)

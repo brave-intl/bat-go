@@ -113,14 +113,14 @@ func (s Signer) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) (si
 // Verifier specifies the PCR values required for verification
 type Verifier struct {
 	PCRs map[uint][]byte
-	now  func() time.Time
+	Now  func() time.Time
 }
 
 // NewVerifier returns a new verifier for nitro attestations
 func NewVerifier(pcrs map[uint][]byte) Verifier {
 	return Verifier{
 		PCRs: pcrs,
-		now:  time.Now,
+		Now:  time.Now,
 	}
 }
 
@@ -136,7 +136,7 @@ func (v Verifier) verifySigOnlyNotPCRs(message, sig []byte, opts crypto.SignerOp
 		sig,
 		nitrite.VerifyOptions{
 			Roots:       pool,
-			CurrentTime: v.now(),
+			CurrentTime: v.Now(),
 		},
 	)
 	if nil != err {

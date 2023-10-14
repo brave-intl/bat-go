@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"io"
+	"time"
 )
 
 // Signator is an interface for cryptographic signature creation
@@ -19,6 +20,6 @@ type Verifier interface {
 
 // Keystore provides a way to lookup a public key based on the keyID a request was signed with
 type Keystore interface {
-	// LookupVerifier based on the keyID
-	LookupVerifier(ctx context.Context, keyID string) (context.Context, *Verifier, error)
+	// LookupVerifier based on the keyID and updatedAt
+	LookupVerifier(ctx context.Context, keyID string, updatedAt time.Time) (context.Context, *Verifier, error)
 }

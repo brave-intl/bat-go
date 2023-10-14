@@ -123,6 +123,7 @@ func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID s
 			if err != nil {
 				return nil, fmt.Errorf("ion unmarshal failed: %w", err)
 			}
+			latestHistoryItem.Data.UpdatedAt = latestHistoryItem.Metadata.TxTime
 			stateHistory = append(stateHistory, latestHistoryItem.Data)
 		}
 

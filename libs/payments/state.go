@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -50,6 +51,7 @@ type PaymentState struct {
 	Signature          []byte    `ion:"signature"`
 	PublicKey          string    `ion:"publicKey"`
 	ID                 uuid.UUID `ion:"idempotencyKey"`
+	UpdatedAt          time.Time `ion:"-"`
 }
 
 // PaymentStateHistory is a sequence of payment states.
@@ -133,7 +135,7 @@ func (p PaymentStateHistory) GetAuthenticatedPaymentState(keystore Keystore, doc
 	// 3. the transition was valid
 	var authenticatedState AuthenticatedPaymentState
 	for i, state := range []PaymentState(p) {
-		_, verifier, err := keystore.LookupVerifier(context.Background(), state.PublicKey)
+		_, verifier, err := keystore.LookupVerifier(context.Background(), state.PublicKey, state.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("signature validation for state with document ID %s failed: %w", documentID, err)
 		}
