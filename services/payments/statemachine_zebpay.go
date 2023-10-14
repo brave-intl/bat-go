@@ -94,78 +94,79 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		ctr, err := zm.client.CheckTransfer(ctx, &zebpay.ClientOpts{
 			APIKey: zm.apiKey, SigningKey: zm.signingKey,
 		}, zm.transaction.IdempotencyKey())
-		if err != nil {
-			return zm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
-		}
-		switch ctr.Code {
-		case zebpay.TransferSuccessCode:
-			// Write the Paid status and end the loop by not calling Drive
-			entry, err = zm.SetNextState(ctx, paymentLib.Paid)
-			if err != nil {
-				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
-			}
-		case zebpay.TransferPendingCode:
-			// Transfer is already Pending, but isn't recorded as such in QLDB. Set it to
-			// Pending in QLDB and proceed.
-			entry, err = zm.SetNextState(ctx, paymentLib.Pending)
-			if err != nil {
-				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
-			}
-			// Set backoff without changing status
-			zm.backoffFactor = zm.backoffFactor * 2
-			entry, err = Drive(ctx, zm)
-			if err != nil {
-				return entry, fmt.Errorf(
-					"failed to drive transaction from pending to paid: %w",
-					err,
-				)
-			}
-		default:
-			// submit the transaction
-			btr, err := zm.client.BulkTransfer(
-				ctx,
-				&zebpay.ClientOpts{
-					APIKey:     zm.apiKey,
-					SigningKey: zm.signingKey,
-				},
-				zebpay.NewBulkTransferRequest(
-					zebpay.NewTransfer(
-						zm.transaction.IdempotencyKey(),
-						uuid.MustParse(zm.transaction.From),
-						zm.transaction.Amount,
-						to,
-					),
-				),
-			)
-			if err != nil {
-				return zm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
-			}
-			if strings.ToUpper(btr.Data) != "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED" {
-				// Status unknown. Fail
-				entry, err = zm.SetNextState(ctx, paymentLib.Failed)
+		if ctr != nil {
+			switch ctr.Code {
+			case zebpay.TransferSuccessCode:
+				// Write the Paid status and end the loop by not calling Drive
+				entry, err = zm.SetNextState(ctx, paymentLib.Paid)
 				if err != nil {
 					return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 				}
-				return nil, fmt.Errorf(
-					"received unknown status from zebpay for transaction: %v",
-					entry,
-				)
+				return zm.transaction, nil
+			case zebpay.TransferPendingCode:
+				// Transfer is already Pending, but isn't recorded as such in QLDB. Set it to
+				// Pending in QLDB and proceed.
+				entry, err = zm.SetNextState(ctx, paymentLib.Pending)
+				if err != nil {
+					return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
+				}
+				// Set backoff without changing status
+				zm.backoffFactor = zm.backoffFactor * 2
+				entry, err = Drive(ctx, zm)
+				if err != nil {
+					return entry, fmt.Errorf(
+						"failed to drive transaction from pending to paid: %w",
+						err,
+					)
+				}
+				return zm.transaction, nil
 			}
+		}
 
-			entry, err = zm.SetNextState(ctx, paymentLib.Pending)
+		// submit the transaction
+		btr, err := zm.client.BulkTransfer(
+			ctx,
+			&zebpay.ClientOpts{
+				APIKey:     zm.apiKey,
+				SigningKey: zm.signingKey,
+			},
+			zebpay.NewBulkTransferRequest(
+				zebpay.NewTransfer(
+					zm.transaction.IdempotencyKey(),
+					uuid.MustParse(zm.transaction.From),
+					zm.transaction.Amount,
+					to,
+				),
+			),
+		)
+		if err != nil {
+			return zm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
+		}
+		if strings.ToUpper(btr.Data) != "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED" {
+			// Status unknown. Fail
+			entry, err = zm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
 				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 			}
+			return nil, fmt.Errorf(
+				"received unknown status from zebpay for transaction: %v",
+				entry,
+			)
+		}
 
-			// Set initial backoff
-			zm.backoffFactor = 2
-			entry, err = Drive(ctx, zm)
-			if err != nil {
-				return entry, fmt.Errorf(
-					"failed to drive transaction from pending to paid: %w",
-					err,
-				)
-			}
+		entry, err = zm.SetNextState(ctx, paymentLib.Pending)
+		if err != nil {
+			return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
+		}
+
+		// Set initial backoff
+		zm.backoffFactor = 2
+		entry, err = Drive(ctx, zm)
+		if err != nil {
+			return entry, fmt.Errorf(
+				"failed to drive transaction from pending to paid: %w",
+				err,
+			)
 		}
 	}
 	return zm.transaction, nil
