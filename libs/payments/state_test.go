@@ -1,10 +1,10 @@
 package payments
 
 import (
+	"context"
 	"crypto"
 	"encoding/json"
 	"testing"
-	"context"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -35,16 +35,17 @@ func (m mockVerifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool,
 	return m.value, nil
 }
 
-type mockKeystore struct{}
+type mockKeystore struct {
+	value bool
+}
 
 func (m mockKeystore) LookupVerifier(
 	ctx context.Context,
 	keyID string,
 ) (context.Context, *Verifier, error) {
-	var verifier *Verifier = &mockVerifier{value: true}
-	return ctx, verifier, nil
+	var verifier Verifier = (Verifier)(mockVerifier{value: m.value})
+	return ctx, &verifier, nil
 }
-
 
 var transactionHistorySetTrue = []PaymentStateHistory{
 	{
@@ -128,7 +129,7 @@ func TestIdempotencyKey(t *testing.T) {
 }
 
 func TestGetAuthenticatedPaymentState(t *testing.T) {
-	keystore := mockKeystore{}
+	keystore := mockKeystore{value: true}
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
 		authenticatedState, err := transactionHistorySet.GetAuthenticatedPaymentState(
@@ -162,7 +163,7 @@ func TestGetAuthenticatedPaymentState(t *testing.T) {
 		}
 	}
 
-	verifier.value = false
+	keystore.value = false
 	// Valid transitions should be invalid with bad signatures
 	for _, transactionHistorySet := range transactionHistorySetTrue {
 		authenticatedState, err := transactionHistorySet.GetAuthenticatedPaymentState(
