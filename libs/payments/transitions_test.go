@@ -15,6 +15,7 @@ impact the set of valid transitions.
 func TestRecurseTransitionResolution(t *testing.T) {
 	allValidTransitionSequences := RecurseTransitionResolution("prepared", []PaymentStatus{})
 	knownValidTransitionSequences := [][]PaymentStatus{
+		{Prepared, Authorized, Paid},
 		{Prepared, Authorized, Pending, Paid},
 		{Prepared, Authorized, Pending, Failed},
 		{Prepared, Authorized, Failed},

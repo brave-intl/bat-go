@@ -22,7 +22,7 @@ const (
 var Transitions = map[PaymentStatus][]PaymentStatus{
 	empty:      {Prepared},
 	Prepared:   {Authorized, Failed},
-	Authorized: {Pending, Failed},
+	Authorized: {Pending, Paid, Failed},
 	Pending:    {Paid, Failed},
 	Paid:       {},
 	Failed:     {},
