@@ -50,6 +50,11 @@ var transactionHistorySetTrue = []PaymentStateHistory{
 	{
 		{UnsafePaymentState: status0, ID: generatedUUID},
 		{UnsafePaymentState: status1, ID: generatedUUID},
+		{UnsafePaymentState: status3, ID: generatedUUID},
+	},
+	{
+		{UnsafePaymentState: status0, ID: generatedUUID},
+		{UnsafePaymentState: status1, ID: generatedUUID},
 		{UnsafePaymentState: status2, ID: generatedUUID},
 		{UnsafePaymentState: status3, ID: generatedUUID},
 	},
