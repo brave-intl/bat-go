@@ -263,13 +263,13 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	// populate the access token
 	affixAccessToken(req, opts)
 
-	var resp = new(CheckTransferResponse)
-	_, err = c.client.Do(ctx, req, resp)
-	if err != nil {
+	var chkResp = new(CheckTransferResponse)
+	resp, err := c.client.Do(ctx, req, chkResp)
+	if resp != nil && err != nil {
 		return nil, fmt.Errorf("failed to do status check request: %w", err)
 	}
 
-	return resp, err
+	return chkResp, nil
 }
 
 // BulkCheckTransfer uploads the bulk payout for gemini
