@@ -100,7 +100,7 @@ func TestAuthorizerSignedMiddleware(t *testing.T) {
 	r.ServeHTTP(wIv, reqIv)
 
 	// add keypair to validAuthorizers
-	validAuthorizers[hex.EncodeToString(pub)] = true
+	validAuthorizers[hex.EncodeToString(pub)] = httpsignature.Ed25519PubKey(pub)
 	defer func() {
 		delete(validAuthorizers, hex.EncodeToString(pub))
 	}()
