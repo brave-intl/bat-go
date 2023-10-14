@@ -11,7 +11,10 @@ import (
 )
 
 // A list of hex encoded previously valid PCR2 values
-var previousPCR2Values = []string{}
+var previousPCR2Values = []string{
+	// 2023-10-13 Release
+	"9626c96c05dfefc0988d7150f5741481f6adeddade120c3542364f0a98f05f4e2b2b0ba5b4b54fa1deaa5ebd3e64eeee",
+}
 
 type VerifierStore struct {
 	verifiers map[string]payments.Verifier

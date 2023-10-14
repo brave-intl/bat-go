@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"encoding/json"
 	"testing"
+	"context"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -30,9 +31,20 @@ type mockVerifier struct {
 	value bool
 }
 
-func (m *mockVerifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
+func (m mockVerifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
 	return m.value, nil
 }
+
+type mockKeystore struct{}
+
+func (m mockKeystore) LookupVerifier(
+	ctx context.Context,
+	keyID string,
+) (context.Context, *Verifier, error) {
+	var verifier *Verifier = &mockVerifier{value: true}
+	return ctx, verifier, nil
+}
+
 
 var transactionHistorySetTrue = []PaymentStateHistory{
 	{
@@ -111,12 +123,11 @@ func TestIdempotencyKey(t *testing.T) {
 }
 
 func TestGetAuthenticatedPaymentState(t *testing.T) {
-	verifier := &mockVerifier{value: true}
-
+	keystore := mockKeystore{}
 	// Valid transitions should be valid
 	for _, transactionHistorySet := range transactionHistorySetTrue {
 		authenticatedState, err := transactionHistorySet.GetAuthenticatedPaymentState(
-			verifier,
+			keystore,
 			dID,
 		)
 		assert.Nil(t, err)
@@ -126,7 +137,7 @@ func TestGetAuthenticatedPaymentState(t *testing.T) {
 	// Invalid transitions should be invalid
 	for _, transactionHistorySet := range transactionHistorySetFalse {
 		authenticatedState, err := transactionHistorySet.GetAuthenticatedPaymentState(
-			verifier,
+			keystore,
 			dID,
 		)
 		assert.Error(t, err)
@@ -136,7 +147,7 @@ func TestGetAuthenticatedPaymentState(t *testing.T) {
 	// Valid transitions should be invalid with wrong doc id
 	for _, transactionHistorySet := range transactionHistorySetTrue {
 		authenticatedState, err := transactionHistorySet.GetAuthenticatedPaymentState(
-			verifier,
+			keystore,
 			"Cn7mea9LNqEH6FWK1XX38o",
 		)
 		// initial state does not have an embedded document id to cause mismatch
@@ -150,7 +161,7 @@ func TestGetAuthenticatedPaymentState(t *testing.T) {
 	// Valid transitions should be invalid with bad signatures
 	for _, transactionHistorySet := range transactionHistorySetTrue {
 		authenticatedState, err := transactionHistorySet.GetAuthenticatedPaymentState(
-			verifier,
+			keystore,
 			dID,
 		)
 		assert.Error(t, err)
