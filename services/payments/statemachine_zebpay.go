@@ -105,6 +105,12 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 			}
 		case zebpay.TransferPendingCode:
+			// Transfer is already Pending, but isn't recorded as such in QLDB. Set it to
+			// Pending in QLDB and proceed.
+			entry, err = zm.SetNextState(ctx, paymentLib.Pending)
+			if err != nil {
+				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
+			}
 			// Set backoff without changing status
 			zm.backoffFactor = zm.backoffFactor * 2
 			entry, err = Drive(ctx, zm)
