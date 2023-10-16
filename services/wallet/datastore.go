@@ -71,7 +71,7 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	datastore.Datastore
-	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, depositProvider string) error
+	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (bool, error)
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
@@ -561,9 +561,46 @@ var (
 )
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, depositProvider string) error {
+func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error {
 	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
 	sublogger.Debug().Msg("linking wallet")
+
+	// rep check
+	if repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
+		walletID, err := uuid.FromString(ID)
+		if err != nil {
+			sublogger.Warn().Err(err).Msg("invalid wallet id")
+			return fmt.Errorf("invalid wallet id, not uuid: %w", err)
+		}
+		// we have a client, check the value for ID
+		reputable, cohorts, err := repClient.IsLinkingReputable(ctx, walletID, country)
+		if err != nil {
+			sublogger.Warn().Err(err).Msg("failed to check reputation")
+			return fmt.Errorf("failed to check wallet rep: %w", err)
+		}
+
+		var (
+			isTooYoung        = false
+			geoResetDifferent = false
+		)
+		for _, v := range cohorts {
+			if isTooYoung = (v == reputation.CohortTooYoung); isTooYoung {
+				break
+			}
+			if geoResetDifferent = (v == reputation.CohortGeoResetDifferent); geoResetDifferent {
+				break
+			}
+		}
+
+		if !reputable && !isTooYoung && !geoResetDifferent {
+			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
+			countLinkingFlaggedUnusual.Inc()
+			return ErrUnusualActivity
+		} else if geoResetDifferent {
+			sublogger.Info().Msg("wallet linking attempt failed - geo reset is different")
+			return ErrGeoResetDifferent
+		}
+	}
 
 	ctx, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
