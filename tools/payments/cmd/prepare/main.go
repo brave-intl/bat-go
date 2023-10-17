@@ -102,7 +102,8 @@ func main() {
 
 	firstRun := true
 	// FIXME
-	responseFile := payments.PreparePrefix + *payoutID + payments.ResponseSuffix + ".log"
+	responseStream := payments.PreparePrefix + *payoutID + payments.ResponseSuffix
+	responseFile := responseStream + ".log"
 	if _, err := os.Stat(responseFile); err == nil {
 		firstRun = false
 		if !*resubmit {
@@ -159,7 +160,7 @@ func main() {
 	}
 
 	// FIXME default to public key as consumer group?
-	err = client.WaitForResponses(ctx, *payoutID, totalTransactions, *cg)
+	err = client.WaitForResponses(ctx, *payoutID, totalTransactions, responseStream, *cg)
 	if err != nil {
 		log.Fatalf("failed to wait for prepare responses: %v\n", err)
 	}

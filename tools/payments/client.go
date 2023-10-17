@@ -46,7 +46,7 @@ type SettlementClient interface {
 	ConfigureWorker(context.Context, string, *payments.WorkerConfig) error
 	PrepareTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.PrepareRequest) error
 	SubmitTransactions(context.Context, httpsignature.ParameterizedSignator, ...payments.SubmitRequest) error
-	WaitForResponses(ctx context.Context, payoutID string, numTransactions int, cg string) error
+	WaitForResponses(ctx context.Context, payoutID string, numTransactions int, stream, cg string) error
 	GetStatus(ctx context.Context, payoutID string) (*PayoutReportStatus, error)
 }
 
@@ -253,13 +253,12 @@ func (rc *redisClient) HandlePrepareResponse(ctx context.Context, stream, id str
 	return nil
 }
 
-func (rc *redisClient) WaitForResponses(ctx context.Context, payoutID string, numTransactions int, cg string) error {
+func (rc *redisClient) WaitForResponses(ctx context.Context, payoutID string, numTransactions int, stream, cg string) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
 	}
 
-	stream := payments.PreparePrefix + payoutID + payments.ResponseSuffix
 	consumerGroup := stream + "-" + cg
 	consumerID := "0"
 
