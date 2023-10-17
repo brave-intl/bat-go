@@ -53,7 +53,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		}
 		switch ctr.Code {
 		case zebpay.TransferSuccessCode:
-			// Write the Paid status and end the loop by not calling Drive
+			// Write the Paid status
 			entry, err = zm.SetNextState(ctx, paymentLib.Paid)
 			if err != nil {
 				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
@@ -61,13 +61,6 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		case zebpay.TransferPendingCode:
 			// Set backoff without changing status
 			zm.backoffFactor = zm.backoffFactor * 2
-			entry, err = Drive(ctx, zm)
-			if err != nil {
-				return entry, fmt.Errorf(
-					"failed to drive transaction from pending to paid: %w",
-					err,
-				)
-			}
 		default:
 			// Status unknown. includes TransferFailedCode
 			entry, err = zm.SetNextState(ctx, paymentLib.Failed)
@@ -97,7 +90,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		if ctr != nil {
 			switch ctr.Code {
 			case zebpay.TransferSuccessCode:
-				// Write the Paid status and end the loop by not calling Drive
+				// Write the Paid status
 				entry, err = zm.SetNextState(ctx, paymentLib.Paid)
 				if err != nil {
 					return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
@@ -112,14 +105,6 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 				}
 				// Set backoff without changing status
 				zm.backoffFactor = zm.backoffFactor * 2
-				entry, err = Drive(ctx, zm)
-				if err != nil {
-					return entry, fmt.Errorf(
-						"failed to drive transaction from pending to paid: %w",
-						err,
-					)
-				}
-				return zm.transaction, nil
 			}
 		}
 
@@ -161,14 +146,8 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 
 		// Set initial backoff
 		zm.backoffFactor = 2
-		entry, err = Drive(ctx, zm)
-		if err != nil {
-			return entry, fmt.Errorf(
-				"failed to drive transaction from pending to paid: %w",
-				err,
-			)
-		}
 	}
+
 	return zm.transaction, nil
 }
 

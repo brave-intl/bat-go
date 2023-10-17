@@ -172,8 +172,7 @@ func TestMockedZebpayStateMachineHappyPathTransitions(t *testing.T) {
 	// For this test, we will return Pending status forever, so we need it to time out
 	// in order to capture and verify that pending status.
 	newTransaction, err = Drive(timeout, &zebpayStateMachine)
-	// The only tolerable error is a timeout, and that's what we expect here
-	must.ErrorIs(t, err, context.DeadlineExceeded)
+	must.Nil(t, err)
 	should.Equal(t, paymentLib.Pending, newTransaction.Status)
 
 	// Should transition transaction into the Paid state
