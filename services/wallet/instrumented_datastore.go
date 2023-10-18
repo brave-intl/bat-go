@@ -255,7 +255,7 @@ func (_d DatastoreWithPrometheus) InsertWalletTx(ctx context.Context, tx *sqlx.T
 }
 
 // LinkWallet implements Datastore
-func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, depositProvider string) (err error) {
+func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, id string, providerID string, providerLinkingID uuid.UUID, depositProvider string, country string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -265,7 +265,7 @@ func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, pro
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "LinkWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.LinkWallet(ctx, ID, providerID, providerLinkingID, depositProvider)
+	return _d.base.LinkWallet(ctx, id, providerID, providerLinkingID, depositProvider, country)
 }
 
 // Migrate implements Datastore

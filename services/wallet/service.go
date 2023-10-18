@@ -415,7 +415,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 	// we also validated that this "info" signed the request to perform the linking with http signature
 	// we assume that since we got linkingInfo signed from BF that they are KYC
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountHash)
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, depositProvider)
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, depositProvider, country)
 	if err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
@@ -497,7 +497,7 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, claims.AccountID)
-	if err := service.Datastore.LinkWallet(ctx, walletID.String(), claims.DepositID, providerLinkingID, depositProvider); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), claims.DepositID, providerLinkingID, depositProvider, country); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
@@ -567,7 +567,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, depositProvider)
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, depositProvider, country)
 	if err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
@@ -669,7 +669,7 @@ func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wall
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, depositProvider)
+	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, depositProvider, country)
 	if err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)

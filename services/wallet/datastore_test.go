@@ -199,8 +199,16 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
-	for i := 0; i < 1; i++ {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
 
+	repClient := mock_reputation.NewMockClient(mockCtrl)
+	repClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, repClient)
+
+	for i := 0; i < 1; i++ {
 		// seed 3 wallets with same linkingID
 		userDepositDestination, providerLinkingID := suite.seedWallet(pg)
 
@@ -214,8 +222,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 			PublicKey:   "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
 		}
 
-		err = pg.UpsertWallet(context.WithValue(context.Background(),
-			appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), walletInfo)
+		err = pg.UpsertWallet(ctx, walletInfo)
 		suite.Require().NoError(err, "save wallet should succeed")
 
 		runs := 2
@@ -225,15 +232,12 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 		for i := 0; i < runs; i++ {
 			go func() {
 				defer wg.Done()
-				err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-					walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.Provider)
+				err = pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.Provider, "")
 			}()
 		}
-
 		wg.Wait()
 
-		used, max, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-			appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
+		used, max, err := pg.GetCustodianLinkCount(ctx, providerLinkingID, "")
 
 		suite.Require().NoError(err, "should have no error getting custodian link count")
 		suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))
@@ -243,6 +247,15 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUID) {
 	userDepositDestination := uuid.NewV4().String()
 	providerLinkingID := uuid.NewV4()
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	repClient := mock_reputation.NewMockClient(mockCtrl)
+	repClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, repClient)
 
 	walletCount := 3
 	for i := 0; i < walletCount; i++ {
@@ -256,16 +269,14 @@ func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUI
 			AnonymousAddress: nil,
 		}
 
-		err := pg.UpsertWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), walletInfo)
+		err := pg.UpsertWallet(ctx, walletInfo)
 		suite.Require().NoError(err, "save wallet should succeed")
 
-		err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-			walletInfo.ID, userDepositDestination, providerLinkingID, "uphold")
+		err = pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID, "uphold", "")
 		suite.Require().NoError(err, "link wallet should succeed")
 	}
 
-	used, _, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
+	used, _, err := pg.GetCustodianLinkCount(ctx, providerLinkingID, "")
 
 	suite.Require().NoError(err, "should have no error getting custodian link count")
 	suite.Require().True(used == walletCount, fmt.Sprintf("used %d", used))
@@ -276,6 +287,15 @@ func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUI
 func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	repClient := mock_reputation.NewMockClient(mockCtrl)
+	repClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, repClient)
 
 	wallets := make([]*walletutils.Info, 10, 10)
 
@@ -289,7 +309,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 			PublicKey:   "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
 		}
 		wallets[i] = walletInfo
-		err := pg.UpsertWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), walletInfo)
+		err := pg.UpsertWallet(ctx, walletInfo)
 		suite.Require().NoError(err, "save wallet should succeed")
 	}
 
@@ -302,15 +322,12 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 	for i := 0; i < len(wallets); i++ {
 		go func(index int) {
 			defer wg.Done()
-			err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
-				wallets[index].ID, userDepositDestination, providerLinkingID, wallets[index].Provider)
+			err = pg.LinkWallet(ctx, wallets[index].ID, userDepositDestination, providerLinkingID, wallets[index].Provider, "")
 		}(i)
 	}
-
 	wg.Wait()
 
-	used, max, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
+	used, max, err := pg.GetCustodianLinkCount(ctx, providerLinkingID, "")
 
 	suite.Require().NoError(err, "should have no error getting custodian link count")
 	suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))
