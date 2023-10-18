@@ -247,9 +247,25 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errors.New("order item does not exist for order")
 	}
 
-	if orderItem.CredentialType == "single-use" {
+	if orderItem.CredentialType == singleUse {
 		if len(blindedCreds) > orderItem.Quantity {
 			return errors.New("submitted more blinded creds than quantity of order item")
+		}
+	}
+
+	if orderItem.CredentialType == timeLimitedV2 {
+		// check order "numPerInterval" from metadata and multiply it by the buffer added to offset
+		numPerInterval, ok := order.Metadata["numPerInterval"].(int)
+		if !ok {
+			return errors.New("bad order: numPerInterval not set in order metadata")
+		}
+		numIntervals, ok := order.Metadata["numIntervals"].(int)
+		if !ok {
+			return errors.New("bad order: numIntervals not set in order metadata")
+		}
+
+		if len(blindedCreds) > numPerInterval*numIntervals {
+			return errors.New("submitted more blinded creds than allowed for order")
 		}
 	}
 
