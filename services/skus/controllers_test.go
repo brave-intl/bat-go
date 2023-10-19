@@ -1602,8 +1602,8 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 }
 
 // This test performs a full e2e test using challenge bypass server to sign time limited v2 order credentials.
-// It uses three tokens and expects two signing results (which is determined by the issuer buffer/overlap and CBR)
-// which translates to two time limited v2 order credentials being stored for the single order containing
+// It uses three tokens and expects three signing results (which is determined by the issuer buffer/overlap and CBR)
+// which translates to three time limited v2 order credentials being stored for the single order containing
 // a single order item.
 func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_TimeLimitedV2() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1660,7 +1660,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		ItemID: order.Items[0].ID,
 		// these are already base64 encoded
 		BlindedCreds: []string{"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
-			"Hi1j/9Pen5vRvGSLn6eZCxgtkgZX7LU9edmOD2w5CWo="},
+			"Hi1j/9Pen5vRvGSLn6eZCxgtkgZX7LU9edmOD2w5CWo=", "YG07TqExOSoo/46SIWK42OG0of3z94Y5SzCswW6sYSw="},
 	}
 
 	payload, err := json.Marshal(data)
@@ -1743,7 +1743,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 
 	suite.Assert().Equal(order.ID, response[0].OrderID)
 	suite.Assert().NotEmpty(response[0].IssuerID)
-	suite.Assert().Equal(2, len(response))
+	suite.Assert().Equal(3, len(response))
 }
 
 func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderCredentials() {
