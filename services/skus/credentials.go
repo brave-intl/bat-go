@@ -13,7 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
+	kafka "github.com/segmentio/kafka-go"
 
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -223,7 +223,7 @@ type TimeLimitedCreds struct {
 
 // CreateOrderItemCredentials creates the order credentials for the given order id using the supplied blinded credentials.
 // If the order is unpaid an error ErrOrderUnpaid is returned.
-func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string, requestID uuid.UUID) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
@@ -247,6 +247,31 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 
 	if orderItem == nil {
 		return errors.New("order item does not exist for order")
+	}
+
+	// TLV2 check to see if we have credentials signed that match incoming blinded tokens
+	if orderItem.CredentialType == timeLimitedV2 {
+		alreadySubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, blindedCreds...)
+		if err != nil {
+			return fmt.Errorf("Error validating credentials exist for order: %w", err)
+		}
+		if alreadySubmitted {
+			// since these are already submitted, no need to create order credentials
+			// return ok
+			return nil
+		}
+	}
+
+	// check if we already have a signing request for this order, delete order creds will
+	// delete the prior signing request.  this allows subscriptions to manage how many
+	// order creds are handed out.
+	signingOrderRequests, err := s.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
+	if err != nil {
+		return fmt.Errorf("Error validating no credentials exist for order: %w", err)
+	}
+
+	if len(signingOrderRequests) > 0 {
+		return errors.New("There are existing order credentials created for this order")
 	}
 
 	if err := checkNumBlindedCreds(order, orderItem, len(blindedCreds)); err != nil {
@@ -274,8 +299,6 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 	if err != nil {
 		return fmt.Errorf("error serializing associated data: %w", err)
 	}
-
-	requestID := uuid.NewV4()
 
 	signingOrderRequest := SigningOrderRequest{
 		RequestID: requestID.String(),
