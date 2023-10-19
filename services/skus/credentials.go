@@ -219,6 +219,14 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
+var (
+	numPerInterval          = "numPerInterval"
+	numIntervals            = "numIntervals"
+	errNumPerIntervalNotSet = errors.New("bad order: numPerInterval not set in order metadata")
+	errNumIntervalsNotSet   = errors.New("bad order: numIntervals not set in order metadata")
+	errInvalidNumTokens     = errors.New("submitted more blinded creds than allowed for order")
+)
+
 // CreateOrderItemCredentials creates the order credentials for the given order id using the supplied blinded credentials.
 // If the order is unpaid an error ErrOrderUnpaid is returned.
 func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
@@ -255,17 +263,17 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 
 	if orderItem.CredentialType == timeLimitedV2 {
 		// check order "numPerInterval" from metadata and multiply it by the buffer added to offset
-		numPerInterval, ok := order.Metadata["numPerInterval"].(int)
+		numPerInterval, ok := order.Metadata[numPerInterval].(float64)
 		if !ok {
-			return errors.New("bad order: numPerInterval not set in order metadata")
+			return errNumPerIntervalNotSet
 		}
-		numIntervals, ok := order.Metadata["numIntervals"].(int)
+		numIntervals, ok := order.Metadata[numIntervals].(float64)
 		if !ok {
-			return errors.New("bad order: numIntervals not set in order metadata")
+			return errNumIntervalsNotSet
 		}
 
-		if len(blindedCreds) > numPerInterval*numIntervals {
-			return errors.New("submitted more blinded creds than allowed for order")
+		if len(blindedCreds) > int(numPerInterval*numIntervals) {
+			return errInvalidNumTokens
 		}
 	}
 
