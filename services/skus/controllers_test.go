@@ -1601,6 +1601,96 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	suite.Assert().NotEmpty(response[0].SignedCreds)
 }
 
+func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_TooManyBlindedTokens_TimeLimitedV2() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	env := os.Getenv("ENV")
+	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, env)
+
+	// setup kafka
+	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaSignedOrderCredsDLQTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC_DLQ")
+	kafkaSignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
+	kafkaSignedRequestReaderGroupID = test.RandomString()
+	ctx = skustest.SetupKafka(ctx, suite.T(), kafkaUnsignedOrderCredsTopic,
+		kafkaSignedOrderCredsDLQTopic, kafkaSignedOrderCredsTopic)
+
+	// create macaroon token for sku and whitelist
+	sku := test.RandomString()
+	price := 0
+	token := suite.CreateMacaroon(sku, price) // create macaroon has a buffer of 3 hardcoded, no overlap
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{token})
+
+	// create order with order items
+	request := model.CreateOrderRequest{
+		Email: test.RandomString(),
+		Items: []model.OrderItemRequest{
+			{
+				SKU:      token,
+				Quantity: 1,
+			},
+		},
+	}
+	client, err := cbr.New()
+	suite.Require().NoError(err)
+
+	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
+
+	service := &Service{
+		issuerRepo: repository.NewIssuer(),
+		Datastore:  suite.storage,
+		cbClient:   client,
+		retry:      backoff.Retry,
+	}
+
+	order, err := service.CreateOrderFromRequest(ctx, request)
+	suite.Require().NoError(err)
+
+	err = service.Datastore.UpdateOrder(order.ID, OrderStatusPaid) // to update the last paid at
+	suite.Require().NoError(err)
+
+	// Create order credentials for the newly create order
+	data := CreateOrderCredsRequest{
+		ItemID: order.Items[0].ID,
+		// these are already base64 encoded
+		BlindedCreds: []string{ // using 7 tokens should be too many for intervals 3, num per interval 2
+			"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"Hi1j/9Pen5vRvGSLn6eZCxgtkgZX7LU9edmOD2w5CWo=",
+			"YG07TqExOSoo/46SIWK42OG0of3z94Y5SzCswW6sYSw="},
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	requestID := uuid.NewV4().String()
+	ctx = context.WithValue(ctx, requestutils.RequestID, requestID)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials",
+		order.ID), bytes.NewBuffer(payload)).WithContext(ctx)
+
+	rw := httptest.NewRecorder()
+
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer())
+	suite.Require().NoError(err)
+
+	authMwr := NewAuthMwr(skuService)
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
+
+	suite.Require().Equal(http.StatusBadRequest, rw.Code) // should get 400 back too many credentials
+}
+
 // This test performs a full e2e test using challenge bypass server to sign time limited v2 order credentials.
 // It uses three tokens and expects three signing results (which is determined by the issuer buffer/overlap and CBR)
 // which translates to three time limited v2 order credentials being stored for the single order containing
