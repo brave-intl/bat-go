@@ -97,6 +97,7 @@ func Router(
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
 		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
+		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", CreateOrderItemCreds(svc)))
 		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
 		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
 		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
@@ -574,6 +575,74 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		requestID := uuid.NewV4()
 
 		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, requestID, req.BlindedCreds); err != nil {
+			logger.Error().Err(err).Msg("failed to create the order credentials")
+			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
+// CreateOrderItemCredsRequest includes the blinded credentials which are to be signed
+type CreateOrderItemCredsRequest struct {
+	BlindedCreds []string `json:"blindedCreds" valid:"base64"`
+}
+
+// CreateOrderItemCreds is the handler for creating order credentials
+func CreateOrderItemCreds(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			req    = new(CreateOrderItemCredsRequest)
+			ctx    = r.Context()
+			logger = logging.Logger(ctx, "skus.CreateOrderItemCreds")
+		)
+
+		err := requestutils.ReadJSON(ctx, r.Body, req)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to read body payload")
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to validate struct")
+			return handlers.WrapValidationError(err)
+		}
+
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
+			logger.Error().Err(err).Msg("failed to validate order id")
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		var itemID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParam(r, "itemID")); err != nil {
+			logger.Error().Err(err).Msg("failed to validate item id")
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"itemID": err.Error(),
+				},
+			)
+		}
+
+		var requestID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(ctx, requestID, chi.URLParam(r, "requestID")); err != nil {
+			logger.Error().Err(err).Msg("failed to validate request id")
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"requestID": err.Error(),
+				},
+			)
+		}
+
+		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), req.BlindedCreds, *requestID.UUID()); err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
