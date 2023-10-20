@@ -33,8 +33,8 @@ const (
 )
 
 var (
-	ErrOrderUnpaid     = errors.New("order not paid")
-	ErrOrderHasNoItems = errors.New("order has no items")
+	ErrOrderUnpaid                 = errors.New("order not paid")
+	ErrOrderHasNoItems model.Error = "order has no items"
 
 	errInvalidIssuerResp model.Error = "invalid issuer response"
 
@@ -600,9 +600,10 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 	return nil
 }
 
-// DeleteOrderCreds performs a hard delete of all the order credentials associated with the given OrderID.
-// This includes both time limited v2 and single use credentials.
-// The isSigned param only applies to single use and will always be false for time limited v2.
+// DeleteOrderCreds hard-deletes all the order credentials associated with the given orderID.
+//
+// This includes both time-limited-v2 and single-use credentials.
+// The isSigned param only applies to single use and will always be false for time-limited-v2.
 // Credentials cannot be deleted when an order is in the process of being signed.
 func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
 	order, err := s.Datastore.GetOrder(orderID)
@@ -610,40 +611,58 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return err
 	}
 
-	if len(order.Items) == 0 {
+	nitems := len(order.Items)
+	if nitems == 0 {
 		return ErrOrderHasNoItems
 	}
 
-	if order.Items[0].CredentialType == timeLimited {
+	// Exit early in this special case.
+	if nitems == 1 && order.Items[0].CredentialType == timeLimited {
 		return nil
 	}
 
-	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("error retrieveing txn delete order cred")
+		return err
 	}
-	defer rollback()
+	defer s.Datastore.RollbackTx(tx)
 
-	switch order.Items[0].CredentialType {
-	case singleUse:
-		err = s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned)
-		if err != nil {
-			return fmt.Errorf("error deleting single use order creds: %w", err)
-		}
-	case timeLimitedV2:
-		err = s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID)
-		if err != nil {
-			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
+	var didSingleUse, didTlv2 bool
+
+	// TODO(pavelb):
+	// - create repos for credentials;
+	// - move the corresponding methods there;
+	// - make those methods work on per-item basis.
+	for i := range order.Items {
+		item := order.Items[i]
+
+		switch item.CredentialType {
+		case timeLimited:
+			continue
+		case singleUse:
+			if !didSingleUse {
+				if err := s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned); err != nil {
+					return fmt.Errorf("error deleting single use order creds: %w", err)
+				}
+			}
+
+			didSingleUse = true
+		case timeLimitedV2:
+			if !didTlv2 {
+				if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
+					return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
+				}
+			}
+
+			didTlv2 = true
 		}
 	}
 
-	err = s.Datastore.DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID)
-	if err != nil {
+	if err := s.Datastore.DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID); err != nil {
 		return fmt.Errorf("error deleting order creds signing in progress")
 	}
 
-	err = commit()
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("error commiting delete order creds: %w", err)
 	}
 
