@@ -664,17 +664,17 @@ func checkNumBlindedCreds(ord *model.Order, item *model.OrderItem, ncreds int) e
 
 		return nil
 	case timeLimitedV2:
-		numPI, err := ord.NumPerInterval()
+		nperInterval, err := ord.NumPerInterval()
 		if err != nil {
 			return err
 		}
 
-		numI, err := ord.NumIntervals()
+		nintervals, err := ord.NumIntervals()
 		if err != nil {
 			return err
 		}
 
-		if ncreds > numPI*numI {
+		if ncreds > nperInterval*nintervals {
 			return errInvalidNCredsTlv2
 		}
 
