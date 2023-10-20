@@ -674,7 +674,7 @@ func checkNumBlindedCreds(ord *model.Order, item *model.OrderItem, ncreds int) e
 			return err
 		}
 
-		if ncreds > int(numPI*numI) {
+		if ncreds > numPI*numI {
 			return errInvalidNCredsTlv2
 		}
 
