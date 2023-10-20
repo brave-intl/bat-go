@@ -36,7 +36,9 @@ var (
 	ErrOrderUnpaid     = errors.New("order not paid")
 	ErrOrderHasNoItems = errors.New("order has no items")
 
-	errInvalidIssuerResp model.Error = "invalid issuer response"
+	errInvalidIssuerResp      model.Error = "invalid issuer response"
+	errInvalidNCredsSingleUse model.Error = "submitted more blinded creds than quantity of order item"
+	errInvalidNCredsTlv2      model.Error = "submitted more blinded creds than allowed for order"
 
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
 	retryPolicy      = retrypolicy.DefaultRetry
@@ -219,14 +221,6 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
-var (
-	numPerInterval          = "numPerInterval"
-	numIntervals            = "numIntervals"
-	errNumPerIntervalNotSet = errors.New("bad order: numPerInterval not set in order metadata")
-	errNumIntervalsNotSet   = errors.New("bad order: numIntervals not set in order metadata")
-	errInvalidNumTokens     = errors.New("submitted more blinded creds than allowed for order")
-)
-
 // CreateOrderItemCredentials creates the order credentials for the given order id using the supplied blinded credentials.
 // If the order is unpaid an error ErrOrderUnpaid is returned.
 func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
@@ -255,26 +249,8 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errors.New("order item does not exist for order")
 	}
 
-	if orderItem.CredentialType == singleUse {
-		if len(blindedCreds) > orderItem.Quantity {
-			return errors.New("submitted more blinded creds than quantity of order item")
-		}
-	}
-
-	if orderItem.CredentialType == timeLimitedV2 {
-		// check order "numPerInterval" from metadata and multiply it by the buffer added to offset
-		numPerInterval, ok := order.Metadata[numPerInterval].(float64)
-		if !ok {
-			return errNumPerIntervalNotSet
-		}
-		numIntervals, ok := order.Metadata[numIntervals].(float64)
-		if !ok {
-			return errNumIntervalsNotSet
-		}
-
-		if len(blindedCreds) > int(numPerInterval*numIntervals) {
-			return errInvalidNumTokens
-		}
+	if err := checkNumBlindedCreds(order, orderItem, len(blindedCreds)); err != nil {
+		return err
 	}
 
 	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
@@ -672,4 +648,38 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	return nil
+}
+
+// checkNumBlindedCreds checks the number of submitted blinded credentials.
+//
+// The number of submitted credentials must not exceed:
+// - for single-use the quantity of the item;
+// - for time-limited-v2 the product of numPerInterval and numIntervals.
+func checkNumBlindedCreds(ord *model.Order, item *model.OrderItem, ncreds int) error {
+	switch item.CredentialType {
+	case singleUse:
+		if ncreds > item.Quantity {
+			return errInvalidNCredsSingleUse
+		}
+
+		return nil
+	case timeLimitedV2:
+		numPI, err := ord.NumPerInterval()
+		if err != nil {
+			return err
+		}
+
+		numI, err := ord.NumIntervals()
+		if err != nil {
+			return err
+		}
+
+		if ncreds > int(numPI*numI) {
+			return errInvalidNCredsTlv2
+		}
+
+		return nil
+	default:
+		return nil
+	}
 }

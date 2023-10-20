@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/lib/pq"
@@ -32,10 +33,17 @@ const (
 	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
 	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
 
+	ErrNumPerIntervalNotSet  Error = "model: invalid order: numPerInterval must be set"
+	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"
+	ErrInvalidNumPerInterval Error = "model: invalid order: invalid numPerInterval"
+	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
+
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
 	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
 	ErrInvalidOrderRequest     Error = "model: no items to be created"
+
+	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 
 const (
@@ -244,6 +252,34 @@ func (o *Order) GetTrialDays() int64 {
 	}
 
 	return *o.TrialDays
+}
+
+func (o *Order) NumPerInterval() (int, error) {
+	numRaw, ok := o.Metadata["numPerInterval"]
+	if !ok {
+		return 0, ErrNumPerIntervalNotSet
+	}
+
+	result, err := numFromAny(numRaw)
+	if err != nil {
+		return 0, ErrInvalidNumPerInterval
+	}
+
+	return result, nil
+}
+
+func (o *Order) NumIntervals() (int, error) {
+	numRaw, ok := o.Metadata["numIntervals"]
+	if !ok {
+		return 0, ErrNumIntervalsNotSet
+	}
+
+	result, err := numFromAny(numRaw)
+	if err != nil {
+		return 0, ErrInvalidNumIntervals
+	}
+
+	return result, nil
 }
 
 // OrderItem represents a particular order item.
@@ -567,4 +603,23 @@ func addURLParam(src, name, val string) (string, error) {
 	raw.RawQuery = v.Encode()
 
 	return raw.String(), nil
+}
+
+func numFromAny(raw any) (int, error) {
+	switch v := raw.(type) {
+	case int:
+		return v, nil
+	case int64:
+		return int(v), nil
+	case int32:
+		return int(v), nil
+	case float32:
+		return int(v), nil
+	case float64:
+		return int(v), nil
+	case string:
+		return strconv.Atoi(v)
+	default:
+		return 0, errInvalidNumConversion
+	}
 }
