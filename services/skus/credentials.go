@@ -36,7 +36,9 @@ var (
 	ErrOrderUnpaid     = errors.New("order not paid")
 	ErrOrderHasNoItems = errors.New("order has no items")
 
-	errInvalidIssuerResp model.Error = "invalid issuer response"
+	errInvalidIssuerResp      model.Error = "invalid issuer response"
+	errInvalidNCredsSingleUse model.Error = "submitted more blinded creds than quantity of order item"
+	errInvalidNCredsTlv2      model.Error = "submitted more blinded creds than allowed for order"
 
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
 	retryPolicy      = retrypolicy.DefaultRetry
@@ -247,10 +249,8 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errors.New("order item does not exist for order")
 	}
 
-	if orderItem.CredentialType == "single-use" {
-		if len(blindedCreds) > orderItem.Quantity {
-			return errors.New("submitted more blinded creds than quantity of order item")
-		}
+	if err := checkNumBlindedCreds(order, orderItem, len(blindedCreds)); err != nil {
+		return err
 	}
 
 	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
@@ -648,4 +648,38 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	return nil
+}
+
+// checkNumBlindedCreds checks the number of submitted blinded credentials.
+//
+// The number of submitted credentials must not exceed:
+// - for single-use the quantity of the item;
+// - for time-limited-v2 the product of numPerInterval and numIntervals.
+func checkNumBlindedCreds(ord *model.Order, item *model.OrderItem, ncreds int) error {
+	switch item.CredentialType {
+	case singleUse:
+		if ncreds > item.Quantity {
+			return errInvalidNCredsSingleUse
+		}
+
+		return nil
+	case timeLimitedV2:
+		nperInterval, err := ord.NumPerInterval()
+		if err != nil {
+			return err
+		}
+
+		nintervals, err := ord.NumIntervals()
+		if err != nil {
+			return err
+		}
+
+		if ncreds > nperInterval*nintervals {
+			return errInvalidNCredsTlv2
+		}
+
+		return nil
+	default:
+		return nil
+	}
 }
