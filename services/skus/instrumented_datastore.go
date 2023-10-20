@@ -156,8 +156,18 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 	return _d.base.CreateKey(merchant, name, encryptedSecretKey, nonce)
 }
 
-func (_d DatastoreWithPrometheus) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, req *model.OrderNew, items []model.OrderItem) (op1 *model.Order, err error) {
-	return _d.base.CreateOrder(ctx, dbi, req, items)
+// CreateOrder implements Datastore
+func (_d DatastoreWithPrometheus) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (op1 *model.Order, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateOrder", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CreateOrder(ctx, dbi, oreq, items)
 }
 
 // CreateTransaction implements Datastore
@@ -412,6 +422,20 @@ func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrderItem(ctx co
 	return _d.base.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
 }
 
+// GetSigningOrderRequestOutboxByRequestID implements Datastore
+func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (sp1 *SigningOrderRequestOutbox, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningOrderRequestOutboxByRequestID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
+}
+
 // GetSigningOrderRequestOutboxByRequestIDTx implements Datastore
 func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (sp1 *SigningOrderRequestOutbox, err error) {
 	_since := time.Now()
@@ -466,6 +490,20 @@ func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrderItem(itemID u
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTimeLimitedV2OrderCredsByOrderItem", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetTimeLimitedV2OrderCredsByOrderItem(itemID)
+}
+
+// GetTimeLimitedV2OrderCredsByRequestID implements Datastore
+func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByRequestID(requestID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTimeLimitedV2OrderCredsByRequestID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetTimeLimitedV2OrderCredsByRequestID(requestID)
 }
 
 // GetTransaction implements Datastore

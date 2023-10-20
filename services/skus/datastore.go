@@ -11,10 +11,10 @@ import (
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -81,10 +81,12 @@ type Datastore interface {
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
+	GetTimeLimitedV2OrderCredsByRequestID(requestID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
+	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
@@ -994,6 +996,34 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 	return &timeLimitedV2Creds, nil
 }
 
+// GetTimeLimitedV2OrderCredsByRequestID returns all the non expired time limited v2 order credentials for a given requestID.
+func (pg *Postgres) GetTimeLimitedV2OrderCredsByRequestID(requestID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	query := `
+		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key,
+		valid_from, valid_to
+		from time_limited_v2_order_creds
+		where request_id = $1 and valid_to > now()
+	`
+
+	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
+	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, requestID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(timeAwareSubIssuedCreds) == 0 {
+		return nil, nil
+	}
+
+	timeLimitedV2Creds := TimeLimitedV2Creds{
+		OrderID:     timeAwareSubIssuedCreds[0].OrderID,
+		IssuerID:    timeAwareSubIssuedCreds[0].IssuerID,
+		Credentials: timeAwareSubIssuedCreds,
+	}
+
+	return &timeLimitedV2Creds, nil
+}
+
 // GetTimeLimitedV2OrderCredsByOrderItem returns all the order credentials for a single order item.
 func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
@@ -1278,7 +1308,6 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 			}
 
 		case timeLimitedV2:
-
 			if so.ValidTo.Value() == nil {
 				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null: %w",
 					metadata.OrderID, metadata.ItemID, err)

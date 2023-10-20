@@ -16,14 +16,14 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/v72"
+	stripe "github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
@@ -50,10 +50,11 @@ import (
 )
 
 var (
-	errSetRetryAfter             = errors.New("set retry-after")
-	errClosingResource           = errors.New("error closing resource")
-	errInvalidRadomURL           = model.Error("service: invalid radom url")
-	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
+	errSetRetryAfter               = errors.New("set retry-after")
+	errClosingResource             = errors.New("error closing resource")
+	errInvalidRadomURL             = model.Error("service: invalid radom url")
+	errGeminiClientNotConfigured   = errors.New("service: gemini client not configured")
+	errMismatchedOrderAndRequestID = errors.New("mismatched order and request id")
 
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
@@ -142,7 +143,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	}
 
 	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"vote":                       voteSchema,
+		"vote": voteSchema,
 		kafkaUnsignedOrderCredsTopic: signingOrderRequestSchema,
 		kafkaSignedOrderCredsTopic:   signingOrderResultSchema,
 	})
@@ -996,26 +997,33 @@ const (
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
 
-// GetItemCredentials - based on the order, get the associated credentials
-func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.UUID) (interface{}, int, error) {
-	orderCreds, status, err := s.GetCredentials(ctx, orderID)
-	if err != nil {
-		return nil, status, err
+// GetItemCredentialsByID - based on the order, item and request id - get the associated credentials
+func (s *Service) GetItemCredentialsByID(ctx context.Context, orderID, itemID, requestID uuid.UUID) (interface{}, int, error) {
+	order, err := s.Datastore.GetOrder(orderID)
+	if err != nil || order == nil {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
 	}
 
-	for _, oc := range orderCreds.([]OrderCreds) {
-		if uuid.Equal(oc.ID, itemID) {
-			return oc, status, nil
+	for _, v := range order.Items {
+		if uuid.Equal(v.ID, itemID) {
+			switch v.CredentialType {
+			case singleUse:
+				return s.GetSingleUseCredsByID(ctx, order, itemID, requestID)
+			case timeLimited:
+				return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
+			case timeLimitedV2:
+				return s.GetTimeLimitedV2CredsByID(ctx, order, itemID, requestID)
+			}
+			return nil, http.StatusConflict, errInvalidCredentialType
+
 		}
 	}
-	// order creds are not available yet
-	return nil, status, nil
+
+	return nil, http.StatusNotFound, fmt.Errorf("failed to get item: %w", err)
 }
 
 // GetCredentials - based on the order, get the associated credentials
 func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
-	var credentialType string
-
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -1025,56 +1033,51 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
 	}
 
-	// look through order, find out what all the order item's credential types are
-	for i, v := range order.Items {
-		if i > 0 {
-			if v.CredentialType != credentialType {
-				// all the order items on the order need the same credential type
-				return nil, http.StatusConflict, fmt.Errorf("all items must have the same credential type")
-			}
-		} else {
-			credentialType = v.CredentialType
-		}
+	if len(order.Items) != 1 {
+		return nil, http.StatusConflict, fmt.Errorf("order must only have one item")
 	}
 
+	itemID := order.Items[0].ID
+	requestID := itemID
+	credentialType := order.Items[0].CredentialType
 	switch credentialType {
 	case singleUse:
-		return s.GetSingleUseCreds(ctx, order)
+		return s.GetSingleUseCredsByID(ctx, order, itemID, requestID)
 	case timeLimited:
-		return s.GetTimeLimitedCreds(ctx, order)
+		return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
 	case timeLimitedV2:
-		return s.GetTimeLimitedV2Creds(ctx, order)
+		return s.GetTimeLimitedV2CredsByID(ctx, order, itemID, requestID)
 	}
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
 
-// GetSingleUseCreds returns all the single use credentials for a given order.
+// GetSingleUseCredsByID returns all the single use credentials for a given order.
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the order credentials.
-func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderCreds, int, error) {
+func (s *Service) GetSingleUseCredsByID(ctx context.Context, order *Order, itemID uuid.UUID, requestID uuid.UUID) ([]OrderCreds, int, error) {
 	if order == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
 
-	creds, err := s.Datastore.GetOrderCreds(order.ID, false)
+	// single use credentials retain the old semantics, only one request
+	// is ever allowed
+	creds, err := s.Datastore.GetOrderCredsByItemID(order.ID, itemID, false)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get single use creds: %w", err)
 	}
 
-	if len(creds) > 0 {
+	if creds != nil {
 		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
-		for i := 0; i < len(creds); i++ {
-			if creds[i].SignedCreds == nil {
-				return nil, http.StatusAccepted, nil
-			}
+		if creds.SignedCreds == nil {
+			return nil, http.StatusAccepted, nil
 		}
 		// TODO: End
-		return creds, http.StatusOK, nil
+		return []OrderCreds{*creds}, http.StatusOK, nil
 	}
 
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
 	if len(outboxMessages) == 0 {
@@ -1086,38 +1089,44 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 			return nil, http.StatusAccepted, nil
 		}
 	}
-
-	return creds, http.StatusOK, nil
+	return nil, http.StatusInternalServerError, fmt.Errorf("unreachable condition")
 }
 
-// GetTimeLimitedV2Creds returns all the single use credentials for a given order.
+// GetTimeLimitedV2CredsByID returns all the time limited v2 credentials for a given order and request id.
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
-func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeAwareSubIssuedCreds, int, error) {
+func (s *Service) GetTimeLimitedV2CredsByID(ctx context.Context, order *Order, itemID uuid.UUID, requestID uuid.UUID) ([]TimeAwareSubIssuedCreds, int, error) {
 	var resp = []TimeAwareSubIssuedCreds{} // browser api_request_helper does not understand "null" as json
 	if order == nil {
 		return resp, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
 	}
 
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
+	outboxMessage, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
 	if err != nil {
 		return resp, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
-	if len(outboxMessages) == 0 {
+	if outboxMessage == nil {
 		return resp, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
 	}
 
-	for _, m := range outboxMessages {
-		if m.CompletedAt == nil {
-			// get average of last 10 outbox messages duration as the retry after
-			return resp, http.StatusAccepted, errSetRetryAfter
-		}
+	if outboxMessage.OrderID != order.ID {
+		return resp, http.StatusBadRequest, errMismatchedOrderAndRequestID
 	}
 
-	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	if outboxMessage.CompletedAt == nil {
+		// get average of last 10 outbox messages duration as the retry after
+		return resp, http.StatusAccepted, errSetRetryAfter
+	}
+
+	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByRequestID(requestID)
 	if err != nil {
 		return resp, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	if creds.OrderID != order.ID {
+		return resp, http.StatusBadRequest, errMismatchedOrderAndRequestID
+
 	}
 
 	// Potentially we can have all creds signed but nothing to return as they are all expired.
@@ -1244,8 +1253,8 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 	return credentials, nil
 }
 
-// GetTimeLimitedCreds get an order's time limited creds
-func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
+// GetTimeLimitedCredsByID get an order's time limited creds
+func (s *Service) GetTimeLimitedCredsByID(ctx context.Context, order *Order, itemID uuid.UUID, requestID uuid.UUID) ([]TimeLimitedCreds, int, error) {
 	if order == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
@@ -1265,7 +1274,6 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 		}
 	}
 
-	var credentials []TimeLimitedCreds
 	secret, err := s.GetActiveCredentialSigningKey(ctx, order.MerchantID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get merchant signing key: %w", err)
@@ -1273,40 +1281,41 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	timeLimitedSecret := cryptography.NewTimeLimitedSecret(secret)
 
 	for _, item := range order.Items {
+		if uuid.Equal(item.ID, itemID) {
+			if item.ValidForISO == nil {
+				return nil, http.StatusBadRequest, fmt.Errorf("order item has no valid for time")
+			}
+			duration, err := timeutils.ParseDuration(*(item.ValidForISO))
+			if err != nil {
+				return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse order duration for credentials")
+			}
 
-		if item.ValidForISO == nil {
-			return nil, http.StatusBadRequest, fmt.Errorf("order item has no valid for time")
-		}
-		duration, err := timeutils.ParseDuration(*(item.ValidForISO))
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse order duration for credentials")
-		}
+			if item.IssuanceIntervalISO == nil {
+				item.IssuanceIntervalISO = new(string)
+				*(item.IssuanceIntervalISO) = "P1D"
+			}
+			interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
+			if err != nil {
+				return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse issuance interval for credentials")
+			}
 
-		if item.IssuanceIntervalISO == nil {
-			item.IssuanceIntervalISO = new(string)
-			*(item.IssuanceIntervalISO) = "P1D"
-		}
-		interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse issuance interval for credentials")
-		}
+			issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
+			if err != nil {
+				return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
+			}
 
-		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
-		}
+			credentials, err := timeChunking(ctx, issuerID, timeLimitedSecret, order.ID, item.ID, *issuedAt, *duration, *interval)
+			if err != nil {
+				return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
+			}
 
-		creds, err := timeChunking(ctx, issuerID, timeLimitedSecret, order.ID, item.ID, *issuedAt, *duration, *interval)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
+			if len(credentials) > 0 {
+				return credentials, http.StatusOK, nil
+			}
+			return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
 		}
-		credentials = append(credentials, creds...)
 	}
-
-	if len(credentials) > 0 {
-		return credentials, http.StatusOK, nil
-	}
-	return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
+	return nil, http.StatusBadRequest, fmt.Errorf("could not find specified item")
 }
 
 type credential interface {

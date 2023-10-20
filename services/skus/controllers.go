@@ -99,7 +99,7 @@ func Router(
 		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
 		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", CreateOrderItemCreds(svc)))
 		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
-		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
+		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
 		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
 	})
 
@@ -572,7 +572,8 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		requestID := uuid.NewV4()
+		// Use the itemID for the requestID so we continue to enforce the old credential uniqueness constraint
+		requestID := req.ItemID
 
 		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, requestID, req.BlindedCreds); err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
@@ -642,7 +643,7 @@ func CreateOrderItemCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), req.BlindedCreds, *requestID.UUID()); err != nil {
+		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), *requestID.UUID(), req.BlindedCreds); err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
@@ -717,6 +718,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 		var (
 			orderID           = new(inputs.ID)
 			itemID            = new(inputs.ID)
+			requestID         = new(inputs.ID)
 			validationPayload = map[string]interface{}{}
 			err               error
 		)
@@ -733,6 +735,12 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 			validationPayload["itemID"] = err.Error()
 		}
 
+		// decode and validate requestID url param
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), requestID, chi.URLParam(r, "requestID")); err != nil {
+			validationPayload["requestID"] = err.Error()
+		}
+
 		// did we get any validation errors?
 		if len(validationPayload) > 0 {
 			return handlers.ValidationError(
@@ -740,7 +748,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, status, err := service.GetItemCredentials(r.Context(), *orderID.UUID(), *itemID.UUID())
+		creds, status, err := service.GetItemCredentialsByID(r.Context(), *orderID.UUID(), *itemID.UUID(), *requestID.UUID())
 		if err != nil {
 			if errors.Is(err, errSetRetryAfter) {
 				// error specifies a retry after period, add to response header
