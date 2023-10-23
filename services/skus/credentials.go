@@ -616,8 +616,7 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return err
 	}
 
-	nitems := len(order.Items)
-	if nitems == 0 {
+	if len(order.Items) == 0 {
 		return ErrOrderHasNoItems
 	}
 
