@@ -605,6 +605,11 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 // This includes both time-limited-v2 and single-use credentials.
 // The isSigned param only applies to single use and will always be false for time-limited-v2.
 // Credentials cannot be deleted when an order is in the process of being signed.
+//
+// TODO(pavelb):
+// - create repos for credentials;
+// - move the corresponding methods there;
+// - make those methods work on per-item basis.
 func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
@@ -616,8 +621,21 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return ErrOrderHasNoItems
 	}
 
-	// Exit early in this special case.
-	if nitems == 1 && order.Items[0].CredentialType == timeLimited {
+	var doSingleUse, doTlv2 bool
+
+	for i := range order.Items {
+		switch order.Items[i].CredentialType {
+		case singleUse:
+			doSingleUse = true
+		case timeLimitedV2:
+			doTlv2 = true
+		}
+	}
+
+	// Handle special cases:
+	// - 1 item with time-limited credential type;
+	// - multiple items with time-limited credential type.
+	if !doSingleUse && !doTlv2 {
 		return nil
 	}
 
@@ -627,34 +645,15 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 	defer s.Datastore.RollbackTx(tx)
 
-	var didSingleUse, didTlv2 bool
+	if doSingleUse {
+		if err := s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned); err != nil {
+			return fmt.Errorf("error deleting single use order creds: %w", err)
+		}
+	}
 
-	// TODO(pavelb):
-	// - create repos for credentials;
-	// - move the corresponding methods there;
-	// - make those methods work on per-item basis.
-	for i := range order.Items {
-		item := order.Items[i]
-
-		switch item.CredentialType {
-		case timeLimited:
-			continue
-		case singleUse:
-			if !didSingleUse {
-				if err := s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned); err != nil {
-					return fmt.Errorf("error deleting single use order creds: %w", err)
-				}
-			}
-
-			didSingleUse = true
-		case timeLimitedV2:
-			if !didTlv2 {
-				if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
-					return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
-				}
-			}
-
-			didTlv2 = true
+	if doTlv2 {
+		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
+			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 		}
 	}
 
