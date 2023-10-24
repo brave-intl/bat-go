@@ -620,16 +620,7 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return ErrOrderHasNoItems
 	}
 
-	var doSingleUse, doTlv2 bool
-
-	for i := range order.Items {
-		switch order.Items[i].CredentialType {
-		case singleUse:
-			doSingleUse = true
-		case timeLimitedV2:
-			doTlv2 = true
-		}
-	}
+	doSingleUse, doTlv2 := doItemsHaveSUOrTlv2(order.Items)
 
 	// Handle special cases:
 	// - 1 item with time-limited credential type;
@@ -699,4 +690,19 @@ func checkNumBlindedCreds(ord *model.Order, item *model.OrderItem, ncreds int) e
 	default:
 		return nil
 	}
+}
+
+func doItemsHaveSUOrTlv2(items []model.OrderItem) (bool, bool) {
+	var hasSingleUse, hasTlv2 bool
+
+	for i := range items {
+		switch items[i].CredentialType {
+		case singleUse:
+			hasSingleUse = true
+		case timeLimitedV2:
+			hasTlv2 = true
+		}
+	}
+
+	return hasSingleUse, hasTlv2
 }

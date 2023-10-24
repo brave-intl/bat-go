@@ -244,3 +244,138 @@ func TestCheckNumBlindedCreds(t *testing.T) {
 		})
 	}
 }
+
+func TestDoItemsHaveSUOrTlv2(t *testing.T) {
+	type testCase struct {
+		name    string
+		given   []model.OrderItem
+		expSU   bool
+		expTlv2 bool
+	}
+
+	tests := []testCase{
+		{
+			name: "nil",
+		},
+
+		{
+			name:  "empty",
+			given: []model.OrderItem{},
+		},
+
+		{
+			name: "one_single_use",
+			given: []model.OrderItem{
+				{
+					CredentialType: singleUse,
+				},
+			},
+			expSU: true,
+		},
+
+		{
+			name: "two_single_use",
+			given: []model.OrderItem{
+				{
+					CredentialType: singleUse,
+				},
+
+				{
+					CredentialType: singleUse,
+				},
+			},
+			expSU: true,
+		},
+
+		{
+			name: "one_time_limited",
+			given: []model.OrderItem{
+				{
+					CredentialType: timeLimited,
+				},
+			},
+		},
+
+		{
+			name: "two_time_limited",
+			given: []model.OrderItem{
+				{
+					CredentialType: timeLimited,
+				},
+
+				{
+					CredentialType: timeLimited,
+				},
+			},
+		},
+
+		{
+			name: "one_time_limited_v2",
+			given: []model.OrderItem{
+				{
+					CredentialType: timeLimitedV2,
+				},
+			},
+			expTlv2: true,
+		},
+
+		{
+			name: "two_time_limited_v2",
+			given: []model.OrderItem{
+				{
+					CredentialType: timeLimitedV2,
+				},
+
+				{
+					CredentialType: timeLimitedV2,
+				},
+			},
+			expTlv2: true,
+		},
+
+		{
+			name: "one_single_use_one_time_limited_v2",
+			given: []model.OrderItem{
+				{
+					CredentialType: singleUse,
+				},
+
+				{
+					CredentialType: timeLimitedV2,
+				},
+			},
+			expSU:   true,
+			expTlv2: true,
+		},
+
+		{
+			name: "all_one",
+			given: []model.OrderItem{
+				{
+					CredentialType: singleUse,
+				},
+
+				{
+					CredentialType: timeLimited,
+				},
+
+				{
+					CredentialType: timeLimitedV2,
+				},
+			},
+			expSU:   true,
+			expTlv2: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			doSingleUse, doTlv2 := doItemsHaveSUOrTlv2(tc.given)
+
+			should.Equal(t, tc.expSU, doSingleUse)
+			should.Equal(t, tc.expTlv2, doTlv2)
+		})
+	}
+}
