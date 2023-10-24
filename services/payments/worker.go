@@ -40,7 +40,9 @@ func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, da
 		return fmt.Errorf("no api base uri for env: %s", env)
 	}
 
-	client, err := client.New(baseURI, "")
+	client, err := client.NewWithHTTPClient(baseURI, "", &http.Client{
+		Timeout: time.Second * 60,
+	})
 	if err != nil {
 		return err
 	}
@@ -58,7 +60,9 @@ func (w *Worker) HandleSubmitMessage(ctx context.Context, stream, id string, dat
 		return fmt.Errorf("no api base uri for env: %s", env)
 	}
 
-	client, err := client.New(baseURI, "")
+	client, err := client.NewWithHTTPClient(baseURI, "", &http.Client{
+		Timeout: time.Second * 60,
+	})
 	if err != nil {
 		return err
 	}
