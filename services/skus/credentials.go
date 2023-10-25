@@ -249,8 +249,8 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errors.New("order item does not exist for order")
 	}
 
-	// TLV2 check to see if we have credentials signed that match incoming blinded tokens
 	if orderItem.CredentialType == timeLimitedV2 {
+		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
 		alreadySubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, blindedCreds...)
 		if err != nil {
 			return fmt.Errorf("Error validating credentials exist for order: %w", err)
@@ -260,18 +260,37 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 			// return ok
 			return nil
 		}
-	}
 
-	// check if we already have a signing request for this order, delete order creds will
-	// delete the prior signing request.  this allows subscriptions to manage how many
-	// order creds are handed out.
-	signingOrderRequests, err := s.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
-	if err != nil {
-		return fmt.Errorf("Error validating no credentials exist for order: %w", err)
-	}
+		// check if we have signed credentials for this order item
+		// if there is no order and we have no creds, we can submit again
+		// similar to the outbox check case below, delete order creds will
+		// wipe out any already signed order creds
+		creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(itemID)
+		if err != nil {
+			return fmt.Errorf("Error validating no credentials exist for order: %w", err)
+		}
+		if creds != nil {
+			return errors.New("There are existing order credentials created for this order")
+		}
+		// NOTE: this creates a possible race to submit between clients.
+		// multiple signing request outboxes can be created since their
+		// uniqueness constraint is on the request id.
+		// despite this, the uniqueness constraint of time_limited_v2_order_creds ensures that
+		// only one set of credentials is written for each order / item & time interval.
+		// as a result, one client will successfully unblind the credentials and
+		// the others will fail.
+	} else {
+		// check if we already have a signing request for this order, delete order creds will
+		// delete the prior signing request.  this allows subscriptions to manage how many
+		// order creds are handed out.
+		signingOrderRequests, err := s.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
+		if err != nil {
+			return fmt.Errorf("Error validating no credentials exist for order: %w", err)
+		}
 
-	if len(signingOrderRequests) > 0 {
-		return errors.New("There are existing order credentials created for this order")
+		if len(signingOrderRequests) > 0 {
+			return errors.New("There are existing order credentials created for this order")
+		}
 	}
 
 	if err := checkNumBlindedCreds(order, orderItem, len(blindedCreds)); err != nil {
