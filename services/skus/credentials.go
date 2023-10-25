@@ -33,8 +33,9 @@ const (
 )
 
 var (
-	ErrOrderUnpaid     = errors.New("order not paid")
-	ErrOrderHasNoItems = errors.New("order has no items")
+	ErrOrderUnpaid         = errors.New("order not paid")
+	ErrOrderHasNoItems     = errors.New("order has no items")
+	ErrExistingCredentials = errors.New("there are existing order item credentials")
 
 	errInvalidIssuerResp      model.Error = "invalid issuer response"
 	errInvalidNCredsSingleUse model.Error = "submitted more blinded creds than quantity of order item"
@@ -253,7 +254,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
 		alreadySubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, blindedCreds...)
 		if err != nil {
-			return fmt.Errorf("Error validating credentials exist for order: %w", err)
+			return fmt.Errorf("Error validating credentials exist for order item: %w", err)
 		}
 		if alreadySubmitted {
 			// since these are already submitted, no need to create order credentials
@@ -267,10 +268,10 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		// wipe out any already signed order creds
 		creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(itemID)
 		if err != nil {
-			return fmt.Errorf("Error validating no credentials exist for order: %w", err)
+			return fmt.Errorf("Error validating no credentials exist for order item: %w", err)
 		}
 		if creds != nil {
-			return errors.New("There are existing order credentials created for this order")
+			return ErrExistingCredentials
 		}
 		// NOTE: this creates a possible race to submit between clients.
 		// multiple signing request outboxes can be created since their
@@ -285,11 +286,11 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		// order creds are handed out.
 		signingOrderRequests, err := s.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
 		if err != nil {
-			return fmt.Errorf("Error validating no credentials exist for order: %w", err)
+			return fmt.Errorf("Error validating no credentials exist for order item: %w", err)
 		}
 
 		if len(signingOrderRequests) > 0 {
-			return errors.New("There are existing order credentials created for this order")
+			return ErrExistingCredentials
 		}
 	}
 
