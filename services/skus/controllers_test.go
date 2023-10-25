@@ -1822,7 +1822,7 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(http.StatusBadRequest, appError.Code)
-	suite.Assert().Contains(appError.Error(), ErrExistingCredentials.Error())
+	suite.Assert().Contains(appError.Error(), ErrCredsAlreadyExist.Error())
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic

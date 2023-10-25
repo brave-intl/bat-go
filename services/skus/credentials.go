@@ -33,9 +33,9 @@ const (
 )
 
 var (
-	ErrOrderUnpaid         = errors.New("order not paid")
-	ErrOrderHasNoItems     = errors.New("order has no items")
-	ErrExistingCredentials = errors.New("there are existing order item credentials")
+	ErrOrderUnpaid       = errors.New("order not paid")
+	ErrOrderHasNoItems   = errors.New("order has no items")
+	ErrCredsAlreadyExist = errors.New("credentials already exist")
 
 	errInvalidIssuerResp      model.Error = "invalid issuer response"
 	errInvalidNCredsSingleUse model.Error = "submitted more blinded creds than quantity of order item"
@@ -224,7 +224,7 @@ type TimeLimitedCreds struct {
 
 // CreateOrderItemCredentials creates the order credentials for the given order id using the supplied blinded credentials.
 // If the order is unpaid an error ErrOrderUnpaid is returned.
-func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string, requestID uuid.UUID) error {
+func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemID, requestID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
@@ -271,7 +271,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 			return fmt.Errorf("Error validating no credentials exist for order item: %w", err)
 		}
 		if creds != nil {
-			return ErrExistingCredentials
+			return ErrCredsAlreadyExist
 		}
 		// NOTE: this creates a possible race to submit between clients.
 		// multiple signing request outboxes can be created since their
@@ -290,7 +290,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		}
 
 		if len(signingOrderRequests) > 0 {
-			return ErrExistingCredentials
+			return ErrCredsAlreadyExist
 		}
 	}
 

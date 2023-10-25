@@ -573,7 +573,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 
 		requestID := uuid.NewV4()
 
-		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, req.BlindedCreds, requestID); err != nil {
+		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, requestID, req.BlindedCreds); err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
