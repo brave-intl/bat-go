@@ -1815,14 +1815,14 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 		order.ID), bytes.NewBuffer(payload)).WithContext(ctx)
 
 	server.Handler.ServeHTTP(rw, r)
-	suite.Assert().Equal(http.StatusConflict, rw.Code)
+	suite.Assert().Equal(http.StatusBadRequest, rw.Code)
 
 	var appError handlers.AppError
 	err = json.NewDecoder(rw.Body).Decode(&appError)
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(http.StatusConflict, appError.Code)
-	suite.Assert().Contains(appError.Error(), "There are existing order credentials created for this order")
+	suite.Assert().Equal(http.StatusBadRequest, appError.Code)
+	suite.Assert().Contains(appError.Error(), ErrCredsAlreadyExist.Error())
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
