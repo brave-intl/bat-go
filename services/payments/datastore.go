@@ -156,11 +156,24 @@ func (q *QLDBDatastore) UpdatePaymentState(ctx context.Context, documentID strin
 		ctx,
 		func(txn qldbdriver.Transaction) (interface{}, error) {
 			_, err := txn.Execute(
-				"UPDATE transactions BY d_id SET data = ?, signature = ?, publicKey = ? WHERE d_id = ?",
+				`UPDATE transactions BY d_id
+						SET
+							data = ?,
+							signature = ?,
+							publicKey = ?
+						WHERE
+							d_id = ?
+							AND data != ?,
+							AND signature != ?,
+							AND publicKey != ?
+				`,
 				state.UnsafePaymentState,
 				state.Signature,
 				state.PublicKey,
 				documentID,
+				state.UnsafePaymentState,
+				state.Signature,
+				state.PublicKey,
 			)
 			return nil, err
 		},
