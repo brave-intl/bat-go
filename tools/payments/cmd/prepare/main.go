@@ -88,6 +88,10 @@ func main() {
 		log.Printf("Operator Key File Location: %s\n", *key)
 	}
 
+	if *env != "dev" && len(*pcr2) != 96 {
+		log.Fatal("a valid pcr2 is required to prepare in this environment\n")
+	}
+
 	// setup the settlement redis client
 	ctx, client, err := paymentscli.NewSettlementClient(ctx, *env, map[string]string{
 		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, "pcr2": *pcr2, // client specific configurations
