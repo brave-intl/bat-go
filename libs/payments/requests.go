@@ -23,4 +23,5 @@ type SubmitRequest struct {
 // error that resulted, if necessary.
 type SubmitResponse struct {
 	Status PaymentStatus `json:"status" valid:"required"`
+	PaymentDetails `json:"paymentDetails,omitempty"`
 }
