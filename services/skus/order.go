@@ -190,14 +190,11 @@ func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
 	return email
 }
 
-// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
+// RenewOrder updates the order status to paid and records payment history.
+//
 // Status should either be one of pending, paid, fulfilled, or canceled.
 func (s *Service) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
-
-	// renew order is an update order with paid status
-	// and an update order expires at with the new expiry time of the order
-	err := s.Datastore.UpdateOrder(orderID, OrderStatusPaid) // this performs a record order payment
-	if err != nil {
+	if err := s.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
 		return fmt.Errorf("failed to set order status to paid: %w", err)
 	}
 

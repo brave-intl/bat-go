@@ -626,12 +626,13 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
+		id := *orderID.UUID()
+		if err := service.validateOrderMerchantAndCaveats(ctx, id); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-		if err := service.DeleteOrderCreds(ctx, *orderID.UUID(), isSigned); err != nil {
+		if err := service.DeleteOrderCreds(ctx, id, isSigned); err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 
