@@ -13,7 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
+	kafka "github.com/segmentio/kafka-go"
 
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -33,10 +33,13 @@ const (
 )
 
 var (
-	ErrOrderUnpaid     = errors.New("order not paid")
-	ErrOrderHasNoItems = errors.New("order has no items")
+	ErrOrderUnpaid                   = errors.New("order not paid")
+	ErrOrderHasNoItems   model.Error = "order has no items"
+	ErrCredsAlreadyExist             = errors.New("credentials already exist")
 
-	errInvalidIssuerResp model.Error = "invalid issuer response"
+	errInvalidIssuerResp      model.Error = "invalid issuer response"
+	errInvalidNCredsSingleUse model.Error = "submitted more blinded creds than quantity of order item"
+	errInvalidNCredsTlv2      model.Error = "submitted more blinded creds than allowed for order"
 
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
 	retryPolicy      = retrypolicy.DefaultRetry
@@ -221,7 +224,7 @@ type TimeLimitedCreds struct {
 
 // CreateOrderItemCredentials creates the order credentials for the given order id using the supplied blinded credentials.
 // If the order is unpaid an error ErrOrderUnpaid is returned.
-func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemID, requestID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
@@ -247,10 +250,52 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 		return errors.New("order item does not exist for order")
 	}
 
-	if orderItem.CredentialType == "single-use" {
-		if len(blindedCreds) > orderItem.Quantity {
-			return errors.New("submitted more blinded creds than quantity of order item")
+	if orderItem.CredentialType == timeLimitedV2 {
+		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
+		alreadySubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, blindedCreds...)
+		if err != nil {
+			return fmt.Errorf("Error validating credentials exist for order item: %w", err)
 		}
+		if alreadySubmitted {
+			// since these are already submitted, no need to create order credentials
+			// return ok
+			return nil
+		}
+
+		// check if we have signed credentials for this order item
+		// if there is no order and we have no creds, we can submit again
+		// similar to the outbox check case below, delete order creds will
+		// wipe out any already signed order creds
+		creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(itemID)
+		if err != nil {
+			return fmt.Errorf("Error validating no credentials exist for order item: %w", err)
+		}
+		if creds != nil {
+			return ErrCredsAlreadyExist
+		}
+		// NOTE: this creates a possible race to submit between clients.
+		// multiple signing request outboxes can be created since their
+		// uniqueness constraint is on the request id.
+		// despite this, the uniqueness constraint of time_limited_v2_order_creds ensures that
+		// only one set of credentials is written for each order / item & time interval.
+		// as a result, one client will successfully unblind the credentials and
+		// the others will fail.
+	} else {
+		// check if we already have a signing request for this order, delete order creds will
+		// delete the prior signing request.  this allows subscriptions to manage how many
+		// order creds are handed out.
+		signingOrderRequests, err := s.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
+		if err != nil {
+			return fmt.Errorf("Error validating no credentials exist for order item: %w", err)
+		}
+
+		if len(signingOrderRequests) > 0 {
+			return ErrCredsAlreadyExist
+		}
+	}
+
+	if err := checkNumBlindedCreds(order, orderItem, len(blindedCreds)); err != nil {
+		return err
 	}
 
 	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
@@ -274,8 +319,6 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID uuid.U
 	if err != nil {
 		return fmt.Errorf("error serializing associated data: %w", err)
 	}
-
-	requestID := uuid.NewV4()
 
 	signingOrderRequest := SigningOrderRequest{
 		RequestID: requestID.String(),
@@ -600,10 +643,16 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 	return nil
 }
 
-// DeleteOrderCreds performs a hard delete of all the order credentials associated with the given OrderID.
-// This includes both time limited v2 and single use credentials.
-// The isSigned param only applies to single use and will always be false for time limited v2.
+// DeleteOrderCreds hard-deletes all the order credentials associated with the given orderID.
+//
+// This includes both time-limited-v2 and single-use credentials.
+// The isSigned param only applies to single use and will always be false for time-limited-v2.
 // Credentials cannot be deleted when an order is in the process of being signed.
+//
+// TODO(pavelb):
+// - create repos for credentials;
+// - move the corresponding methods there;
+// - make those methods work on per-item basis.
 func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
@@ -614,38 +663,89 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return ErrOrderHasNoItems
 	}
 
-	if order.Items[0].CredentialType == timeLimited {
+	doSingleUse, doTlv2 := doItemsHaveSUOrTlv2(order.Items)
+
+	// Handle special cases:
+	// - 1 item with time-limited credential type;
+	// - multiple items with time-limited credential type.
+	if !doSingleUse && !doTlv2 {
 		return nil
 	}
 
-	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("error retrieveing txn delete order cred")
+		return err
 	}
-	defer rollback()
+	defer s.Datastore.RollbackTx(tx)
 
-	switch order.Items[0].CredentialType {
-	case singleUse:
-		err = s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned)
-		if err != nil {
+	if doSingleUse {
+		if err := s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned); err != nil {
 			return fmt.Errorf("error deleting single use order creds: %w", err)
 		}
-	case timeLimitedV2:
-		err = s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID)
-		if err != nil {
+	}
+
+	if doTlv2 {
+		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
 			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 		}
 	}
 
-	err = s.Datastore.DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID)
-	if err != nil {
+	if err := s.Datastore.DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID); err != nil {
 		return fmt.Errorf("error deleting order creds signing in progress")
 	}
 
-	err = commit()
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("error commiting delete order creds: %w", err)
 	}
 
 	return nil
+}
+
+// checkNumBlindedCreds checks the number of submitted blinded credentials.
+//
+// The number of submitted credentials must not exceed:
+// - for single-use the quantity of the item;
+// - for time-limited-v2 the product of numPerInterval and numIntervals.
+func checkNumBlindedCreds(ord *model.Order, item *model.OrderItem, ncreds int) error {
+	switch item.CredentialType {
+	case singleUse:
+		if ncreds > item.Quantity {
+			return errInvalidNCredsSingleUse
+		}
+
+		return nil
+	case timeLimitedV2:
+		nperInterval, err := ord.NumPerInterval()
+		if err != nil {
+			return err
+		}
+
+		nintervals, err := ord.NumIntervals()
+		if err != nil {
+			return err
+		}
+
+		if ncreds > nperInterval*nintervals {
+			return errInvalidNCredsTlv2
+		}
+
+		return nil
+	default:
+		return nil
+	}
+}
+
+func doItemsHaveSUOrTlv2(items []model.OrderItem) (bool, bool) {
+	var hasSingleUse, hasTlv2 bool
+
+	for i := range items {
+		switch items[i].CredentialType {
+		case singleUse:
+			hasSingleUse = true
+		case timeLimitedV2:
+			hasTlv2 = true
+		}
+	}
+
+	return hasSingleUse, hasTlv2
 }

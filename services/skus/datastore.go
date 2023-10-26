@@ -1000,7 +1000,7 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*Ti
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key,
 		valid_from, valid_to
 		from time_limited_v2_order_creds
-		where item_id = $1
+		where item_id = $1 and valid_to > now()
 	`
 
 	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds

@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stripe/stripe-go/v72"
+	stripe "github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
@@ -571,40 +571,9 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderItem, err := service.Datastore.GetOrderItem(ctx, req.ItemID)
-		if err != nil {
-			logger.Error().Err(err).Msg("error getting the order item for creds")
-			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
-		}
+		requestID := uuid.NewV4()
 
-		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
-		if orderItem.CredentialType == timeLimitedV2 {
-			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, req.BlindedCreds...)
-			if err != nil {
-				// This is an existing error message so don't want to change it incase client are relying on it.
-				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
-			}
-			if alreadySubmitted {
-				// since these are already submitted, no need to create order credentials
-				// return ok
-				return handlers.RenderContent(ctx, nil, w, http.StatusOK)
-			}
-		}
-
-		// check if we already have a signing request for this order, delete order creds will
-		// delete the prior signing request.  this allows subscriptions to manage how many
-		// order creds are handed out.
-		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, req.ItemID)
-		if err != nil {
-			// This is an existing error message so don't want to change it incase client are relying on it.
-			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
-		}
-
-		if len(signingOrderRequests) > 0 {
-			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
-		}
-
-		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, req.BlindedCreds); err != nil {
+		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, requestID, req.BlindedCreds); err != nil {
 			logger.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
@@ -657,12 +626,13 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
+		id := *orderID.UUID()
+		if err := service.validateOrderMerchantAndCaveats(ctx, id); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-		if err := service.DeleteOrderCreds(ctx, *orderID.UUID(), isSigned); err != nil {
+		if err := service.DeleteOrderCreds(ctx, id, isSigned); err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 
