@@ -919,10 +919,12 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 }
 
 // UpdateOrderMetadata sets the order's metadata to the key and value.
+//
+// Deprecated: This method is no longer used and should be deleted.
+//
+// TODO(pavelb): Remove this method as it's dangerous and must not be used.
 func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
-	data := datastore.Metadata{key: value}
-
-	return pg.orderRepo.UpdateMetadata(context.TODO(), pg.RawDB(), orderID, data)
+	return model.Error("UpdateOrderMetadata must not be used")
 }
 
 // TimeLimitedV2Creds represent all the
@@ -1369,7 +1371,7 @@ func (pg *Postgres) AppendOrderMetadataInt(ctx context.Context, orderID *uuid.UU
 }
 
 // AppendOrderMetadata appends the key and string value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key string, value string) error {
+func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key, value string) error {
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
 	if err != nil {
 		return err
