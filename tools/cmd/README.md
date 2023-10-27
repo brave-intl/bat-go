@@ -23,17 +23,6 @@ with options
   --base-currency "USD" --address ":4321"
 ```
 
-## start rewards grpc server
-```bash
-./bat-go serve rewards grpc
-```
-with options
-```bash
-./bat-go serve rewards grpc \
-  --config "config.yaml" \
-  --ratios-token "abc" --ratios-service "123" --environment "local" \
-  --base-currency "USD" --address ":4321"
-```
 
 ## check server fingerprints
 ```bash
