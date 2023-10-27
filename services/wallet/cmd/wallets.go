@@ -24,6 +24,7 @@ var (
 )
 
 func init() {
+	// add grpc and rest commands
 	WalletsCmd.AddCommand(walletsRestCmd)
 
 	// add this command as a serve subcommand

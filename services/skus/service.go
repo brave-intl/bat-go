@@ -530,34 +530,44 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 	if _, sOK := order.Metadata["stripeSubscriptionId"]; !sOK {
 		if cs, ok := order.Metadata["stripeCheckoutSessionId"].(string); ok && cs != "" {
 			// get old checkout session from stripe by id
-			sess, err := session.Get(cs, nil)
+			stripeSession, err := session.Get(cs, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
 			}
 
-			// Set status to paid and the subscription id and if the session is actually paid.
-			if sess.PaymentStatus == "paid" {
+			if stripeSession.PaymentStatus == "paid" {
+				// if the session is actually paid, then set the subscription id and order to paid
 				if err = s.Datastore.UpdateOrder(order.ID, "paid"); err != nil {
 					return nil, fmt.Errorf("failed to update order to paid status: %w", err)
 				}
-
-				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeSubscriptionId", sess.Subscription.ID); err != nil {
+				err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeSubscriptionId", stripeSession.Subscription.ID)
+				if err != nil {
 					return nil, fmt.Errorf("failed to update order to add the subscription id")
 				}
 
-				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, paymentProcessor, StripePaymentMethod); err != nil {
+				// TODO(pavelb): Duplicate calls. Remove one.
+
+				// set paymentProcessor as stripe
+				err = s.Datastore.AppendOrderMetadata(context.Background(), &order.ID, paymentProcessor, StripePaymentMethod)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update order to add the payment processor")
+				}
+				// set paymentProcessor as stripe
+				err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, paymentProcessor, StripePaymentMethod)
+				if err != nil {
 					return nil, fmt.Errorf("failed to update order to add the payment processor")
 				}
 			}
 		}
 	}
 
-	result, err := s.Datastore.GetOrder(order.ID)
+	// get the order latest state
+	order, err = s.Datastore.GetOrder(order.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get order: %w", err)
 	}
 
-	return result, nil
+	return order, nil
 }
 
 // CancelOrder cancels an order, propagates to stripe if needed.

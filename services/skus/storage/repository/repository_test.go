@@ -180,57 +180,6 @@ func TestOrder_AppendMetadata(t *testing.T) {
 				},
 			},
 		},
-
-		{
-			name: "stripeSubscriptionId_add_with_no_previous_value",
-			given: tcGiven{
-				data: datastore.Metadata{"key_02_01": "value_02_01"},
-				key:  "stripeSubscriptionId",
-				val:  "9570bf21-98e8-4ddc-950d-a50121d48a0a",
-			},
-			exp: tcExpected{
-				data: datastore.Metadata{
-					"key_02_01":            "value_02_01",
-					"stripeSubscriptionId": "9570bf21-98e8-4ddc-950d-a50121d48a0a",
-				},
-			},
-		},
-
-		{
-			name: "stripeSubscriptionId_no_change",
-			given: tcGiven{
-				data: datastore.Metadata{
-					"key_02_01":            "value_02_01",
-					"stripeSubscriptionId": "9570bf21-98e8-4ddc-950d-a50121d48a0a",
-				},
-				key: "stripeSubscriptionId",
-				val: "9570bf21-98e8-4ddc-950d-a50121d48a0a",
-			},
-			exp: tcExpected{
-				data: datastore.Metadata{
-					"key_02_01":            "value_02_01",
-					"stripeSubscriptionId": "9570bf21-98e8-4ddc-950d-a50121d48a0a",
-				},
-			},
-		},
-
-		{
-			name: "stripeSubscriptionId_replace",
-			given: tcGiven{
-				data: datastore.Metadata{
-					"key_02_01":            "value_02_01",
-					"stripeSubscriptionId": "9570bf21-98e8-4ddc-950d-a50121d48a0a",
-				},
-				key: "stripeSubscriptionId",
-				val: "edfe50f8-06dc-4d5f-a6ca-15c8a1ce6afb",
-			},
-			exp: tcExpected{
-				data: datastore.Metadata{
-					"key_02_01":            "value_02_01",
-					"stripeSubscriptionId": "edfe50f8-06dc-4d5f-a6ca-15c8a1ce6afb",
-				},
-			},
-		},
 	}
 
 	repo := repository.NewOrder()
