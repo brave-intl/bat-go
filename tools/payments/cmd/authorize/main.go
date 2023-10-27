@@ -90,7 +90,7 @@ func main() {
 		log.Printf("Redis: %s, %s\n", *redisAddr, *redisUser)
 	}
 
-	if *env != "dev" && len(*pcr2) != 96 {
+	if *env != "development" && len(*pcr2) != 96 {
 		log.Fatal("a valid pcr2 is required to authorize in this environment\n")
 	}
 
