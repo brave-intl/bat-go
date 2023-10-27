@@ -91,7 +91,7 @@ func main() {
 	}
 
 	if *env != "development" && len(*pcr2) != 96 {
-		log.Fatal("a valid pcr2 is required to authorize in this environment\n")
+		log.Fatal("a valid pcr2 is required to authorize outside of development\n")
 	}
 
 	// setup the settlement redis client
