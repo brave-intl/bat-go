@@ -539,30 +539,26 @@ type CreateOrderCredsRequest struct {
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
-// CreateOrderCreds is the handler for creating order credentials
-func CreateOrderCreds(service *Service) handlers.AppHandler {
+// CreateOrderCreds handles requests for creating credentials.
+func CreateOrderCreds(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			req    = new(CreateOrderCredsRequest)
-			ctx    = r.Context()
-			logger = logging.Logger(ctx, "skus.CreateOrderCreds")
-		)
+		ctx := r.Context()
+		lg := logging.Logger(ctx, "skus.CreateOrderCreds")
 
-		err := requestutils.ReadJSON(ctx, r.Body, req)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to read body payload")
+		req := &CreateOrderCredsRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
+			lg.Error().Err(err).Msg("failed to read body payload")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to validate struct")
+		if _, err := govalidator.ValidateStruct(req); err != nil {
+			lg.Error().Err(err).Msg("failed to validate struct")
 			return handlers.WrapValidationError(err)
 		}
 
-		var orderID = new(inputs.ID)
+		orderID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			logger.Error().Err(err).Msg("failed to validate order id")
+			lg.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
@@ -573,8 +569,8 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 
 		requestID := uuid.NewV4()
 
-		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, requestID, req.BlindedCreds); err != nil {
-			logger.Error().Err(err).Msg("failed to create the order credentials")
+		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, requestID, req.BlindedCreds); err != nil {
+			lg.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
