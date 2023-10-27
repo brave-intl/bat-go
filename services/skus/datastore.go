@@ -1118,18 +1118,15 @@ func (pg *Postgres) UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *s
 	return nil
 }
 
-// InsertSigningOrderRequestOutbox insert the signing order request into the outbox.
-func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID,
-	itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
-
+// InsertSigningOrderRequestOutbox inserts the signing order request into the outbox.
+func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, requestID, orderID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
 	message, err := json.Marshal(signingOrderRequest)
 	if err != nil {
 		return fmt.Errorf("error marshalling signing order request: %w", err)
 	}
 
-	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(request_id, order_id, item_id, message_data)
-											values ($1, $2, $3, $4)`, requestID, orderID, itemID, message)
-	if err != nil {
+	const q = `INSERT INTO signing_order_request_outbox (request_id, order_id, item_id, message_data) VALUES ($1, $2, $3, $4)`
+	if _, err := pg.ExecContext(ctx, q, requestID, orderID, itemID, message); err != nil {
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
 	}
 
