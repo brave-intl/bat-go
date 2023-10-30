@@ -58,8 +58,8 @@ const (
 
 const (
 	// The Intermediate Certificates
-	sandboxFingerprint = "kJqLxbJ8/oYCPhA6n13q+s2dh53zGifWjEghNUNpAP8="
-	prodFingerprint    = "kJqLxbJ8/oYCPhA6n13q+s2dh53zGifWjEghNUNpAP8="
+	sandboxFingerprint = "tk+cMPkidAxyq8UwNxRaw2HJaUzzfUXtxn3Q+ekeqgc="
+	prodFingerprint    = "tk+cMPkidAxyq8UwNxRaw2HJaUzzfUXtxn3Q+ekeqgc="
 )
 
 var (
