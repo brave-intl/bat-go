@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/libs/nitro"
 )
 
 func now() time.Time {
@@ -30,7 +32,12 @@ func TestVerifyNitroAttestation(t *testing.T) {
 		t.Fatal("error reading sample attestation doc:", err)
 	}
 
-	verifier := NitroVerifier{PCRs: pcrs, Now: now}
+	verifier := NitroVerifier{
+		nitro.Verifier{
+			PCRs: pcrs,
+			Now: now,
+		},
+	}
 
 	valid, err := verifier.Verify([]byte{}, doc, crypto.Hash(0))
 	if err != nil {
