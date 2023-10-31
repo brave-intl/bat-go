@@ -36,7 +36,7 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO
 	sp.KeyID = "primary"
-	sp.Headers = []string{"digest"}
+	sp.Headers = []string{"digest", "date"}
 
 	ps := httpsignature.ParameterizedSignator{
 		SignatureParams: sp,
@@ -57,6 +57,8 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	// setup payments routes
 	r.Route("/v1/payments", func(r chi.Router) {
+		// Set date header with current date
+		r.Use(middleware.SetResponseDate())
 		// Sign all payments responses
 		r.Use(middleware.SignResponse(ps))
 		// Log all payments requests
