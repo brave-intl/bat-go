@@ -656,7 +656,6 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	}
 
 	if s.Sig != "JD6/4S08wxdnMMCGA1FkIHlBuEiW0azVUmbuOeAbRlJ21BlXCjv7ZZTWssLONgjyZprVK0VdRKxEB0AizGnaBA==" {
-		fmt.Println(s.Sig)
 		t.Error("Incorrect signature genearted for ED25519")
 	}
 
