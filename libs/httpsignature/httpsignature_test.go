@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"testing"
 	"time"
-	"fmt"
 
 	"golang.org/x/crypto/ed25519"
 )
