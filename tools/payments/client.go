@@ -57,7 +57,7 @@ func NewSettlementClient(ctx context.Context, env string, config map[string]stri
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO
 	sp.KeyID = "primary"
-	sp.Headers = []string{"digest"}
+	sp.Headers = []string{"digest", "date"}
 
 	pcr2, err := hex.DecodeString(config["pcr2"])
 	if err != nil {

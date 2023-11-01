@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ed25519"
 )
@@ -613,7 +614,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	var sp SignatureParams
 	sp.Algorithm = ED25519
 	sp.KeyID = "primary"
-	sp.Headers = []string{"digest", "foo"}
+	sp.Headers = []string{"digest", "foo", "date"}
 
 	ps := ParameterizedSignator{
 		SignatureParams: sp,
@@ -627,6 +628,11 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	w = psw
 
 	w.Header().Set("Foo", "bar")
+	dateHeaderValue, err := time.Parse(time.RFC1123, "Tue, 10 Nov 2009 23:00:00 UTC")
+	if err != nil {
+		t.Error(err)
+	}
+	w.Header().Add("date", dateHeaderValue.Format(time.RFC1123))
 	w.WriteHeader(200)
 	if psw.statusCode != 200 {
 		t.Error("Status code did not match")
@@ -648,7 +654,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 		t.Error(err)
 	}
 
-	if s.Sig != "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA==" {
+	if s.Sig != "JD6/4S08wxdnMMCGA1FkIHlBuEiW0azVUmbuOeAbRlJ21BlXCjv7ZZTWssLONgjyZprVK0VdRKxEB0AizGnaBA==" {
 		t.Error("Incorrect signature genearted for ED25519")
 	}
 
