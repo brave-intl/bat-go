@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -23,6 +24,7 @@ import (
 
 type getConfResponse struct {
 	EncryptionKeyARN string `json:"encryptionKeyArn"`
+	Environment      string `json:"environment"`
 }
 
 func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
@@ -101,6 +103,7 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 
 		resp := &getConfResponse{
 			EncryptionKeyARN: service.kmsDecryptKeyArn,
+			Environment:      os.Getenv("ENV"),
 		}
 
 		logger.Debug().Msg("handling configuration request")

@@ -102,6 +102,10 @@ func main() {
 
 	encryptKeyArn := data["encryptionKeyArn"]
 
+	if data["environment"] != *env {
+		log.Fatalf("environments do not match!! payments service environment: %s", data["environment"])
+	}
+
 	// make the config
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
