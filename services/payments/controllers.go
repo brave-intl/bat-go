@@ -242,7 +242,10 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			Cause:   err,
 			Message: "submitted",
 			Code:    code,
-			Data:    paymentLib.SubmitResponse{Status: status},
+			Data:    paymentLib.SubmitResponse{
+				Status: status,
+				PaymentDetails: authenticatedState.PaymentDetails,
+			},
 		}
 	}
 }
