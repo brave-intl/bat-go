@@ -88,7 +88,7 @@ func main() {
 		log.Printf("Operator Key File Location: %s\n", *key)
 	}
 
-	if *env != "dev" && len(*pcr2) != 96 {
+	if *env != "development" && len(*pcr2) != 96 {
 		log.Fatal("a valid pcr2 is required to prepare in this environment\n")
 	}
 
