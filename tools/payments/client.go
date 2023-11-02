@@ -233,7 +233,7 @@ func (rc *redisClient) HandlePrepareResponse(ctx context.Context, stream, id str
 	}
 	nitroVerifier, ok := rc.verifier.(httpsignature.NitroVerifier)
 	if !ok {
-		return errors.New("provided verifier is not a nitro verifier")
+		return nil
 	}
 	nitroVerifier.Now = func() time.Time { return headerDate }
 
