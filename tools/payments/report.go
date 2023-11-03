@@ -63,7 +63,7 @@ func (ar AttestedReport) EnsureTransactionAmountsMatch(pr PreparedReport) error 
 		preparedMap[paymentDetails.To] = paymentDetails.Amount
 	}
 	for _, attestedDetails := range ar {
-		if preparedMap[attestedDetails.To].Cmp(attestedDetails.Amount) != 0 {
+		if !preparedMap[attestedDetails.To].Equal(attestedDetails.Amount) {
 			return fmt.Errorf(
 				"%w for %s - prepared: %s, attested: %s",
 				ErrMismatchedDepositAmounts,
