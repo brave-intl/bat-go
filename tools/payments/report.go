@@ -185,11 +185,7 @@ func Compare(pr PreparedReport, ar AttestedReport) error {
 	}
 
 	// Check for individual transaction amounts that don't match between reports
-	if err := ar.EnsureTransactionAmountsMatch(pr); err != nil {
-		return err
-	}
-
-	return nil
+	return ar.EnsureTransactionAmountsMatch(pr)
 }
 
 // Submit performs a submission of approval from an operator to the settlement client
