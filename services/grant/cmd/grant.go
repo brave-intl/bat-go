@@ -393,17 +393,29 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, promotionService.Jobs()...)
 
-	r.Mount("/v1/promotions", promotion.Router(promotionService))
-	r.Mount("/v2/promotions", promotion.RouterV2(promotionService))
+	// vbat expired var from env
+	vbatExpires, err := time.Parse(time.RFC3339, "2023-11-02T00:00:00Z") // default 11/2/23
+	if err != nil {
+		logger.Panic().Err(err).Msg("failed to parse vbatExpires time")
+	}
+	if os.Getenv("VBAT_EXPIRES") != "" { // use what is in the environment if exists
+		vbatExpires, err = time.Parse(time.RFC3339, os.Getenv("VBAT_EXPIRES"))
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to parse vbatExpires time")
+		}
+	}
 
-	sRouter, err := promotion.SuggestionsRouter(promotionService)
+	r.Mount("/v1/promotions", promotion.Router(promotionService, vbatExpires))
+	r.Mount("/v2/promotions", promotion.RouterV2(promotionService, vbatExpires))
+
+	sRouter, err := promotion.SuggestionsRouter(promotionService, vbatExpires)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to initialize the suggestions router")
 	}
 
 	r.Mount("/v1/suggestions", sRouter)
 
-	sV2Router, err := promotion.SuggestionsV2Router(promotionService)
+	sV2Router, err := promotion.SuggestionsV2Router(promotionService, vbatExpires)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to initialize the suggestions router")
 	}
@@ -411,7 +423,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v2/suggestions", sV2Router)
 
 	// temporarily house batloss events in promotion to avoid widespread conflicts later
-	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
+	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService, vbatExpires))
 
 	skuOrderRepo := repository.NewOrder()
 	skuOrderItemRepo := repository.NewOrderItem()
