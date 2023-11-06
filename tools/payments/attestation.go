@@ -11,7 +11,7 @@ func NewNitroVerifier(pcr2Hex *string) (*httpsignature.SignatureParams, *httpsig
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO
 	sp.KeyID = "primary"
-	sp.Headers = []string{"digest"}
+	sp.Headers = []string{"digest", "date"}
 
 	pcrs := map[uint][]byte{
 		1: nitro.ExpectedPCR1,
