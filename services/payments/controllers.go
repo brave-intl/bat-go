@@ -38,7 +38,7 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO
 	sp.KeyID = "primary"
-	sp.Headers = []string{"digest", "date"}
+	sp.Headers = []string{"digest"}
 
 	ps := httpsignature.ParameterizedSignator{
 		SignatureParams: sp,
