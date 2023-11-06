@@ -227,8 +227,17 @@ func (rc *redisClient) HandlePrepareResponse(ctx context.Context, stream, id str
 	if err != nil {
 		return err
 	}
+	headerDate, err := time.Parse(time.RFC1123, resp.Header.Get("date"))
+	if err != nil {
+		return err
+	}
+	nitroVerifier, ok := rc.verifier.(httpsignature.NitroVerifier)
+	if !ok {
+		return nil
+	}
+	nitroVerifier.Now = func() time.Time { return headerDate }
 
-	valid, err := rc.sp.VerifyResponse(rc.verifier, crypto.Hash(0), &resp)
+	valid, err := rc.sp.VerifyResponse(nitroVerifier, crypto.Hash(0), &resp)
 	if err != nil {
 		return err
 	}
