@@ -21,6 +21,8 @@ import (
 var (
 	// ErrDuplicateDepositDestination indicates that a report contains duplicate deposit destinations.
 	ErrDuplicateDepositDestination = errors.New("duplicate deposit destination")
+	// ErrMismatchedDepositAmounts indicates that transaction that share a To do not share an Amount.
+	ErrMismatchedDepositAmounts = errors.New("mismatched deposit amounts")
 )
 
 // AttestedReport is the report of payouts after being prepared
@@ -50,6 +52,27 @@ func (r AttestedReport) EnsureUniqueDest() error {
 		u[tx.To] = struct{}{}
 	}
 
+	return nil
+}
+
+// EnsureTransactionAmountsMatch checks each transaction by To address and errors if the Amounts do
+// not match between the AttestedReport and the provided PreparedReport.
+func (ar AttestedReport) EnsureTransactionAmountsMatch(pr PreparedReport) error {
+	preparedMap := make(map[string]decimal.Decimal, len(pr))
+	for _, paymentDetails := range pr {
+		preparedMap[paymentDetails.To] = paymentDetails.Amount
+	}
+	for _, attestedDetails := range ar {
+		if !preparedMap[attestedDetails.To].Equal(attestedDetails.Amount) {
+			return fmt.Errorf(
+				"%w for %s - prepared: %s, attested: %s",
+				ErrMismatchedDepositAmounts,
+				attestedDetails.To,
+				preparedMap[attestedDetails.To],
+				attestedDetails.Amount,
+			)
+		}
+	}
 	return nil
 }
 
@@ -161,7 +184,8 @@ func Compare(pr PreparedReport, ar AttestedReport) error {
 		return fmt.Errorf("sum of BAT do not match - prepared: %s; attested: %s", p.String(), a.String())
 	}
 
-	return nil
+	// Check for individual transaction amounts that don't match between reports
+	return ar.EnsureTransactionAmountsMatch(pr)
 }
 
 // Submit performs a submission of approval from an operator to the settlement client
