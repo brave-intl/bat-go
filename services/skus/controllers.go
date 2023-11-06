@@ -94,13 +94,22 @@ func Router(
 	// Receipt validation.
 	r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc))))
 
-	r.Route("/{orderID}/credentials", func(cr chi.Router) {
-		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
-		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
-		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
-		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
-		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
-	})
+	{
+		credsh := handler.NewCredentials(svc)
+
+		r.Route("/{orderID}/credentials", func(cr chi.Router) {
+			cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
+
+			cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
+			cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateCredsForItem", handlers.AppHandler(credsh.CreateForItem)))
+
+			cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
+			cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
+			cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetCredsForItem", handlers.AppHandler(credsh.GetForItem)))
+
+			cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
+		})
+	}
 
 	return r
 }
@@ -567,7 +576,10 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 			)
 		}
 
-		requestID := uuid.NewV4()
+		// Backwards compatibility with pre multi-device mode.
+		//
+		// Use the itemID for the requestID to continue enforcing the legacy credential uniqueness constraint.
+		requestID := req.ItemID
 
 		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, requestID, req.BlindedCreds); err != nil {
 			lg.Error().Err(err).Msg("failed to create the order credentials")
@@ -595,7 +607,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
-			if errors.Is(err, errSetRetryAfter) {
+			if errors.Is(err, model.ErrSetRetryAfter) {
 				// error specifies a retry after period, add to response header
 				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
 				if err != nil {
@@ -636,54 +648,46 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 	}
 }
 
-// GetOrderCredsByID is the handler for fetching order credentials by an item id
+// GetOrderCredsByID handles requests for order credentials by an item id.
 func GetOrderCredsByID(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		validationPayload := make(map[string]interface{})
 
-		// get the IDs from the URL
-		var (
-			orderID           = new(inputs.ID)
-			itemID            = new(inputs.ID)
-			validationPayload = map[string]interface{}{}
-			err               error
-		)
-
-		// decode and validate orderID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			validationPayload["orderID"] = err.Error()
 		}
 
-		// decode and validate itemID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
+		itemID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParam(r, "itemID")); err != nil {
 			validationPayload["itemID"] = err.Error()
 		}
 
-		// did we get any validation errors?
 		if len(validationPayload) > 0 {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				validationPayload)
+			return handlers.ValidationError("Error validating request url parameter", validationPayload)
 		}
 
-		creds, status, err := service.GetItemCredentials(r.Context(), *orderID.UUID(), *itemID.UUID())
+		creds, status, err := service.GetItemCredentials(ctx, *orderID.UUID(), *itemID.UUID())
 		if err != nil {
-			if errors.Is(err, errSetRetryAfter) {
-				// error specifies a retry after period, add to response header
-				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
-				if err != nil {
-					return handlers.WrapError(err, "Error getting credential retry-after", status)
-				}
-				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
-			} else {
+			if !errors.Is(err, model.ErrSetRetryAfter) {
 				return handlers.WrapError(err, "Error getting credentials", status)
 			}
+
+			// Handle a retry-after error: add it to response header.
+			avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
+			if err != nil {
+				return handlers.WrapError(err, "Error getting credential retry-after", status)
+			}
+
+			w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
 		}
+
 		if creds == nil {
-			return handlers.RenderContent(r.Context(), map[string]interface{}{}, w, status)
+			return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
 		}
-		return handlers.RenderContent(r.Context(), creds, w, status)
+
+		return handlers.RenderContent(ctx, creds, w, status)
 	})
 }
 

@@ -307,6 +307,10 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 	return nil
 }
 
+func (s *Service) CredsForItem(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
+	return nil, 0, nil
+}
+
 func (s *Service) doCredentialsExist(ctx context.Context, item *model.OrderItem, blindedCreds []string) error {
 	switch item.CredentialType {
 	case timeLimitedV2:

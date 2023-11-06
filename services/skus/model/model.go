@@ -43,6 +43,8 @@ const (
 	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
 	ErrInvalidOrderRequest     Error = "model: no items to be created"
 
+	ErrSetRetryAfter Error = "set retry-after"
+
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 
@@ -589,6 +591,10 @@ type IssuerConfig struct {
 
 func (c *IssuerConfig) NumIntervals() int {
 	return c.Buffer + c.Overlap
+}
+
+type CreateItemCredsRequest struct {
+	BlindedCreds []string `json:"blindedCreds" validate:"required,base64"`
 }
 
 func addURLParam(src, name, val string) (string, error) {

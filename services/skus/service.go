@@ -50,7 +50,6 @@ import (
 )
 
 var (
-	errSetRetryAfter             = errors.New("set retry-after")
 	errClosingResource           = errors.New("error closing resource")
 	errInvalidRadomURL           = model.Error("service: invalid radom url")
 	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
@@ -1101,7 +1100,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]Ti
 	for _, m := range outboxMessages {
 		if m.CompletedAt == nil {
 			// get average of last 10 outbox messages duration as the retry after
-			return resp, http.StatusAccepted, errSetRetryAfter
+			return resp, http.StatusAccepted, model.ErrSetRetryAfter
 		}
 	}
 
@@ -1634,6 +1633,10 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	return commit()
+}
+
+func (s *Service) GetOutboxMovAvgDurationSeconds(ctx context.Context) (int64, error) {
+	return s.Datastore.GetOutboxMovAvgDurationSeconds()
 }
 
 func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*Order, error) {

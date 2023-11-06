@@ -343,21 +343,22 @@ func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
 
 // GetOutboxMovAvgDurationSeconds - get the number of seconds it takes to clear the last 20 outbox messages
 func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
-	statement := `
-		select
-			coalesce(ceiling(extract(epoch from avg(completed_at-created_at))),1)
-		from
-			(select completed_at, created_at from signing_order_request_outbox order by completed_at desc limit 20) as q;
-`
-	var seconds int64
-	if err := pg.RawDB().Get(&seconds, statement); err != nil {
+	const q = `SELECT coalesce(ceiling(extract(epoch from avg(completed_at-created_at))),1)
+	FROM (
+		SELECT completed_at, created_at FROM signing_order_request_outbox ORDER BY completed_at DESC LIMIT 20
+	) AS q;`
+
+	var result int64
+	if err := pg.RawDB().GetContext(context.TODO(), &result, q); err != nil {
 		return 0, err
 	}
-	if seconds > 5 {
-		// set max allowable retry after
-		seconds = 5
+
+	if result > 5 {
+		// Set max allowable retry after.
+		result = 5
 	}
-	return seconds, nil
+
+	return result, nil
 }
 
 // GetOrder returns an order from the database.
