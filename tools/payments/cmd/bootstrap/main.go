@@ -7,12 +7,12 @@ Bootstrap takes as parameters the operator share, kms key arn and s3 uri.
 
 Usage:
 
-bootstrap [flags]
+bootstrap [flags] [share-file]
 
 The flags are:
 
-	-s
-		The operator's Shamir key share from the create command
+	-p
+		The operator's private key filename in order to decrypt share-file
 	-u
 		The enclave services' base uri to get the key id from
 	-b
@@ -29,11 +29,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"filippo.io/age"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -49,9 +52,9 @@ func main() {
 	env := flag.String(
 		"e", "local",
 		"the environment to which the tool will interact")
-	s := flag.String(
-		"s", "",
-		"the operators shamir key share")
+	p := flag.String(
+		"p", "",
+		"the operators private key file")
 	b := flag.String(
 		"b", "", "the s3 bucket to upload ciphertext to")
 	pcr2 := flag.String(
@@ -62,10 +65,52 @@ func main() {
 
 	flag.Parse()
 
+	shareFile := ""
+
+	if shareFiles := flag.Args(); len(shareFiles) == 1 {
+		shareFile = shareFiles[0]
+	}
+
+	if shareFile == "" {
+		log.Fatalln("Invalid share file parameter:", shareFile)
+	}
+
+	// load up the operator's private key as an identity
+	f, err := os.Open(*p)
+	if err != nil {
+		log.Fatalf("failed to open operator receipient share file", err.Error())
+	}
+
+	identities, err := age.ParseIdentities(f)
+	if err != nil {
+		log.Fatalf("Failed to parse private key: %v", err)
+	}
+
+	if len(identities) != 1 {
+		log.Fatalf("private key should have 1 identity")
+	}
+
+	sf, err := os.Open(shareFile)
+	if err != nil {
+		log.Fatalf("Failed to open file: %v", err)
+	}
+
+	r, err := age.Decrypt(sf, identities[0])
+	if err != nil {
+		log.Fatalf("Failed to open encrypted file: %v", err)
+	}
+
+	shareVal := &bytes.Buffer{}
+	if _, err := io.Copy(shareVal, r); err != nil {
+		log.Fatalf("Failed to read encrypted file: %v", err)
+	}
+
+	// s is the shamir share
+	s := shareVal.String()
+
 	if *verbose {
 		// print out the configuration
 		log.Printf("Environment: %s\n", *env)
-		log.Printf("Operator Shamir Share: %s\n", *s)
 		log.Printf("S3 Bucket URI: %s\n", *b)
 	}
 
@@ -155,7 +200,7 @@ func main() {
 	// perform encryption of the operator's shamir share
 	out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{
 		KeyId:     aws.String(encryptKeyArn),
-		Plaintext: []byte(*s),
+		Plaintext: []byte(s),
 	})
 	if err != nil {
 		log.Fatalf("failed to encrypt operator key share: %v", err)

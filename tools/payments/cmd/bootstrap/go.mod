@@ -7,10 +7,12 @@ replace github.com/brave-intl/bat-go/libs => ../../../../libs
 go 1.20
 
 require (
+	filippo.io/age v1.1.1
 	github.com/aws/aws-sdk-go-v2 v1.18.0
 	github.com/aws/aws-sdk-go-v2/config v1.18.19
 	github.com/aws/aws-sdk-go-v2/service/kms v1.21.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.31.1
+	github.com/brave-intl/bat-go/libs v0.0.0-20230403164253-ad445ff37512
 	github.com/brave-intl/bat-go/tools/payments v0.0.0-00010101000000-000000000000
 )
 
@@ -32,7 +34,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.18.7 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/brave-intl/bat-go/libs v0.0.0-20230403164253-ad445ff37512 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
@@ -55,9 +56,10 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.7.0 // indirect
+	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.6.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/term v0.6.0 // indirect
 	golang.org/x/text v0.8.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
