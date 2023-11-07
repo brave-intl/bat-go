@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -19,7 +20,7 @@ var (
 
 type httpSignedKeyID struct{}
 
-//AddKeyID - Helpful for test cases
+// AddKeyID - Helpful for test cases
 func AddKeyID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, httpSignedKeyID{}, id)
 }
@@ -36,7 +37,7 @@ func GetKeyID(ctx context.Context) (string, error) {
 func SignResponse(p httpsignature.ParameterizedSignator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w = httpsignature.NewParameterizedSignatorResponseWriter(p, w)
+			w = httpsignature.NewParameterizedSignatorResponseWriter(p, w, time.Now().UTC())
 			next.ServeHTTP(w, r)
 		})
 	}

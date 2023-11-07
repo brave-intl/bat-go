@@ -59,6 +59,7 @@ type ParameterizedSignatorResponseWriter struct {
 	ParameterizedSignator
 	w          http.ResponseWriter
 	statusCode int
+	now        time.Time
 }
 
 // Keystore provides a way to lookup a public key based on the keyID a request was signed with
@@ -252,11 +253,12 @@ func (p *ParameterizedSignator) SignResponse(resp *http.Response) error {
 }
 
 // NewParameterizedSignatorResponseWriter wraps the provided response writer and signs the response
-func NewParameterizedSignatorResponseWriter(p ParameterizedSignator, w http.ResponseWriter) *ParameterizedSignatorResponseWriter {
+func NewParameterizedSignatorResponseWriter(p ParameterizedSignator, w http.ResponseWriter, t time.Time) *ParameterizedSignatorResponseWriter {
 	return &ParameterizedSignatorResponseWriter{
 		ParameterizedSignator: p,
 		w:                     w,
 		statusCode:            -1,
+		now:                   t,
 	}
 }
 
@@ -278,7 +280,7 @@ func (psrw *ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
 func (psrw *ParameterizedSignatorResponseWriter) Write(body []byte) (int, error) {
 
 	// add the date if required by signator as it will be too late later when http server does it
-	psrw.Header().Add("date", time.Now().UTC().Format(http.TimeFormat))
+	psrw.Header().Add("date", psrw.now.UTC().Format(http.TimeFormat))
 
 	ss, err := psrw.SignatureParams.buildSigningString(body, psrw.Header(), nil)
 	if err != nil {

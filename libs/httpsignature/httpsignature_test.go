@@ -623,16 +623,18 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	}
 
 	mw := &MockResponseWriter{h: http.Header{}}
-	psw := NewParameterizedSignatorResponseWriter(ps, mw)
-	var w http.ResponseWriter
-	w = psw
 
 	w.Header().Set("Foo", "bar")
 	dateHeaderValue, err := time.Parse(time.RFC1123, "Tue, 10 Nov 2009 23:00:00 UTC")
 	if err != nil {
 		t.Error(err)
 	}
-	w.Header().Add("date", dateHeaderValue.Format(time.RFC1123))
+
+	psw := NewParameterizedSignatorResponseWriter(ps, mw, dateHeaderValue)
+	var w http.ResponseWriter
+	w = psw
+
+	w.Header().Add("date", dateHeaderValue.Format(http.TimeFormat))
 	w.WriteHeader(200)
 	if psw.statusCode != 200 {
 		t.Error("Status code did not match")
