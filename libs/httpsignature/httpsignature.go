@@ -270,10 +270,6 @@ func (psrw *ParameterizedSignatorResponseWriter) Header() http.Header {
 // WriteHeader sends an HTTP response header with the provided
 // status code.
 func (psrw *ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
-	// add the date if required by signator as it will be too late later when http server does it
-	if slices.Contains(psrw.Headers, "date") {
-		psrw.w.Header().Add("date", time.Now().Format(time.RFC1123))
-	}
 	psrw.statusCode = statusCode
 }
 
