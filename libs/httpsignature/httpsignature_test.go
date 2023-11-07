@@ -628,17 +628,25 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	w = psw
 
 	w.Header().Set("Foo", "bar")
-	dateHeaderValue, err := time.Parse(time.RFC1123, "Tue, 10 Nov 2009 23:00:00 UTC")
-	if err != nil {
-		t.Error(err)
-	}
-	w.Header().Add("date", dateHeaderValue.Format(time.RFC1123))
 	w.WriteHeader(200)
 	if psw.statusCode != 200 {
 		t.Error("Status code did not match")
 	}
 
 	body := []byte("{\"hello\": \"world\"}\n")
+	// First write should fail, as we have not provided the date header required above
+	_, err = w.Write(body)
+	if err == nil {
+		t.Error("Should have failed due to missing date header")
+	}
+
+	// Set date header and succeed this time
+	dateHeaderValue, err := time.Parse(time.RFC1123, "Tue, 10 Nov 2009 23:00:00 UTC")
+	if err != nil {
+		t.Error(err)
+	}
+	w.Header().Set("date", dateHeaderValue.Format(time.RFC1123))
+
 	_, err = w.Write(body)
 	if err != nil {
 		t.Error("Unexpected error:", err)
@@ -670,7 +678,7 @@ func TestVerifyResponse(t *testing.T) {
 	var s signature
 	s.Algorithm = ED25519
 	s.KeyID = "primary"
-	s.Headers = []string{"digest", "foo"}
+	s.Headers = []string{"digest", "foo", "date"}
 	s.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
 	body := []byte("{\"hello\": \"world\"}\n")
 
@@ -679,10 +687,23 @@ func TestVerifyResponse(t *testing.T) {
 	resp.Header.Set("Foo", "bar")
 	resp.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s.Sig+`"`)
 
+	// Fail first verification attempt because the date header is required above but is not set
 	valid, err := s.VerifyResponse(pubKey, crypto.Hash(0), resp)
-	if err != nil {
-		t.Error("Unexpected error while building signing string")
+	if err == nil {
+		t.Error("Should have failed due to missing date header")
 	}
+	dateHeaderValue, err := time.Parse(time.RFC1123, "Tue, 10 Nov 2009 23:00:00 UTC")
+	if err != nil {
+		t.Error(err)
+	}
+	resp.Header.Set("date", dateHeaderValue.Format(time.RFC1123))
+
+	// Verify again, passing this time now that the date header is set
+	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+	if err != nil {
+		t.Error("Unexpected error while building signing string:", err)
+	}
+
 	if !valid {
 		t.Error("The signature should be valid")
 	}
