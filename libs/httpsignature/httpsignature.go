@@ -19,7 +19,6 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/digest"
 	"github.com/brave-intl/bat-go/libs/requestutils"
-	"golang.org/x/exp/slices"
 )
 
 // SignatureParams contains parameters needed to create and verify signatures
@@ -270,10 +269,6 @@ func (psrw *ParameterizedSignatorResponseWriter) Header() http.Header {
 // WriteHeader sends an HTTP response header with the provided
 // status code.
 func (psrw *ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
-	// add the date if required by signator as it will be too late later when http server does it
-	if slices.Contains(psrw.Headers, "date") {
-		psrw.w.Header().Add("date", time.Now().Format(time.RFC1123))
-	}
 	psrw.statusCode = statusCode
 }
 
@@ -281,6 +276,10 @@ func (psrw *ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
 //
 // For the ResponseWriter, we also sign the response before writing it out
 func (psrw *ParameterizedSignatorResponseWriter) Write(body []byte) (int, error) {
+
+	// add the date if required by signator as it will be too late later when http server does it
+	psrw.Header().Add("date", time.Now().UTC().Format(http.TimeFormat))
+
 	ss, err := psrw.SignatureParams.buildSigningString(body, psrw.Header(), nil)
 	if err != nil {
 		return -1, err
