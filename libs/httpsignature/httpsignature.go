@@ -15,11 +15,9 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/brave-intl/bat-go/libs/digest"
 	"github.com/brave-intl/bat-go/libs/requestutils"
-	"golang.org/x/exp/slices"
 )
 
 // SignatureParams contains parameters needed to create and verify signatures
