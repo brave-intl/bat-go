@@ -193,7 +193,11 @@ func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, 
 			}
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "host", host))...)
 		} else {
-			val := strings.Join(headers[http.CanonicalHeaderKey(header)], ", ")
+			headerToAppend := headers[http.CanonicalHeaderKey(header)]
+			if len(headerToAppend) < 1 {
+				return nil, fmt.Errorf("header %s was called for but is not present", header)
+			}
+			val := strings.Join(headerToAppend, ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
 		}
 
