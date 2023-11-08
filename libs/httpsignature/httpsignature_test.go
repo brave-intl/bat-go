@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/hex"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
-	"runtime/debug"
 	"testing"
 	"time"
 
@@ -699,7 +697,6 @@ func TestVerifyResponse(t *testing.T) {
 		t.Error(err)
 	}
 	resp.Header.Set("date", dateHeaderValue.Format(http.TimeFormat))
-	fmt.Printf("PUBKEY: %v\nHASH: %v\nRESP: %v\n", pubKey, crypto.Hash(0), resp)
 
 	// Verify again, passing this time now that the date header is set
 	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
@@ -708,7 +705,6 @@ func TestVerifyResponse(t *testing.T) {
 	}
 
 	if !valid {
-		debug.PrintStack()
 		t.Error("The signature should be valid")
 	}
 
