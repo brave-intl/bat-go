@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/hex"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -692,11 +694,12 @@ func TestVerifyResponse(t *testing.T) {
 	if err == nil {
 		t.Error("Should have failed due to missing date header")
 	}
-	dateHeaderValue, err := time.Parse(time.RFC1123, "Tue, 10 Nov 2009 23:00:00 UTC")
+	dateHeaderValue, err := time.Parse(time.RFC1123, "Tue, 07 Nov 2023 23:00:00 UTC")
 	if err != nil {
 		t.Error(err)
 	}
-	resp.Header.Set("date", dateHeaderValue.Format(time.RFC1123))
+	resp.Header.Set("date", dateHeaderValue.Format(http.TimeFormat))
+	fmt.Printf("PUBKEY: %v\nHASH: %v\nRESP: %v\n", pubKey, crypto.Hash(0), resp)
 
 	// Verify again, passing this time now that the date header is set
 	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
@@ -705,6 +708,7 @@ func TestVerifyResponse(t *testing.T) {
 	}
 
 	if !valid {
+		debug.PrintStack()
 		t.Error("The signature should be valid")
 	}
 
