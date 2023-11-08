@@ -5,8 +5,6 @@ import (
 	"crypto"
 	"errors"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -38,26 +36,8 @@ func GetKeyID(ctx context.Context) (string, error) {
 func SignResponse(p httpsignature.ParameterizedSignator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger := logging.Logger(r.Context(), "SignResponse")
-			// recorder response writer for debugging
-			rec := httptest.NewRecorder()
-			for k, v := range w.Header() {
-				// add w's headers to response writer for debugging
-				rec.Header().Add(k, strings.Join(v, " "))
-			}
-			// use the signator response writer with a base of recorder
-			sw := httpsignature.NewParameterizedSignatorResponseWriter(p, rec)
-			next.ServeHTTP(sw, r)
-			// write all the recorded headers to real response writer
-			for k, v := range rec.Header() {
-				w.Header().Add(k, strings.Join(v, " "))
-				logger.Info().Str(k, strings.Join(v, " ")).Msg("recorded header")
-			}
-			// write headers to real response writer
-			w.WriteHeader(rec.Code)
-			// write body to the real response writer
-			w.Write(rec.Body.Bytes())
-			logger.Info().Str("body", rec.Body.String()).Msg("recorded body")
+			w = httpsignature.NewParameterizedSignatorResponseWriter(p, w)
+			next.ServeHTTP(w, r)
 		})
 	}
 }
