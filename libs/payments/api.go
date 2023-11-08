@@ -2,9 +2,9 @@ package payments
 
 var (
 	APIBase = map[string]string{
-		"":        "https://nitro-payments.bsg.brave.software",
-		"local":   "https://nitro-payments.bsg.brave.software",
-		"dev":     "https://nitro-payments.bsg.brave.software",
+		"":        "https://web.payments-dev.svc.cluster.local",
+		"local":   "https://web.payments-dev.svc.cluster.local",
+		"dev":     "https://web.payments-dev.svc.cluster.local",
 		"staging": "https://nitro-payments-staging.bsg.brave.com",
 	}
 )
