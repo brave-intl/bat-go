@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"strconv"
-	"fmt"
 
 	"golang.org/x/crypto/ed25519"
 )
@@ -20,7 +19,6 @@ func (pk Ed25519PubKey) Verify(message, sig []byte, opts crypto.SignerOpts) (boo
 	if l := len(pk); l != ed25519.PublicKeySize {
 		return false, errors.New("ed25519: bad public key length: " + strconv.Itoa(l))
 	}
-	fmt.Printf("PK: %v\nMESSAGE: %v\nSIG: %v\n", ed25519.PublicKey(pk), message, sig)
 
 	return ed25519.Verify(ed25519.PublicKey(pk), message, sig), nil
 }
