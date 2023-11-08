@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/hex"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -590,6 +591,7 @@ func TestSignResponse(t *testing.T) {
 
 type MockResponseWriter struct {
 	h http.Header
+	b io.ReadCloser
 }
 
 func (mrw MockResponseWriter) Header() http.Header {
@@ -600,6 +602,7 @@ func (mrw MockResponseWriter) WriteHeader(statusCode int) {
 }
 
 func (mrw MockResponseWriter) Write(body []byte) (int, error) {
+	mrw.b = io.NopCloser(bytes.NewBuffer(body))
 	return len(body), nil
 }
 
@@ -645,7 +648,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	w.Header().Set("date", dateHeaderValue.Format(time.RFC1123))
+	w.Header().Set("date", dateHeaderValue.Format(http.TimeFormat))
 
 	_, err = w.Write(body)
 	if err != nil {
@@ -662,10 +665,15 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 		t.Error(err)
 	}
 
-	if s.Sig != "JD6/4S08wxdnMMCGA1FkIHlBuEiW0azVUmbuOeAbRlJ21BlXCjv7ZZTWssLONgjyZprVK0VdRKxEB0AizGnaBA==" {
-		t.Error("Incorrect signature genearted for ED25519")
+	// perform verification of the response
+	resp := &http.Response{Header: mw.h, Body: mw.b}
+	valid, err := s.VerifyResponse(Ed25519PubKey(privKey.Public().(ed25519.PublicKey)), crypto.Hash(0), resp)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
 	}
-
+	if valid {
+		t.Error("The signature should be invalid")
+	}
 }
 
 func TestVerifyResponse(t *testing.T) {
@@ -678,7 +686,7 @@ func TestVerifyResponse(t *testing.T) {
 	var s signature
 	s.Algorithm = ED25519
 	s.KeyID = "primary"
-	s.Headers = []string{"digest", "foo", "date"}
+	s.Headers = []string{"digest", "foo"}
 	s.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
 	body := []byte("{\"hello\": \"world\"}\n")
 
