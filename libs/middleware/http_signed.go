@@ -5,8 +5,6 @@ import (
 	"crypto"
 	"errors"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -38,21 +36,8 @@ func GetKeyID(ctx context.Context) (string, error) {
 func SignResponse(p httpsignature.ParameterizedSignator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger := logging.Logger(r.Context(), "SignResponse")
-
-			rec := httptest.NewRecorder()
-
-			w = httpsignature.NewParameterizedSignatorResponseWriter(p, rec)
+			w = httpsignature.NewParameterizedSignatorResponseWriter(p, w)
 			next.ServeHTTP(w, r)
-
-			for k, v := range rec.Header() {
-				w.Header().Add(k, strings.Join(v, " "))
-				logger.Info().Str(k, strings.Join(v, " ")).Msg("recorded header")
-			}
-			w.WriteHeader(rec.Code)
-			w.Write(rec.Body.Bytes())
-			logger.Info().Str("body", rec.Body.String()).Msg("recorded body")
-
 		})
 	}
 }
