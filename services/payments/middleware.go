@@ -27,7 +27,7 @@ func (s *Service) AuthorizerSignedMiddleware() func(http.Handler) http.Handler {
 		SignatureParams: httpsignature.SignatureParams{
 			Algorithm: httpsignature.ED25519,
 			Headers: []string{
-				"(request-target)", "host", "date", "digest", "content-length", "content-type",
+				"(request-target)", "date", "digest", "content-length", "content-type",
 			},
 		},
 		Keystore: s,
