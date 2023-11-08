@@ -205,6 +205,7 @@ func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, 
 			out = append(out, byte('\n'))
 		}
 	}
+	fmt.Printf("&&&\n%s\n&&&\n", out)
 	return out, nil
 }
 
@@ -309,6 +310,7 @@ func (sp *SignatureParams) VerifyResponse(verifier Verifier, opts crypto.SignerO
 	if err != nil {
 		return false, err
 	}
+	fmt.Printf("###\nSIGNING STRING: %s\n###\n", signingStr)
 	return sp.verify(verifier, opts, signingStr, resp.Header)
 }
 
