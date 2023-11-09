@@ -196,7 +196,6 @@ func (ar AttestedReport) Submit(ctx context.Context, key ed25519.PrivateKey, cli
 			KeyID:     hex.EncodeToString([]byte(key.Public().(ed25519.PublicKey))),
 			Headers: []string{
 				"(request-target)",
-				"host",
 				"date",
 				"digest",
 				"content-length",
@@ -224,7 +223,6 @@ func (r PreparedReport) Prepare(ctx context.Context, key ed25519.PrivateKey, cli
 			KeyID:     hex.EncodeToString([]byte(key.Public().(ed25519.PublicKey))),
 			Headers: []string{
 				"(request-target)",
-				"host",
 				"date",
 				"digest",
 				"content-length",

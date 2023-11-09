@@ -159,19 +159,23 @@ func (v Verifier) verifySigOnlyNotPCRs(message, sig []byte, opts crypto.SignerOp
 func (v Verifier) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
 	valid, pcrs, err := v.verifySigOnlyNotPCRs(message, sig, opts)
 	if err != nil || !valid {
+		fmt.Println("ERR: verify failed or not valid")
 		return valid, err
 	}
 
 	if len(v.PCRs) == 0 {
+		fmt.Println("ERR: pcrs was empty")
 		return false, nil
 	}
 
 	for pcr, expectedV := range v.PCRs {
 		v, exists := pcrs[pcr]
 		if !exists {
+			fmt.Println("ERR: pcr was missing", pcr)
 			return false, nil
 		}
 		if !bytes.Equal(expectedV, v) {
+			fmt.Println("ERR: pcr did not match", pcr)
 			return false, nil
 		}
 	}
