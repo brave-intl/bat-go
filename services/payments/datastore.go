@@ -163,7 +163,7 @@ func (q *QLDBDatastore) UpdatePaymentState(ctx context.Context, documentID strin
 							publicKey = ?
 						WHERE
 							d_id = ?
-							AND data != ?,
+							AND data != ?
 				`,
 				state.UnsafePaymentState,
 				state.Signature,
