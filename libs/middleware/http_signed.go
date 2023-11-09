@@ -19,7 +19,7 @@ var (
 
 type httpSignedKeyID struct{}
 
-//AddKeyID - Helpful for test cases
+// AddKeyID - Helpful for test cases
 func AddKeyID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, httpSignedKeyID{}, id)
 }
