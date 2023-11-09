@@ -27,8 +27,8 @@ var validAuthorizerKeys = map[string][]string{
 		// @kdenhartog for dev environment only
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEY/3VGKsrH5dp3mK5PJIHVkUMWpsmUhZkrLuZTf7Sqr kdenhartog+settlement+dev@brave.com",
 		// two development keys
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINGylZXIukc6tYnLj6wuSlg/foMCnslAEwFl7qG+TuBK dev1+settlements@brave.com"
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBBEASr19T3JQ1U7SFO2EcZDfqYjUkBlBtVq+KLQtmY dev2+settlements@brave.com"
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINGylZXIukc6tYnLj6wuSlg/foMCnslAEwFl7qG+TuBK dev1+settlements@brave.com",
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBBEASr19T3JQ1U7SFO2EcZDfqYjUkBlBtVq+KLQtmY dev2+settlements@brave.com",
 	},
 }
 
