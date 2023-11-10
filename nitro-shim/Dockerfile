@@ -8,11 +8,14 @@ RUN make -C ./gvproxy/ gvproxy
 RUN make -C ./eifbuild/ eifbuild
 
 FROM rust:1.67 as rust_builder
-RUN apt update && apt install -y libssl-dev
+RUN apt update && apt install -y libssl-dev musl-tools musl-dev
 ENV OPENSSL_STATIC=1
-ENV OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu
-ENV OPENSSL_INCLUDE_DIR=/usr/include/openssl
-RUN cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
+RUN rustup target add x86_64-unknown-linux-musl
+RUN ln -s /usr/include/x86_64-linux-gnu/openssl/opensslconf.h /usr/include/openssl/
+RUN git clone https://github.com/aws/aws-nitro-enclaves-image-format 
+RUN cd aws-nitro-enclaves-image-format && \
+    sed -i -e 's/^openssl.*/openssl = { version = "0.10", features = ["vendored"] }/g' Cargo.toml && \
+    cargo install --target x86_64-unknown-linux-musl --path . --example eif_build
 
 FROM amazonlinux:2.0.20230207.0
 
@@ -23,8 +26,6 @@ RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
     yum clean all && \
     rm -rf /var/cache/yum && \
     mkdir -p /enclave
-
-RUN yum install openssl openssl-devel -y
 
 WORKDIR /enclave
 
