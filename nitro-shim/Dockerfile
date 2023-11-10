@@ -8,6 +8,7 @@ RUN make -C ./gvproxy/ gvproxy
 RUN make -C ./eifbuild/ eifbuild
 
 FROM rust:1.67 as rust_builder
+ENV OPENSSL_STATIC=1
 RUN cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
 
 FROM amazonlinux:2.0.20230207.0
@@ -28,7 +29,5 @@ COPY --from=builder /src/viproxy/viproxy /enclave/
 COPY --from=builder /src/gvproxy/gvproxy /enclave/
 COPY --from=builder /src/eifbuild/eifbuild /enclave/
 COPY --from=rust_builder /usr/local/cargo/bin/eif_build /bin/eif_build
-COPY --from=rust_builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib64/libssl.so.1.1
-
 
 COPY scripts/ /enclave/
