@@ -20,8 +20,7 @@ RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
     rm -rf /var/cache/yum && \
     mkdir -p /enclave
 
-RUN yum install openssl -y
-RUN yum install libssl-dev openssl-devel -y
+RUN yum install openssl openssl-devel -y
 
 WORKDIR /enclave
 
@@ -29,6 +28,7 @@ COPY --from=builder /src/viproxy/viproxy /enclave/
 COPY --from=builder /src/gvproxy/gvproxy /enclave/
 COPY --from=builder /src/eifbuild/eifbuild /enclave/
 COPY --from=rust_builder /usr/local/cargo/bin/eif_build /bin/eif_build
+COPY --from=rust_builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib64/libssl.so.1.1
 
 
 COPY scripts/ /enclave/
