@@ -15,7 +15,7 @@ FROM amazonlinux:2.0.20230207.0
 RUN echo "timeout=60.0" >> /etc/yum.conf
 
 RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
-    yum install aws-nitro-enclaves-cli-devel -y && \
+    yum install aws-nitro-enclaves-cli-devel awscli -y && \
     yum clean all && \
     rm -rf /var/cache/yum && \
     mkdir -p /enclave
