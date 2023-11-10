@@ -20,6 +20,9 @@ RUN amazon-linux-extras install aws-nitro-enclaves-cli -y && \
     rm -rf /var/cache/yum && \
     mkdir -p /enclave
 
+RUN yum install openssl -y
+RUN yum install libssl-dev openssl-devel -y
+
 WORKDIR /enclave
 
 COPY --from=builder /src/viproxy/viproxy /enclave/
