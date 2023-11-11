@@ -123,12 +123,27 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 
 	if getKeyResult != nil {
 		// key exists, check the key policy matches
-		// if the key alias already exists, pull down that particular key
-		getKeyPolicyResult, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+		// if the key alias already exists, pull down that particular key policy
+		listKeyPolicyResult, err := kmsClient.ListKeyPolicies(ctx, &kms.ListKeyPoliciesInput{
 			KeyId: getKeyResult.KeyMetadata.KeyId,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get key by alias: %w", err)
+			return fmt.Errorf("failed to list key for alias: %w", err)
+		}
+
+		// this should always be one policy, named `default`
+		// aws says we should get the list of names though, who am i to argue
+		if listKeyPolicyResult == nil || len(listKeyPolicyResult.PolicyNames) != 1 {
+			return fmt.Errorf("wrong number of key policies for alias")
+		}
+
+		// actually pull the key
+		getKeyPolicyResult, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+			KeyId:      getKeyResult.KeyMetadata.KeyId,
+			PolicyName: &listKeyPolicyResult.PolicyNames[0],
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get key policy for alias: %w", err)
 		}
 
 		if *getKeyPolicyResult.Policy == policy {
