@@ -20,6 +20,7 @@ var previousPCR2Values = []string{
 	"e0c0d819451abc2224a62ea1791fc813ad0b6c7bb0d1ff9700c954939691f619b3ab231b9534acdd14e666b121d1012c",
 	// 2023-11-09 Release
 	"cbf60e4ebe608c3785f35bd990dba5d77d273a38ebe6aafde99190346b9f5eb842db973e854bf8e002a4e12de3f620f4",
+	"4cd91f7f6e0585bcdeb91bf0760456b5c5199f377927cc9340fdceac6aac5ac99509ca6c495a56e8a646dc9269ef0af4",
 }
 
 type VerifierStore struct {
