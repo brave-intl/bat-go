@@ -103,6 +103,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	// get the aws configuration loaded
 	cfg := s.awsCfg
 	kmsClient := kms.NewFromConfig(cfg)
+	var logger = logging.Logger(ctx, "payments.ConfigureKMSEncryptionKey")
 
 	// parse the key policy
 	policy, imageSHA, err := parseKeyPolicyTemplate(ctx, "/decrypt-policy.tmpl")
@@ -122,6 +123,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	}
 
 	if getKeyResult != nil {
+		logger.Info().Msgf("%+v - getKeyResult!", getKeyResult)
 		// key exists, check the key policy matches
 		// if the key alias already exists, pull down that particular key policy
 		listKeyPolicyResult, err := kmsClient.ListKeyPolicies(ctx, &kms.ListKeyPoliciesInput{
@@ -147,14 +149,16 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 		}
 
 		if *getKeyPolicyResult.Policy == policy {
+			logger.Info().Msgf("policy matches: \n %s \n %s!", *getKeyPolicyResult.Policy, policy)
 			// if the policy matches, we should use this key
 			s.kmsDecryptKeyArn = *getKeyResult.KeyMetadata.KeyId
 			return nil
 		}
+		return fmt.Errorf("failed to match policy text")
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -166,6 +170,8 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 		return fmt.Errorf("failed to make key: %w", err)
 	}
 
+	logger.Info().Msgf("created new key! %+v", input)
+
 	aliasInput := &kms.CreateAliasInput{
 		AliasName:   aws.String("alias/decryption-" + imageSHA),
 		TargetKeyId: result.KeyMetadata.KeyId,
@@ -173,8 +179,13 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 
 	_, err = kmsClient.CreateAlias(ctx, aliasInput)
 	if err != nil {
-		return fmt.Errorf("failed to make key alias: %w", err)
+		var aee *kmsTypes.AlreadyExistsException
+		if !errors.As(err, &aee) {
+			return fmt.Errorf("failed to make key alias: %w", err)
+		}
+		logger.Info().Msgf("alias already exists! %+v", err)
 	}
+	logger.Info().Msgf("created new alias! %+v", input)
 
 	s.kmsDecryptKeyArn = *result.KeyMetadata.KeyId
 	return nil
