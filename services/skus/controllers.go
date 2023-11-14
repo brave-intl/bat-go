@@ -99,10 +99,10 @@ func Router(
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
 		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
-		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateCredsForItem", handlers.AppHandler(credsh.CreateForItem)))
+		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateCredentialsForItem", handlers.AppHandler(credsh.CreateForItem)))
 		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
 		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
-		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetCredsForItem", handlers.AppHandler(credsh.GetForItem)))
+		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetCredentialsForItem", handlers.AppHandler(credsh.GetForItem)))
 		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
 	})
 

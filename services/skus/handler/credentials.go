@@ -20,7 +20,7 @@ import (
 
 type credService interface {
 	CreateOrderItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID, creds []string) error
-	CredsForItem(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error)
+	CredentialsForItem(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error)
 
 	GetOutboxMovAvgDurationSeconds(ctx context.Context) (int64, error)
 }
@@ -117,7 +117,7 @@ func (h *Credentials) GetForItem(w http.ResponseWriter, r *http.Request) *handle
 		})
 	}
 
-	creds, status, err := h.svc.CredsForItem(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID())
+	creds, status, err := h.svc.CredentialsForItem(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID())
 	if err != nil {
 		if !errors.Is(err, model.ErrSetRetryAfter) {
 			return handlers.WrapError(err, "Error getting credentials", status)

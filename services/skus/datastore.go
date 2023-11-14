@@ -1083,30 +1083,18 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context,
 	return signingRequestOutbox, nil
 }
 
-// GetSigningOrderRequestOutboxByRequestID retrieves the SigningOrderRequestOutbox by requestID.
-// An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1`, requestID)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
-	}
-	return &signingRequestOutbox, nil
-}
-
 // GetSigningOrderRequestOutboxByRequestIDTx retrieves the SigningOrderRequestOutbox by requestID.
-// An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := tx.GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1 for update`, requestID)
-	if err != nil {
+func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, reqID uuid.UUID) (*SigningOrderRequestOutbox, error) {
+	const q = `SELECT request_id, order_id, item_id, completed_at, message_data
+	FROM signing_order_request_outbox
+	WHERE request_id = $1 FOR UPDATE`
+
+	result := &SigningOrderRequestOutbox{}
+	if err := tx.GetContext(ctx, result, q, reqID); err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
-	return &signingRequestOutbox, nil
+
+	return result, nil
 }
 
 // UpdateSigningOrderRequestOutboxTx updates a signing order request outbox message for the given requestID.

@@ -49,9 +49,21 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet"
 )
 
+const (
+	errInvalidRadomURL       = model.Error("service: invalid radom url")
+	errInvalidCredentialType = model.Error("invalid credential type on order")
+	errCredentialsDoNotExist = model.Error("credentials do not exist")
+	errLegacyUnreachable     = model.Error("unreachable condition")
+)
+
+const (
+	singleUse     = "single-use"
+	timeLimited   = "time-limited"
+	timeLimitedV2 = "time-limited-v2"
+)
+
 var (
 	errClosingResource           = errors.New("error closing resource")
-	errInvalidRadomURL           = model.Error("service: invalid radom url")
 	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
 
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
@@ -77,8 +89,8 @@ const (
 	OrderStatusPending = model.OrderStatusPending
 )
 
-// Default issuer V3 config default values
 const (
+	// Default issuer V3 config default values.
 	defaultBuffer  = 30
 	defaultOverlap = 5
 )
@@ -977,13 +989,33 @@ func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 	return u
 }
 
-const (
-	singleUse     = "single-use"
-	timeLimited   = "time-limited"
-	timeLimitedV2 = "time-limited-v2"
-)
+func (s *Service) CredentialsForItem(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
+	ord, err := s.orderRepo.Get(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		if errors.Is(err, model.ErrOrderNotFound) {
+			return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
+		}
 
-var errInvalidCredentialType = errors.New("invalid credential type on order")
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	item, ok := ord.HasItem(itemID)
+	if !ok {
+		// TODO: Must be something different from 404.
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get item: %w", err)
+	}
+
+	switch item.CredentialType {
+	case singleUse:
+		return s.SingleUseCredsForItem(ctx, ord.ID, itemID, reqID)
+	// case timeLimited:
+	// return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
+	// case timeLimitedV2:
+	// return s.GetTimeLimitedV2CredsByID(ctx, order, itemID, requestID)
+	default:
+		return nil, http.StatusConflict, errInvalidCredentialType
+	}
+}
 
 // GetItemCredentials - based on the order, get the associated credentials
 func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.UUID) (interface{}, int, error) {
@@ -1077,6 +1109,48 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 	}
 
 	return creds, http.StatusOK, nil
+}
+
+// SingleUseCredsForItem returns single use credentials for a given item.
+//
+// If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
+func (s *Service) SingleUseCredsForItem(ctx context.Context, orderID, itemID, reqID uuid.UUID) ([]OrderCreds, int, error) {
+	creds, err := s.Datastore.GetOrderCredsByItemID(orderID, itemID, false)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get single use creds: %w", err)
+	}
+
+	if creds != nil {
+		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed.
+		if creds.SignedCreds == nil {
+			return nil, http.StatusAccepted, nil
+		}
+		// TODO: End
+
+		return []OrderCreds{*creds}, http.StatusOK, nil
+	}
+
+	// Open a tx and roll it back since nothing is being modified.
+	tx, err := s.Datastore.BeginTx()
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	signingOrd, err := s.Datastore.GetSigningOrderRequestOutboxByRequestIDTx(ctx, tx, reqID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, http.StatusNotFound, errCredentialsDoNotExist
+		}
+
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+	}
+
+	if signingOrd.CompletedAt == nil {
+		return nil, http.StatusAccepted, nil
+	}
+
+	return nil, http.StatusInternalServerError, errLegacyUnreachable
 }
 
 // GetTimeLimitedV2Creds returns all the single use credentials for a given order.
