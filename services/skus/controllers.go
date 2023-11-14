@@ -94,22 +94,17 @@ func Router(
 	// Receipt validation.
 	r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc))))
 
-	{
-		credsh := handler.NewCredentials(svc)
+	credsh := handler.NewCredentials(svc)
 
-		r.Route("/{orderID}/credentials", func(cr chi.Router) {
-			cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
-
-			cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
-			cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateCredsForItem", handlers.AppHandler(credsh.CreateForItem)))
-
-			cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
-			cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
-			cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetCredsForItem", handlers.AppHandler(credsh.GetForItem)))
-
-			cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
-		})
-	}
+	r.Route("/{orderID}/credentials", func(cr chi.Router) {
+		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
+		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
+		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateCredsForItem", handlers.AppHandler(credsh.CreateForItem)))
+		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
+		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
+		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetCredsForItem", handlers.AppHandler(credsh.GetForItem)))
+		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
+	})
 
 	return r
 }
