@@ -50,10 +50,14 @@ import (
 )
 
 const (
-	errInvalidRadomURL       = model.Error("service: invalid radom url")
-	errInvalidCredentialType = model.Error("invalid credential type on order")
-	errCredentialsDoNotExist = model.Error("credentials do not exist")
-	errLegacyUnreachable     = model.Error("unreachable condition")
+	errInvalidRadomURL                  = model.Error("service: invalid radom url")
+	errInvalidCredentialType            = model.Error("invalid credential type on order")
+	errCredentialsDoNotExist            = model.Error("credentials do not exist")
+	errLegacyUnreachable                = model.Error("unreachable condition")
+	errLegacyOrderNotPaidOrNoLastPaidAt = model.Error("order is not paid, or invalid last paid at")
+	errLegacyOrderExpired               = model.Error("order has expired")
+	errLegacyItemNotFound               = model.Error("could not find specified item")
+	errLegacyItemNoValidISO             = model.Error("order item has no valid for time")
 )
 
 const (
@@ -1008,8 +1012,9 @@ func (s *Service) CredentialsForItem(ctx context.Context, orderID, itemID, reqID
 	switch item.CredentialType {
 	case singleUse:
 		return s.SingleUseCredsForItem(ctx, ord.ID, itemID, reqID)
-	// case timeLimited:
-	// return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
+	case timeLimited:
+		return s.TimeLimitedCredsForItem(ctx, ord, item, reqID, time.Now())
+
 	// case timeLimitedV2:
 	// return s.GetTimeLimitedV2CredsByID(ctx, order, itemID, requestID)
 	default:
@@ -1370,6 +1375,63 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 		return credentials, http.StatusOK, nil
 	}
 	return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
+}
+
+// TimeLimitedCredsForItem returns time-limited credentials for a given item.
+func (s *Service) TimeLimitedCredsForItem(ctx context.Context, ord *model.Order, item *model.OrderItem, reqID uuid.UUID, now time.Time) ([]TimeLimitedCreds, int, error) {
+	if !ord.IsPaid() || ord.LastPaidAt == nil {
+		return nil, http.StatusBadRequest, errLegacyOrderNotPaidOrNoLastPaidAt
+	}
+
+	issuedAt := ord.LastPaidAt
+
+	if ord.ExpiresAt != nil {
+		if now.After(*ord.ExpiresAt) {
+			return nil, http.StatusBadRequest, errLegacyOrderExpired
+		}
+	}
+
+	secret, err := s.GetActiveCredentialSigningKey(ctx, ord.MerchantID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get merchant signing key: %w", err)
+	}
+
+	tlSecret := cryptography.NewTimeLimitedSecret(secret)
+
+	if item.ValidForISO == nil {
+		return nil, http.StatusBadRequest, errLegacyItemNoValidISO
+	}
+
+	duration, err := timeutils.ParseDuration(*(item.ValidForISO))
+	if err != nil {
+		return nil, http.StatusInternalServerError, model.Error("unable to parse order duration for credentials")
+	}
+
+	if item.IssuanceIntervalISO == nil {
+		item.IssuanceIntervalISO = ptrTo("P1D")
+	}
+
+	interval, err := timeutils.ParseDuration(*item.IssuanceIntervalISO)
+	if err != nil {
+		return nil, http.StatusInternalServerError, model.Error("unable to parse issuance interval for credentials")
+	}
+
+	issuerID, err := encodeIssuerID(ord.MerchantID, item.SKU)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
+	}
+
+	credentials, err := timeChunking(ctx, issuerID, tlSecret, ord.ID, item.ID, *issuedAt, *duration, *interval)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
+	}
+
+	if len(credentials) == 0 {
+		// TODO: Should be something different from 400.
+		return nil, http.StatusBadRequest, model.Error("failed to issue credentials")
+	}
+
+	return credentials, http.StatusOK, nil
 }
 
 type credential interface {
@@ -1989,4 +2051,8 @@ type tlv1CredPresentation struct {
 	Token     string `json:"token"`
 	IssuedAt  string `json:"issuedAt"`
 	ExpiresAt string `json:"expiresAt"`
+}
+
+func ptrTo[T any](v T) *T {
+	return &v
 }
