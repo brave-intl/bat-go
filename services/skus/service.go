@@ -50,11 +50,12 @@ import (
 )
 
 var (
-	errSetRetryAfter               = errors.New("set retry-after")
-	errClosingResource             = errors.New("error closing resource")
-	errInvalidRadomURL             = model.Error("service: invalid radom url")
-	errGeminiClientNotConfigured   = errors.New("service: gemini client not configured")
-	errMismatchedOrderAndRequestID = errors.New("mismatched order and request id")
+	errSetRetryAfter             = errors.New("set retry-after")
+	errClosingResource           = errors.New("error closing resource")
+	errInvalidRadomURL           = model.Error("service: invalid radom url")
+	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
+	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
+	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
 
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
@@ -1002,7 +1003,7 @@ func (s *Service) GetItemCredentialsByID(ctx context.Context, orderID, itemID, r
 			case timeLimited:
 				return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
 			case timeLimitedV2:
-				return s.GetTimeLimitedV2CredsByID(ctx, order, itemID, requestID)
+				return s.GetTimeLimitedV2Creds(ctx, order, itemID, requestID)
 			}
 			return nil, http.StatusConflict, errInvalidCredentialType
 
@@ -1036,7 +1037,7 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	case timeLimited:
 		return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
 	case timeLimitedV2:
-		return s.GetTimeLimitedV2CredsByID(ctx, order, itemID, requestID)
+		return s.GetTimeLimitedV2Creds(ctx, order, itemID, requestID)
 	}
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
@@ -1081,46 +1082,39 @@ func (s *Service) GetSingleUseCredsByID(ctx context.Context, order *Order, itemI
 	return nil, http.StatusInternalServerError, fmt.Errorf("unreachable condition")
 }
 
-// GetTimeLimitedV2CredsByID returns all the time limited v2 credentials for a given order and request id.
+// GetTimeLimitedV2Creds returns all the tlv2 credentials for a given order, item and request id.
+//
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
-func (s *Service) GetTimeLimitedV2CredsByID(ctx context.Context, order *Order, itemID uuid.UUID, requestID uuid.UUID) ([]TimeAwareSubIssuedCreds, int, error) {
-	var resp = []TimeAwareSubIssuedCreds{} // browser api_request_helper does not understand "null" as json
-	if order == nil {
-		return resp, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
-	}
-
-	outboxMessage, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), requestID)
+//
+// Browser's api_request_helper does not understand Go's nil slices, hence explicit empty slice is returned.
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order, itemID uuid.UUID, requestID uuid.UUID) ([]TimeAwareSubIssuedCreds, int, error) {
+	obmsg, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), requestID)
 	if err != nil {
-		return resp, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return []TimeAwareSubIssuedCreds{}, http.StatusNotFound, errLegacyOutboxNotFound
+		}
+
+		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
-	if outboxMessage == nil {
-		return resp, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
+	if obmsg.OrderID != order.ID {
+		return []TimeAwareSubIssuedCreds{}, http.StatusBadRequest, errWrongOrderIDForRequestID
 	}
 
-	if outboxMessage.OrderID != order.ID {
-		return resp, http.StatusBadRequest, errMismatchedOrderAndRequestID
+	if obmsg.CompletedAt == nil {
+		// Get average of last 10 outbox messages duration as the retry after.
+		return []TimeAwareSubIssuedCreds{}, http.StatusAccepted, errSetRetryAfter
 	}
 
-	if outboxMessage.CompletedAt == nil {
-		// get average of last 10 outbox messages duration as the retry after
-		return resp, http.StatusAccepted, errSetRetryAfter
-	}
-
-	creds, err := s.Datastore.GetTLV2CredsByRequestID(ctx, s.Datastore.RawDB(), requestID)
+	creds, err := s.Datastore.GetTLV2Creds(ctx, s.Datastore.RawDB(), order.ID, itemID, requestID)
 	if err != nil {
-		return resp, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
-	}
+		if errors.Is(err, errNoTLV2Creds) {
+			// Credentials could be signed, but nothing to return as they are all expired.
+			return []TimeAwareSubIssuedCreds{}, http.StatusOK, nil
+		}
 
-	if creds.OrderID != order.ID {
-		return resp, http.StatusBadRequest, errMismatchedOrderAndRequestID
-
-	}
-
-	// Potentially we can have all creds signed but nothing to return as they are all expired.
-	if creds == nil {
-		return resp, http.StatusOK, nil
+		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
 	return creds.Credentials, http.StatusOK, nil

@@ -29,7 +29,8 @@ import (
 const (
 	signingRequestBatchSize = 10
 
-	errNotFound = model.Error("not found")
+	errNotFound    = model.Error("not found")
+	errNoTLV2Creds = model.Error("no unexpired time-limited-v2 credentials found")
 )
 
 // Datastore abstracts over the underlying datastore.
@@ -81,14 +82,12 @@ type Datastore interface {
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
-	GetTLV2CredsByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
+	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
-
 	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error)
-
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -999,32 +998,32 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 	return &timeLimitedV2Creds, nil
 }
 
-// GetTLV2CredsByRequestID returns all the non expired tlv2 credentials for a given requestID.
-func (pg *Postgres) GetTLV2CredsByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*TimeLimitedV2Creds, error) {
-	query := `
-		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key,
-		valid_from, valid_to
-		from time_limited_v2_order_creds
-		where request_id = $1 and valid_to > now()
-	`
+// GetTLV2Creds returns all the non expired tlv2 credentials for a given order, item and request ids.
+//
+// If no credentials have been found, the method returns errNoTLV2Creds.
+func (pg *Postgres) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	const q = `SELECT
+		order_id, item_id, issuer_id, blinded_creds, signed_creds,
+		batch_proof, public_key, valid_from, valid_to
+	FROM time_limited_v2_order_creds
+	WHERE order_id = $1 AND item_id = $2 AND request_id = $3 AND valid_to > now()`
 
-	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
-	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, reqID)
-	if err != nil {
+	creds := make([]TimeAwareSubIssuedCreds, 0)
+	if err := sqlx.SelectContext(ctx, dbi, &creds, q, ordID, itemID, reqID); err != nil {
 		return nil, err
 	}
 
-	if len(timeAwareSubIssuedCreds) == 0 {
-		return nil, nil
+	if len(creds) == 0 {
+		return nil, errNoTLV2Creds
 	}
 
-	timeLimitedV2Creds := TimeLimitedV2Creds{
-		OrderID:     timeAwareSubIssuedCreds[0].OrderID,
-		IssuerID:    timeAwareSubIssuedCreds[0].IssuerID,
-		Credentials: timeAwareSubIssuedCreds,
+	result := &TimeLimitedV2Creds{
+		OrderID:     creds[0].OrderID,
+		IssuerID:    creds[0].IssuerID,
+		Credentials: creds,
 	}
 
-	return &timeLimitedV2Creds, nil
+	return result, nil
 }
 
 // GetTimeLimitedV2OrderCredsByOrderItem returns all the order credentials for a single order item.
