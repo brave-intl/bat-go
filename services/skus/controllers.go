@@ -546,8 +546,8 @@ type CreateOrderCredsRequest struct {
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
-// CreateOrderCreds is the handler for creating order credentials
-func CreateOrderCreds(service *Service) handlers.AppHandler {
+// CreateOrderCreds handles requests for creating credentials.
+func CreateOrderCreds(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 		lg := logging.Logger(ctx, "skus.CreateOrderCreds")
@@ -577,7 +577,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		// Use the itemID for the request id so the old credential uniqueness constraint remains enforced.
 		reqID := req.ItemID
 
-		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, reqID, req.BlindedCreds); err != nil {
+		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, reqID, req.BlindedCreds); err != nil {
 			lg.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}

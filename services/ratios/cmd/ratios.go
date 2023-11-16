@@ -12,7 +12,6 @@ import (
 )
 
 func init() {
-	// add grpc and rest commands
 	ratiosCmd.AddCommand(restCmd)
 
 	// add this command as a serve subcommand

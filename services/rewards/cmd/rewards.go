@@ -12,8 +12,6 @@ import (
 )
 
 func init() {
-	// add grpc and rest commands
-	rewardsCmd.AddCommand(grpcCmd)
 	rewardsCmd.AddCommand(restCmd)
 
 	// add this command as a serve subcommand
@@ -79,11 +77,5 @@ var (
 		Use:   "rest",
 		Short: "provides REST api services",
 		Run:   RestRun,
-	}
-
-	grpcCmd = &cobra.Command{
-		Use:   "grpc",
-		Short: "provides gRPC api services",
-		Run:   GRPCRun,
 	}
 )

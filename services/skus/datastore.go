@@ -922,10 +922,12 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 }
 
 // UpdateOrderMetadata sets the order's metadata to the key and value.
+//
+// Deprecated: This method is no longer used and should be deleted.
+//
+// TODO(pavelb): Remove this method as it's dangerous and must not be used.
 func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
-	data := datastore.Metadata{key: value}
-
-	return pg.orderRepo.UpdateMetadata(context.TODO(), pg.RawDB(), orderID, data)
+	return model.Error("UpdateOrderMetadata must not be used")
 }
 
 // TimeLimitedV2Creds represent all the
@@ -1137,18 +1139,15 @@ func (pg *Postgres) UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *s
 	return nil
 }
 
-// InsertSigningOrderRequestOutbox insert the signing order request into the outbox.
-func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID,
-	itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
-
+// InsertSigningOrderRequestOutbox inserts the signing order request into the outbox.
+func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, requestID, orderID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
 	message, err := json.Marshal(signingOrderRequest)
 	if err != nil {
 		return fmt.Errorf("error marshalling signing order request: %w", err)
 	}
 
-	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(request_id, order_id, item_id, message_data)
-											values ($1, $2, $3, $4)`, requestID, orderID, itemID, message)
-	if err != nil {
+	const q = `INSERT INTO signing_order_request_outbox (request_id, order_id, item_id, message_data) VALUES ($1, $2, $3, $4)`
+	if _, err := pg.ExecContext(ctx, q, requestID, orderID, itemID, message); err != nil {
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
 	}
 
@@ -1389,7 +1388,7 @@ func (pg *Postgres) AppendOrderMetadataInt(ctx context.Context, orderID *uuid.UU
 }
 
 // AppendOrderMetadata appends the key and string value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key string, value string) error {
+func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key, value string) error {
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
 	if err != nil {
 		return err

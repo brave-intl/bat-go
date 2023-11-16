@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -30,8 +31,9 @@ import (
 )
 
 // RouterV2 for promotion endpoints
-func RouterV2(service *Service) chi.Router {
+func RouterV2(service *Service, vbatExpires time.Time) chi.Router {
 	r := chi.NewRouter()
+	r.Use(middleware.NewUpgradeRequiredByMiddleware(vbatExpires))
 	if os.Getenv("ENV") != "local" {
 		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
 	} else {
@@ -45,8 +47,9 @@ func RouterV2(service *Service) chi.Router {
 }
 
 // Router for promotion endpoints
-func Router(service *Service) chi.Router {
+func Router(service *Service, vbatExpires time.Time) chi.Router {
 	r := chi.NewRouter()
+	r.Use(middleware.NewUpgradeRequiredByMiddleware(vbatExpires))
 	if os.Getenv("ENV") != "local" {
 		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
 	} else {
@@ -67,8 +70,9 @@ func Router(service *Service) chi.Router {
 }
 
 // SuggestionsV2Router for suggestions endpoints
-func SuggestionsV2Router(service *Service) (chi.Router, error) {
+func SuggestionsV2Router(service *Service, vbatExpires time.Time) (chi.Router, error) {
 	r := chi.NewRouter()
+	r.Use(middleware.NewUpgradeRequiredByMiddleware(vbatExpires))
 	var (
 		enableLinkingDraining bool
 		err                   error
@@ -88,8 +92,9 @@ func SuggestionsV2Router(service *Service) (chi.Router, error) {
 }
 
 // SuggestionsRouter for suggestions endpoints
-func SuggestionsRouter(service *Service) (chi.Router, error) {
+func SuggestionsRouter(service *Service, vbatExpires time.Time) (chi.Router, error) {
 	r := chi.NewRouter()
+	r.Use(middleware.NewUpgradeRequiredByMiddleware(vbatExpires))
 	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
 
 	var (
@@ -111,8 +116,9 @@ func SuggestionsRouter(service *Service) (chi.Router, error) {
 }
 
 // WalletEventRouter for reporting bat loss events
-func WalletEventRouter(service *Service) chi.Router {
+func WalletEventRouter(service *Service, vbatExpires time.Time) chi.Router {
 	r := chi.NewRouter()
+	r.Use(middleware.NewUpgradeRequiredByMiddleware(vbatExpires))
 	r.Method("POST", "/{walletId}/events/batloss/{reportId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportWalletEvent", PostReportWalletEvent(service))))
 	return r
 }
