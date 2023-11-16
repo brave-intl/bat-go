@@ -1435,7 +1435,7 @@ func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
 		ValidFor:  &valid,
 	}
 
-	creds, status, err := suite.service.GetTimeLimitedCreds(ctx, order)
+	creds, status, err := suite.service.GetTimeLimitedCredsByID(ctx, order, uuid.Nil, uuid.Nil)
 	suite.Require().True(creds == nil, "should not get creds back")
 	suite.Require().True(status == http.StatusBadRequest, "should not get creds back")
 	suite.Require().Error(err, "should get an error")
