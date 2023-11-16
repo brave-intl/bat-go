@@ -1000,11 +1000,11 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reque
 		if uuid.Equal(v.ID, itemID) {
 			switch v.CredentialType {
 			case singleUse:
-				return s.GetSingleUseCreds(ctx, order, itemID, requestID)
+				return s.GetSingleUseCreds(ctx, order.ID, itemID, requestID)
 			case timeLimited:
 				return s.GetTimeLimitedCreds(ctx, order, itemID, requestID)
 			case timeLimitedV2:
-				return s.GetTimeLimitedV2Creds(ctx, order, itemID, requestID)
+				return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, requestID)
 			}
 			return nil, http.StatusConflict, errInvalidCredentialType
 
@@ -1034,11 +1034,11 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	credentialType := order.Items[0].CredentialType
 	switch credentialType {
 	case singleUse:
-		return s.GetSingleUseCreds(ctx, order, itemID, requestID)
+		return s.GetSingleUseCreds(ctx, order.ID, itemID, requestID)
 	case timeLimited:
 		return s.GetTimeLimitedCreds(ctx, order, itemID, requestID)
 	case timeLimitedV2:
-		return s.GetTimeLimitedV2Creds(ctx, order, itemID, requestID)
+		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, requestID)
 	}
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
@@ -1047,9 +1047,9 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 //
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the order credentials.
-func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order, itemID, reqID uuid.UUID) ([]OrderCreds, int, error) {
+func (s *Service) GetSingleUseCreds(ctx context.Context, orderID, itemID, reqID uuid.UUID) ([]OrderCreds, int, error) {
 	// Single use credentials retain the old semantics, only one request is ever allowed.
-	creds, err := s.Datastore.GetOrderCredsByItemID(order.ID, itemID, false)
+	creds, err := s.Datastore.GetOrderCredsByItemID(orderID, itemID, false)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get single use creds: %w", err)
 	}
@@ -1086,7 +1086,7 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order, itemID, r
 // If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
 //
 // Browser's api_request_helper does not understand Go's nil slices, hence explicit empty slice is returned.
-func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order, itemID, reqID uuid.UUID) ([]TimeAwareSubIssuedCreds, int, error) {
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, reqID uuid.UUID) ([]TimeAwareSubIssuedCreds, int, error) {
 	obmsg, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1096,7 +1096,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order, itemI
 		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
-	if obmsg.OrderID != order.ID {
+	if !uuid.Equal(obmsg.OrderID, orderID) {
 		return []TimeAwareSubIssuedCreds{}, http.StatusBadRequest, errWrongOrderIDForRequestID
 	}
 
@@ -1105,7 +1105,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order, itemI
 		return []TimeAwareSubIssuedCreds{}, http.StatusAccepted, errSetRetryAfter
 	}
 
-	creds, err := s.Datastore.GetTLV2Creds(ctx, s.Datastore.RawDB(), order.ID, itemID, reqID)
+	creds, err := s.Datastore.GetTLV2Creds(ctx, s.Datastore.RawDB(), orderID, itemID, reqID)
 	if err != nil {
 		if errors.Is(err, errNoTLV2Creds) {
 			// Credentials could be signed, but nothing to return as they are all expired.
