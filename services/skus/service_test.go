@@ -297,10 +297,6 @@ func TestCreateOrderItem(t *testing.T) {
 	}
 }
 
-func ptrTo[T any](v T) *T {
-	return &v
-}
-
 func mustDurationFromISO(v string) *time.Duration {
 	result, err := durationFromISO(v)
 	if err != nil {
