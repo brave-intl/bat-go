@@ -56,6 +56,7 @@ var (
 	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
 	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
 	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
+	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
 
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
@@ -988,8 +989,8 @@ const (
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
 
-// GetItemCredentialsByID - based on the order, item and request id - get the associated credentials
-func (s *Service) GetItemCredentialsByID(ctx context.Context, orderID, itemID, requestID uuid.UUID) (interface{}, int, error) {
+// GetItemCredentials returns credentials based on the order, item and request id.
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, requestID uuid.UUID) (interface{}, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil || order == nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -999,7 +1000,7 @@ func (s *Service) GetItemCredentialsByID(ctx context.Context, orderID, itemID, r
 		if uuid.Equal(v.ID, itemID) {
 			switch v.CredentialType {
 			case singleUse:
-				return s.GetSingleUseCredsByID(ctx, order, itemID, requestID)
+				return s.GetSingleUseCreds(ctx, order, itemID, requestID)
 			case timeLimited:
 				return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
 			case timeLimitedV2:
@@ -1033,7 +1034,7 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	credentialType := order.Items[0].CredentialType
 	switch credentialType {
 	case singleUse:
-		return s.GetSingleUseCredsByID(ctx, order, itemID, requestID)
+		return s.GetSingleUseCreds(ctx, order, itemID, requestID)
 	case timeLimited:
 		return s.GetTimeLimitedCredsByID(ctx, order, itemID, requestID)
 	case timeLimitedV2:
@@ -1042,16 +1043,12 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
 
-// GetSingleUseCredsByID returns all the single use credentials for a given order.
+// GetSingleUseCreds returns single use credentials for a given order, item and request.
+//
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the order credentials.
-func (s *Service) GetSingleUseCredsByID(ctx context.Context, order *Order, itemID uuid.UUID, requestID uuid.UUID) ([]OrderCreds, int, error) {
-	if order == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
-	}
-
-	// single use credentials retain the old semantics, only one request
-	// is ever allowed
+func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order, itemID, reqID uuid.UUID) ([]OrderCreds, int, error) {
+	// Single use credentials retain the old semantics, only one request is ever allowed.
 	creds, err := s.Datastore.GetOrderCredsByItemID(order.ID, itemID, false)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get single use creds: %w", err)
@@ -1062,14 +1059,15 @@ func (s *Service) GetSingleUseCredsByID(ctx context.Context, order *Order, itemI
 		if creds.SignedCreds == nil {
 			return nil, http.StatusAccepted, nil
 		}
+
 		// TODO: End
 		return []OrderCreds{*creds}, http.StatusOK, nil
 	}
 
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), requestID)
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+			return nil, http.StatusNotFound, errLegacySUCredsNotFound
 		}
 
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
@@ -1079,7 +1077,7 @@ func (s *Service) GetSingleUseCredsByID(ctx context.Context, order *Order, itemI
 		return nil, http.StatusAccepted, nil
 	}
 
-	return nil, http.StatusInternalServerError, fmt.Errorf("unreachable condition")
+	return nil, http.StatusInternalServerError, model.Error("unreachable condition")
 }
 
 // GetTimeLimitedV2Creds returns all the tlv2 credentials for a given order, item and request id.

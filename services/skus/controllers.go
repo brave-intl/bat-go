@@ -740,7 +740,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			reqID = *reqIDRaw.UUID()
 		}
 
-		creds, status, err := svc.GetItemCredentialsByID(ctx, *orderID.UUID(), *itemID.UUID(), reqID)
+		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), reqID)
 		if err != nil {
 			if !errors.Is(err, errSetRetryAfter) {
 				return handlers.WrapError(err, "Error getting credentials", status)
