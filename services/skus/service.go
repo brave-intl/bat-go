@@ -1075,7 +1075,7 @@ func (s *Service) GetSingleUseCredsByID(ctx context.Context, order *Order, itemI
 		return []OrderCreds{*creds}, http.StatusOK, nil
 	}
 
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), requestID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
@@ -1100,7 +1100,7 @@ func (s *Service) GetTimeLimitedV2CredsByID(ctx context.Context, order *Order, i
 		return resp, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
 	}
 
-	outboxMessage, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
+	outboxMessage, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), requestID)
 	if err != nil {
 		return resp, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}

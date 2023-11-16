@@ -566,7 +566,7 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 	defer rollback()
 
 	// Check to see if the signing request has not been deleted whilst signing the request.
-	sor, err := s.datastore.GetSigningOrderRequestOutboxByRequestIDTx(ctx, tx, requestID)
+	sor, err := s.datastore.GetSigningOrderRequestOutboxByRequestID(ctx, tx, requestID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("error get signing order credentials tx: %w", err)
 	}
