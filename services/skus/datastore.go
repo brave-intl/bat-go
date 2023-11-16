@@ -11,10 +11,10 @@ import (
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -81,7 +81,7 @@ type Datastore interface {
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
-	GetTimeLimitedV2OrderCredsByRequestID(requestID uuid.UUID) (*TimeLimitedV2Creds, error)
+	GetTLV2CredsByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
@@ -999,8 +999,8 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 	return &timeLimitedV2Creds, nil
 }
 
-// GetTimeLimitedV2OrderCredsByRequestID returns all the non expired time limited v2 order credentials for a given requestID.
-func (pg *Postgres) GetTimeLimitedV2OrderCredsByRequestID(requestID uuid.UUID) (*TimeLimitedV2Creds, error) {
+// GetTLV2CredsByRequestID returns all the non expired tlv2 credentials for a given requestID.
+func (pg *Postgres) GetTLV2CredsByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key,
 		valid_from, valid_to
@@ -1009,7 +1009,7 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByRequestID(requestID uuid.UUID) (
 	`
 
 	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
-	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, requestID)
+	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, reqID)
 	if err != nil {
 		return nil, err
 	}

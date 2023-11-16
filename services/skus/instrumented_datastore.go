@@ -468,8 +468,8 @@ func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrderItem(itemID u
 	return _d.base.GetTimeLimitedV2OrderCredsByOrderItem(itemID)
 }
 
-// GetTimeLimitedV2OrderCredsByRequestID implements Datastore
-func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByRequestID(requestID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
+// GetTLV2CredsByRequestID implements Datastore
+func (_d DatastoreWithPrometheus) GetTLV2CredsByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -477,9 +477,9 @@ func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByRequestID(requestI
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTimeLimitedV2OrderCredsByRequestID", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTLV2CredsByRequestID", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetTimeLimitedV2OrderCredsByRequestID(requestID)
+	return _d.base.GetTLV2CredsByRequestID(ctx, dbi, reqID)
 }
 
 // GetTransaction implements Datastore

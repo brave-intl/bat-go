@@ -506,19 +506,19 @@ func (mr *MockDatastoreMockRecorder) GetTimeLimitedV2OrderCredsByOrderItem(itemI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeLimitedV2OrderCredsByOrderItem", reflect.TypeOf((*MockDatastore)(nil).GetTimeLimitedV2OrderCredsByOrderItem), itemID)
 }
 
-// GetTimeLimitedV2OrderCredsByRequestID mocks base method.
-func (m *MockDatastore) GetTimeLimitedV2OrderCredsByRequestID(requestID go_uuid.UUID) (*TimeLimitedV2Creds, error) {
+// GetTLV2CredsByRequestID mocks base method.
+func (m *MockDatastore) GetTLV2CredsByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID go_uuid.UUID) (*TimeLimitedV2Creds, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimeLimitedV2OrderCredsByRequestID", requestID)
+	ret := m.ctrl.Call(m, "GetTLV2CredsByRequestID", ctx, dbi, reqID)
 	ret0, _ := ret[0].(*TimeLimitedV2Creds)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetTimeLimitedV2OrderCredsByRequestID indicates an expected call of GetTimeLimitedV2OrderCredsByRequestID.
-func (mr *MockDatastoreMockRecorder) GetTimeLimitedV2OrderCredsByRequestID(requestID interface{}) *gomock.Call {
+// GetTLV2CredsByRequestID indicates an expected call of GetTLV2CredsByRequestID.
+func (mr *MockDatastoreMockRecorder) GetTLV2CredsByRequestID(ctx, dbi, reqID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeLimitedV2OrderCredsByRequestID", reflect.TypeOf((*MockDatastore)(nil).GetTimeLimitedV2OrderCredsByRequestID), requestID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTLV2CredsByRequestID", reflect.TypeOf((*MockDatastore)(nil).GetTLV2CredsByRequestID), ctx, dbi, reqID)
 }
 
 // GetTransaction mocks base method.

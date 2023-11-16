@@ -1108,7 +1108,7 @@ func (s *Service) GetTimeLimitedV2CredsByID(ctx context.Context, order *Order, i
 		return resp, http.StatusAccepted, errSetRetryAfter
 	}
 
-	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByRequestID(requestID)
+	creds, err := s.Datastore.GetTLV2CredsByRequestID(ctx, s.Datastore.RawDB(), requestID)
 	if err != nil {
 		return resp, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
