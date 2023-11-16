@@ -100,10 +100,10 @@ func Router(
 		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
 		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
 
-		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
+		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc)))
 
-		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
-		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", CreateOrderItemCreds(svc)))
+		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc)))
+		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", createItemCreds(svc)))
 	})
 
 	return r
@@ -583,67 +583,54 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 	}
 }
 
-// CreateOrderItemCredsRequest includes the blinded credentials which are to be signed
-type CreateOrderItemCredsRequest struct {
+// createItemCredsRequest includes the blinded credentials to be signed.
+type createItemCredsRequest struct {
 	BlindedCreds []string `json:"blindedCreds" valid:"base64"`
 }
 
-// CreateOrderItemCreds is the handler for creating order credentials
-func CreateOrderItemCreds(service *Service) handlers.AppHandler {
+// createItemCreds handles requests for creating credentials for an item.
+func createItemCreds(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			req    = new(CreateOrderItemCredsRequest)
-			ctx    = r.Context()
-			logger = logging.Logger(ctx, "skus.CreateOrderItemCreds")
-		)
+		ctx := r.Context()
+		lg := logging.Logger(ctx, "skus.createItemCreds")
 
-		err := requestutils.ReadJSON(ctx, r.Body, req)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to read body payload")
+		req := &createItemCredsRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
+			lg.Error().Err(err).Msg("failed to read body payload")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to validate struct")
+		if _, err := govalidator.ValidateStruct(req); err != nil {
+			lg.Error().Err(err).Msg("failed to validate struct")
 			return handlers.WrapValidationError(err)
 		}
 
-		var orderID = new(inputs.ID)
+		orderID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			logger.Error().Err(err).Msg("failed to validate order id")
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
-			)
+			lg.Error().Err(err).Msg("failed to validate order id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"orderID": err.Error(),
+			})
 		}
 
-		var itemID = new(inputs.ID)
+		itemID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParam(r, "itemID")); err != nil {
-			logger.Error().Err(err).Msg("failed to validate item id")
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"itemID": err.Error(),
-				},
-			)
+			lg.Error().Err(err).Msg("failed to validate item id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"itemID": err.Error(),
+			})
 		}
 
-		var requestID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(ctx, requestID, chi.URLParam(r, "requestID")); err != nil {
-			logger.Error().Err(err).Msg("failed to validate request id")
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"requestID": err.Error(),
-				},
-			)
+		reqID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParam(r, "requestID")); err != nil {
+			lg.Error().Err(err).Msg("failed to validate request id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"requestID": err.Error(),
+			})
 		}
 
-		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), *requestID.UUID(), req.BlindedCreds); err != nil {
-			logger.Error().Err(err).Msg("failed to create the order credentials")
+		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID(), req.BlindedCreds); err != nil {
+			lg.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
@@ -709,61 +696,52 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 	}
 }
 
-// GetOrderCredsByID is the handler for fetching order credentials by an item id
-func GetOrderCredsByID(service *Service) handlers.AppHandler {
+// getOrderCredsByID handles requests for fetching order credentials by an item id.
+func getOrderCredsByID(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		// get the IDs from the URL
-		var (
-			orderID           = new(inputs.ID)
-			itemID            = new(inputs.ID)
-			requestID         = new(inputs.ID)
-			validationPayload = map[string]interface{}{}
-			err               error
-		)
-
-		// decode and validate orderID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			validationPayload["orderID"] = err.Error()
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"orderID": err.Error(),
+			})
 		}
 
-		// decode and validate itemID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
-			validationPayload["itemID"] = err.Error()
+		itemID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParam(r, "itemID")); err != nil {
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"itemID": err.Error(),
+			})
 		}
 
-		// decode and validate requestID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), requestID, chi.URLParam(r, "requestID")); err != nil {
-			validationPayload["requestID"] = err.Error()
+		reqID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParam(r, "requestID")); err != nil {
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"requestID": err.Error(),
+			})
 		}
 
-		// did we get any validation errors?
-		if len(validationPayload) > 0 {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				validationPayload)
-		}
-
-		creds, status, err := service.GetItemCredentialsByID(r.Context(), *orderID.UUID(), *itemID.UUID(), *requestID.UUID())
+		creds, status, err := svc.GetItemCredentialsByID(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID())
 		if err != nil {
-			if errors.Is(err, errSetRetryAfter) {
-				// error specifies a retry after period, add to response header
-				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
-				if err != nil {
-					return handlers.WrapError(err, "Error getting credential retry-after", status)
-				}
-				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
-			} else {
+			if !errors.Is(err, errSetRetryAfter) {
 				return handlers.WrapError(err, "Error getting credentials", status)
 			}
+
+			// Add to response header as error specifies a retry after period.
+			avg, err := svc.Datastore.GetOutboxMovAvgDurationSeconds()
+			if err != nil {
+				return handlers.WrapError(err, "Error getting credential retry-after", status)
+			}
+
+			w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
 		}
+
 		if creds == nil {
-			return handlers.RenderContent(r.Context(), map[string]interface{}{}, w, status)
+			return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
 		}
-		return handlers.RenderContent(r.Context(), creds, w, status)
+
+		return handlers.RenderContent(ctx, creds, w, status)
 	})
 }
 
