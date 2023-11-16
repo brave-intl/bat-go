@@ -100,9 +100,12 @@ func Router(
 		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
 		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
 
-		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc)))
+		// Handle the old endpoint while the new is being rolled out:
+		// - true: the handler uses itemID as the request id, which is the old mode;
+		// - false: the handler uses the requestID from the URI.
+		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, true)))
+		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, false)))
 
-		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc)))
 		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", createItemCreds(svc)))
 	})
 
@@ -606,7 +609,7 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 		}
 
 		orderID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
 			lg.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 				"orderID": err.Error(),
@@ -614,7 +617,7 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 		}
 
 		itemID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParam(r, "itemID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
 			lg.Error().Err(err).Msg("failed to validate item id")
 			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 				"itemID": err.Error(),
@@ -622,7 +625,7 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 		}
 
 		reqID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParam(r, "requestID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
 			lg.Error().Err(err).Msg("failed to validate request id")
 			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 				"requestID": err.Error(),
@@ -697,32 +700,47 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 }
 
 // getOrderCredsByID handles requests for fetching order credentials by an item id.
-func getOrderCredsByID(svc *Service) handlers.AppHandler {
+//
+// Requests may come in via two endpoints:
+// - /{itemID} – legacyMode, reqID == itemID
+// - /items/{itemID}/batches/{requestID} – new mode, reqID == requestID.
+//
+// The legacy mode will be gone after confirming a successful rollout.
+//
+// TODO: Clean up the legacy mode.
+func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
 		orderID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
 			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 				"orderID": err.Error(),
 			})
 		}
 
 		itemID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParam(r, "itemID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
 			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 				"itemID": err.Error(),
 			})
 		}
 
-		reqID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParam(r, "requestID")); err != nil {
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
-				"requestID": err.Error(),
-			})
+		var reqID uuid.UUID
+		if legacyMode {
+			reqID = *itemID.UUID()
+		} else {
+			reqIDRaw := &inputs.ID{}
+			if err := inputs.DecodeAndValidateString(ctx, reqIDRaw, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
+				return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+					"requestID": err.Error(),
+				})
+			}
+
+			reqID = *reqIDRaw.UUID()
 		}
 
-		creds, status, err := svc.GetItemCredentialsByID(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID())
+		creds, status, err := svc.GetItemCredentialsByID(ctx, *orderID.UUID(), *itemID.UUID(), reqID)
 		if err != nil {
 			if !errors.Is(err, errSetRetryAfter) {
 				return handlers.WrapError(err, "Error getting credentials", status)
