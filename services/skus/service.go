@@ -1054,30 +1054,30 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order, itemID, r
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get single use creds: %w", err)
 	}
 
-	if creds == nil {
-		outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, http.StatusNotFound, errLegacySUCredsNotFound
-			}
-
-			return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
-		}
-
-		if outboxMessages.CompletedAt == nil {
+	if creds != nil {
+		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
+		if creds.SignedCreds == nil {
 			return nil, http.StatusAccepted, nil
 		}
 
-		return nil, http.StatusInternalServerError, model.Error("unreachable condition")
+		// TODO: End
+		return []OrderCreds{*creds}, http.StatusOK, nil
 	}
 
-	// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
-	if creds.SignedCreds == nil {
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, http.StatusNotFound, errLegacySUCredsNotFound
+		}
+
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+	}
+
+	if outboxMessages.CompletedAt == nil {
 		return nil, http.StatusAccepted, nil
 	}
 
-	// TODO: End
-	return []OrderCreds{*creds}, http.StatusOK, nil
+	return nil, http.StatusInternalServerError, model.Error("unreachable condition")
 }
 
 // GetTimeLimitedV2Creds returns all the tlv2 credentials for a given order, item and request id.
