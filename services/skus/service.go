@@ -992,7 +992,11 @@ var errInvalidCredentialType = errors.New("invalid credential type on order")
 // GetItemCredentials returns credentials based on the order, item and request id.
 func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
-	if err != nil || order == nil {
+	if err != nil {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	if order == nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
 	}
 

@@ -282,6 +282,10 @@ func (o *Order) NumIntervals() (int, error) {
 	return result, nil
 }
 
+// HasItem returns the item if found.
+//
+// It exposes a comma, ok API similar to a map.
+// Today items are stored in a slice, but it might change to a map in the future.
 func (o *Order) HasItem(id uuid.UUID) (*OrderItem, bool) {
 	for i := range o.Items {
 		if uuid.Equal(o.Items[i].ID, id) {

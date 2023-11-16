@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
@@ -570,6 +571,129 @@ func TestOrderItemList_TotalCost(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			act := model.OrderItemList(tc.given).TotalCost()
 			should.Equal(t, true, tc.exp.Equal(act))
+		})
+	}
+}
+
+func TestOrder_HasItem(t *testing.T) {
+	type tcGiven struct {
+		order  *model.Order
+		itemID uuid.UUID
+	}
+
+	type tcExpected struct {
+		item *model.OrderItem
+		ok   bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_items_nothing_found",
+			given: tcGiven{
+				order:  &model.Order{},
+				itemID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+			},
+		},
+
+		{
+			name: "one_item_not_found",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []model.OrderItem{
+						{
+							ID: uuid.Must(uuid.FromString("dbc6416a-7713-4aa5-8968-56aef7ec0e81")),
+						},
+					},
+				},
+				itemID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+			},
+		},
+
+		{
+			name: "two_items_not_found",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []model.OrderItem{
+						{
+							ID: uuid.Must(uuid.FromString("dbc6416a-7713-4aa5-8968-56aef7ec0e81")),
+						},
+
+						{
+							ID: uuid.Must(uuid.FromString("4efbedfe-a598-43a4-a345-17653d6289e8")),
+						},
+					},
+				},
+				itemID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+			},
+		},
+
+		{
+			name: "one_item_found",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []model.OrderItem{
+						{
+							ID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+						},
+					},
+				},
+				itemID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+			},
+			exp: tcExpected{
+				item: &model.OrderItem{
+					ID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+				},
+				ok: true,
+			},
+		},
+
+		{
+			name: "many_items_found",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []model.OrderItem{
+						{
+							ID: uuid.Must(uuid.FromString("dbc6416a-7713-4aa5-8968-56aef7ec0e81")),
+						},
+
+						{
+							ID: uuid.Must(uuid.FromString("4efbedfe-a598-43a4-a345-17653d6289e8")),
+						},
+
+						{
+							ID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+						},
+					},
+				},
+				itemID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+			},
+			exp: tcExpected{
+				item: &model.OrderItem{
+					ID: uuid.Must(uuid.FromString("b5e3f3e4-0bd4-4fd5-a693-a50f4dbfd6ac")),
+				},
+				ok: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			item, ok := tc.given.order.HasItem(tc.given.itemID)
+			must.Equal(t, tc.exp.ok, ok)
+
+			if !tc.exp.ok {
+				return
+			}
+
+			should.Equal(t, tc.exp.item, item)
 		})
 	}
 }
