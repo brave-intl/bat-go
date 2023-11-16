@@ -156,18 +156,8 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 	return _d.base.CreateKey(merchant, name, encryptedSecretKey, nonce)
 }
 
-// CreateOrder implements Datastore
-func (_d DatastoreWithPrometheus) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (op1 *model.Order, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateOrder", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.CreateOrder(ctx, dbi, oreq, items)
+func (_d DatastoreWithPrometheus) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, req *model.OrderNew, items []model.OrderItem) (op1 *model.Order, err error) {
+	return _d.base.CreateOrder(ctx, dbi, req, items)
 }
 
 // CreateTransaction implements Datastore
