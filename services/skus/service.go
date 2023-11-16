@@ -143,7 +143,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	}
 
 	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"vote": voteSchema,
+		"vote":                       voteSchema,
 		kafkaUnsignedOrderCredsTopic: signingOrderRequestSchema,
 		kafkaSignedOrderCredsTopic:   signingOrderResultSchema,
 	})
@@ -1077,18 +1077,17 @@ func (s *Service) GetSingleUseCredsByID(ctx context.Context, order *Order, itemI
 
 	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, requestID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+		}
+
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
-	if len(outboxMessages) == 0 {
-		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	if outboxMessages.CompletedAt == nil {
+		return nil, http.StatusAccepted, nil
 	}
 
-	for _, m := range outboxMessages {
-		if m.CompletedAt == nil {
-			return nil, http.StatusAccepted, nil
-		}
-	}
 	return nil, http.StatusInternalServerError, fmt.Errorf("unreachable condition")
 }
 
