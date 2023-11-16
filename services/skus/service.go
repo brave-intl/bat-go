@@ -990,31 +990,33 @@ const (
 var errInvalidCredentialType = errors.New("invalid credential type on order")
 
 // GetItemCredentials returns credentials based on the order, item and request id.
-func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, requestID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil || order == nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
 	}
 
-	for _, v := range order.Items {
-		if uuid.Equal(v.ID, itemID) {
-			switch v.CredentialType {
-			case singleUse:
-				return s.GetSingleUseCreds(ctx, order.ID, itemID, requestID)
-			case timeLimited:
-				return s.GetTimeLimitedCreds(ctx, order, itemID, requestID)
-			case timeLimitedV2:
-				return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, requestID)
-			}
-			return nil, http.StatusConflict, errInvalidCredentialType
-
-		}
+	item, ok := order.HasItem(itemID)
+	if !ok {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get item: %w", err)
 	}
 
-	return nil, http.StatusNotFound, fmt.Errorf("failed to get item: %w", err)
+	switch item.CredentialType {
+	case singleUse:
+		return s.GetSingleUseCreds(ctx, order.ID, itemID, reqID)
+	case timeLimited:
+		return s.GetTimeLimitedCreds(ctx, order, itemID, reqID)
+	case timeLimitedV2:
+		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, reqID)
+	default:
+		return nil, http.StatusConflict, errInvalidCredentialType
+	}
 }
 
-// GetCredentials - based on the order, get the associated credentials
+// GetCredentials returns credentials on the order.
+//
+// This is a legacy method.
+// For backward compatibility, similar to creating credentials, it uses item id as request id.
 func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
@@ -1026,21 +1028,21 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	}
 
 	if len(order.Items) != 1 {
-		return nil, http.StatusConflict, fmt.Errorf("order must only have one item")
+		return nil, http.StatusConflict, model.Error("order must only have one item")
 	}
 
 	itemID := order.Items[0].ID
-	requestID := itemID
-	credentialType := order.Items[0].CredentialType
-	switch credentialType {
+
+	switch order.Items[0].CredentialType {
 	case singleUse:
-		return s.GetSingleUseCreds(ctx, order.ID, itemID, requestID)
+		return s.GetSingleUseCreds(ctx, order.ID, itemID, itemID)
 	case timeLimited:
-		return s.GetTimeLimitedCreds(ctx, order, itemID, requestID)
+		return s.GetTimeLimitedCreds(ctx, order, itemID, itemID)
 	case timeLimitedV2:
-		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, requestID)
+		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, itemID)
+	default:
+		return nil, http.StatusConflict, errInvalidCredentialType
 	}
-	return nil, http.StatusConflict, errInvalidCredentialType
 }
 
 // GetSingleUseCreds returns single use credentials for a given order, item and request.
