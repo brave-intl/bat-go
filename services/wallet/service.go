@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
@@ -41,6 +42,19 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/cmd"
 )
+
+var (
+	countZebPayLinking = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "count_zebpay_linking",
+		Help: "Counts the number of ZebPay wallet linking",
+	},
+		[]string{"status"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(countZebPayLinking)
+}
 
 // VerifiedWalletEnable enable verified wallet call
 var VerifiedWalletEnable = isVerifiedWalletEnable()
@@ -485,6 +499,7 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	if err := claims.validate(time.Now()); err != nil {
+		countZebPayLinking.With(prometheus.Labels{"status": "failure"})
 		return "", err
 	}
 
@@ -513,6 +528,8 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 
 		return "", handlers.WrapError(err, "unable to link zebpay wallets", status)
 	}
+
+	countZebPayLinking.With(prometheus.Labels{"status": "success"})
 
 	return country, nil
 }
