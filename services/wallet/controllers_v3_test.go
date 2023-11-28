@@ -214,7 +214,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 				}`, tokenString)),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
 		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
 		rw             = httptest.NewRecorder()
 	)
@@ -322,7 +322,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -427,7 +427,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		"DELETE",
 		fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
 
-	s, _ = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+	s, _ = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
 	handler = wallet.DisconnectCustodianLinkV3(s)
 	rw = httptest.NewRecorder()
 
@@ -552,7 +552,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -670,7 +670,12 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 				},
 			})
 
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		met = &mockMetric{
+			fnLinkFailureZP: func(cc string) {
+				assert.Equal(t, "IN", cc)
+			},
+		}
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, met)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -742,7 +747,13 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		// setup mock clients
 		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
 
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		met = &mockMetric{
+			fnLinkSuccessZP: func(cc string) {
+				assert.Equal(t, "IN", cc)
+			},
+		}
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, met)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -867,7 +878,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -971,8 +982,7 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 		r = httptest.NewRequest(
 			"DELETE",
 			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
-
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
 		handler = wallet.DisconnectCustodianLinkV3(s)
 		w       = httptest.NewRecorder()
 	)
@@ -1027,4 +1037,21 @@ func mockSQLCustodianLink(mock sqlmock.Sqlmock, custodian string) {
 		AddRow(uuid.NewV4().String(), custodian, uuid.NewV4().String(), time.Now(), time.Now(), time.Now())
 	mock.ExpectQuery("^select(.+) from wallet_custodian(.+)").
 		WillReturnRows(clRow)
+}
+
+type mockMetric struct {
+	fnLinkSuccessZP func(cc string)
+	fnLinkFailureZP func(cc string)
+}
+
+func (m *mockMetric) LinkSuccessZP(cc string) {
+	if m.fnLinkSuccessZP != nil {
+		m.fnLinkSuccessZP(cc)
+	}
+}
+
+func (m *mockMetric) LinkFailureZP(cc string) {
+	if m.fnLinkFailureZP != nil {
+		m.fnLinkFailureZP(cc)
+	}
 }
