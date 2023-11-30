@@ -14,10 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brave-intl/bat-go/services/wallet/metric"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/go-chi/chi"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/lib/pq"
+
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
@@ -103,6 +105,11 @@ type GeoValidator interface {
 	Validate(ctx context.Context, geolocation string) (bool, error)
 }
 
+type metricSvc interface {
+	LinkSuccessZP(cc string)
+	LinkFailureZP(cc string)
+}
+
 // Service contains datastore connections
 type Service struct {
 	Datastore        Datastore
@@ -114,12 +121,11 @@ type Service struct {
 	jobs             []srv.Job
 	crMu             *sync.RWMutex
 	custodianRegions custodian.Regions
+	metric           metricSvc
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client,
-	geminiClient gemini.Client, geoCountryValidator GeoValidator,
-	retry backoff.RetryFunc) (*Service, error) {
+func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client, geminiClient gemini.Client, geoCountryValidator GeoValidator, retry backoff.RetryFunc, metric metricSvc) (*Service, error) {
 	service := &Service{
 		crMu:         new(sync.RWMutex),
 		Datastore:    datastore,
@@ -128,6 +134,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient r
 		geminiClient: geminiClient,
 		geoValidator: geoCountryValidator,
 		retry:        retry,
+		metric:       metric,
 	}
 	// get the valid custodian regions
 	return service, nil
@@ -223,7 +230,9 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	geoCountryValidator := NewGeoCountryValidator(awsClient, config)
 
-	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry)
+	mtc := metric.New()
+
+	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -438,58 +447,22 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 
 // LinkZebPayWallet links a wallet and transfers funds to newly linked wallet.
 func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) (string, error) {
-	const (
-		depositProvider = "zebpay"
-		country         = "IN"
-	)
+	const depositProvider = "zebpay"
 
-	// Get zebpay linking_info signing key.
-	linkingKeyB64, ok := ctx.Value(appctx.ZebPayLinkingKeyCTXKey).(string)
-	if !ok {
-		const msg = "zebpay linking validation misconfigured"
-		return "", handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
-	}
-
-	// Decode base64 encoded jwt key.
-	decodedJWTKey, err := base64.StdEncoding.DecodeString(linkingKeyB64)
+	claims, err := parseZebPayClaims(ctx, verificationToken)
 	if err != nil {
-		const msg = "zebpay linking validation misconfigured"
-		return "", handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusInternalServerError)
-	}
-
-	// Parse the signed verification token from input.
-	tok, err := jwt.ParseSigned(verificationToken)
-	if err != nil {
-		const msg = "zebpay linking info parsing failed"
-		return "", handlers.WrapError(appctx.ErrNotInContext, msg, http.StatusBadRequest)
-	}
-
-	if len(tok.Headers) == 0 {
-		const msg = "linking info token invalid no headers"
-		return "", handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
-	}
-
-	// validate algorithm used
-	for i := range tok.Headers {
-		if tok.Headers[i].Algorithm != "HS256" {
-			const msg = "linking info token invalid"
-			return "", handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
-		}
-	}
-
-	// Create the jwt claims and get them (verified) from the token.
-	claims := &claimsZP{}
-	if err := tok.Claims(decodedJWTKey, claims); err != nil {
-		const msg = "zebpay linking info validation failed"
-		return "", handlers.WrapError(errors.New(msg), msg, http.StatusBadRequest)
+		return "", err
 	}
 
 	if err := claims.validate(time.Now()); err != nil {
+		service.metric.LinkFailureZP(claims.CountryCode)
 		return "", err
 	}
 
 	err = validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
 	if err != nil {
+		service.metric.LinkFailureZP(claims.CountryCode)
+
 		if errors.Is(err, errCustodianLinkMismatch) {
 			return "", errCustodianLinkMismatch
 		}
@@ -497,7 +470,9 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	providerLinkingID := uuid.NewV5(ClaimNamespace, claims.AccountID)
-	if err := service.Datastore.LinkWallet(ctx, walletID.String(), claims.DepositID, providerLinkingID, depositProvider, country); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), claims.DepositID, providerLinkingID, depositProvider, claims.CountryCode); err != nil {
+		service.metric.LinkFailureZP(claims.CountryCode)
+
 		if errors.Is(err, ErrUnusualActivity) {
 			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
@@ -506,15 +481,16 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 			return "", handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
 		}
 
-		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
-			status = http.StatusConflict
+			return "", handlers.WrapError(err, "unable to link zebpay wallets", http.StatusConflict)
 		}
 
-		return "", handlers.WrapError(err, "unable to link zebpay wallets", status)
+		return "", handlers.WrapError(err, "unable to link zebpay wallets", http.StatusInternalServerError)
 	}
 
-	return country, nil
+	service.metric.LinkSuccessZP(claims.CountryCode)
+
+	return claims.CountryCode, nil
 }
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
@@ -906,4 +882,46 @@ func validateCustodianLinking(ctx context.Context, storage Datastore, walletID u
 	}
 
 	return nil
+}
+
+const (
+	errZPParseToken       model.Error = "zebpay linking info parsing failed"
+	errZPNoHeaders        model.Error = "linking info token invalid no headers"
+	errZPInvalidToken     model.Error = "linking info token invalid"
+	errZPValidationFailed model.Error = "zebpay linking info validation failed"
+)
+
+func parseZebPayClaims(ctx context.Context, verificationToken string) (claimsZP, error) {
+	const msgBadConf = "zebpay linking validation misconfigured"
+	linkingKeyB64, ok := ctx.Value(appctx.ZebPayLinkingKeyCTXKey).(string)
+	if !ok {
+		return claimsZP{}, handlers.WrapError(appctx.ErrNotInContext, msgBadConf, http.StatusInternalServerError)
+	}
+
+	decodedJWTKey, err := base64.StdEncoding.DecodeString(linkingKeyB64)
+	if err != nil {
+		return claimsZP{}, handlers.WrapError(appctx.ErrNotInContext, msgBadConf, http.StatusInternalServerError)
+	}
+
+	tok, err := jwt.ParseSigned(verificationToken)
+	if err != nil {
+		return claimsZP{}, handlers.WrapError(errZPParseToken, errZPParseToken.Error(), http.StatusBadRequest)
+	}
+
+	if len(tok.Headers) == 0 {
+		return claimsZP{}, handlers.WrapError(errZPNoHeaders, errZPNoHeaders.Error(), http.StatusBadRequest)
+	}
+
+	for i := range tok.Headers {
+		if tok.Headers[i].Algorithm != "HS256" {
+			return claimsZP{}, handlers.WrapError(errZPInvalidToken, errZPInvalidToken.Error(), http.StatusBadRequest)
+		}
+	}
+
+	var claims claimsZP
+	if err := tok.Claims(decodedJWTKey, &claims); err != nil {
+		return claimsZP{}, handlers.WrapError(errZPValidationFailed, errZPValidationFailed.Error(), http.StatusBadRequest)
+	}
+
+	return claims, nil
 }
