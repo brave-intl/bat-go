@@ -670,12 +670,12 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 				},
 			})
 
-		met = &mockMtc{
+		mtc = &mockMtc{
 			fnLinkFailureZP: func(cc string) {
 				assert.Equal(t, "IN", cc)
 			},
 		}
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, met)
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -751,13 +751,13 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		// setup mock clients
 		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
 
-		met = &mockMtc{
+		mtc = &mockMtc{
 			fnLinkSuccessZP: func(cc string) {
 				assert.Equal(t, "IN", cc)
 			},
 		}
 
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, met)
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
