@@ -670,7 +670,7 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 				},
 			})
 
-		met = &mockMetric{
+		met = &mockMtc{
 			fnLinkFailureZP: func(cc string) {
 				assert.Equal(t, "IN", cc)
 			},
@@ -685,7 +685,11 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
 	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
-		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
+		"accountId":   accountID,
+		"depositId":   idTo,
+		"countryCode": "IN",
+		"iat":         time.Now().Unix(),
+		"exp":         time.Now().Add(5 * time.Second).Unix(),
 	}).CompactSerialize()
 	if err != nil {
 		panic(err)
@@ -747,7 +751,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		// setup mock clients
 		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
 
-		met = &mockMetric{
+		met = &mockMtc{
 			fnLinkSuccessZP: func(cc string) {
 				assert.Equal(t, "IN", cc)
 			},
@@ -1039,18 +1043,18 @@ func mockSQLCustodianLink(mock sqlmock.Sqlmock, custodian string) {
 		WillReturnRows(clRow)
 }
 
-type mockMetric struct {
+type mockMtc struct {
 	fnLinkSuccessZP func(cc string)
 	fnLinkFailureZP func(cc string)
 }
 
-func (m *mockMetric) LinkSuccessZP(cc string) {
+func (m *mockMtc) LinkSuccessZP(cc string) {
 	if m.fnLinkSuccessZP != nil {
 		m.fnLinkSuccessZP(cc)
 	}
 }
 
-func (m *mockMetric) LinkFailureZP(cc string) {
+func (m *mockMtc) LinkFailureZP(cc string) {
 	if m.fnLinkFailureZP != nil {
 		m.fnLinkFailureZP(cc)
 	}

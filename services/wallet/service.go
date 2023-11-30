@@ -105,7 +105,7 @@ type GeoValidator interface {
 	Validate(ctx context.Context, geolocation string) (bool, error)
 }
 
-type Metric interface {
+type metricSvc interface {
 	LinkSuccessZP(cc string)
 	LinkFailureZP(cc string)
 }
@@ -121,11 +121,11 @@ type Service struct {
 	jobs             []srv.Job
 	crMu             *sync.RWMutex
 	custodianRegions custodian.Regions
-	metric           Metric
+	metric           metricSvc
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client, geminiClient gemini.Client, geoCountryValidator GeoValidator, retry backoff.RetryFunc, metric Metric) (*Service, error) {
+func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client, geminiClient gemini.Client, geoCountryValidator GeoValidator, retry backoff.RetryFunc, metric metricSvc) (*Service, error) {
 	service := &Service{
 		crMu:         new(sync.RWMutex),
 		Datastore:    datastore,
@@ -230,9 +230,9 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	geoCountryValidator := NewGeoCountryValidator(awsClient, config)
 
-	met := metric.New()
+	mtc := metric.New()
 
-	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry, met)
+	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -455,7 +455,7 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	if err := claims.validate(time.Now()); err != nil {
-
+		service.metric.LinkFailureZP(claims.CountryCode)
 		return "", err
 	}
 
@@ -885,18 +885,14 @@ func validateCustodianLinking(ctx context.Context, storage Datastore, walletID u
 }
 
 const (
-	errZPParseToken       Error = "zebpay linking info parsing failed"
-	errZPNoHeaders        Error = "linking info token invalid no headers"
-	errZPInvalidToken     Error = "linking info token invalid"
-	errZPValidationFailed Error = "zebpay linking info validation failed"
+	errZPParseToken       model.Error = "zebpay linking info parsing failed"
+	errZPNoHeaders        model.Error = "linking info token invalid no headers"
+	errZPInvalidToken     model.Error = "linking info token invalid"
+	errZPValidationFailed model.Error = "zebpay linking info validation failed"
 )
 
 func parseZebPayClaims(ctx context.Context, verificationToken string) (claimsZP, error) {
-	const (
-		msgBadConf = "zebpay linking validation misconfigured"
-		HS256      = "HS256"
-	)
-
+	const msgBadConf = "zebpay linking validation misconfigured"
 	linkingKeyB64, ok := ctx.Value(appctx.ZebPayLinkingKeyCTXKey).(string)
 	if !ok {
 		return claimsZP{}, handlers.WrapError(appctx.ErrNotInContext, msgBadConf, http.StatusInternalServerError)
@@ -917,7 +913,7 @@ func parseZebPayClaims(ctx context.Context, verificationToken string) (claimsZP,
 	}
 
 	for i := range tok.Headers {
-		if tok.Headers[i].Algorithm != HS256 {
+		if tok.Headers[i].Algorithm != "HS256" {
 			return claimsZP{}, handlers.WrapError(errZPInvalidToken, errZPInvalidToken.Error(), http.StatusBadRequest)
 		}
 	}
@@ -928,10 +924,4 @@ func parseZebPayClaims(ctx context.Context, verificationToken string) (claimsZP,
 	}
 
 	return claims, nil
-}
-
-type Error string
-
-func (e Error) Error() string {
-	return string(e)
 }
