@@ -1720,6 +1720,7 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 			if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", ssid); err != nil {
 				return nil, fmt.Errorf("failed to update order metadata: %w", err)
 			}
+
 		// Backporting this from the legacy method CreateOrderFromRequest.
 		case order.IsRadomPayable():
 			ssid, err := s.createRadomSessID(ctx, req, order)
