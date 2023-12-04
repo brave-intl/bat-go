@@ -1709,14 +1709,27 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	if !order.IsPaid() && order.IsStripePayable() {
-		ssid, err := s.createStripeSessID(ctx, req, order)
-		if err != nil {
-			return nil, err
-		}
+	if !order.IsPaid() {
+		switch {
+		case order.IsStripePayable():
+			ssid, err := s.createStripeSessID(ctx, req, order)
+			if err != nil {
+				return nil, err
+			}
 
-		if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", ssid); err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", ssid); err != nil {
+				return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			}
+		// Backporting this from the legacy method CreateOrderFromRequest.
+		case order.IsRadomPayable():
+			ssid, err := s.createRadomSessID(ctx, req, order)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create checkout session: %w", err)
+			}
+
+			if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "radomCheckoutSessionId", ssid); err != nil {
+				return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			}
 		}
 	}
 
@@ -1782,6 +1795,16 @@ func (s *Service) createStripeSessID(ctx context.Context, req *model.CreateOrder
 	sess, err := model.CreateStripeCheckoutSession(oid, req.Email, surl, curl, order.GetTrialDays(), order.Items)
 	if err != nil {
 		return "", fmt.Errorf("failed to create checkout session: %w", err)
+	}
+
+	return sess.SessionID, nil
+}
+
+// TODO: Refactor the Radom-related logic.
+func (s *Service) createRadomSessID(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
+	sess, err := order.CreateRadomCheckoutSession(ctx, s.radomClient, s.radomSellerAddress)
+	if err != nil {
+		return "", err
 	}
 
 	return sess.SessionID, nil
