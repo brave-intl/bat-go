@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"time"
@@ -284,16 +285,26 @@ func IterateRequest(
 					availableCurrency[currency.Currency] = currency.Amount
 				}
 
-				requiredCurrency := map[string]decimal.Decimal{}
-				for _, pay := range bulkPayoutRequestRequirements.Base.Payouts {
-					requiredCurrency[pay.Currency] = requiredCurrency[pay.Currency].Add(pay.Amount)
+				maxAmountInterface := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
+				maxAmount, ok := maxAmountInterface.(decimal.Decimal)
+				if !ok {
+					return nil, errors.New("provided max amount is not an integer")
 				}
 
+				requiredCurrency := map[string]decimal.Decimal{}
 				for key, amount := range requiredCurrency {
 					if availableCurrency[key].LessThan(amount) {
 						logger.Error().Str("required", amount.String()).Str("available", availableCurrency[key].String()).Str("currency", key).Err(err).Msg("failed to meet required balance")
 						return submittedTransactions, fmt.Errorf("failed to meet required balance: %w", err)
 					}
+				}
+
+				for _, pay := range bulkPayoutRequestRequirements.Base.Payouts {
+					if pay.Amount.GreaterThan(maxAmount) {
+						logger.Error().Str("amount", pay.Amount.String()).Str("max", maxAmount.String())
+						return submittedTransactions, fmt.Errorf("transaction amount %s exceeded max %s", pay.Amount, maxAmount)
+					}
+					requiredCurrency[pay.Currency] = requiredCurrency[pay.Currency].Add(pay.Amount)
 				}
 
 				submittedTransactions, err = SubmitBulkPayoutTransactions(
