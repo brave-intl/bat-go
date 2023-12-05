@@ -77,7 +77,11 @@ func RunUpholdUpload(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	maxPayoutAmount, err := cmd.Flags().GetString("max")
+	maxPayoutAmountString, err := cmd.Flags().GetString("max")
+	if err != nil {
+		return err
+	}
+	maxPayoutAmount, err := decimal.NewFromString(maxPayoutAmountString)
 	if err != nil {
 		return err
 	}
@@ -237,17 +241,18 @@ func UpholdUpload(
 			Count:   0,
 		}},
 	}
+
+	maxAmountAny := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
+	maxAmount, ok := maxAmountAny.(decimal.Decimal)
+	if !ok {
+		logger.Panic().Err(err).Msg("provided max amount is not a number")
+	}
+
 	for i := 0; i < total; i++ {
 		settlementTransaction := &settlementState.Transactions[i]
 
 		if settlementTransaction.IsComplete() || settlementTransaction.IsFailed() {
 			continue
-		}
-
-		maxAmountInterface := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
-		maxAmount, ok := maxAmountInterface.(decimal.Decimal)
-		if !ok {
-			logger.Panic().Err(err).Msg("provided max amount is not an integer")
 		}
 
 		if settlementTransaction.Amount.GreaterThan(maxAmount) {

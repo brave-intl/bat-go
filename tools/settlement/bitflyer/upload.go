@@ -256,8 +256,8 @@ func createBitflyerRequest(
 ) (*bitflyer.WithdrawToDepositIDBulkPayload, error) {
 	set := []custodian.Transaction{}
 	sourceFrom := ""
-	maxAmountInterface := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
-	maxAmount, ok := maxAmountInterface.(decimal.Decimal)
+	maxAmountAny := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
+	maxAmount, ok := maxAmountAny.(decimal.Decimal)
 	if !ok {
 		return nil, errors.New("provided max amount is not an integer")
 	}

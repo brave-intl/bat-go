@@ -17,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/tools/settlement"
 	geminisettlement "github.com/brave-intl/bat-go/tools/settlement/gemini"
+	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +61,11 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	maxPayoutAmount, err := cmd.Flags().GetString("max")
+	maxPayoutAmountString, err := cmd.Flags().GetString("max")
+	if err != nil {
+		return err
+	}
+	maxPayoutAmount, err := decimal.NewFromString(maxPayoutAmountString)
 	if err != nil {
 		return err
 	}

@@ -254,6 +254,12 @@ func IterateRequest(
 		return submittedTransactions, fmt.Errorf("failed to get gemini api key: %w", err)
 	}
 
+	maxAmountAny := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
+	maxAmount, ok := maxAmountAny.(decimal.Decimal)
+	if !ok {
+		return nil, errors.New("provided max amount is not an integer")
+	}
+
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
@@ -283,12 +289,6 @@ func IterateRequest(
 				availableCurrency := map[string]decimal.Decimal{}
 				for _, currency := range *result {
 					availableCurrency[currency.Currency] = currency.Amount
-				}
-
-				maxAmountInterface := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
-				maxAmount, ok := maxAmountInterface.(decimal.Decimal)
-				if !ok {
-					return nil, errors.New("provided max amount is not an integer")
 				}
 
 				requiredCurrency := map[string]decimal.Decimal{}
