@@ -23,8 +23,6 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -704,21 +702,6 @@ func GrantServer(
 				go srv.JobWorker(ctx, job.Func, job.Cadence)
 			}
 		}
-	}
-	if viper.GetString("environment") != "local" &&
-		viper.GetString("environment") != "development" {
-		// run gemini balance watch so we have balance info in prometheus
-		go func() {
-			// no need to panic here, log the error and move on with serving
-			if err := gemini.WatchGeminiBalance(ctx); err != nil {
-				logger.Error().Err(err).Msg("error launching gemini balance watch")
-			}
-		}()
-		go func() {
-			if err := bitflyer.WatchBitflyerBalance(ctx, 2*time.Minute); err != nil {
-				logger.Error().Err(err).Msg("error launching bitflyer balance watch")
-			}
-		}()
 	}
 
 	go func() {

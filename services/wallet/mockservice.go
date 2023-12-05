@@ -48,3 +48,50 @@ func (mr *MockGeoValidatorMockRecorder) Validate(ctx, geolocation interface{}) *
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockGeoValidator)(nil).Validate), ctx, geolocation)
 }
+
+// MockmetricSvc is a mock of metricSvc interface.
+type MockmetricSvc struct {
+	ctrl     *gomock.Controller
+	recorder *MockmetricSvcMockRecorder
+}
+
+// MockmetricSvcMockRecorder is the mock recorder for MockmetricSvc.
+type MockmetricSvcMockRecorder struct {
+	mock *MockmetricSvc
+}
+
+// NewMockmetricSvc creates a new mock instance.
+func NewMockmetricSvc(ctrl *gomock.Controller) *MockmetricSvc {
+	mock := &MockmetricSvc{ctrl: ctrl}
+	mock.recorder = &MockmetricSvcMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockmetricSvc) EXPECT() *MockmetricSvcMockRecorder {
+	return m.recorder
+}
+
+// LinkFailureZP mocks base method.
+func (m *MockmetricSvc) LinkFailureZP(cc string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "LinkFailureZP", cc)
+}
+
+// LinkFailureZP indicates an expected call of LinkFailureZP.
+func (mr *MockmetricSvcMockRecorder) LinkFailureZP(cc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkFailureZP", reflect.TypeOf((*MockmetricSvc)(nil).LinkFailureZP), cc)
+}
+
+// LinkSuccessZP mocks base method.
+func (m *MockmetricSvc) LinkSuccessZP(cc string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "LinkSuccessZP", cc)
+}
+
+// LinkSuccessZP indicates an expected call of LinkSuccessZP.
+func (mr *MockmetricSvcMockRecorder) LinkSuccessZP(cc interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkSuccessZP", reflect.TypeOf((*MockmetricSvc)(nil).LinkSuccessZP), cc)
+}

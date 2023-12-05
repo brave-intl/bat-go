@@ -7,7 +7,6 @@ package promotion
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/services/promotion -i ReadOnlyDatastore -t ../../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go -l ""
 
 import (
-	"context"
 	"time"
 
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
@@ -125,48 +124,6 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, gr
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClaimSummary", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetClaimSummary(walletID, grantType)
-}
-
-// GetCustodianDrainInfo implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []CustodianDrain, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianDrainInfo", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetCustodianDrainInfo(paymentID)
-}
-
-// GetDrainPoll implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetDrainPoll(drainID *uuid.UUID) (dp1 *DrainPoll, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainPoll", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetDrainPoll(drainID)
-}
-
-// GetDrainsByBatchID implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) (da1 []DrainTransfer, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainsByBatchID", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetDrainsByBatchID(ctx, batchID)
 }
 
 // GetIssuer implements ReadOnlyDatastore
