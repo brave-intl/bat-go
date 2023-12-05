@@ -264,7 +264,7 @@ func createBitflyerRequest(
 
 	for _, tx := range settlementRequests {
 		if tx.Transaction.Amount.GreaterThan(maxAmount) {
-			return nil, errors.New(fmt.Sprintf("amount %s exceeds the max %s", tx.Transaction.Amount, maxAmount))
+			return nil, fmt.Errorf("amount %s exceeds the max %s", tx.Transaction.Amount, maxAmount)
 		}
 		set = append(set, tx.Transaction)
 		sourceFrom = tx.SourceFrom
