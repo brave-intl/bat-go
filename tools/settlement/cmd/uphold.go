@@ -19,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/tools/settlement"
+	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 )
 
@@ -76,8 +77,13 @@ func RunUpholdUpload(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	maxPayoutAmount, err := cmd.Flags().GetString("max")
+	if err != nil {
+		return err
+	}
 	// setup context for logging, debug and progress
 	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, verbose)
+	ctx = context.WithValue(ctx, appctx.PayoutTxnMaxAmountCTXKey, maxPayoutAmount)
 
 	// setup progress logging
 	progressDuration, err := time.ParseDuration(progress)
@@ -236,6 +242,16 @@ func UpholdUpload(
 
 		if settlementTransaction.IsComplete() || settlementTransaction.IsFailed() {
 			continue
+		}
+
+		maxAmountInterface := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
+		maxAmount, ok := maxAmountInterface.(decimal.Decimal)
+		if !ok {
+			logger.Panic().Err(err).Msg("provided max amount is not an integer")
+		}
+
+		if settlementTransaction.Amount.GreaterThan(maxAmount) {
+			logger.Panic().Err(err).Msgf("amount %s exceeds the max %s", settlementTransaction.Amount, maxAmount)
 		}
 
 		err = settlement.SubmitPreparedTransaction(ctx, settlementWallet, settlementTransaction)

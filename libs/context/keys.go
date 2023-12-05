@@ -71,6 +71,8 @@ const (
 	GeminiAPISecretCTXKey CTXKey = "gemini_api_secret"
 	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
+	// PayoutTxnMaxPayoutAmount - maximum value allowed for a single payout transaction
+	PayoutTxnMaxAmountCTXKey CTXKey = "payout_txn_max_amount"
 
 	// for skus ac validation
 

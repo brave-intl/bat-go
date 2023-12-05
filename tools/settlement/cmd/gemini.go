@@ -60,6 +60,10 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	maxPayoutAmount, err := cmd.Flags().GetString("max")
+	if err != nil {
+		return err
+	}
 
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
@@ -67,6 +71,7 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 
 	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
 	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, os.Getenv("GEMINI_API_KEY"))
+	ctx = context.WithValue(ctx, appctx.PayoutTxnMaxAmountCTXKey, maxPayoutAmount)
 
 	return GeminiUploadSettlement(
 		ctx,

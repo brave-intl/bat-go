@@ -112,8 +112,14 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	maxPayoutAmount, err := cmd.Flags().GetString("max")
+	if err != nil {
+		return err
+	}
+
+	ctx := context.WithValue(cmd.Context(), appctx.PayoutTxnMaxAmountCTXKey, maxPayoutAmount)
 	return BitflyerUploadSettlement(
-		cmd.Context(),
+		ctx,
 		"upload",
 		input,
 		out,
