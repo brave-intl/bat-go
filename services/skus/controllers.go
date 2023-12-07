@@ -330,11 +330,13 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
+		oid := *orderID.UUID()
+
+		if err := service.validateOrderMerchantAndCaveats(ctx, oid); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
-		if err := service.CancelOrder(*orderID.UUID()); err != nil {
+		if err := service.CancelOrder(oid); err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
@@ -1064,151 +1066,124 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-// HandleStripeWebhook is the handler for stripe checkout session webhooks
+// HandleStripeWebhook handles webhook events from Stripe.
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		// get logger
-		sublogger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleStripeWebhook").
-			Logger()
 
-		// get webhook secret from ctx
+		lg := logging.Logger(ctx, "payments").With().Str("func", "HandleStripeWebhook").Logger()
+
 		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
 		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
-			return handlers.WrapError(
-				err, "error getting stripe_webhook_secret from context",
-				http.StatusInternalServerError)
+			lg.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
+			return handlers.WrapError(err, "error getting stripe_webhook_secret from context", http.StatusInternalServerError)
 		}
 
-		b, err := requestutils.Read(r.Context(), r.Body)
+		b, err := requestutils.Read(ctx, r.Body)
 		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to read request body")
+			lg.Error().Err(err).Msg("failed to read request body")
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
 
-		event, err := webhook.ConstructEvent(
-			b, r.Header.Get("Stripe-Signature"), endpointSecret)
+		event, err := webhook.ConstructEvent(b, r.Header.Get("Stripe-Signature"), endpointSecret)
 		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to verify stripe signature")
+			lg.Error().Err(err).Msg("failed to verify stripe signature")
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
-		// log the event
-		sublogger.Debug().Str("event_type", event.Type).Str("data", string(event.Data.Raw)).Msg("webhook event captured")
+		switch event.Type {
+		case StripeInvoiceUpdated, StripeInvoicePaid:
+			// Handle invoice events.
 
-		// Handle invoice events
-		if event.Type == StripeInvoiceUpdated || event.Type == StripeInvoicePaid {
-			// Retrieve invoice from update events
 			var invoice stripe.Invoice
-			err := json.Unmarshal(event.Data.Raw, &invoice)
-			if err != nil {
-				sublogger.Error().Err(err).Msg("error parsing webhook json")
+			if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
+				lg.Error().Err(err).Msg("error parsing webhook json")
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
-			sublogger.Debug().
-				Str("event_type", event.Type).
-				Str("invoice", fmt.Sprintf("%+v", invoice)).Msg("webhook invoice")
 
 			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
-				sublogger.Error().Err(err).Msg("error getting subscription")
+				lg.Error().Err(err).Msg("error getting subscription")
 				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
 
-			sublogger.Debug().
-				Str("subscription", fmt.Sprintf("%+v", subscription)).Msg("corresponding subscription")
-
 			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
-				sublogger.Error().Err(err).Msg("error getting order id from subscription metadata")
+				lg.Error().Err(err).Msg("error getting order id from subscription metadata")
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-
-			sublogger.Debug().
-				Str("orderID", orderID.String()).Msg("order id")
 
 			// If the invoice is paid set order status to paid, otherwise
 			if invoice.Paid {
-				// is this an existing subscription??
 				ok, subID, err := service.Datastore.IsStripeSub(orderID)
 				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
+					lg.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
 					return handlers.WrapError(err, "error looking up payment provider", http.StatusInternalServerError)
 				}
+
+				// Handle renewal.
 				if ok && subID != "" {
-					// okay, this is a subscription renewal, not first time,
-					err = service.RenewOrder(ctx, orderID)
-					if err != nil {
-						sublogger.Error().Err(err).Msg("failed to renew the order")
+					if err := service.RenewOrder(ctx, orderID); err != nil {
+						lg.Error().Err(err).Msg("failed to renew the order")
 						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
 					}
-					// end flow for renew order
-					return handlers.RenderContent(r.Context(), "subscription renewed", w, http.StatusOK)
+
+					return handlers.RenderContent(ctx, "subscription renewed", w, http.StatusOK)
 				}
 
-				// not a renewal, first time
-				// and update the order's expires at as it was just paid
-				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
-				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to update order status")
+				// New subscription.
+				// Update the order's expires at as it was just paid.
+				if err := service.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
+					lg.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 				}
-				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
-				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to update order metadata")
+
+				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+					lg.Error().Err(err).Msg("failed to update order metadata")
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
-				// set paymentProcessor as stripe
-				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod)
-				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
+
+				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod); err != nil {
+					lg.Error().Err(err).Msg("failed to update order to add the payment processor")
 					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
 				}
 
-				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
-				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
+				return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
 			}
 
-			sublogger.Debug().
-				Str("orderID", orderID.String()).Msg("order not paid, set pending")
-			err = service.Datastore.UpdateOrder(orderID, "pending")
-			if err != nil {
-				sublogger.Error().Err(err).Msg("failed to update order status")
+			if err := service.Datastore.UpdateOrder(orderID, "pending"); err != nil {
+				lg.Error().Err(err).Msg("failed to update order status")
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
-			sublogger.Debug().
-				Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
-			err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
-			if err != nil {
-				sublogger.Error().Err(err).Msg("failed to update order metadata")
+
+			if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+				lg.Error().Err(err).Msg("failed to update order metadata")
 				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 			}
-			sublogger.Debug().
-				Str("sub_id", subscription.ID).Msg("set ok response")
-			return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
-		}
 
-		// Handle subscription cancellations
-		if event.Type == StripeCustomerSubscriptionDeleted {
+			return handlers.RenderContent(ctx, "payment failed", w, http.StatusOK)
+
+		case StripeCustomerSubscriptionDeleted:
+			// Handle subscription cancellations
+
 			var subscription stripe.Subscription
-			err := json.Unmarshal(event.Data.Raw, &subscription)
-			if err != nil {
+			if err := json.Unmarshal(event.Data.Raw, &subscription); err != nil {
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
+
 			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-			err = service.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
-			if err != nil {
+
+			if err := service.Datastore.UpdateOrder(orderID, OrderStatusCanceled); err != nil {
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
-			return handlers.RenderContent(r.Context(), "subscription canceled", w, http.StatusOK)
+
+			return handlers.RenderContent(ctx, "subscription canceled", w, http.StatusOK)
 		}
 
-		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
+		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
 	}
 }
 
