@@ -135,6 +135,11 @@ func init() {
 	uploadCheckStatusBuilder := cmdutils.NewFlagBuilder(UploadGeminiSettlementCmd).
 		AddCommand(CheckStatusGeminiSettlementCmd)
 
+	uploadCheckStatusBuilder.Flag().String("max", "",
+		"the maximum BAT value permitted to be sent in a single transaction").
+		Require().
+		Bind("max")
+
 	uploadCheckStatusBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized").
 		Require().

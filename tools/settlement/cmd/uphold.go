@@ -52,6 +52,11 @@ func init() {
 		"how verbose logging should be").
 		Bind("verbose")
 
+	uploadBuilder.Flag().String("max", "",
+		"the maximum BAT value permitted to be sent in a single transaction").
+		Require().
+		Bind("max")
+
 	uploadBuilder.Flag().String("input", "",
 		"input file to submit to a given provider").
 		Bind("input").

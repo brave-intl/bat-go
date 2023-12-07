@@ -202,6 +202,11 @@ func init() {
 		AddCommand(CheckStatusBitflyerSettlementCmd)
 	allBuilder := tokenBuilder.Concat(uploadCheckStatusBuilder)
 
+	uploadCheckStatusBuilder.Flag().String("max", "",
+		"the maximum BAT value permitted to be sent in a single transaction").
+		Require().
+		Bind("max")
+
 	uploadCheckStatusBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized. both referrals and contributions should be done in one command in order to group the transactions appropriately").
 		Require().
