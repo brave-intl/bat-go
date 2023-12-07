@@ -585,10 +585,9 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 
 	// Try to find order in Stripe.
 	params := &stripe.SubscriptionSearchParams{}
-	params.Query = *stripe.String(fmt.Sprintf(
-		"status:'active' AND metadata['orderID']:'%s'",
-		orderID.String(), // orderID is already checked as uuid
-	))
+	params.Query = *stripe.String(fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String()))
+
+	ctx := context.TODO()
 
 	iter := sub.Search(params)
 	for iter.Next() {
@@ -598,7 +597,8 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 		if _, err := sub.Cancel(subscription.ID, nil); err != nil {
 			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
 		}
-		if err := s.Datastore.AppendOrderMetadata(context.Background(), &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+
+		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
 			return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
 		}
 	}
