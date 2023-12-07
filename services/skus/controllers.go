@@ -1091,8 +1091,6 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
-		lg.Debug().Str("event_type", event.Type).Str("data", string(event.Data.Raw)).Msg("webhook event captured")
-
 		switch event.Type {
 		case StripeInvoiceUpdated, StripeInvoicePaid:
 			// Handle invoice events.
@@ -1103,23 +1101,17 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
 
-			lg.Debug().Str("event_type", event.Type).Str("invoice", fmt.Sprintf("%+v", invoice)).Msg("webhook invoice")
-
 			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
 				lg.Error().Err(err).Msg("error getting subscription")
 				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
 
-			lg.Debug().Str("subscription", fmt.Sprintf("%+v", subscription)).Msg("corresponding subscription")
-
 			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
 				lg.Error().Err(err).Msg("error getting order id from subscription metadata")
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-
-			lg.Debug().Str("orderID", orderID.String()).Msg("order id")
 
 			// If the invoice is paid set order status to paid, otherwise
 			if invoice.Paid {
@@ -1156,25 +1148,18 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
 				}
 
-				lg.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
 				return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
 			}
-
-			lg.Debug().Str("orderID", orderID.String()).Msg("order not paid, set pending")
 
 			if err := service.Datastore.UpdateOrder(orderID, "pending"); err != nil {
 				lg.Error().Err(err).Msg("failed to update order status")
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
 
-			lg.Debug().Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
-
 			if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
 				lg.Error().Err(err).Msg("failed to update order metadata")
 				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 			}
-
-			lg.Debug().Str("sub_id", subscription.ID).Msg("set ok response")
 
 			return handlers.RenderContent(ctx, "payment failed", w, http.StatusOK)
 
