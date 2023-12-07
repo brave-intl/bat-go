@@ -174,12 +174,6 @@ func (o *Order) CreateRadomCheckoutSession(
 }
 
 // CreateRadomCheckoutSessionWithTime creates a Radom checkout session for o.
-//
-// TODO: This must be refactored before it's usable. Issues with the current implementation:
-// - it assumes one item per order;
-// - most of the logic does not belong in here;
-// - metadata information must be passed explisictly instead of being parsed (it's known prior to this place);
-// And more.
 func (o *Order) CreateRadomCheckoutSessionWithTime(
 	ctx context.Context,
 	client radomClient,
