@@ -21,3 +21,4 @@ tokens:
   "stripe_success_uri": "https://account.brave.com/account/?intent=provision",
   "stripe_cancel_uri": "https://account.brave.com/plans/?intent=checkout"
 }'
+
