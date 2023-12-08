@@ -247,8 +247,7 @@ func UpholdUpload(
 		}},
 	}
 
-	maxAmountAny := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey)
-	maxAmount, ok := maxAmountAny.(decimal.Decimal)
+	maxAmount, ok := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey).(decimal.Decimal)
 	if !ok {
 		logger.Panic().Err(err).Msg("provided max amount is not a number")
 	}
