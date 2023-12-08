@@ -299,6 +299,13 @@ func (c *HTTPClient) BulkTransfer(ctx context.Context, opts *ClientOpts, transfe
 		return nil, errBadClientOpts
 	}
 
+	// check if any transfer exceeds our limit
+	for _, v := range transfers {
+		if v.Amount.GreaterThan(clients.TransferLimit) {
+			return nil, clients.ErrTransferExceedsLimit
+		}
+	}
+
 	// /api/bulktransfercheckstatus
 	req, err := c.client.NewRequest(ctx, "POST", "/api/bulktransfer", transfers, nil)
 	if err != nil {
