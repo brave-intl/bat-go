@@ -1,12 +1,15 @@
 package clients
 
 import (
+	"errors"
 	"fmt"
 
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 )
 
 var (
+	// ErrTransferExceedsLimit
+	ErrTransferExceedsLimit = errors.New("transfer exceeds limit")
 	// ErrUnableToDecode unable to decode body
 	ErrUnableToDecode = "unable to decode response"
 	// ErrProtocolError the error was within the data that went into the endpoint
