@@ -5,6 +5,6 @@ var (
 		"":            "https://nitro-payments.bsg.brave.software",
 		"local":       "https://nitro-payments.bsg.brave.software",
 		"development": "https://nitro-payments.bsg.brave.software",
-		"staging":     "http://web.payment-staging.svc.cluster.local",
+		"staging":     "https://nitro-payments-staging.bsg.brave.com",
 	}
 )
