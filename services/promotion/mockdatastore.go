@@ -9,7 +9,6 @@ import (
 	reflect "reflect"
 
 	cbr "github.com/brave-intl/bat-go/libs/clients/cbr"
-	errors "github.com/brave-intl/bat-go/libs/errors"
 	jsonutils "github.com/brave-intl/bat-go/libs/jsonutils"
 	wallet "github.com/brave-intl/bat-go/libs/wallet"
 	v4 "github.com/golang-migrate/migrate/v4"
@@ -145,53 +144,6 @@ func (mr *MockDatastoreMockRecorder) DeactivatePromotion(promotion interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivatePromotion", reflect.TypeOf((*MockDatastore)(nil).DeactivatePromotion), promotion)
 }
 
-// DrainClaim mocks base method.
-func (m *MockDatastore) DrainClaim(drainID *go_uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal, codedErr errors.DrainCodified) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DrainClaim", drainID, claim, credentials, wallet, total, codedErr)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DrainClaim indicates an expected call of DrainClaim.
-func (mr *MockDatastoreMockRecorder) DrainClaim(drainID, claim, credentials, wallet, total, codedErr interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaim", reflect.TypeOf((*MockDatastore)(nil).DrainClaim), drainID, claim, credentials, wallet, total, codedErr)
-}
-
-// DrainClaims mocks base method.
-func (m *MockDatastore) DrainClaims(drainClaims []DrainClaim) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DrainClaims", drainClaims)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DrainClaims indicates an expected call of DrainClaims.
-func (mr *MockDatastoreMockRecorder) DrainClaims(drainClaims interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaims", reflect.TypeOf((*MockDatastore)(nil).DrainClaims), drainClaims)
-}
-
-// EnqueueMintDrainJob mocks base method.
-func (m *MockDatastore) EnqueueMintDrainJob(ctx context.Context, walletID go_uuid.UUID, promotionIDs ...go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, walletID}
-	for _, a := range promotionIDs {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "EnqueueMintDrainJob", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// EnqueueMintDrainJob indicates an expected call of EnqueueMintDrainJob.
-func (mr *MockDatastoreMockRecorder) EnqueueMintDrainJob(ctx, walletID interface{}, promotionIDs ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, walletID}, promotionIDs...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnqueueMintDrainJob", reflect.TypeOf((*MockDatastore)(nil).EnqueueMintDrainJob), varargs...)
-}
-
 // GetAvailablePromotions mocks base method.
 func (m *MockDatastore) GetAvailablePromotions(platform string) ([]Promotion, error) {
 	m.ctrl.T.Helper()
@@ -265,51 +217,6 @@ func (m *MockDatastore) GetClaimSummary(walletID go_uuid.UUID, grantType string)
 func (mr *MockDatastoreMockRecorder) GetClaimSummary(walletID, grantType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimSummary", reflect.TypeOf((*MockDatastore)(nil).GetClaimSummary), walletID, grantType)
-}
-
-// GetCustodianDrainInfo mocks base method.
-func (m *MockDatastore) GetCustodianDrainInfo(paymentID *go_uuid.UUID) ([]CustodianDrain, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCustodianDrainInfo", paymentID)
-	ret0, _ := ret[0].([]CustodianDrain)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetCustodianDrainInfo indicates an expected call of GetCustodianDrainInfo.
-func (mr *MockDatastoreMockRecorder) GetCustodianDrainInfo(paymentID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustodianDrainInfo", reflect.TypeOf((*MockDatastore)(nil).GetCustodianDrainInfo), paymentID)
-}
-
-// GetDrainPoll mocks base method.
-func (m *MockDatastore) GetDrainPoll(drainID *go_uuid.UUID) (*DrainPoll, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDrainPoll", drainID)
-	ret0, _ := ret[0].(*DrainPoll)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDrainPoll indicates an expected call of GetDrainPoll.
-func (mr *MockDatastoreMockRecorder) GetDrainPoll(drainID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrainPoll", reflect.TypeOf((*MockDatastore)(nil).GetDrainPoll), drainID)
-}
-
-// GetDrainsByBatchID mocks base method.
-func (m *MockDatastore) GetDrainsByBatchID(ctx context.Context, batchID *go_uuid.UUID) ([]DrainTransfer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDrainsByBatchID", ctx, batchID)
-	ret0, _ := ret[0].([]DrainTransfer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDrainsByBatchID indicates an expected call of GetDrainsByBatchID.
-func (mr *MockDatastoreMockRecorder) GetDrainsByBatchID(ctx, batchID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrainsByBatchID", reflect.TypeOf((*MockDatastore)(nil).GetDrainsByBatchID), ctx, batchID)
 }
 
 // GetIssuer mocks base method.
@@ -579,21 +486,6 @@ func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockDatastore)(nil).RollbackTxAndHandle), tx)
 }
 
-// RunNextBatchPaymentsJob mocks base method.
-func (m *MockDatastore) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextBatchPaymentsJob", ctx, worker)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RunNextBatchPaymentsJob indicates an expected call of RunNextBatchPaymentsJob.
-func (mr *MockDatastoreMockRecorder) RunNextBatchPaymentsJob(ctx, worker interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextBatchPaymentsJob", reflect.TypeOf((*MockDatastore)(nil).RunNextBatchPaymentsJob), ctx, worker)
-}
-
 // RunNextClaimJob mocks base method.
 func (m *MockDatastore) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error) {
 	m.ctrl.T.Helper()
@@ -607,65 +499,6 @@ func (m *MockDatastore) RunNextClaimJob(ctx context.Context, worker ClaimWorker)
 func (mr *MockDatastoreMockRecorder) RunNextClaimJob(ctx, worker interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextClaimJob", reflect.TypeOf((*MockDatastore)(nil).RunNextClaimJob), ctx, worker)
-}
-
-// RunNextDrainJob mocks base method.
-func (m *MockDatastore) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextDrainJob", ctx, worker)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RunNextDrainJob indicates an expected call of RunNextDrainJob.
-func (mr *MockDatastoreMockRecorder) RunNextDrainJob(ctx, worker interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextDrainJob", reflect.TypeOf((*MockDatastore)(nil).RunNextDrainJob), ctx, worker)
-}
-
-// RunNextDrainRetryJob mocks base method.
-func (m *MockDatastore) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextDrainRetryJob", ctx, worker)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RunNextDrainRetryJob indicates an expected call of RunNextDrainRetryJob.
-func (mr *MockDatastoreMockRecorder) RunNextDrainRetryJob(ctx, worker interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextDrainRetryJob", reflect.TypeOf((*MockDatastore)(nil).RunNextDrainRetryJob), ctx, worker)
-}
-
-// RunNextGeminiCheckStatus mocks base method.
-func (m *MockDatastore) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextGeminiCheckStatus", ctx, worker)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RunNextGeminiCheckStatus indicates an expected call of RunNextGeminiCheckStatus.
-func (mr *MockDatastoreMockRecorder) RunNextGeminiCheckStatus(ctx, worker interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextGeminiCheckStatus", reflect.TypeOf((*MockDatastore)(nil).RunNextGeminiCheckStatus), ctx, worker)
-}
-
-// RunNextMintDrainJob mocks base method.
-func (m *MockDatastore) RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextMintDrainJob", ctx, worker)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RunNextMintDrainJob indicates an expected call of RunNextMintDrainJob.
-func (mr *MockDatastoreMockRecorder) RunNextMintDrainJob(ctx, worker interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextMintDrainJob", reflect.TypeOf((*MockDatastore)(nil).RunNextMintDrainJob), ctx, worker)
 }
 
 // RunNextSuggestionJob mocks base method.
@@ -695,34 +528,6 @@ func (m *MockDatastore) SaveClaimCreds(claimCreds *ClaimCreds) error {
 func (mr *MockDatastoreMockRecorder) SaveClaimCreds(claimCreds interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClaimCreds", reflect.TypeOf((*MockDatastore)(nil).SaveClaimCreds), claimCreds)
-}
-
-// SetMintDrainPromotionTotal mocks base method.
-func (m *MockDatastore) SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID go_uuid.UUID, total decimal.Decimal) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetMintDrainPromotionTotal", ctx, walletID, promotionID, total)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetMintDrainPromotionTotal indicates an expected call of SetMintDrainPromotionTotal.
-func (mr *MockDatastoreMockRecorder) SetMintDrainPromotionTotal(ctx, walletID, promotionID, total interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMintDrainPromotionTotal", reflect.TypeOf((*MockDatastore)(nil).SetMintDrainPromotionTotal), ctx, walletID, promotionID, total)
-}
-
-// UpdateDrainJobAsRetriable mocks base method.
-func (m *MockDatastore) UpdateDrainJobAsRetriable(ctx context.Context, walletID go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateDrainJobAsRetriable", ctx, walletID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateDrainJobAsRetriable indicates an expected call of UpdateDrainJobAsRetriable.
-func (mr *MockDatastoreMockRecorder) UpdateDrainJobAsRetriable(ctx, walletID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDrainJobAsRetriable", reflect.TypeOf((*MockDatastore)(nil).UpdateDrainJobAsRetriable), ctx, walletID)
 }
 
 // UpdateOrder mocks base method.
@@ -850,51 +655,6 @@ func (m *MockReadOnlyDatastore) GetClaimSummary(walletID go_uuid.UUID, grantType
 func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimSummary(walletID, grantType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimSummary", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetClaimSummary), walletID, grantType)
-}
-
-// GetCustodianDrainInfo mocks base method.
-func (m *MockReadOnlyDatastore) GetCustodianDrainInfo(paymentID *go_uuid.UUID) ([]CustodianDrain, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCustodianDrainInfo", paymentID)
-	ret0, _ := ret[0].([]CustodianDrain)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetCustodianDrainInfo indicates an expected call of GetCustodianDrainInfo.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetCustodianDrainInfo(paymentID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCustodianDrainInfo", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetCustodianDrainInfo), paymentID)
-}
-
-// GetDrainPoll mocks base method.
-func (m *MockReadOnlyDatastore) GetDrainPoll(drainID *go_uuid.UUID) (*DrainPoll, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDrainPoll", drainID)
-	ret0, _ := ret[0].(*DrainPoll)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDrainPoll indicates an expected call of GetDrainPoll.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetDrainPoll(drainID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrainPoll", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetDrainPoll), drainID)
-}
-
-// GetDrainsByBatchID mocks base method.
-func (m *MockReadOnlyDatastore) GetDrainsByBatchID(ctx context.Context, batchID *go_uuid.UUID) ([]DrainTransfer, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDrainsByBatchID", ctx, batchID)
-	ret0, _ := ret[0].([]DrainTransfer)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDrainsByBatchID indicates an expected call of GetDrainsByBatchID.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetDrainsByBatchID(ctx, batchID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrainsByBatchID", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetDrainsByBatchID), ctx, batchID)
 }
 
 // GetIssuer mocks base method.
