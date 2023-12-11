@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"text/template"
 	"time"
 
 	"encoding/hex"
+	"encoding/json"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -148,8 +150,18 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 			return fmt.Errorf("failed to get key policy for alias: %w", err)
 		}
 
+		// we will now check that the retrieved policy matches the policy we just
+		// created, and if so we will use this kms key in the enclave
+		var generated, retrieved interface{}
+		if err := json.Unmarshal([]byte(*getKeyPolicyResult.Policy), &retrieved); err != nil {
+			return fmt.Errorf("invalid json returned from get key policy result: %w", err)
+		}
+		if err := json.Unmarshal([]byte(policy), &generated); err != nil {
+			return fmt.Errorf("invalid json generated from key policy template: %w", err)
+		}
+
 		// aws policy will alter the whitespace in the policy
-		if strings.TrimSpace(*getKeyPolicyResult.Policy) == strings.TrimSpace(policy) {
+		if reflect.DeepEqual(generated, retrieved) {
 			logger.Info().Msgf("policy matches: \n %s \n %s!", *getKeyPolicyResult.Policy, policy)
 			// if the policy matches, we should use this key
 			s.kmsDecryptKeyArn = *getKeyResult.KeyMetadata.KeyId
