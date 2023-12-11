@@ -148,7 +148,8 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 			return fmt.Errorf("failed to get key policy for alias: %w", err)
 		}
 
-		if *getKeyPolicyResult.Policy == policy {
+		// aws policy will alter the whitespace in the policy
+		if strings.TrimSpace(*getKeyPolicyResult.Policy) == strings.TrimSpace(policy) {
 			logger.Info().Msgf("policy matches: \n %s \n %s!", *getKeyPolicyResult.Policy, policy)
 			// if the policy matches, we should use this key
 			s.kmsDecryptKeyArn = *getKeyResult.KeyMetadata.KeyId
