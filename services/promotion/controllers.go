@@ -62,10 +62,7 @@ func Router(service *Service, vbatExpires time.Time) chi.Router {
 	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 1)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
-	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
 	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
-	r.Method("GET", "/custodian-drain-status/{paymentId}", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("GetCustodianDrainInfo", GetCustodianDrainInfo(service))))
-	r.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("PatchDrainJobErred", PatchDrainJobErred(service))))
 	return r
 }
 
@@ -300,51 +297,6 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 	})
 }
 
-// DrainPollResponse - structure for a drain poll response
-type DrainPollResponse struct {
-	ID     *uuid.UUID `json:"drainId"`
-	Status string     `json:"status"`
-}
-
-// GetDrainPoll is the handler for checking on a particular claim's status
-func GetDrainPoll(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var drainID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), drainID, chi.URLParam(r, "drainId")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"drainId": err.Error(),
-				},
-			)
-		}
-
-		var resp = &DrainPollResponse{}
-
-		drainPoll, err := service.Datastore.GetDrainPoll(drainID.UUID())
-		if err != nil {
-			return handlers.WrapError(err, "Error getting drain poll by id", http.StatusBadRequest)
-		}
-
-		if drainPoll == nil {
-			return &handlers.AppError{
-				Message: "Drain Job does not exist",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
-			}
-		}
-
-		resp.ID = drainPoll.ID
-		resp.Status = drainPoll.Status
-
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			panic(err)
-		}
-		return nil
-	})
-}
-
 // GetClaimResponse includes signed credentials and a batch proof showing they were signed by the public key
 type GetClaimResponse struct {
 	SignedCreds jsonutils.JSONStringArray `json:"signedCreds"`
@@ -485,143 +437,19 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 	})
 }
 
-// DrainSuggestionV2Request includes the ID of the verified wallet attempting to drain suggestions
-// and returns the drain_poll uuid so the client can poll for status updates on this draining
-type DrainSuggestionV2Request struct {
-	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
-	Credentials []CredentialBinding `json:"credentials"`
-}
-
-// DrainSuggestionV2Response - the response structure of the token draining endpoint v2
-type DrainSuggestionV2Response struct {
-	DrainID *uuid.UUID `json:"drainId"`
-}
+var errGone = errors.New("endpoint is gone")
 
 // DrainSuggestionV2 is the handler for draining ad suggestions for a verified wallet
 func DrainSuggestionV2(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			req  DrainSuggestionV2Request
-			resp = DrainSuggestionV2Response{}
-		)
-
-		ctx := r.Context()
-		// no logger, setup
-		// get logger from context
-		logger := logging.Logger(ctx, "wallet.DrainSuggestionV2")
-
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		sublogger := logger.With().
-			Str("wallet_id", req.WalletID.String()).
-			Logger()
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to validate request")
-			return handlers.WrapValidationError(err)
-		}
-
-		logging.AddWalletIDToContext(r.Context(), req.WalletID)
-
-		keyID, err := middleware.GetKeyID(r.Context())
-		sublogger = sublogger.With().Str("key_id", keyID).Logger()
-		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to get http signature key id")
-			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
-		}
-		if req.WalletID.String() != keyID {
-			sublogger.Error().Err(err).Msg("httpsignature key id != wallet id")
-			return handlers.ValidationError("request",
-				map[string]string{"paymentId": "paymentId must match signature"})
-		}
-
-		drainID, err := service.Drain(ctx, req.Credentials, req.WalletID)
-		if err != nil {
-			switch err.(type) {
-			case govalidator.Error:
-				sublogger.Error().Err(err).Msg("validation error")
-				return handlers.WrapValidationError(err)
-			case govalidator.Errors:
-				sublogger.Error().Err(err).Msg("validation error")
-				return handlers.WrapValidationError(err)
-			default:
-				// FIXME not all remaining errors should be mapped to 400
-				sublogger.Error().Err(err).Msg("error draining")
-				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
-			}
-		}
-		resp.DrainID = drainID
-
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			panic(err)
-		}
-		return nil
+		return handlers.WrapError(errGone, "gone", http.StatusGone)
 	})
-}
-
-// DrainSuggestionRequest includes the ID of the verified wallet attempting to drain suggestions
-type DrainSuggestionRequest struct {
-	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
-	Credentials []CredentialBinding `json:"credentials"`
 }
 
 // DrainSuggestion is the handler for draining ad suggestions for a verified wallet
 func DrainSuggestion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req DrainSuggestionRequest
-
-		ctx := r.Context()
-		// no logger, setup
-		// get logger from context
-		logger := logging.Logger(ctx, "wallet.DrainSuggestion")
-
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		sublogger := logger.With().Str("wallet_id", req.WalletID.String()).Logger()
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			sublogger.Error().Err(err).Msg("validating request body")
-			return handlers.WrapValidationError(err)
-		}
-
-		logging.AddWalletIDToContext(r.Context(), req.WalletID)
-
-		keyID, err := middleware.GetKeyID(r.Context())
-		if err != nil {
-			sublogger.Error().Err(err).Msg("error getting keyid from http signature")
-			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
-		}
-		if req.WalletID.String() != keyID {
-			sublogger.Error().Err(err).Msg("keyid doesnt match wallet in url")
-			return handlers.ValidationError("request",
-				map[string]string{"paymentId": "paymentId must match signature"})
-		}
-
-		_, err = service.Drain(r.Context(), req.Credentials, req.WalletID)
-		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to drain")
-			switch err.(type) {
-			case govalidator.Error:
-				return handlers.WrapValidationError(err)
-			case govalidator.Errors:
-				return handlers.WrapValidationError(err)
-			default:
-				// FIXME not all remaining errors should be mapped to 400
-				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
-			}
-		}
-
-		w.WriteHeader(http.StatusOK)
-		return nil
+		return handlers.WrapError(errGone, "gone", http.StatusGone)
 	})
 }
 
@@ -845,36 +673,7 @@ type CustodianDrainInfoResponse struct {
 // GetCustodianDrainInfo is the handler which provides information about a particular paymentId's drains
 func GetCustodianDrainInfo(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		var paymentID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), paymentID, chi.URLParam(r, "paymentId")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"paymentId": err.Error(),
-				},
-			)
-		}
-
-		var resp = &CustodianDrainInfoResponse{}
-
-		drainInfo, err := service.Datastore.GetCustodianDrainInfo(paymentID.UUID())
-		if err != nil {
-			return handlers.WrapError(err, "Error getting custodian drain info payment id", http.StatusBadRequest)
-		}
-
-		if drainInfo == nil {
-			return &handlers.AppError{
-				Message: "Drain Info does not exist",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
-			}
-		}
-
-		resp.Drains = drainInfo
-		resp.Meta.Status = "success"
-
-		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
+		return handlers.WrapError(errGone, "gone", http.StatusGone)
 	})
 }
 
@@ -886,41 +685,8 @@ type DrainJobRequest struct {
 // PatchDrainJobErred is the handler for toggling a drain job as retriable
 func PatchDrainJobErred(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		walletID, err := uuid.FromString(chi.URLParam(r, "walletId"))
-		if err != nil {
-			return handlers.ValidationError("validation error", map[string]string{
-				"walletId": "must be a valid uuid v4",
-			})
-		}
-
-		var drainJobRequest DrainJobRequest
-		err = requestutils.ReadJSON(r.Context(), r.Body, &drainJobRequest)
-		if err != nil {
-			return handlers.WrapError(errors.New("could not decode request body"), "patch drain job",
-				http.StatusBadRequest)
-		}
-
-		if drainJobRequest.Erred {
-			return handlers.ValidationError("validation error", map[string]string{
-				"erred": "invalid value true only false is supported",
-			})
-		}
-
-		err = service.Datastore.UpdateDrainJobAsRetriable(r.Context(), walletID)
-		if err != nil {
-			logging.FromContext(r.Context()).Err(err).Msg("patch drain job")
-			switch {
-			case errors.Is(err, errorutils.ErrNotFound):
-				return handlers.WrapError(fmt.Errorf("no updateable drain job found for walletId %s", walletID),
-					"patch drain job", http.StatusNotFound)
-			default:
-				return handlers.WrapError(fmt.Errorf("error updating drain job for walletdId %s", walletID),
-					"patch drain job", http.StatusInternalServerError)
-			}
-		}
-
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusGone)
+		w.Write([]byte{})
 		return nil
 	}
 }
