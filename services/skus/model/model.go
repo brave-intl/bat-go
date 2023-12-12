@@ -231,7 +231,10 @@ func (o *Order) CreateRadomCheckoutSessionWithTime(
 		return EmptyCreateCheckoutSessionResponse(), fmt.Errorf("failed to get checkout session response: %w", err)
 	}
 
-	return CreateCheckoutSessionResponse{SessionID: resp.SessionID}, nil
+	return CreateCheckoutSessionResponse{
+		SessionURL: resp.SessionURL,
+		SessionID:  resp.SessionID,
+	}, nil
 }
 
 // IsPaid returns true if the order is paid.
@@ -334,7 +337,8 @@ type OrderNew struct {
 
 // CreateCheckoutSessionResponse represents a checkout session response.
 type CreateCheckoutSessionResponse struct {
-	SessionID string `json:"checkoutSessionId"`
+	SessionID  string `json:"checkoutSessionId"`
+	SessionURL string `json:"checkoutSessionUrl"`
 }
 
 func EmptyCreateCheckoutSessionResponse() CreateCheckoutSessionResponse {

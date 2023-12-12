@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -41,8 +42,9 @@ type Managed struct {
 
 // Method is a Radom payment method type
 type Method struct {
-	Network string `json:"network"`
-	Token   string `json:"token"`
+	Network            string  `json:"network"`
+	Token              string  `json:"token"`
+	DiscountPercentOff float64 `json:"discountPercentOff"`
 }
 
 // CheckoutSessionResponse represents the result of submission of a checkout session.
@@ -163,23 +165,32 @@ func newClient(srvURL, secret, proxyAddr string) (*Client, error) {
 		client: client,
 		gwMethodsProd: []Method{
 			{
-				Network: "Polygon",
-				Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+				Network:            "Polygon",
+				Token:              "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+				DiscountPercentOff: 20.0, // BAT 20% off
 			},
-
 			{
-				Network: "Ethereum",
-				Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+				Network:            "Ethereum",
+				Token:              "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+				DiscountPercentOff: 20.0, // BAT 20% off
+			},
+			{
+				Network: "Bitcoin",
 			},
 		},
 		gwMethods: []Method{
 			{
-				Network: "SepoliaTestnet",
-				Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+				Network:            "SepoliaTestnet",
+				Token:              "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+				DiscountPercentOff: 20.0, // BAT 20% off
 			},
 			{
-				Network: "PolygonTestnet",
-				Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+				Network:            "PolygonTestnet",
+				Token:              "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+				DiscountPercentOff: 20.0, // BAT 20% off
+			},
+			{
+				Network: "BitcoinTestnet",
 			},
 		},
 	}
@@ -190,16 +201,27 @@ func newClient(srvURL, secret, proxyAddr string) (*Client, error) {
 // CreateCheckoutSession creates a Radom checkout session.
 func (c *Client) CreateCheckoutSession(
 	ctx context.Context,
-	req *CheckoutSessionRequest,
+	csReq *CheckoutSessionRequest,
 ) (*CheckoutSessionResponse, error) {
 	// Get the environment so we know what is acceptable chain/tokens.
 	methods := c.methodsForEnv(ctx)
 
-	req.Gateway = Gateway{
+	csReq.Gateway = Gateway{
 		Managed: Managed{Methods: methods},
 	}
 
-	return nil, errors.New("not implemented")
+	req, err := c.client.NewRequest(ctx, "POST", "checkout_session", csReq, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new checkout session request: %w", err)
+	}
+
+	var csResp CheckoutSessionResponse
+	_, err = c.client.Do(ctx, req, &csResp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call radom checkout session api: %w", err)
+	}
+
+	return &csResp, nil
 }
 
 func (c *Client) methodsForEnv(ctx context.Context) []Method {

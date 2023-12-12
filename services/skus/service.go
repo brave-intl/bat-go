@@ -441,13 +441,17 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 			session, err := order.CreateRadomCheckoutSession(
 				ctx,
 				s.radomClient,
-				s.radomSellerAddress, //TODO: fill in
+				s.radomSellerAddress, // set in environment
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
 			}
 
 			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "radomCheckoutSessionId", session.SessionID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			}
+			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "checkoutSessionUrl", session.SessionURL)
 			if err != nil {
 				return nil, fmt.Errorf("failed to update order metadata: %w", err)
 			}
