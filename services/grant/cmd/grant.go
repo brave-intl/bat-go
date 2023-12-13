@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
@@ -504,27 +504,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
-
-	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgres(
-			skuOrderRepo,
-			skuOrderItemRepo,
-			skuOrderPayHistRepo,
-			skuIssuerRepo,
-			"", true, "merch_skus_db",
-		)
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
-		}
-
-		skusService, err := skus.InitService(ctx, skusDB, walletService, skuOrderRepo, skuIssuerRepo)
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("SKUs service initialization failed")
-		}
-		r.Mount("/v1/merchants", skus.MerchantRouter(skusService))
-	}
 
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
