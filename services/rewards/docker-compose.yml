@@ -39,7 +39,7 @@ services:
 
   rewards-dev-refresh:
     container_name: rewards-dev-refresh
-    image: golang:1.18
+    image: golang:1.19
     ports:
       - "3343:3343"
       - "6061:6061"

@@ -1,5 +1,5 @@
 run:
-  go: "1.17" ## TODO update to 1.18 once all linters support it
+  go: "1.19"
   timeout: 3m
 
 linters-settings:

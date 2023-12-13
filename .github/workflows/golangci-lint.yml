@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - name: golangci-lint-libs
         uses: golangci/golangci-lint-action@v3
         with:
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - name: golangci-lint-services
         uses: golangci/golangci-lint-action@v3
         with:
@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - name: golangci-lint-tools
         uses: golangci/golangci-lint-action@v3
         with:
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - name: golangci-lint-cmd
         uses: golangci/golangci-lint-action@v3
         with:
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - name: golangci-lint-main
         uses: golangci/golangci-lint-action@v3
         with:
