@@ -205,6 +205,7 @@ func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, 
 			out = append(out, byte('\n'))
 		}
 	}
+	fmt.Printf("signing string: %s", out)
 	return out, nil
 }
 
