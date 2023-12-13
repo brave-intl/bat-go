@@ -8,7 +8,7 @@ services:
   # every time a file changes.
   dev-refresh:
     container_name: grant-dev-refresh
-    image: golang:1.18
+    image: golang:1.19
     ports:
       - "3335:3333"
       - "6061:6061"
