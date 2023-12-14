@@ -20,7 +20,11 @@ import (
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 )
+
+// TransferLimit is the limit of BAT any client can transfer
+var TransferLimit = decimal.NewFromInt(300)
 
 // regular expression mapped to the replacement
 var redactHeaders = map[*regexp.Regexp][]byte{

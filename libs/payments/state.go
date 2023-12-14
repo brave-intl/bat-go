@@ -45,7 +45,7 @@ type AuthenticatedPaymentState struct {
 // object authored by the enclave. Accessing the payment state directly is considered unsafe, one must
 // go through a getter which verifies the history.
 type PaymentState struct {
-	// Serialized AuthenticatedPaymentState. Should only ever be access via GetSafePaymentState,
+	// Serialized AuthenticatedPaymentState. Should only ever be access via GetAuthenticatedPaymentState,
 	// which does all of the needed validation of the state
 	UnsafePaymentState []byte    `ion:"data"`
 	Signature          []byte    `ion:"signature"`

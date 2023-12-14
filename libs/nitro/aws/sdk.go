@@ -146,7 +146,6 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 		config.WithHTTPClient(&client),
 		config.WithRegion("us-west-2"),
 		config.WithLogger(applicationLogger),
-	//	config.WithClientLogMode(aws.LogRetries|aws.LogRequest), // for debugging, very verbose
 	)
 	if err != nil {
 		return aws.Config{}, fmt.Errorf("unable to load SDK config, %v", err)
@@ -161,6 +160,5 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 		config.WithRegion(region),
 		config.WithCredentialsProvider(provider),
 		config.WithLogger(applicationLogger),
-		config.WithClientLogMode(aws.LogRetries|aws.LogRequest),
 	)
 }

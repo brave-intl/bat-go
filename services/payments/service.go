@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"text/template"
 	"time"
 
 	"encoding/hex"
+	"encoding/json"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -103,6 +105,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	// get the aws configuration loaded
 	cfg := s.awsCfg
 	kmsClient := kms.NewFromConfig(cfg)
+	var logger = logging.Logger(ctx, "payments.ConfigureKMSEncryptionKey")
 
 	// parse the key policy
 	policy, imageSHA, err := parseKeyPolicyTemplate(ctx, "/decrypt-policy.tmpl")
@@ -122,24 +125,54 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 	}
 
 	if getKeyResult != nil {
+		logger.Info().Msgf("%+v - getKeyResult!", getKeyResult)
 		// key exists, check the key policy matches
-		// if the key alias already exists, pull down that particular key
-		getKeyPolicyResult, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+		// if the key alias already exists, pull down that particular key policy
+		listKeyPolicyResult, err := kmsClient.ListKeyPolicies(ctx, &kms.ListKeyPoliciesInput{
 			KeyId: getKeyResult.KeyMetadata.KeyId,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to get key by alias: %w", err)
+			return fmt.Errorf("failed to list key for alias: %w", err)
 		}
 
-		if *getKeyPolicyResult.Policy == policy {
+		// this should always be one policy, named `default`
+		// aws says we should get the list of names though, who am i to argue
+		if listKeyPolicyResult == nil || len(listKeyPolicyResult.PolicyNames) != 1 {
+			return fmt.Errorf("wrong number of key policies for alias")
+		}
+
+		// actually pull the key
+		getKeyPolicyResult, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+			KeyId:      getKeyResult.KeyMetadata.KeyId,
+			PolicyName: &listKeyPolicyResult.PolicyNames[0],
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get key policy for alias: %w", err)
+		}
+
+		// we will now check that the retrieved policy matches the policy we just
+		// created, and if so we will use this kms key in the enclave
+		var generated, retrieved interface{}
+		if err := json.Unmarshal([]byte(*getKeyPolicyResult.Policy), &retrieved); err != nil {
+			return fmt.Errorf("invalid json returned from get key policy result: %w", err)
+		}
+		if err := json.Unmarshal([]byte(policy), &generated); err != nil {
+			return fmt.Errorf("invalid json generated from key policy template: %w", err)
+		}
+
+		// aws policy will alter the whitespace in the policy
+		if reflect.DeepEqual(generated, retrieved) {
+			logger.Info().Msgf("policy matches: \n %s \n %s!", *getKeyPolicyResult.Policy, policy)
 			// if the policy matches, we should use this key
 			s.kmsDecryptKeyArn = *getKeyResult.KeyMetadata.KeyId
 			return nil
 		}
+		logger.Info().Msgf("policy does not match: \n\n %s \n\n %s!", *getKeyPolicyResult.Policy, policy)
+		return fmt.Errorf("failed to match policy text")
 	}
 
 	input := &kms.CreateKeyInput{
-		Policy: aws.String(policy),
+		Policy:                         aws.String(policy),
 		BypassPolicyLockoutSafetyCheck: true,
 		Tags: []kmsTypes.Tag{
 			{TagKey: aws.String("Purpose"), TagValue: aws.String("settlements")},
@@ -151,6 +184,8 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 		return fmt.Errorf("failed to make key: %w", err)
 	}
 
+	logger.Info().Msgf("created new key! %+v", input)
+
 	aliasInput := &kms.CreateAliasInput{
 		AliasName:   aws.String("alias/decryption-" + imageSHA),
 		TargetKeyId: result.KeyMetadata.KeyId,
@@ -158,8 +193,13 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 
 	_, err = kmsClient.CreateAlias(ctx, aliasInput)
 	if err != nil {
-		return fmt.Errorf("failed to make key alias: %w", err)
+		var aee *kmsTypes.AlreadyExistsException
+		if !errors.As(err, &aee) {
+			return fmt.Errorf("failed to make key alias: %w", err)
+		}
+		logger.Info().Msgf("alias already exists! %+v", err)
 	}
+	logger.Info().Msgf("created new alias! %+v", input)
 
 	s.kmsDecryptKeyArn = *result.KeyMetadata.KeyId
 	return nil

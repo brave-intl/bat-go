@@ -15,11 +15,9 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/brave-intl/bat-go/libs/digest"
 	"github.com/brave-intl/bat-go/libs/requestutils"
-	"golang.org/x/exp/slices"
 )
 
 // SignatureParams contains parameters needed to create and verify signatures
@@ -195,7 +193,11 @@ func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, 
 			}
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "host", host))...)
 		} else {
-			val := strings.Join(headers[http.CanonicalHeaderKey(header)], ", ")
+			headerToAppend := headers[http.CanonicalHeaderKey(header)]
+			if len(headerToAppend) < 1 {
+				return nil, fmt.Errorf("header %s was called for but is not present", header)
+			}
+			val := strings.Join(headerToAppend, ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
 		}
 
@@ -203,6 +205,7 @@ func (sp *SignatureParams) buildSigningString(body []byte, headers http.Header, 
 			out = append(out, byte('\n'))
 		}
 	}
+	fmt.Printf("signing string: %s", out)
 	return out, nil
 }
 
@@ -270,10 +273,6 @@ func (psrw *ParameterizedSignatorResponseWriter) Header() http.Header {
 // WriteHeader sends an HTTP response header with the provided
 // status code.
 func (psrw *ParameterizedSignatorResponseWriter) WriteHeader(statusCode int) {
-	// add the date if required by signator as it will be too late later when http server does it
-	if slices.Contains(psrw.Headers, "date") {
-		psrw.w.Header().Add("date", time.Now().Format(time.RFC1123))
-	}
 	psrw.statusCode = statusCode
 }
 
