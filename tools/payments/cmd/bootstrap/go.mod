@@ -7,6 +7,7 @@ replace github.com/brave-intl/bat-go/libs => ../../../../libs
 go 1.20
 
 require (
+	filippo.io/age v1.1.1
 	github.com/aws/aws-sdk-go-v2 v1.18.0
 	github.com/aws/aws-sdk-go-v2/config v1.18.19
 	github.com/aws/aws-sdk-go-v2/service/kms v1.21.1
