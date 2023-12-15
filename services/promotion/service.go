@@ -6,14 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -33,11 +30,6 @@ import (
 const localEnv = "local"
 
 var (
-	// toggle for drain retry job
-	enableDrainRetryJob = isDrainRetryJobEnabled()
-	// toggle for gemini check status
-	enableGemini = isGeminiEnabled()
-
 	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
 	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
 
@@ -78,30 +70,6 @@ var (
 	)
 )
 
-func isDrainRetryJobEnabled() bool {
-	var toggle = false
-	if os.Getenv("DRAIN_RETRY_JOB_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("DRAIN_RETRY_JOB_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
-func isGeminiEnabled() bool {
-	var toggle = false
-	if os.Getenv("GEMINI_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
 // SetSuggestionTopic allows for a new topic to be suggested
 func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
@@ -119,15 +87,11 @@ type Service struct {
 	RoDatastore                 ReadOnlyDatastore
 	cbClient                    cbr.Client
 	reputationClient            reputation.Client
-	bfClient                    bitflyer.Client
-	geminiClient                gemini.Client
-	geminiConf                  *gemini.Conf
 	codecs                      map[string]*goavro.Codec
 	kafkaWriter                 *kafka.Writer
 	kafkaDialer                 *kafka.Dialer
 	kafkaAdminAttestationReader kafkautils.Consumer
 	hotWallet                   *uphold.Wallet
-	drainChannel                chan *w.TransactionInfo
 	jobs                        []srv.Job
 	pauseSuggestionsUntil       time.Time
 	pauseSuggestionsUntilMu     sync.RWMutex
@@ -148,20 +112,6 @@ func (service *Service) InitKafka(ctx context.Context) error {
 	service.kafkaWriter, service.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, suggestionTopic)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
-	}
-
-	// toggle for drain retry job
-	if enableDrainRetryJob {
-		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_PROMOTIONS")
-		if groupID == "" {
-			return errors.New("failed not initialize kafka could not find consumer group")
-		}
-
-		reader, err := kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
-		if err != nil {
-			return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
-		}
-		service.kafkaAdminAttestationReader = reader
 	}
 
 	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
@@ -221,9 +171,6 @@ func InitService(
 	walletService *wallet.Service,
 ) (*Service, error) {
 
-	// get logger from context
-	logger := logging.Logger(ctx, "promotion.InitService")
-
 	// register metrics with prometheus
 	if err := prometheus.Register(countGrantsClaimedBatTotal); err != nil {
 		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
@@ -253,41 +200,6 @@ func InitService(
 		return nil, err
 	}
 
-	var bfClient bitflyer.Client
-	// setup bfClient
-	if os.Getenv("BITFLYER_ENABLED") == "true" {
-		bfClient, err = bitflyer.New()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create bitflyer client: %w", err)
-		}
-		// get a fresh bf token
-		// this will set the AuthToken on the client for us
-		_, err = bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
-		if err != nil {
-			// we don't want to stop the world if we can't connect to bf
-			logger.Error().Err(err).Msg("failed to get bf access token!")
-		}
-	}
-
-	var (
-		geminiClient gemini.Client
-		geminiConf   *gemini.Conf
-	)
-	if os.Getenv("GEMINI_ENABLED") == "true" {
-		// get the correct env variables for bulk pay API call
-		geminiConf = &gemini.Conf{
-			ClientID: os.Getenv("GEMINI_CLIENT_ID"),
-			APIKey:   os.Getenv("GEMINI_API_KEY"),
-			Secret:   os.Getenv("GEMINI_API_SECRET"),
-		}
-
-		gc, err := gemini.New()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create gemini client: %w", err)
-		}
-		geminiClient = gc
-	}
-
 	reputationClient, err := reputation.New()
 	// okay to fail to make a reputation client if the environment is local
 	if err != nil && os.Getenv("ENV") != localEnv {
@@ -298,9 +210,6 @@ func InitService(
 		Datastore:               promotionDB,
 		RoDatastore:             promotionRODB,
 		cbClient:                cbClient,
-		bfClient:                bfClient,
-		geminiClient:            geminiClient,
-		geminiConf:              geminiConf,
 		reputationClient:        reputationClient,
 		wallet:                  walletService,
 		pauseSuggestionsUntilMu: sync.RWMutex{},
@@ -323,55 +232,6 @@ func InitService(
 			Cadence: 5 * time.Second,
 			Workers: 1,
 		},
-		{
-			Func:    service.RunNextMintDrainJob,
-			Cadence: time.Second,
-			Workers: 6,
-		},
-		{
-			Func:    service.RunNextBatchPaymentsJob,
-			Cadence: time.Second,
-			Workers: 1,
-		},
-	}
-
-	// toggle for drain  retry job
-	if enableDrainRetryJob {
-		service.jobs = append(service.jobs,
-			srv.Job{
-				Func:    service.RunNextDrainRetryJob,
-				Cadence: 5 * time.Second,
-				Workers: 1,
-			})
-	}
-
-	// toggle for gemini check status
-	if enableGemini {
-		service.jobs = append(service.jobs,
-			srv.Job{
-				Func:    service.RunNextGeminiCheckStatus,
-				Cadence: time.Second,
-				Workers: 1,
-			})
-	}
-
-	var enableLinkingDraining bool
-	// make sure that we only enable the DrainJob if we have linking/draining enabled
-	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
-		enableLinkingDraining, err = strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
-		if err != nil {
-			// there was an error parsing the environment variable
-			return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
-		}
-	}
-
-	if enableLinkingDraining {
-		service.jobs = append(service.jobs,
-			srv.Job{
-				Func:    service.RunNextDrainJob,
-				Cadence: 5 * time.Second,
-				Workers: 1,
-			})
 	}
 
 	err = service.InitKafka(ctx)
@@ -394,16 +254,6 @@ func (service *Service) ReadableDatastore() ReadOnlyDatastore {
 	return service.Datastore
 }
 
-// RunNextMintDrainJob takes the next mint job and completes it
-func (service *Service) RunNextMintDrainJob(ctx context.Context) (bool, error) {
-	return service.Datastore.RunNextMintDrainJob(ctx, service)
-}
-
-// RunNextBatchPaymentsJob takes the next claim job and completes it
-func (service *Service) RunNextBatchPaymentsJob(ctx context.Context) (bool, error) {
-	return service.Datastore.RunNextBatchPaymentsJob(ctx, service)
-}
-
 // RunNextClaimJob takes the next claim job and completes it
 func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
 	return service.Datastore.RunNextClaimJob(ctx, service)
@@ -412,16 +262,6 @@ func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
 // RunNextSuggestionJob takes the next suggestion job and completes it
 func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
 	return service.Datastore.RunNextSuggestionJob(ctx, service)
-}
-
-// RunNextDrainJob takes the next drain job and completes it
-func (service *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
-	return service.Datastore.RunNextDrainJob(ctx, service)
-}
-
-// RunNextDrainRetryJob - retires failed drain jobs
-func (service *Service) RunNextDrainRetryJob(ctx context.Context) (bool, error) {
-	return true, service.Datastore.RunNextDrainRetryJob(ctx, service)
 }
 
 // RunNextPromotionMissingIssuer takes the next job and completes it
@@ -442,9 +282,4 @@ func (service *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool
 		}
 	}
 	return true, nil
-}
-
-// RunNextGeminiCheckStatus periodically check the status of gemini claim drain transactions
-func (service *Service) RunNextGeminiCheckStatus(ctx context.Context) (bool, error) {
-	return service.Datastore.RunNextGeminiCheckStatus(ctx, service)
 }

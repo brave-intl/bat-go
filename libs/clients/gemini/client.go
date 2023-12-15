@@ -20,7 +20,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shengdoushi/base58"
@@ -41,11 +40,6 @@ func isIssueCountryEnabled() bool {
 }
 
 var (
-	balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "gemini_account_balance",
-		Help: "A gauge of the current account balance in gemini",
-	})
-
 	countGeminiWalletAccountValidation = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "count_gemini_wallet_account_validation",
@@ -74,70 +68,8 @@ var (
 var ErrNoAcceptedDocumentType = errors.New("no accepted document type")
 
 func init() {
-	prometheus.MustRegister(balanceGauge)
 	prometheus.MustRegister(countGeminiWalletAccountValidation)
 	prometheus.MustRegister(countGeminiDocumentTypeByIssuingCountry)
-}
-
-// WatchGeminiBalance - when called reports the balance to prometheus
-func WatchGeminiBalance(ctx context.Context) error {
-	logger := logging.Logger(ctx, "WatchGeminiBalance")
-	// create a new gemini client
-	client, err := New()
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to get gemini client")
-		return fmt.Errorf("failed to get gemini client: %w", err)
-	}
-
-	// get api secret from context
-	apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to get gemini api secret")
-		return fmt.Errorf("failed to get gemini api secret: %w", err)
-	}
-	apiKey, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPIKeyCTXKey)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to get gemini api key")
-		return fmt.Errorf("failed to get gemini api key: %w", err)
-	}
-	//create a new hmac hasher
-	signer := cryptography.NewHMACHasher([]byte(apiSecret))
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		// check every 10 min
-		case <-time.After(2 * 60 * time.Second):
-			// create the gemini payload
-			payload, err := json.Marshal(NewBalancesPayload(nil))
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to create gemini balance payload")
-				// okay to error, retry in 10 min
-				continue
-			}
-
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to fetch gemini balance, panic")
-					}
-				}()
-				result, err := client.FetchBalances(ctx, apiKey, signer, string(payload))
-				if err != nil {
-					logger.Error().Err(err).Msg("failed to fetch gemini balance")
-				} else {
-					// dont care about float downsampling from decimal errs
-					if result == nil || len(*result) < 1 {
-						logger.Error().Msg("gemini result is empty")
-					} else {
-						b := *result
-						available, _ := b[0].Available.Float64()
-						balanceGauge.Set(available)
-					}
-				}
-			}()
-		}
-	}
 }
 
 // PrivateRequestSequence handles the ability to sign a request multiple times
