@@ -1,4 +1,4 @@
-FROM golang:1.18-alpine as builder
+FROM golang:1.19-alpine as builder
 
 # Put certs in builder image.
 RUN apk update
@@ -20,7 +20,8 @@ RUN cd main && go mod download && CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o bat-go main.go
 
-FROM alpine:3.15 as base
+# golang:1.19-alpine is based on alpine:3.18.
+FROM alpine:3.18 as base
 
 # Put certs in artifact from builder.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/

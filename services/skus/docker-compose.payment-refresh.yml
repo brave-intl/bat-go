@@ -8,7 +8,7 @@ services:
   # every time a file changes.
   payment-refresh:
     container_name: grant-payment-refresh
-    image: golang:1.18
+    image: golang:1.19
     ports:
       - "3335:3333"
       - "6061:6061"
@@ -38,7 +38,6 @@ services:
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
       - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
       - ENCRYPTION_KEY=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0
-      - FEATURE_MERCHANT=true
       - FEATURE_PAYMENT=true
       - DONOR_WALLET_CARD_ID
       - DONOR_WALLET_PRIVATE_KEY
