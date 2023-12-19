@@ -1905,7 +1905,7 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 			},
 		},
 		Quantity: req.Quantity,
-		Metadata: req.StripeMetadata.Metadata(),
+		Metadata: req.Metadata(),
 		Subtotal: req.Price.Mul(decimal.NewFromInt(int64(req.Quantity))),
 		IssuerConfig: &model.IssuerConfig{
 			Buffer:  req.TokenBufferOrDefault(),
