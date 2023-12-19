@@ -19,7 +19,6 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/lib/pq"
-
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
@@ -108,6 +107,14 @@ type GeoValidator interface {
 type metricSvc interface {
 	LinkSuccessZP(cc string)
 	LinkFailureZP(cc string)
+	LinkFailureGemini(cc string)
+	LinkSuccessGemini(cc string)
+	CountDocTypeByIssuingCntry(validDocs []gemini.ValidDocument)
+}
+
+type geminiSvc interface {
+	GetIssuingCountry(acc gemini.ValidatedAccount, fallback bool) string
+	IsRegionAvailable(ctx context.Context, issuingCountry string, custodianRegions custodian.Regions) error
 }
 
 // Service contains datastore connections
@@ -122,10 +129,11 @@ type Service struct {
 	crMu             *sync.RWMutex
 	custodianRegions custodian.Regions
 	metric           metricSvc
+	gemini           geminiSvc
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client, geminiClient gemini.Client, geoCountryValidator GeoValidator, retry backoff.RetryFunc, metric metricSvc) (*Service, error) {
+func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client, geminiClient gemini.Client, geoCountryValidator GeoValidator, retry backoff.RetryFunc, metric metricSvc, gemini geminiSvc) (*Service, error) {
 	service := &Service{
 		crMu:         new(sync.RWMutex),
 		Datastore:    datastore,
@@ -135,8 +143,8 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient r
 		geoValidator: geoCountryValidator,
 		retry:        retry,
 		metric:       metric,
+		gemini:       gemini,
 	}
-	// get the valid custodian regions
 	return service, nil
 }
 
@@ -231,8 +239,9 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	geoCountryValidator := NewGeoCountryValidator(awsClient, config)
 
 	mtc := metric.New()
+	gemx := newGeminix("passport", "drivers_license", "national_identity_card", "passport_card")
 
-	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc)
+	s, err := InitService(db, roDB, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -493,45 +502,54 @@ func (service *Service) LinkZebPayWallet(ctx context.Context, walletID uuid.UUID
 	return claims.CountryCode, nil
 }
 
-// LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
+const errNoAcceptedDocumentType model.Error = "no accepted document type"
+
+// LinkGeminiWallet links a wallet to a Gemini account.
 func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken, depositID string) (string, error) {
-	const depositProvider = "gemini"
-
-	// get gemini client from context
-	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
-	if !ok {
-		// no gemini client on context
-		return "", handlers.WrapError(appctx.ErrNotInContext, "gemini client misconfigured", http.StatusInternalServerError)
-	}
-
-	// add custodian regions to ctx going to client
-	_, ok = ctx.Value(appctx.CustodianRegionsCTXKey).(custodian.Regions)
-	if !ok {
-		cr := service.getCustodianRegions()
-		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, &cr)
-	}
-
-	err := validateCustodianLinking(ctx, service.Datastore, walletID, depositProvider)
-	if err != nil {
-		if errors.Is(err, errCustodianLinkMismatch) {
-			return "", errCustodianLinkMismatch
-		}
+	cl, err := service.Datastore.GetCustodianLinkByWalletID(ctx, walletID)
+	if err != nil && !errors.Is(err, model.ErrNoWalletCustodian) {
 		return "", handlers.WrapError(err, "failed to check linking mismatch", http.StatusInternalServerError)
 	}
 
-	// If a wallet has previously been linked i.e. has a prior linking, but the country is now invalid/blocked
-	// then we can allow the account to link due to its prior successful linking i.e. it is grandfathered.
-	// If there is no prior linking and the country is invalid/blocked then we should apply the current rules and block it.
+	const depositProvider = "gemini"
 
-	accountID, country, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
+	if cl.isLinked() && !strings.EqualFold(cl.Custodian, depositProvider) {
+		return "", errCustodianLinkMismatch
+	}
+
+	gc, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
+	if !ok {
+		return "", handlers.WrapError(appctx.ErrNotInContext, "gemini client misconfigured", http.StatusInternalServerError)
+	}
+
+	acc, err := gc.FetchValidatedAccount(ctx, verificationToken, depositID)
 	if err != nil {
+		return "", fmt.Errorf("failed to validate account: %w", err)
+	}
+
+	service.metric.CountDocTypeByIssuingCntry(acc.ValidDocuments)
+
+	linkingID := uuid.NewV5(ClaimNamespace, acc.ID)
+	// Some Gemini accounts do not have valid documents setup. For accounts that are already linked i.e. are
+	// re-authenticating we can fall back to the legacy country code. New or re-linkings should not fall back.
+	isAuth := cl.isLinked() && *cl.LinkingID == linkingID
+	issuingCountry := service.gemini.GetIssuingCountry(acc, isAuth)
+	if issuingCountry == "" {
+		return "", fmt.Errorf("failed to validate account: %w", errNoAcceptedDocumentType)
+	}
+
+	if err := service.gemini.IsRegionAvailable(ctx, issuingCountry, service.custodianRegions); err != nil {
 		if errors.Is(err, errorutils.ErrInvalidCountry) {
-			hasPriorLinking, priorLinkingErr := service.Datastore.HasPriorLinking(ctx, walletID, uuid.NewV5(ClaimNamespace, accountID))
+			// If a wallet has previously been linked i.e. has a prior linking, but the country is now invalid/blocked
+			// then we can allow the account to link due to its prior successful linking i.e. it is grandfathered.
+			// If there is no prior linking and the country is invalid/blocked then we should apply the current rules and block it.
+			hasPriorLinking, priorLinkingErr := service.Datastore.HasPriorLinking(ctx, walletID, linkingID)
 			if priorLinkingErr != nil && !errors.Is(err, sql.ErrNoRows) {
 				return "", fmt.Errorf("failed to check prior linkings: %w", priorLinkingErr)
 			}
 
 			if !hasPriorLinking {
+				service.metric.LinkFailureGemini(issuingCountry)
 				return "", fmt.Errorf("failed to validate account: %w", err)
 			}
 
@@ -540,11 +558,9 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 			return "", fmt.Errorf("failed to validate account: %w", err)
 		}
 	}
+	service.metric.LinkSuccessGemini(issuingCountry)
 
-	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
-	providerLinkingID := uuid.NewV5(ClaimNamespace, accountID)
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, depositProvider, country)
-	if err != nil {
+	if err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, linkingID, depositProvider, issuingCountry); err != nil {
 		if errors.Is(err, ErrUnusualActivity) {
 			return "", handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
@@ -553,15 +569,14 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 			return "", handlers.WrapError(err, "mismatched provider account regions", http.StatusBadRequest)
 		}
 
-		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
-			status = http.StatusConflict
+			return "", handlers.WrapError(err, "unable to link gemini wallets", http.StatusConflict)
 		}
 
-		return "", handlers.WrapError(err, "unable to link gemini wallets", status)
+		return "", handlers.WrapError(err, "unable to link gemini wallets", http.StatusInternalServerError)
 	}
 
-	return country, nil
+	return issuingCountry, nil
 }
 
 // LinkUpholdWallet links an uphold.Wallet and transfers funds.

@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,56 +20,9 @@ import (
 	"github.com/brave-intl/bat-go/libs/custodian"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/google/go-querystring/query"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
-
-// isIssueCountryEnabled temp feature flag for Gemini endpoint update
-func isIssueCountryEnabled() bool {
-	var toggle = false
-	if os.Getenv("GEMINI_ISSUING_COUNTRY_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_ISSUING_COUNTRY_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
-var (
-	countGeminiWalletAccountValidation = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "count_gemini_wallet_account_validation",
-			Help: "Counts the number of gemini wallets requesting account validation partitioned by country code",
-		},
-		[]string{"country_code", "status"},
-	)
-
-	countGeminiDocumentTypeByIssuingCountry = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "count_gemini_document_type_by_issuing_country",
-			Help: "Counts the number document types being used for KYC broken down by country",
-		},
-		[]string{"document_type", "issuing_country"},
-	)
-
-	documentTypePrecedence = []string{
-		"passport",
-		"drivers_license",
-		"national_identity_card",
-		"passport_card",
-	}
-)
-
-// ErrNoAcceptedDocumentType is the returned error when no accepted documents exist in the Gemini response.
-var ErrNoAcceptedDocumentType = errors.New("no accepted document type")
-
-func init() {
-	prometheus.MustRegister(countGeminiWalletAccountValidation)
-	prometheus.MustRegister(countGeminiDocumentTypeByIssuingCountry)
-}
 
 // PrivateRequestSequence handles the ability to sign a request multiple times
 type PrivateRequestSequence struct {
@@ -229,8 +181,8 @@ func (pr PayoutResult) GenerateLog() string {
 
 // Client abstracts over the underlying client
 type Client interface {
-	// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
-	ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, string, error)
+	// FetchValidatedAccount given a verificationToken validate the token is authentic and get the unique account id
+	FetchValidatedAccount(ctx context.Context, verificationToken, recipientID string) (ValidatedAccount, error)
 	// FetchAccountList requests account information to scope future requests
 	FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
 	// FetchBalances requests balance information for a given account
@@ -413,8 +365,8 @@ func (v *ValidateAccountReq) GenerateQueryString() (url.Values, error) {
 	return query.Values(v)
 }
 
-// ValidateAccountRes - request structure for inputs to validate account client call
-type ValidateAccountRes struct {
+// ValidatedAccount represents an account that has been validated by Gemini.
+type ValidatedAccount struct {
 	ID             string          `json:"id"`
 	CountryCode    string          `json:"countryCode"`
 	ValidDocuments []ValidDocument `json:"validDocuments"`
@@ -426,85 +378,21 @@ type ValidDocument struct {
 	IssuingCountry string `json:"issuingCountry"`
 }
 
-// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
-func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, string, error) {
-	// create the query string parameters
-	var (
-		res = new(ValidateAccountRes)
-	)
-
-	// create the request
-	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/validate", nil, &ValidateAccountReq{
+func (c *HTTPClient) FetchValidatedAccount(ctx context.Context, verificationToken, recipientID string) (ValidatedAccount, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/v1/account/validate", nil, &ValidateAccountReq{
 		Token:       verificationToken,
 		RecipientID: recipientID,
 	})
-
 	if err != nil {
-		return "", "", err
+		return ValidatedAccount{}, err
 	}
 
-	_, err = c.client.Do(ctx, req, res)
-	if err != nil {
-		return "", res.CountryCode, err
+	var res ValidatedAccount
+	if _, err := c.client.Do(ctx, req, &res); err != nil {
+		return ValidatedAccount{}, err
 	}
 
-	issuingCountry := res.CountryCode
-
-	if isIssueCountryEnabled() {
-		if len(res.ValidDocuments) <= 0 {
-			return "", "", errors.New("error no valid documents in response")
-		}
-
-		for i := range res.ValidDocuments {
-			countGeminiDocumentTypeByIssuingCountry.With(prometheus.Labels{
-				"document_type":   res.ValidDocuments[i].Type,
-				"issuing_country": res.ValidDocuments[i].IssuingCountry,
-			}).Inc()
-		}
-
-		issuingCountry = countryForDocByPrecedence(documentTypePrecedence, res.ValidDocuments)
-		if issuingCountry == "" {
-			return "", "", ErrNoAcceptedDocumentType
-		}
-	}
-
-	// feature flag for using new custodian regions
-	if useCustodianRegions, ok := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool); ok && useCustodianRegions {
-		// get the uphold custodian supported regions
-		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.Regions); ok {
-			allowed := custodianRegions.Gemini.Verdict(issuingCountry)
-			if !allowed {
-				countGeminiWalletAccountValidation.With(prometheus.Labels{
-					"country_code": issuingCountry,
-					"status":       "failure",
-				}).Inc()
-				return res.ID, issuingCountry, errorutils.ErrInvalidCountry
-			}
-		}
-	} else { // use default blacklist functionality
-		if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
-			// check country code
-			for _, v := range blacklist {
-				if strings.EqualFold(issuingCountry, v) {
-					if issuingCountry != "" {
-						countGeminiWalletAccountValidation.With(prometheus.Labels{
-							"country_code": issuingCountry,
-							"status":       "failure",
-						}).Inc()
-					}
-					return res.ID, issuingCountry, errorutils.ErrInvalidCountry
-				}
-			}
-		}
-	}
-	if issuingCountry != "" {
-		countGeminiWalletAccountValidation.With(prometheus.Labels{
-			"country_code": issuingCountry,
-			"status":       "success",
-		}).Inc()
-	}
-
-	return res.ID, issuingCountry, nil
+	return res, nil
 }
 
 // FetchAccountList fetches the list of accounts associated with the given api key
@@ -553,18 +441,4 @@ func (c *HTTPClient) FetchBalances(
 		return nil, err
 	}
 	return &body, err
-}
-
-func countryForDocByPrecedence(precedence []string, docs []ValidDocument) string {
-	var result string
-
-	for _, pdoc := range precedence {
-		for _, vdoc := range docs {
-			if strings.EqualFold(pdoc, vdoc.Type) {
-				return strings.ToUpper(vdoc.IssuingCountry)
-			}
-		}
-	}
-
-	return result
 }
