@@ -545,9 +545,6 @@ type ItemStripeMetadata struct {
 	ItemID    string `json:"item_id"`
 }
 
-// Metadata returns the contents of m as a map for datastore.Metadata.
-//
-// It can be called when m is nil.
 func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
 	if m == nil {
 		return nil
@@ -576,9 +573,6 @@ type ItemRadomMetadata struct {
 	ProductID string `json:"product_id"`
 }
 
-// Metadata returns the contents of m as a map for datastore.Metadata.
-//
-// It can be called when m is nil.
 func (m *ItemRadomMetadata) Metadata() map[string]interface{} {
 	if m == nil {
 		return nil
