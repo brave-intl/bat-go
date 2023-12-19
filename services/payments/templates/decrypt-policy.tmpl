@@ -1,0 +1,152 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+        "Sid": "AllowHostNodeAccess",
+        "Effect": "Allow",
+        "Principal": {
+        "AWS": "{{.NodeGroupRole}}"
+        },
+        "Action": [
+            "kms:TagResource",
+            "kms:List*",
+            "kms:Get*",
+            "kms:Enable*",
+            "kms:Describe*",
+            "kms:CreateKey",
+            "kms:CreateAlias"
+        ],
+        "Resource": "*"
+    },
+    {
+      "Sid": "AllowDevOpsReadOnlyAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:List*",
+        "kms:Get*",
+        "kms:Describe*"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": [
+          "arn:aws:iam::{{.AWSAccount}}:role/devops-admin-rw-role",
+          "arn:aws:iam::{{.AWSAccount}}:role/devops-admin-ro-role"
+        ]
+      }
+    },
+    {
+      "Sid": "AllowConfigServiceAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:ListResourceTags",
+        "kms:ListKeyPolicies",
+        "kms:ListGrants",
+        "kms:ListAliases",
+        "kms:GetKeyRotationStatus",
+        "kms:GetKeyPolicy",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Condition": {
+        "ArnLike": {
+        "aws:PrincipalArn": "arn:aws:iam::{{.AWSAccount}}:role/config-service-role"
+        },
+        "StringEquals": {
+          "aws:PrincipalServiceName": [
+            "config.us-west-2.amazonaws.com",
+            "config.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "AllowSecurityAuditAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:UntagResource",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
+        "kms:Revoke*",
+        "kms:List*",
+        "kms:Get*",
+        "kms:Disable*",
+        "kms:Describe*",
+        "kms:Delete*"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "arn:aws:iam::{{.AWSAccount}}:role/security-admin-sa-role"
+      }
+    },
+    {
+      "Sid": "AllowAnalyzerAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:List*",
+        "kms:GetKeyPolicy",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Condition": {
+        "StringEquals": {
+        "kms:CallerAccount": "{{.AWSAccount}}",
+          "kms:ViaService": "access-analyzer.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AllowSettlementsDeveloperAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:ReEncrypt*",
+        "kms:List*",
+        "kms:GetKeyPolicy",
+        "kms:GenerateDataKey",
+        "kms:Encrypt",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*",
+      "Principal": {
+      "AWS": "{{.SettlementsDeveloperRole}}"
+      }
+    },
+    {
+      "Sid": "AllowEnclaveDecryptAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:GenerateRandom",
+        "kms:GenerateDataKey",
+        "kms:Decrypt"
+      ],
+      "Resource": "*",
+      "Principal": {
+        "AWS": "*"
+      },
+      "Condition": {
+        "StringLike": {
+            "kms:RecipientAttestation:PCR0": "{{.PCR0}}",
+            "kms:RecipientAttestation:PCR1": "{{.PCR1}}",
+            "kms:RecipientAttestation:PCR2": "{{.PCR2}}"
+        },
+        "ArnLike": {
+            "aws:PrincipalArn": "{{.NodeGroupRole}}"
+        }
+      }
+    },
+    {
+      "Sid": "DenyAWSOverrideAccess",
+      "Effect": "Deny",
+      "Action": "kms:PutKeyPolicy",
+      "Resource": "*",
+      "Principal": {
+        "AWS": "*"
+      }
+    }
+  ]
+}

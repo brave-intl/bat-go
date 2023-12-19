@@ -39,6 +39,7 @@ mock:
 	cd libs && mockgen -source=./clients/cbr/client.go -destination=clients/cbr/mock/mock.go -package=mock_cbr
 	cd libs && mockgen -source=./clients/reputation/client.go -destination=clients/reputation/mock/mock.go -package=mock_reputation
 	cd libs && mockgen -source=./clients/gemini/client.go -destination=clients/gemini/mock/mock.go -package=mock_gemini
+	cd libs && mockgen -source=./clients/zebpay/client.go -destination=clients/zebpay/mock/mock.go -package=mock_zebpay
 	cd libs && mockgen -source=./clients/bitflyer/client.go -destination=clients/bitflyer/mock/mock.go -package=mock_bitflyer
 	cd libs && mockgen -source=./clients/coingecko/client.go -destination=clients/coingecko/mock/mock.go -package=mock_coingecko
 	cd libs && mockgen -source=./clients/stripe/client.go -destination=clients/stripe/mock/mock.go -package=mock_stripe
@@ -71,6 +72,8 @@ instrumented:
 	sed -i'bak' 's/reputation.//g' libs/clients/reputation/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/gemini -i Client -t ../.prom-gowrap.tmpl -o ./clients/gemini/instrumented_client.go
 	sed -i'bak' 's/gemini.//g' libs/clients/gemini/instrumented_client.go
+	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/zebpay -i Client -t ../.prom-gowrap.tmpl -o ./clients/zebpay/instrumented_client.go
+	sed -i'bak' 's/zebpay.//g' libs/clients/zebpay/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/bitflyer -i Client -t ../.prom-gowrap.tmpl -o ./clients/bitflyer/instrumented_client.go
 	sed -i'bak' 's/bitflyer.//g' libs/clients/bitflyer/instrumented_client.go
 	cd libs && gowrap gen -p github.com/brave-intl/bat-go/libs/clients/coingecko -i Client -t ../.prom-gowrap.tmpl -o ./clients/coingecko/instrumented_client.go
@@ -103,6 +106,12 @@ docker-reproducible:
 		--reproducible --dockerfile /workspace/Dockerfile \
 		--no-push --tarPath /workspace/bat-go-repro.tar \
 		--destination bat-go-repro:latest --context dir:///workspace/ && cat bat-go-repro.tar | docker load
+
+docker-payments:
+	docker rmi -f bat-go/payments:latest
+	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) --target payments -t bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) .
+	docker tag bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) bat-go/payments:latest
 
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \

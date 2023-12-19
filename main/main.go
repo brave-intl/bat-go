@@ -4,7 +4,9 @@ package main
 
 import (
 	// pull in tool module. setup code is in init
+
 	"github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/libs/logging"
 	_ "github.com/brave-intl/bat-go/tools/cmd"
 
 	// pull in settlement module. setup code is in init
@@ -28,6 +30,9 @@ import (
 	_ "github.com/brave-intl/bat-go/services/ratios/cmd"
 	// pull in grants module. setup code is in init
 	_ "github.com/brave-intl/bat-go/services/grant/cmd"
+	// pull in payments service
+	_ "github.com/brave-intl/bat-go/services/nitro"
+	_ "github.com/brave-intl/bat-go/services/payments/cmd"
 )
 
 var (
@@ -38,5 +43,10 @@ var (
 )
 
 func main() {
+	defer func() {
+		if logging.Writer != nil {
+			logging.Writer.Close()
+		}
+	}()
 	cmd.Execute(version, commit, buildTime)
 }

@@ -20,7 +20,11 @@ import (
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 )
+
+// TransferLimit is the limit of BAT any client can transfer
+var TransferLimit = decimal.NewFromInt(300)
 
 // regular expression mapped to the replacement
 var redactHeaders = map[*regexp.Regexp][]byte{
@@ -245,13 +249,15 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 		}
 	}
 
-	// put a timeout on the request context
-	reqCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	scopedCtx := appctx.Wrap(req.Context(), reqCtx)
-	// cancel the context when complete
-	defer cancel()
+	if c.client.Timeout > 0 {
+		// put a timeout on the request context
+		reqCtx, cancel := context.WithTimeout(context.Background(), c.client.Timeout)
+		scopedCtx := appctx.Wrap(req.Context(), reqCtx)
+		// cancel the context when complete
+		defer cancel()
 
-	req = req.WithContext(scopedCtx)
+		req = req.WithContext(scopedCtx)
+	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {

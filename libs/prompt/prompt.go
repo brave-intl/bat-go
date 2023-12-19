@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"syscall"
+
+	"golang.org/x/term"
 )
 
 // Bool prompts for y/n input returning a bool
@@ -25,4 +28,11 @@ func Bool() (bool, error) {
 			fmt.Println("Input must be \"y\" or \"n\"")
 		}
 	}
+}
+
+// Password prompts for a password
+func Password() ([]byte, error) {
+	fmt.Print("Enter Password: ")
+	defer fmt.Print("\n")
+	return term.ReadPassword(int(syscall.Stdin))
 }

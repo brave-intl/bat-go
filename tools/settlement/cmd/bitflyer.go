@@ -3,6 +3,7 @@ package settlement
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -258,20 +259,10 @@ func BitflyerUploadSettlement(
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	bitflyerClient, err := bitflyer.New()
+	bitflyerClient, err := GetBitflyerAuthorizedClient(ctx, token)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create new bitflyer client")
 		return err
-	}
-	// set the auth token
-	if token != "" {
-		bitflyerClient.SetAuthToken(token)
-	} else {
-		refreshTokenPayload := NewRefreshTokenPayloadFromViper()
-		_, err := bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
-		if err != nil {
-			return err
-		}
 	}
 
 	bytes, err := ioutil.ReadFile(inPath)
@@ -305,4 +296,23 @@ func BitflyerUploadSettlement(
 		return err
 	}
 	return submitErr
+}
+
+func GetBitflyerAuthorizedClient(ctx context.Context, token string) (bitflyer.Client, error) {
+	bitflyerClient, err := bitflyer.New()
+	if err != nil {
+		return bitflyerClient, fmt.Errorf("failed to create new bitflyer client: %w", err)
+	}
+	// set the auth token
+	if token != "" {
+		bitflyerClient.SetAuthToken(token)
+	} else {
+		refreshTokenPayload := NewRefreshTokenPayloadFromViper()
+		resp, err := bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
+		fmt.Printf("TOKENRESP: %v\n", resp)
+		if err != nil {
+			return bitflyerClient, fmt.Errorf("failed to refresh bitflyer token: %w", err)
+		}
+	}
+	return bitflyerClient, nil
 }

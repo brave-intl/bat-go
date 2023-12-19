@@ -1,86 +1,5 @@
 package payments
 
-import "encoding/json"
-
-var (
-	status0, _ = json.Marshal(QLDBPaymentTransitionData{Status: 0})
-	status1, _ = json.Marshal(QLDBPaymentTransitionData{Status: 1})
-	status2, _ = json.Marshal(QLDBPaymentTransitionData{Status: 2})
-	status3, _ = json.Marshal(QLDBPaymentTransitionData{Status: 3})
-	status4, _ = json.Marshal(QLDBPaymentTransitionData{Status: 4})
-	status5, _ = json.Marshal(QLDBPaymentTransitionData{Status: 5})
-)
-
-var transactionHistorySetTrue = [][]QLDBPaymentTransitionHistoryEntry{
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-	},
-}
-
-var transactionHistorySetFalse = [][]QLDBPaymentTransitionHistoryEntry{
-	// Transitions must always start at 0
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status1}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status5}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status4}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status3}},
-	},
-	{
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status0}},
-		{Data: QLDBPaymentTransitionHistoryEntryData{Data: status2}},
-	},
-}
-
 var upholdCreateTransactionSuccessResponse = map[string]interface{}{
 	"application": nil,
 	"createdAt":   "2018-08-01T09:53:47.020Z",
@@ -187,7 +106,7 @@ var geminiBulkPaySuccessResponse = []map[string]string{
 	},
 }
 
-var geminiBulkPayFailureResponse = []map[string]string{
+/*var geminiBulkPayFailureResponse = []map[string]string{
 	{
 		"result":      "error",
 		"tx_ref":      "",
@@ -197,7 +116,7 @@ var geminiBulkPayFailureResponse = []map[string]string{
 		"Status":      "",
 		"reason":      "",
 	},
-}
+}*/
 
 var geminiTransactionCheckSuccessResponse = map[string]string{
 	"result":      "ok",
@@ -209,7 +128,7 @@ var geminiTransactionCheckSuccessResponse = map[string]string{
 	"reason":      "",
 }
 
-var geminiTransactionCheckFailureResponse = map[string]string{
+/*var geminiTransactionCheckFailureResponse = map[string]string{
 	"result":      "error",
 	"tx_ref":      "",
 	"amount":      "",
@@ -217,52 +136,115 @@ var geminiTransactionCheckFailureResponse = map[string]string{
 	"destination": "",
 	"Status":      "",
 	"reason":      "",
-}
+}*/
 
 var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
-		"transfer_Status": "",
+		"transfer_Status": "pending",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
 var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
-	},
-	},
+	}},
 }
 
 var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
-		"transfer_Status": "",
+		"transfer_Status": "success",
 		"transfer_id":     "",
-	},
-	},
+	}},
+}
+
+var bitflyerTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
+	"dry_run": false,
+	"withdrawals": []map[string]interface{}{{
+		"currency_code":   "",
+		"amount":          1.0,
+		"message":         "",
+		"transfer_Status": "pending",
+		"transfer_id":     "",
+	}},
 }
 
 var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
-	"dry_run": "false",
+	"dry_run": false,
 	"withdrawals": []map[string]interface{}{{
 		"currency_code":   "",
 		"amount":          1.0,
 		"message":         "",
 		"transfer_Status": "",
 		"transfer_id":     "",
+	}},
+}
+
+var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
+	"dry_run":      false,
+	"access_token": "Look at me. I'm a token.",
+	"refresh_toke": "another token",
+	"expires_in":   4,
+	"scope":        "some scope",
+	"account_hash": "hashed something",
+	"tokey_type":   "token type",
+}
+
+var bitflyerFetchPriceResponse = map[string]interface{}{
+	"product_code":  "BAT_JPY",
+	"main_currency": "BAT",
+	"sub_currency":  "",
+	"rate":          4,
+	"price_token":   "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
+}
+
+var zebpayTransactionSubmitSuccessResponse = map[string]interface{}{
+	"data": "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED",
+}
+
+var zebpayTransactionSubmitFailureResponse = map[string]interface{}{
+	"data": "oops",
+}
+
+var zebpayTransactionCheckStatusSuccessResponse = map[string]interface{}{
+	"transaction_id": "725c920b-d158-56fb-b5cf-5910d9ca4a16",
+	"code":           2,
+	"status":         "Success",
+	"details": map[string]interface{}{
+		"amount":      13.736461457342187,
+		"destination": 512,
 	},
+}
+
+var zebpayTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
+	"transaction_id": "725c920b-d158-56fb-b5cf-5910d9ca4a16",
+	"code":           1,
+	"status":         "Pending",
+	"details": map[string]interface{}{
+		"amount":      13.736461457342187,
+		"destination": 512,
+	},
+}
+
+var zebpayTransactionCheckStatusFailureResponse = map[string]interface{}{
+	"transaction_id": "725c920b-d158-56fb-b5cf-5910d9ca4a16",
+	"code":           3,
+	"status":         "Failed",
+	"details": map[string]interface{}{
+		"amount":      13.736461457342187,
+		"destination": 512,
 	},
 }

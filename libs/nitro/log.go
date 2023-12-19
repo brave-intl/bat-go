@@ -2,11 +2,11 @@ package nitro
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 
 	"github.com/brave-intl/bat-go/libs/closers"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/mdlayher/vsock"
 )
 
@@ -77,20 +77,21 @@ func NewVsockLogServer(ctx context.Context, port uint32) VsockLogServer {
 
 // Serve - interface implementation for Serve for VsockLogServer
 func (s VsockLogServer) Serve(l net.Listener) error {
+	logger := logging.Logger(s.baseCtx, "nitro.Serve")
 	if l == nil {
 		var err error
 		l, err = vsock.Listen(s.port, &vsock.Config{})
 		if err != nil {
-			log.Panicln(err)
+			return err
 		}
 		defer closers.Panic(s.baseCtx, l)
 	}
-	log.Printf("Listening to connections on vsock port %d\n", s.port)
+	logger.Info().Uint32("port", s.port).Msg("Listening to connections on vsock port")
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Panicln(err)
+			logger.Error().Err(err).Msg("accept failed")
 		}
 
 		go handleLogConn(s.baseCtx, conn)
@@ -98,9 +99,11 @@ func (s VsockLogServer) Serve(l net.Listener) error {
 }
 
 func handleLogConn(ctx context.Context, conn net.Conn) {
-	log.Println("Accepted connection.")
+	logger := logging.Logger(ctx, "nitro.handleLogConn")
+
+	logger.Debug().Msg("Accepted connection.")
 	defer closers.Panic(ctx, conn)
-	defer log.Println("Closed connection.")
+	defer logger.Debug().Msg("Closed connection.")
 
 	for {
 		buf := make([]byte, 1024)
@@ -109,7 +112,7 @@ func handleLogConn(ctx context.Context, conn net.Conn) {
 			return
 		}
 		if _, err := os.Stdout.Write(buf[:size]); err != nil {
-			log.Printf("failed to write: %s", err.Error())
+			logger.Error().Err(err).Msg("failed to write")
 		}
 	}
 }

@@ -211,6 +211,7 @@ func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 				return
 			}
 
+			next = middleware.VerifyDateIsRecent(10*time.Minute, 10*time.Minute)(next)
 			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
 		})
 	}

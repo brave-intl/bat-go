@@ -5,9 +5,7 @@ import (
 	"crypto"
 	"errors"
 	"net/http"
-	"time"
 
-	"github.com/brave-intl/bat-go/libs/contains"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -21,7 +19,7 @@ var (
 
 type httpSignedKeyID struct{}
 
-//AddKeyID - Helpful for test cases
+// AddKeyID - Helpful for test cases
 func AddKeyID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, httpSignedKeyID{}, id)
 }
@@ -33,6 +31,15 @@ func GetKeyID(ctx context.Context) (string, error) {
 		return "", errors.New("keyID was missing from context")
 	}
 	return keyID, nil
+}
+
+func SignResponse(p httpsignature.ParameterizedSignator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w = httpsignature.NewParameterizedSignatorResponseWriter(p, w)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // HTTPSignedOnly is a middleware that requires an HTTP request to be signed
@@ -78,43 +85,6 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 				}
 				ae.ServeHTTP(w, r)
 				return
-			}
-
-			if contains.Str(verifier.SignatureParams.Headers, "date") {
-				// Date: Wed, 21 Oct 2015 07:28:00 GMT
-				dateStr := r.Header.Get("date")
-				date, err := time.Parse(time.RFC1123, dateStr)
-				if err != nil {
-					logger.Error().Err(err).Msg("failed to parse the date header")
-					ae := handlers.AppError{
-						Cause:   errInvalidHeader,
-						Message: "Invalid date header",
-						Code:    http.StatusBadRequest,
-					}
-					ae.ServeHTTP(w, r)
-					return
-				}
-
-				if time.Now().Add(10 * time.Minute).Before(date) {
-					logger.Error().Err(err).Msg("date is invalid")
-					ae := handlers.AppError{
-						Cause:   errInvalidHeader,
-						Message: "date is invalid",
-						Code:    http.StatusTooEarly,
-					}
-					ae.ServeHTTP(w, r)
-					return
-				}
-				if time.Now().Add(-10 * time.Minute).After(date) {
-					logger.Error().Err(err).Msg("date is invalid")
-					ae := handlers.AppError{
-						Cause:   errInvalidHeader,
-						Message: "date is invalid",
-						Code:    http.StatusRequestTimeout,
-					}
-					ae.ServeHTTP(w, r)
-					return
-				}
 			}
 
 			ctx = context.WithValue(ctx, httpSignedKeyID{}, keyID)

@@ -1,0 +1,20 @@
+version: "3.4"
+
+services:
+  redis-master:
+    container_name: redis-master
+    image: bitnami/redis:7.2
+    environment:
+      - REDIS_ACLFILE=/etc/redis/users.acl
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_PORT=0
+      - REDIS_TLS_ENABLED=yes
+      - REDIS_TLS_PORT=6379
+      - REDIS_TLS_AUTH_CLIENTS=no
+      - REDIS_TLS_CERT_FILE=/etc/redis/server.crt
+      - REDIS_TLS_KEY_FILE=/etc/redis/server.key
+      - REDIS_TLS_CA_FILE=/etc/redis/ca.crt
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./tls:/etc/redis

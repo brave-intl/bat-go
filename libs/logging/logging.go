@@ -26,7 +26,18 @@ var (
 			Help: "A counter for the number of dropped log messages",
 		},
 	)
+	Writer io.WriteCloser
 )
+
+func NopCloser(w io.Writer) io.WriteCloser {
+	return nopCloser{w}
+}
+
+type nopCloser struct {
+	io.Writer
+}
+
+func (nopCloser) Close() error { return nil }
 
 func init() {
 	prometheus.MustRegister(droppedLogTotal)
@@ -42,6 +53,8 @@ func SetupLoggerWithLevel(ctx context.Context, level zerolog.Level) (context.Con
 
 // SetupLogger - helper to setup a logger and associate with context
 func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
+	writer, ok := ctx.Value(appctx.LogWriterCTXKey).(io.Writer)
+
 	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {
 		// if not in context, default to local
@@ -51,24 +64,24 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	// defaults to info level
 	level, _ := appctx.GetLogLevelFromContext(ctx, appctx.LogLevelCTXKey)
 
-	var output io.Writer
-	if env != "local" {
+	if ok {
+		Writer = NopCloser(writer)
+	} else if env != "local" {
 		// this log writer uses a ring buffer and drops messages that cannot be processed
 		// in a timely manner
-		output = diode.NewWriter(os.Stdout, 1000, time.Duration(20*time.Millisecond), func(missed int) {
+		Writer = diode.NewWriter(os.Stdout, 1000, time.Duration(20*time.Millisecond), func(missed int) {
 			// add to our counter of lost log messages
 			droppedLogTotal.Add(float64(missed))
 		})
 	} else {
-		output = zerolog.ConsoleWriter{Out: os.Stdout}
+		Writer = NopCloser(zerolog.ConsoleWriter{Out: os.Stdout})
 	}
 
 	// always print out timestamp
-	l := zerolog.New(output).With().Timestamp().Logger()
+	l := zerolog.New(Writer).With().Timestamp().Logger()
 
 	var (
 		debug bool
-		ok    bool
 	)
 
 	// set the log level
@@ -80,6 +93,11 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	}
 
 	return l.WithContext(ctx), &l
+}
+
+func UpdateContext(ctx context.Context, logger zerolog.Logger) (context.Context, *zerolog.Logger) {
+	ctx = logger.WithContext(ctx)
+	return ctx, &logger
 }
 
 // AddWalletIDToContext adds wallet id to context
@@ -150,7 +168,7 @@ type UpholdProgress struct {
 	Count   int
 }
 
-// UpholdProgressSet - set of progress updates
+// UpholdProgressSet - the set up uphold progresses
 type UpholdProgressSet struct {
 	Progress []UpholdProgress
 }
@@ -217,4 +235,12 @@ func FromContext(ctx context.Context) *zerolog.Logger {
 		_, logger = SetupLogger(ctx)
 	}
 	return logger
+}
+
+// LogAndError - helper to log and error
+func LogAndError(logger *zerolog.Logger, msg string, err error) error {
+	if logger != nil {
+		logger.Error().Err(err).Msg(msg)
+	}
+	return err
 }

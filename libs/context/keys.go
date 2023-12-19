@@ -71,6 +71,12 @@ const (
 	GeminiAPISecretCTXKey CTXKey = "gemini_api_secret"
 	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
+	// GeminiServerURLCTXKey - context key for gemini server url
+	GeminiServerURLCTXKey CTXKey = "gemini_server_url"
+	// GeminiProxyURLCTXKey - context key for gemini proxy url
+	GeminiProxyURLCTXKey CTXKey = "gemini_proxy_url"
+	// GeminiTokenCTXKey - context key for gemini token
+	GeminiTokenCTXKey CTXKey = "gemini_token_url"
 
 	// for skus ac validation
 
@@ -103,6 +109,9 @@ const (
 	WalletOnPlatformPriorToCTXKey CTXKey = "wallet_on_platform_prior_to"
 	// LogLevelCTXKey - context key for application logging level
 	LogLevelCTXKey CTXKey = "log_level"
+
+	// Bitflyer Keys
+
 	// BitFlyerJWTKeyCTXKey - context key for the bitflyer jwt key
 	BitFlyerJWTKeyCTXKey CTXKey = "bitflyer_jwt_key"
 	// BitflyerExtraClientSecretCTXKey - context key for the extra client secret
@@ -111,6 +120,15 @@ const (
 	BitflyerClientSecretCTXKey CTXKey = "bitflyer_client_secret"
 	// BitflyerClientIDCTXKey - context key for the client secret
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
+	// BitflyerServerURLCTXKey - the service ctx key
+	BitflyerServerURLCTXKey CTXKey = "bitflyer_server"
+	// BitflyerProxyURLCTXKey - the service proxy ctx key
+	BitflyerProxyURLCTXKey CTXKey = "bitflyer_proxy"
+	// BitflyerTokenCTXKey - the service token ctx key
+	BitflyerTokenCTXKey CTXKey = "bitflyer_token"
+	// BitflyerSourceFromCTXKey - the source from for payouts
+	BitflyerSourceFromCTXKey CTXKey = "bitflyer_source_from"
+
 	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
 	// UseCustodianRegionsCTXKey - context key for getting the reputation on drain feature flag
@@ -176,14 +194,13 @@ const (
 	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"
 	// BlacklistedCountryCodesCTXKey - the context key for getting the ratios redis address
 	BlacklistedCountryCodesCTXKey CTXKey = "blacklisted_country_codes"
-
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
-
+	// SecretsURICTXKey - the context key for getting the application secrets file location
+	SecretsURICTXKey CTXKey = "secrets_uri"
 	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
 	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
-	// AWSRegionCTXKey - the context key for getting the rate limit
-	AWSRegionCTXKey CTXKey = "aws_region"
+
 	// RequireUpholdCountryCTXKey - the context key for getting the rate limit
 	RequireUpholdCountryCTXKey CTXKey = "require_uphold_country"
 
@@ -211,12 +228,33 @@ const (
 	StripeOnrampServerCTXKey CTXKey = "stripe_onramp_server"
 
 	// Nitro
+	// PaymentsEncryptionKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
+	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
+	// PaymentsKMSWrapperCTXKey - the context key for getting the kms wrapper key
+	PaymentsKMSWrapperCTXKey CTXKey = "payments_kms_wrapper"
+	// AWSRegionCTXKey - AWS region for SDK integration
+	AWSRegionCTXKey CTXKey = "aws_region"
+	// PaymentsQLDBRoleArnCTXKey - ARN of the AWS role to assume for QLDB access
+	PaymentsQLDBRoleArnCTXKey CTXKey = "qldb_role_arn"
+	// PaymentsQLDBLedgerNameCTXKey - Name of the QLDB ledger to which the role has access
+	PaymentsQLDBLedgerNameCTXKey CTXKey = "qldb_ledger_name"
+	// PaymentsQLDBLedgerARNCTXKey - ARN of the AWS QLDB ledger to which the role has access
+	PaymentsQLDBLedgerARNCTXKey CTXKey = "qldb_ledger_arn"
+
 	// LogWriterCTXKey - the context key for getting the log writer
 	LogWriterCTXKey CTXKey = "log_writer"
 	// EgressProxyAddrCTXKey - the context key for getting the egress proxy address
 	EgressProxyAddrCTXKey CTXKey = "egress_proxy_addr"
 	// EnclaveDecryptKeyTemplateSecretIDCTXKey - the context key for getting the key template for key creation
 	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
+	// EnclaveConfigObjectNameCTXKey specifies the config object name for nitro enclave payments service
+	EnclaveSecretsObjectNameCTXKey CTXKey = "enclave_config_object_name"
+	// EnclaveConfigBucketNameCTXKey specifies the config bucket name for nitro enclave payments service
+	EnclaveSecretsBucketNameCTXKey CTXKey = "enclave_config_bucket_name"
+	// EnclaveOperatorSharesBucketNameCTXKey specifies the operator shares bucket name for nitro enclave payments service
+	EnclaveOperatorSharesBucketNameCTXKey CTXKey = "enclave_operator_shares_bucket_name"
 )
 
 var (

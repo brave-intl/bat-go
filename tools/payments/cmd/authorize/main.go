@@ -9,21 +9,20 @@ authorize [flags] filename...
 
 The flags are:
 
+	-pr
+		Location on file system of the original prepared report
 	-v
 		verbose logging enabled
 	-k
 		Location on file system of the operators private ED25519 signing key in PEM format.
 	-e
 		The environment to which the operator is sending approval for transactions.
-		The environment is specified as the base URI of the payments service running in the
-		nitro enclave.  This should include the protocol, and host at the minimum.  Example:
-			https://payments.bsg.brave.software
 	-ra
-		The redis cluster addresses comma seperated
+		The redis address
 	-rp
-		The redis cluster password
+		The redis password
 	-ru
-		The redis cluster user
+		The redis user
 	-p
 		The payout id
 */
@@ -36,11 +35,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brave-intl/bat-go/tools/payments"
+	"github.com/brave-intl/bat-go/libs/payments"
+	paymentscli "github.com/brave-intl/bat-go/tools/payments"
 )
 
 func main() {
 	ctx := context.Background()
+
+	// original report
+	preparedReportFilename := flag.String(
+		"pr", "",
+		"the location on disk of the original payout report")
 
 	// command line flags
 	key := flag.String(
@@ -48,24 +53,27 @@ func main() {
 		"the operator's key file location (ed25519 private key) in PEM format")
 
 	env := flag.String(
-		"e", "https://payments.bsg.brave.software",
+		"e", "local",
 		"the environment to which the tool will interact")
 
-	redisAddrs := flag.String(
-		"ra", "",
-		"redis cluster addresses")
+	redisAddr := flag.String(
+		"ra", "127.0.0.1:6380",
+		"redis address")
 
 	redisPass := flag.String(
 		"rp", "",
-		"redis cluster password")
+		"redis password")
 
 	redisUser := flag.String(
 		"ru", "",
-		"redis cluster username")
+		"redis username")
 
 	verbose := flag.Bool(
 		"v", false,
 		"view verbose logging")
+
+	pcr2 := flag.String(
+		"pcr2", "", "the hex PCR2 value for this enclave")
 
 	payoutID := flag.String(
 		"p", "",
@@ -79,12 +87,16 @@ func main() {
 	if *verbose {
 		// print out the configuration
 		log.Printf("Operator Key File Location: %s\n", *key)
-		log.Printf("Redis: %s, %s\n", *redisAddrs, *redisUser)
+		log.Printf("Redis: %s, %s\n", *redisAddr, *redisUser)
+	}
+
+	if *env != "development" && len(*pcr2) != 96 {
+		log.Fatal("a valid pcr2 is required to authorize outside of development\n")
 	}
 
 	// setup the settlement redis client
-	client, err := payments.NewSettlementClient(*env, map[string]string{
-		"addrs": *redisAddrs, "pass": *redisPass, "username": *redisUser, // client specific configurations
+	ctx, client, err := paymentscli.NewSettlementClient(ctx, *env, map[string]string{
+		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, "pcr2": *pcr2, // client specific configurations
 	})
 	if err != nil {
 		log.Fatalf("failed to create settlement client: %v\n", err)
@@ -92,13 +104,6 @@ func main() {
 
 	if payoutID == nil || strings.TrimSpace(*payoutID) == "" {
 		log.Fatal("failed payout id cannot be nil or empty\n")
-	}
-
-	wc := &payments.WorkerConfig{
-		PayoutID:      *payoutID,
-		ConsumerGroup: payments.SubmitStream + "-cg",
-		Stream:        payments.SubmitStream,
-		Count:         0,
 	}
 
 	for _, name := range files {
@@ -109,35 +114,73 @@ func main() {
 			}
 			defer f.Close()
 
-			var report payments.AttestedReport
-			if err := payments.ReadReport(&report, f); err != nil {
+			var report paymentscli.AttestedReport
+			if err := paymentscli.ReadReportFromResponses(&report, f); err != nil {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 
-			wc.Count += len(report)
+			if report[0].PayoutID != *payoutID {
+				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
+			}
+
+			preparedReportFile, err := os.Open(*preparedReportFilename)
+			if err != nil {
+				log.Fatalf("failed to open prepared report file: %v\n", err)
+			}
+			defer preparedReportFile.Close()
+
+			// parse the original prepared report
+			preparedReport := paymentscli.PreparedReport{}
+			if err := paymentscli.ReadReport(&preparedReport, preparedReportFile); err != nil {
+				log.Fatalf("failed to read prepared report: %v\n", err)
+			}
+
+			if *verbose {
+				log.Printf("attested report stats: %d transactions; %s total bat\n",
+					len(report), report.SumBAT())
+				log.Printf("prepared report stats: %d transactions; %s total bat\n",
+					len(preparedReport), preparedReport.SumBAT())
+			}
+
+			// compare performs automated checks to validate reports
+			if err := paymentscli.Compare(preparedReport, report); err != nil {
+				log.Fatalf("failed to compare reports: %v\n", err)
+			}
 
 			if *verbose {
 				log.Printf("report stats: %d transactions; %s total bat\n", len(report), report.SumBAT())
 			}
 
-			priv, err := payments.GetOperatorPrivateKey(*key)
+			priv, err := paymentscli.GetOperatorPrivateKey(*key)
 			if err != nil {
 				log.Fatalf("failed to parse operator key file: %v\n", err)
 			}
 
+			// validate the report
+
 			if err := report.Submit(ctx, priv, client); err != nil {
 				log.Fatalf("failed to submit report: %v\n", err)
+			}
+
+			wc := &payments.WorkerConfig{
+				PayoutID:      *payoutID,
+				ConsumerGroup: payments.SubmitPrefix + *payoutID + "-cg",
+				Stream:        payments.SubmitPrefix + *payoutID,
+				Count:         len(report),
+			}
+
+			err = client.ConfigureWorker(ctx, payments.SubmitConfigStream, wc)
+			if err != nil {
+				log.Fatalf("failed to write to submit config stream: %v\n", err)
+			}
+
+			if *verbose {
+				log.Printf("submit transactions loaded for %+v\n", wc)
 			}
 		}()
 	}
 
-	err = client.ConfigureWorker(ctx, payments.SubmitConfigStream, wc)
-	if err != nil {
-		log.Fatalf("failed to write to submit config stream: %v\n", err)
-	}
-
 	if *verbose {
-		log.Printf("submit transactions loaded for %+v\n", wc)
 		log.Println("authorize command complete")
 	}
 }
