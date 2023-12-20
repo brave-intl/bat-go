@@ -29,7 +29,8 @@ import (
 const (
 	signingRequestBatchSize = 10
 
-	errNotFound = model.Error("not found")
+	errNotFound    = model.Error("not found")
+	errNoTLV2Creds = model.Error("no unexpired time-limited-v2 credentials found")
 )
 
 // Datastore abstracts over the underlying datastore.
@@ -81,11 +82,12 @@ type Datastore interface {
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
+	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
-	GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
+	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -996,6 +998,34 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 	return &timeLimitedV2Creds, nil
 }
 
+// GetTLV2Creds returns all the non expired tlv2 credentials for a given order, item and request ids.
+//
+// If no credentials have been found, the method returns errNoTLV2Creds.
+func (pg *Postgres) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	const q = `SELECT
+		order_id, item_id, issuer_id, blinded_creds, signed_creds,
+		batch_proof, public_key, valid_from, valid_to
+	FROM time_limited_v2_order_creds
+	WHERE order_id = $1 AND item_id = $2 AND request_id = $3 AND valid_to > now()`
+
+	creds := make([]TimeAwareSubIssuedCreds, 0)
+	if err := sqlx.SelectContext(ctx, dbi, &creds, q, ordID, itemID, reqID); err != nil {
+		return nil, err
+	}
+
+	if len(creds) == 0 {
+		return nil, errNoTLV2Creds
+	}
+
+	result := &TimeLimitedV2Creds{
+		OrderID:     creds[0].OrderID,
+		IssuerID:    creds[0].IssuerID,
+		Credentials: creds,
+	}
+
+	return result, nil
+}
+
 // GetTimeLimitedV2OrderCredsByOrderItem returns all the order credentials for a single order item.
 func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
@@ -1083,29 +1113,19 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context,
 }
 
 // GetSigningOrderRequestOutboxByRequestID retrieves the SigningOrderRequestOutbox by requestID.
+//
 // An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1`, requestID)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
-	}
-	return &signingRequestOutbox, nil
-}
+func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error) {
+	const q = `SELECT request_id, order_id, item_id, completed_at, message_data
+	FROM signing_order_request_outbox
+	WHERE request_id = $1 FOR UPDATE`
 
-// GetSigningOrderRequestOutboxByRequestIDTx retrieves the SigningOrderRequestOutbox by requestID.
-// An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := tx.GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1 for update`, requestID)
-	if err != nil {
+	result := &SigningOrderRequestOutbox{}
+	if err := sqlx.GetContext(ctx, dbi, result, q, reqID); err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
-	return &signingRequestOutbox, nil
+
+	return result, nil
 }
 
 // UpdateSigningOrderRequestOutboxTx updates a signing order request outbox message for the given requestID.
@@ -1277,7 +1297,6 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 			}
 
 		case timeLimitedV2:
-
 			if so.ValidTo.Value() == nil {
 				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null: %w",
 					metadata.OrderID, metadata.ItemID, err)
