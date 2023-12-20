@@ -7,7 +7,7 @@ import (
 	should "github.com/stretchr/testify/assert"
 )
 
-func Test_getIssuingCountry(t *testing.T) {
+func TestGetIssuingCountry(t *testing.T) {
 	type tcGiven struct {
 		gx       *geminix
 		validAcc gemini.ValidatedAccount
@@ -109,10 +109,15 @@ func Test_getIssuingCountry(t *testing.T) {
 	}
 }
 
-func Test_countryForDocByPrecedence(t *testing.T) {
+func TestCountryForDocByPrecedence(t *testing.T) {
+	type tcGiven struct {
+		docTypePres    []string
+		validDocuments []gemini.ValidDocument
+	}
+
 	type testCase struct {
 		name  string
-		given []gemini.ValidDocument
+		given tcGiven
 		exp   string
 	}
 
@@ -123,10 +128,18 @@ func Test_countryForDocByPrecedence(t *testing.T) {
 
 		{
 			name: "one_passport",
-			given: []gemini.ValidDocument{
-				{
-					Type:           "passport",
-					IssuingCountry: "US",
+			given: tcGiven{
+				docTypePres: []string{
+					"passport",
+					"drivers_license",
+					"national_identity_card",
+					"passport_card",
+				},
+				validDocuments: []gemini.ValidDocument{
+					{
+						Type:           "passport",
+						IssuingCountry: "US",
+					},
 				},
 			},
 			exp: "US",
@@ -134,15 +147,23 @@ func Test_countryForDocByPrecedence(t *testing.T) {
 
 		{
 			name: "two_docs",
-			given: []gemini.ValidDocument{
-				{
-					Type:           "passport",
-					IssuingCountry: "US",
+			given: tcGiven{
+				docTypePres: []string{
+					"passport",
+					"drivers_license",
+					"national_identity_card",
+					"passport_card",
 				},
+				validDocuments: []gemini.ValidDocument{
+					{
+						Type:           "passport",
+						IssuingCountry: "US",
+					},
 
-				{
-					Type:           "drivers_license",
-					IssuingCountry: "CA",
+					{
+						Type:           "drivers_license",
+						IssuingCountry: "CA",
+					},
 				},
 			},
 			exp: "US",
@@ -150,15 +171,23 @@ func Test_countryForDocByPrecedence(t *testing.T) {
 
 		{
 			name: "two_docs_reverse",
-			given: []gemini.ValidDocument{
-				{
-					Type:           "drivers_license",
-					IssuingCountry: "CA",
+			given: tcGiven{
+				docTypePres: []string{
+					"passport",
+					"drivers_license",
+					"national_identity_card",
+					"passport_card",
 				},
+				validDocuments: []gemini.ValidDocument{
+					{
+						Type:           "drivers_license",
+						IssuingCountry: "CA",
+					},
 
-				{
-					Type:           "passport",
-					IssuingCountry: "US",
+					{
+						Type:           "passport",
+						IssuingCountry: "US",
+					},
 				},
 			},
 			exp: "US",
@@ -166,10 +195,18 @@ func Test_countryForDocByPrecedence(t *testing.T) {
 
 		{
 			name: "no_valid_document_type",
-			given: []gemini.ValidDocument{
-				{
-					Type:           "invalid_type",
-					IssuingCountry: "US",
+			given: tcGiven{
+				docTypePres: []string{
+					"passport",
+					"drivers_license",
+					"national_identity_card",
+					"passport_card",
+				},
+				validDocuments: []gemini.ValidDocument{
+					{
+						Type:           "invalid_type",
+						IssuingCountry: "US",
+					},
 				},
 			},
 			exp: "",
@@ -177,14 +214,22 @@ func Test_countryForDocByPrecedence(t *testing.T) {
 
 		{
 			name: "valid_and_invalid_document_type_lower_case",
-			given: []gemini.ValidDocument{
-				{
-					Type:           "invalid_type",
-					IssuingCountry: "US",
+			given: tcGiven{
+				docTypePres: []string{
+					"passport",
+					"drivers_license",
+					"national_identity_card",
+					"passport_card",
 				},
-				{
-					Type:           "passport",
-					IssuingCountry: "uk",
+				validDocuments: []gemini.ValidDocument{
+					{
+						Type:           "invalid_type",
+						IssuingCountry: "US",
+					},
+					{
+						Type:           "passport",
+						IssuingCountry: "uk",
+					},
 				},
 			},
 			exp: "UK",
@@ -194,13 +239,7 @@ func Test_countryForDocByPrecedence(t *testing.T) {
 	for i := range tests {
 		tc := tests[i]
 		t.Run(tc.name, func(t *testing.T) {
-			pres := []string{
-				"passport",
-				"drivers_license",
-				"national_identity_card",
-				"passport_card",
-			}
-			act := countryForDocByPrecedence(pres, tc.given)
+			act := countryForDocByPrecedence(tc.given.docTypePres, tc.given.validDocuments)
 			should.Equal(t, tc.exp, act)
 		})
 	}
