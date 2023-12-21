@@ -103,7 +103,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 
@@ -163,7 +163,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 	w2 := suite.NewWallet(service, "uphold")
@@ -319,7 +319,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -362,7 +362,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 

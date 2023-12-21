@@ -86,7 +86,7 @@ type Datastore interface {
 	ConnectCustodialWallet(ctx context.Context, cl *CustodianLink, depositDest string) error
 	// DisconnectCustodialWallet - disconnect the wallet's custodial id
 	DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) error
-	// GetCustodianLinkByWalletID - get the custodian link by ID
+	// GetCustodianLinkByWalletID retrieves the currently linked wallet custodian by walletID.
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
 	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
 	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error)
@@ -643,6 +643,10 @@ func (cl *CustodianLink) GetLinkingIDString() string {
 		return cl.LinkingID.String()
 	}
 	return ""
+}
+
+func (cl *CustodianLink) isLinked() bool {
+	return cl != nil && cl.UnlinkedAt == nil && cl.DisconnectedAt == nil && !cl.LinkedAt.IsZero()
 }
 
 // GetCustodianLinkCount - get the wallet custodian link count across all wallets
