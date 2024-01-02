@@ -57,9 +57,8 @@ func (s *baseStateMachine) Prepare(ctx context.Context) (*paymentLib.Authenticat
 func (s *baseStateMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	if len(s.getTransaction().Authorizations) >= 2 {
 		return s.SetNextState(ctx, paymentLib.Authorized)
-	} else {
-		return s.transaction, &InsufficientAuthorizationsError{}
 	}
+	return s.transaction, &InsufficientAuthorizationsError{}
 }
 
 func (s *baseStateMachine) setTransaction(transaction *paymentLib.AuthenticatedPaymentState) {
@@ -77,33 +76,33 @@ func (s *baseStateMachine) getTransaction() *paymentLib.AuthenticatedPaymentStat
 }
 
 // StateMachineFromTransaction returns a state machine when provided a transaction.
-func (service *Service) StateMachineFromTransaction(
+func (s *Service) StateMachineFromTransaction(
 	ctx context.Context,
 	authenticatedState *paymentLib.AuthenticatedPaymentState,
 ) (TxStateMachine, error) {
 
 	// check if service is configured, if not error
-	if !service.AreSecretsLoaded(ctx) {
+	if !s.AreSecretsLoaded(ctx) {
 		return nil, errSecretsNotLoaded
 	}
 
 	var machine TxStateMachine
 
 	client := http.Client{
-		Transport: nitro.NewProxyRoundTripper(ctx, service.egressAddr).(*http.Transport),
+		Transport: nitro.NewProxyRoundTripper(ctx, s.egressAddr).(*http.Transport),
 	}
 
 	switch authenticatedState.PaymentDetails.Custodian {
-	case "uphold":
-		machine = &UpholdMachine{}
-	case "bitflyer":
-		// Set Bitflyer-specific properties
-		machine = &BitflyerMachine{
-			client:       *http.DefaultClient,
-			bitflyerHost: os.Getenv("BITFLYER_SERVER"),
-		}
-	case "gemini":
-		machine = &GeminiMachine{}
+	//case "uphold":
+	//	machine = &UpholdMachine{}
+	//case "bitflyer":
+	// Set Bitflyer-specific properties
+	//	machine = &BitflyerMachine{
+	//		client:       *http.DefaultClient,
+	//		bitflyerHost: os.Getenv("BITFLYER_SERVER"),
+	//	}
+	//case "gemini":
+	//	machine = &GeminiMachine{}
 	case "zebpay":
 		client, err := zebpay.NewWithHTTPClient(client)
 		if err != nil {
@@ -145,7 +144,9 @@ func Drive[T TxStateMachine](
 	// Drive is called recursively, so we need to check whether a deadline has been set
 	// by a prior caller and only set the default deadline if not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
-		ctx, _ = context.WithTimeout(ctx, 5*time.Minute)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
 	}
 	err := ctx.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -220,10 +221,9 @@ func (s *Service) DriveTransaction(
 			}
 		}
 		return nil
-	} else {
-		if lastErr != nil {
-			return fmt.Errorf("failed to progress transaction: %w", lastErr)
-		}
-		return errors.New("failed to progress transaction, no state returned")
 	}
+	if lastErr != nil {
+		return fmt.Errorf("failed to progress transaction: %w", lastErr)
+	}
+	return errors.New("failed to progress transaction, no state returned")
 }

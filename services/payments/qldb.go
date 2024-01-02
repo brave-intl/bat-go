@@ -26,8 +26,10 @@ type QLDBPaymentTransitionHistoryEntryBlockAddress struct {
 // QLDBPaymentTransitionHistoryEntryHash defines hash for qldbPaymentTransitionHistoryEntry.
 type QLDBPaymentTransitionHistoryEntryHash []byte
 
+/* TODO: unused
 // qldbPaymentTransitionHistoryEntrySignature defines signature for qldbPaymentTransitionHistoryEntry.
 type qldbPaymentTransitionHistoryEntrySignature []byte
+*/
 
 // QLDBPaymentTransitionHistoryEntryMetadata defines metadata for qldbPaymentTransitionHistoryEntry
 type QLDBPaymentTransitionHistoryEntryMetadata struct {

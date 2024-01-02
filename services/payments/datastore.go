@@ -68,35 +68,34 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 					return nil, err
 				}
 				return documentIDResult.DocumentID, nil
-			} else {
-				documentIDResultBinary, err := txn.Execute(
-					"INSERT INTO transactions ?",
-					state,
-				)
-				if err != nil {
-					return nil, fmt.Errorf(
-						"failed to insert tx: %s due to: %w",
-						state.ID,
-						err,
-					)
-				}
-
-				if documentIDResultBinary.Next(txn) {
-					documentIDResult := new(qldbDocumentIDResult)
-					err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
-					if err != nil {
-						return nil, err
-					}
-					return documentIDResult.DocumentID, nil
-				}
-
-				err = documentIDResultBinary.Err()
+			}
+			documentIDResultBinary, err := txn.Execute(
+				"INSERT INTO transactions ?",
+				state,
+			)
+			if err != nil {
 				return nil, fmt.Errorf(
 					"failed to insert tx: %s due to: %w",
 					state.ID,
 					err,
 				)
 			}
+
+			if documentIDResultBinary.Next(txn) {
+				documentIDResult := new(qldbDocumentIDResult)
+				err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
+				if err != nil {
+					return nil, err
+				}
+				return documentIDResult.DocumentID, nil
+			}
+
+			err = documentIDResultBinary.Err()
+			return nil, fmt.Errorf(
+				"failed to insert tx: %s due to: %w",
+				state.ID,
+				err,
+			)
 		},
 	)
 	if err != nil {

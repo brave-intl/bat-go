@@ -17,26 +17,22 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/brave-intl/bat-go/libs/custodian/provider"
 	"github.com/brave-intl/bat-go/libs/nitro"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
-	appsrv "github.com/brave-intl/bat-go/libs/service"
 )
 
 // Service struct definition of payments service.
 type Service struct {
 	// concurrent safe
 	datastore  Datastore
-	custodians map[string]provider.Custodian
 	awsCfg     aws.Config
 	egressAddr string
 
 	baseCtx           context.Context
-	secretMgr         appsrv.SecretManager
 	keyShares         [][]byte
 	secretsCiphertext []byte
 	secrets           map[string]string
@@ -96,8 +92,6 @@ func parseKeyPolicyTemplate(ctx context.Context, templateFile string) (string, s
 
 	return policy, hex.EncodeToString(pcrs[2]), nil
 }
-
-type serviceNamespaceContextKey struct{}
 
 // configureKMSEncryptionKey creates the enclave kms key which is only decrypt capable with enclave
 // attestation.

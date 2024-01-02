@@ -1,5 +1,6 @@
 package payments
 
+/* TODO: unused
 var upholdCreateTransactionSuccessResponse = map[string]interface{}{
 	"application": nil,
 	"createdAt":   "2018-08-01T09:53:47.020Z",
@@ -89,13 +90,41 @@ var upholdCreateTransactionSuccessResponse = map[string]interface{}{
 	"Status":    "completed",
 	"type":      "transfer",
 }
+*/
+
+/*
+// TODO: unused
 
 var upholdCommitTransactionSuccessResponse = upholdCreateTransactionSuccessResponse
 var upholdCommitTransactionFailureResponse = upholdCreateTransactionSuccessResponse
-var upholdCreateTransactionFailureResponse = upholdCreateTransactionSuccessResponse
 
-var geminiBulkPaySuccessResponse = []map[string]string{
-	{
+//var upholdCreateTransactionFailureResponse = upholdCreateTransactionSuccessResponse
+
+	var geminiBulkPaySuccessResponse = []map[string]string{
+		{
+			"result":      "ok",
+			"tx_ref":      "",
+			"amount":      "",
+			"currency":    "",
+			"destination": "",
+			"Status":      "",
+			"reason":      "",
+		},
+	}
+
+	var geminiBulkPayFailureResponse = []map[string]string{
+		{
+			"result":      "error",
+			"tx_ref":      "",
+			"amount":      "",
+			"currency":    "",
+			"destination": "",
+			"Status":      "",
+			"reason":      "",
+		},
+	}
+
+	var geminiTransactionCheckSuccessResponse = map[string]string{
 		"result":      "ok",
 		"tx_ref":      "",
 		"amount":      "",
@@ -103,11 +132,9 @@ var geminiBulkPaySuccessResponse = []map[string]string{
 		"destination": "",
 		"Status":      "",
 		"reason":      "",
-	},
-}
+	}
 
-/*var geminiBulkPayFailureResponse = []map[string]string{
-	{
+	var geminiTransactionCheckFailureResponse = map[string]string{
 		"result":      "error",
 		"tx_ref":      "",
 		"amount":      "",
@@ -115,102 +142,81 @@ var geminiBulkPaySuccessResponse = []map[string]string{
 		"destination": "",
 		"Status":      "",
 		"reason":      "",
-	},
-}*/
+	}
 
-var geminiTransactionCheckSuccessResponse = map[string]string{
-	"result":      "ok",
-	"tx_ref":      "",
-	"amount":      "",
-	"currency":    "",
-	"destination": "",
-	"Status":      "",
-	"reason":      "",
-}
+	var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
+		"dry_run": false,
+		"withdrawals": []map[string]interface{}{{
+			"currency_code":   "",
+			"amount":          1.0,
+			"message":         "",
+			"transfer_Status": "pending",
+			"transfer_id":     "",
+		}},
+	}
 
-/*var geminiTransactionCheckFailureResponse = map[string]string{
-	"result":      "error",
-	"tx_ref":      "",
-	"amount":      "",
-	"currency":    "",
-	"destination": "",
-	"Status":      "",
-	"reason":      "",
-}*/
+	var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
+		"dry_run": false,
+		"withdrawals": []map[string]interface{}{{
+			"currency_code":   "",
+			"amount":          1.0,
+			"message":         "",
+			"transfer_Status": "",
+			"transfer_id":     "",
+		}},
+	}
 
-var bitflyerTransactionSubmitSuccessResponse = map[string]interface{}{
-	"dry_run": false,
-	"withdrawals": []map[string]interface{}{{
-		"currency_code":   "",
-		"amount":          1.0,
-		"message":         "",
-		"transfer_Status": "pending",
-		"transfer_id":     "",
-	}},
-}
+	var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
+		"dry_run": false,
+		"withdrawals": []map[string]interface{}{{
+			"currency_code":   "",
+			"amount":          1.0,
+			"message":         "",
+			"transfer_Status": "success",
+			"transfer_id":     "",
+		}},
+	}
 
-var bitflyerTransactionSubmitFailureResponse = map[string]interface{}{
-	"dry_run": false,
-	"withdrawals": []map[string]interface{}{{
-		"currency_code":   "",
-		"amount":          1.0,
-		"message":         "",
-		"transfer_Status": "",
-		"transfer_id":     "",
-	}},
-}
+	var bitflyerTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
+		"dry_run": false,
+		"withdrawals": []map[string]interface{}{{
+			"currency_code":   "",
+			"amount":          1.0,
+			"message":         "",
+			"transfer_Status": "pending",
+			"transfer_id":     "",
+		}},
+	}
 
-var bitflyerTransactionCheckStatusSuccessResponse = map[string]interface{}{
-	"dry_run": false,
-	"withdrawals": []map[string]interface{}{{
-		"currency_code":   "",
-		"amount":          1.0,
-		"message":         "",
-		"transfer_Status": "success",
-		"transfer_id":     "",
-	}},
-}
+	var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
+		"dry_run": false,
+		"withdrawals": []map[string]interface{}{{
+			"currency_code":   "",
+			"amount":          1.0,
+			"message":         "",
+			"transfer_Status": "",
+			"transfer_id":     "",
+		}},
+	}
 
-var bitflyerTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
-	"dry_run": false,
-	"withdrawals": []map[string]interface{}{{
-		"currency_code":   "",
-		"amount":          1.0,
-		"message":         "",
-		"transfer_Status": "pending",
-		"transfer_id":     "",
-	}},
-}
+	var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
+		"dry_run":      false,
+		"access_token": "Look at me. I'm a token.",
+		"refresh_toke": "another token",
+		"expires_in":   4,
+		"scope":        "some scope",
+		"account_hash": "hashed something",
+		"tokey_type":   "token type",
+	}
 
-var bitflyerTransactionCheckStatusFailureResponse = map[string]interface{}{
-	"dry_run": false,
-	"withdrawals": []map[string]interface{}{{
-		"currency_code":   "",
-		"amount":          1.0,
-		"message":         "",
-		"transfer_Status": "",
-		"transfer_id":     "",
-	}},
-}
-
-var bitflyerTransactionTokenRefreshResponse = map[string]interface{}{
-	"dry_run":      false,
-	"access_token": "Look at me. I'm a token.",
-	"refresh_toke": "another token",
-	"expires_in":   4,
-	"scope":        "some scope",
-	"account_hash": "hashed something",
-	"tokey_type":   "token type",
-}
-
-var bitflyerFetchPriceResponse = map[string]interface{}{
-	"product_code":  "BAT_JPY",
-	"main_currency": "BAT",
-	"sub_currency":  "",
-	"rate":          4,
-	"price_token":   "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
-}
-
+	var bitflyerFetchPriceResponse = map[string]interface{}{
+		"product_code":  "BAT_JPY",
+		"main_currency": "BAT",
+		"sub_currency":  "",
+		"rate":          4,
+		"price_token":   "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJPbmxpbmUgSldUIEJ1aWxkZXIiLCJpYXQiOjE2OTM1MTczODksImV4cCI6MTg1MTI4Mzc4OSwiYXVkIjoidGVzdCIsInN1YiI6InRlc3QifQ.6lcVSDtmVJcix01cn2wf3maXUyoGwAWn_hXQTLQtK40",
+	}
+*/
 var zebpayTransactionSubmitSuccessResponse = map[string]interface{}{
 	"data": "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED",
 }
@@ -239,6 +245,7 @@ var zebpayTransactionCheckStatusSuccessResponsePending = map[string]interface{}{
 	},
 }
 
+/* TODO: currently unused
 var zebpayTransactionCheckStatusFailureResponse = map[string]interface{}{
 	"transaction_id": "725c920b-d158-56fb-b5cf-5910d9ca4a16",
 	"code":           3,
@@ -248,3 +255,4 @@ var zebpayTransactionCheckStatusFailureResponse = map[string]interface{}{
 		"destination": 512,
 	},
 }
+*/

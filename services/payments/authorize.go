@@ -66,15 +66,14 @@ func DecodePublicKey(key string) (httpsignature.Ed25519PubKey, error) {
 			return nil, fmt.Errorf("public key is not ed25519 public key")
 		}
 		return httpsignature.Ed25519PubKey(edKey), nil
-	} else {
-		var (
-			edKey httpsignature.Ed25519PubKey
-			err   error
-		)
-
-		edKey, err = hex.DecodeString(key)
-		return edKey, err
 	}
+	var (
+		edKey httpsignature.Ed25519PubKey
+		err   error
+	)
+
+	edKey, err = hex.DecodeString(key)
+	return edKey, err
 }
 
 // LookupVerifier implements keystore for httpsignature.

@@ -30,9 +30,11 @@ type mockSDKClient struct {
 	mock.Mock
 }
 
+/* TODO: unused
 type mockResult struct {
 	mock.Mock
 }
+*/
 
 type mockKMSClient struct {
 	mock.Mock
@@ -47,15 +49,19 @@ func (m *mockDriver) Shutdown(ctx context.Context) {
 	return
 }
 
-func (m *mockResult) GetCurrentData() []byte {
-	args := m.Called()
-	return args.Get(0).([]byte)
-}
-func (m *mockResult) Next(txn qldbdriver.Transaction) bool {
-	args := m.Called(txn)
-	return args.Get(0).(bool)
-}
+/*
+TODO: unused
 
+	func (m *mockResult) GetCurrentData() []byte {
+		args := m.Called()
+		return args.Get(0).([]byte)
+	}
+
+	func (m *mockResult) Next(txn qldbdriver.Transaction) bool {
+		args := m.Called(txn)
+		return args.Get(0).(bool)
+	}
+*/
 func (m *mockSDKClient) New() *wrappedQldbSDKClient {
 	args := m.Called()
 	return args.Get(0).(*wrappedQldbSDKClient)

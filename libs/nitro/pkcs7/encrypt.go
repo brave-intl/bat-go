@@ -88,8 +88,6 @@ var ErrUnsupportedEncryptionAlgorithm = errors.New("pkcs7: cannot encrypt conten
 // using a PSK without actually providing the PSK.
 var ErrPSKNotProvided = errors.New("pkcs7: cannot encrypt content: PSK not provided")
 
-const nonceSize = 12
-
 type aesGCMParameters struct {
 	Nonce  []byte `asn1:"tag:4"`
 	ICVLen int

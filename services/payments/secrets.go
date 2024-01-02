@@ -190,6 +190,9 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 		Prefix: aws.String(hex.EncodeToString(pcrs[2]) + "/operator-share"),
 		Bucket: aws.String(bucket),
 	})
+	if err != nil {
+		return fmt.Errorf("failed to list s3 objects: %w", err)
+	}
 
 	// for each share object, get it, attempt to decrypt and append to keyShares
 	for _, shareObject := range shareObjects.Contents {
