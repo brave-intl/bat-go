@@ -30,7 +30,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/libs/pindialer"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/validators"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
@@ -54,12 +53,6 @@ const (
 	dateFormat              = "2006-01-02T15:04:05.000Z"
 	batchSize               = 50
 	listTransactionsRetries = 5
-)
-
-const (
-	// The Intermediate Certificates
-	sandboxFingerprint = "tk+cMPkidAxyq8UwNxRaw2HJaUzzfUXtxn3Q+ekeqgc="
-	prodFingerprint    = "tk+cMPkidAxyq8UwNxRaw2HJaUzzfUXtxn3Q+ekeqgc="
 )
 
 var (
@@ -119,8 +112,7 @@ func init() {
 		Timeout: time.Second * 60,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
-				Proxy:          proxy,
-				DialTLSContext: pindialer.MakeContextDialer(upholdCertFingerprint),
+				Proxy: proxy,
 			}, "uphold"),
 	}
 }
