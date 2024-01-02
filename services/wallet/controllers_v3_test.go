@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -214,7 +215,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 				}`, tokenString)),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil, nil)
 		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
 		rw             = httptest.NewRecorder()
 	)
@@ -322,7 +323,15 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+
+		mtc = &mockMtc{}
+		gem = &mockGemini{
+			fnGetIssuingCountry: func(acc gemini.ValidatedAccount, fallback bool) string {
+				return "US"
+			},
+		}
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -351,15 +360,21 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
 
-	mockGeminiClient.EXPECT().ValidateAccount(
+	validateAccountRes := gemini.ValidatedAccount{
+		ID: accountID.String(),
+		ValidDocuments: []gemini.ValidDocument{
+			{
+				Type:           "passport",
+				IssuingCountry: "US",
+			},
+		},
+	}
+
+	mockGeminiClient.EXPECT().FetchValidateAccount(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-	).Return(
-		accountID.String(),
-		"US",
-		nil,
-	)
+	).Return(validateAccountRes, nil)
 
 	mockSQLCustodianLink(mock, "gemini")
 
@@ -427,7 +442,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		"DELETE",
 		fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
 
-	s, _ = wallet.InitService(datastore, nil, nil, nil, nil, nil)
 	handler = wallet.DisconnectCustodianLinkV3(s)
 	rw = httptest.NewRecorder()
 
@@ -552,7 +566,15 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+
+		mtc = &mockMtc{}
+		gem = &mockGemini{
+			fnGetIssuingCountry: func(acc gemini.ValidatedAccount, fallback bool) string {
+				return "US"
+			},
+		}
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -572,15 +594,21 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
-	mockGeminiClient.EXPECT().ValidateAccount(
+	validateAccountRes := gemini.ValidatedAccount{
+		ID: accountID.String(),
+		ValidDocuments: []gemini.ValidDocument{
+			{
+				Type:           "passport",
+				IssuingCountry: "US",
+			},
+		},
+	}
+
+	mockGeminiClient.EXPECT().FetchValidateAccount(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-	).Return(
-		accountID.String(),
-		"",
-		nil,
-	)
+	).Return(validateAccountRes, nil)
 
 	mockSQLCustodianLink(mock, "gemini")
 
@@ -670,7 +698,15 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 				},
 			})
 
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		mtc = &mockMtc{
+			fnLinkFailureZP: func(cc string) {
+				assert.Equal(t, "IN", cc)
+			},
+		}
+
+		gem = &mockGemini{}
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -680,7 +716,11 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
 	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
-		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
+		"accountId":   accountID,
+		"depositId":   idTo,
+		"countryCode": "IN",
+		"iat":         time.Now().Unix(),
+		"exp":         time.Now().Add(5 * time.Second).Unix(),
 	}).CompactSerialize()
 	if err != nil {
 		panic(err)
@@ -742,7 +782,15 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		// setup mock clients
 		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
 
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		mtc = &mockMtc{
+			fnLinkSuccessZP: func(cc string) {
+				assert.Equal(t, "IN", cc)
+			},
+		}
+
+		gem = &mockGemini{}
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -867,7 +915,15 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+
+		mtc = &mockMtc{}
+		gem = &mockGemini{
+			fnGetIssuingCountry: func(acc gemini.ValidatedAccount, fallback bool) string {
+				return "GB"
+			},
+		}
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -877,15 +933,21 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
-	mockGeminiClient.EXPECT().ValidateAccount(
+	validateAccountRes := gemini.ValidatedAccount{
+		ID: accountID.String(),
+		ValidDocuments: []gemini.ValidDocument{
+			{
+				Type:           "passport",
+				IssuingCountry: "GB",
+			},
+		},
+	}
+
+	mockGeminiClient.EXPECT().FetchValidateAccount(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
-	).Return(
-		accountID.String(),
-		"GB",
-		nil,
-	)
+	).Return(validateAccountRes, nil)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
@@ -972,7 +1034,10 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 			"DELETE",
 			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
 
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil)
+		mtc = &mockMtc{}
+		gem = &mockGemini{}
+
+		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.DisconnectCustodianLinkV3(s)
 		w       = httptest.NewRecorder()
 	)
@@ -1028,3 +1093,43 @@ func mockSQLCustodianLink(mock sqlmock.Sqlmock, custodian string) {
 	mock.ExpectQuery("^select(.+) from wallet_custodian(.+)").
 		WillReturnRows(clRow)
 }
+
+type mockGemini struct {
+	fnGetIssuingCountry func(acc gemini.ValidatedAccount, fallback bool) string
+	fnIsRegionAllowed   func(ctx context.Context, issuingCountry string, custodianRegions custodian.Regions) error
+}
+
+func (m *mockGemini) GetIssuingCountry(acc gemini.ValidatedAccount, fallback bool) string {
+	if m.fnGetIssuingCountry == nil {
+		return ""
+	}
+	return m.fnGetIssuingCountry(acc, fallback)
+}
+
+func (m *mockGemini) IsRegionAvailable(ctx context.Context, issuingCountry string, custodianRegions custodian.Regions) error {
+	if m.fnIsRegionAllowed == nil {
+		return nil
+	}
+	return m.fnIsRegionAllowed(ctx, issuingCountry, custodianRegions)
+}
+
+type mockMtc struct {
+	fnLinkSuccessZP func(cc string)
+	fnLinkFailureZP func(cc string)
+}
+
+func (m *mockMtc) LinkSuccessZP(cc string) {
+	if m.fnLinkSuccessZP != nil {
+		m.fnLinkSuccessZP(cc)
+	}
+}
+
+func (m *mockMtc) LinkFailureZP(cc string) {
+	if m.fnLinkFailureZP != nil {
+		m.fnLinkFailureZP(cc)
+	}
+}
+
+func (m *mockMtc) LinkFailureGemini(_ string)                          {}
+func (m *mockMtc) LinkSuccessGemini(_ string)                          {}
+func (m *mockMtc) CountDocTypeByIssuingCntry(_ []gemini.ValidDocument) {}

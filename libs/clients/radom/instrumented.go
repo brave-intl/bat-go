@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type InstrumentedClient struct {
@@ -14,19 +13,23 @@ type InstrumentedClient struct {
 	vec  *prometheus.SummaryVec
 }
 
-// newInstrucmentedClient returns an instance of the Client decorated with prometheus summary metric.
-func newInstrucmentedClient(name string, cl *Client) *InstrumentedClient {
+// newInstrumentedClient returns an instance of the Client decorated with prometheus summary metric.
+// This function panics if it cannot register the metric.
+func newInstrumentedClient(name string, cl *Client) *InstrumentedClient {
+	v := prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name:       "radom_client_duration_seconds",
+		Help:       "client runtime duration and result",
+		MaxAge:     time.Minute,
+		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	},
+		[]string{"instance_name", "method", "result"},
+	)
+	prometheus.MustRegister(v)
+
 	result := &InstrumentedClient{
 		name: name,
 		cl:   cl,
-		vec: promauto.NewSummaryVec(prometheus.SummaryOpts{
-			Name:       "client_duration_seconds",
-			Help:       "client runtime duration and result",
-			MaxAge:     time.Minute,
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
-		},
-			[]string{"instance_name", "method", "result"},
-		),
+		vec:  v,
 	}
 
 	return result

@@ -29,14 +29,15 @@ import (
 const (
 	signingRequestBatchSize = 10
 
-	errNotFound = model.Error("not found")
+	errNotFound    = model.Error("not found")
+	errNoTLV2Creds = model.Error("no unexpired time-limited-v2 credentials found")
 )
 
-// Datastore abstracts over the underlying datastore
+// Datastore abstracts over the underlying datastore.
 type Datastore interface {
 	datastore.Datastore
-	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error)
+
+	CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error)
 	// SetOrderTrialDays - set the number of days of free trial for this order
 	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
@@ -81,11 +82,12 @@ type Datastore interface {
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
+	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
-	GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
+	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -101,14 +103,7 @@ type Datastore interface {
 type orderStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
-	Create(
-		ctx context.Context,
-		dbi sqlx.QueryerContext,
-		totalPrice decimal.Decimal,
-		merchantID, status, currency, location string,
-		paymentMethods []string,
-		validFor *time.Duration,
-	) (*model.Order, error)
+	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID, ndays int64) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
@@ -301,35 +296,23 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 	return result, nil
 }
 
-// CreateOrder creates an order with the given total price, merchant ID, status and orderItems.
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods []string) (*Order, error) {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return nil, err
-	}
-	defer pg.RollbackTx(tx)
-
-	ctx := context.TODO()
-
-	result, err := pg.orderRepo.Create(ctx, tx, totalPrice, merchantID, status, currency, location, allowedPaymentMethods, validFor)
+// CreateOrder creates an order from the given prototype, and inserts items.
+func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	result, err := pg.orderRepo.Create(ctx, dbi, oreq)
 	if err != nil {
 		return nil, err
 	}
 
-	if status == OrderStatusPaid {
-		if err := pg.recordOrderPayment(ctx, tx, result.ID, time.Now()); err != nil {
+	if oreq.Status == OrderStatusPaid {
+		if err := pg.recordOrderPayment(ctx, dbi, result.ID, time.Now()); err != nil {
 			return nil, fmt.Errorf("failed to record order payment: %w", err)
 		}
 	}
 
-	model.OrderItemList(orderItems).SetOrderID(result.ID)
+	model.OrderItemList(items).SetOrderID(result.ID)
 
-	result.Items, err = pg.orderItemRepo.InsertMany(ctx, tx, orderItems...)
+	result.Items, err = pg.orderItemRepo.InsertMany(ctx, dbi, items...)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -938,10 +921,12 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 }
 
 // UpdateOrderMetadata sets the order's metadata to the key and value.
+//
+// Deprecated: This method is no longer used and should be deleted.
+//
+// TODO(pavelb): Remove this method as it's dangerous and must not be used.
 func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
-	data := datastore.Metadata{key: value}
-
-	return pg.orderRepo.UpdateMetadata(context.TODO(), pg.RawDB(), orderID, data)
+	return model.Error("UpdateOrderMetadata must not be used")
 }
 
 // TimeLimitedV2Creds represent all the
@@ -1013,13 +998,41 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 	return &timeLimitedV2Creds, nil
 }
 
+// GetTLV2Creds returns all the non expired tlv2 credentials for a given order, item and request ids.
+//
+// If no credentials have been found, the method returns errNoTLV2Creds.
+func (pg *Postgres) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	const q = `SELECT
+		order_id, item_id, issuer_id, blinded_creds, signed_creds,
+		batch_proof, public_key, valid_from, valid_to
+	FROM time_limited_v2_order_creds
+	WHERE order_id = $1 AND item_id = $2 AND request_id = $3 AND valid_to > now()`
+
+	creds := make([]TimeAwareSubIssuedCreds, 0)
+	if err := sqlx.SelectContext(ctx, dbi, &creds, q, ordID, itemID, reqID); err != nil {
+		return nil, err
+	}
+
+	if len(creds) == 0 {
+		return nil, errNoTLV2Creds
+	}
+
+	result := &TimeLimitedV2Creds{
+		OrderID:     creds[0].OrderID,
+		IssuerID:    creds[0].IssuerID,
+		Credentials: creds,
+	}
+
+	return result, nil
+}
+
 // GetTimeLimitedV2OrderCredsByOrderItem returns all the order credentials for a single order item.
 func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key,
 		valid_from, valid_to
 		from time_limited_v2_order_creds
-		where item_id = $1
+		where item_id = $1 and valid_to > now()
 	`
 
 	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
@@ -1100,29 +1113,19 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context,
 }
 
 // GetSigningOrderRequestOutboxByRequestID retrieves the SigningOrderRequestOutbox by requestID.
+//
 // An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1`, requestID)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
-	}
-	return &signingRequestOutbox, nil
-}
+func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error) {
+	const q = `SELECT request_id, order_id, item_id, completed_at, message_data
+	FROM signing_order_request_outbox
+	WHERE request_id = $1 FOR UPDATE`
 
-// GetSigningOrderRequestOutboxByRequestIDTx retrieves the SigningOrderRequestOutbox by requestID.
-// An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := tx.GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1 for update`, requestID)
-	if err != nil {
+	result := &SigningOrderRequestOutbox{}
+	if err := sqlx.GetContext(ctx, dbi, result, q, reqID); err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
-	return &signingRequestOutbox, nil
+
+	return result, nil
 }
 
 // UpdateSigningOrderRequestOutboxTx updates a signing order request outbox message for the given requestID.
@@ -1135,18 +1138,15 @@ func (pg *Postgres) UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *s
 	return nil
 }
 
-// InsertSigningOrderRequestOutbox insert the signing order request into the outbox.
-func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID,
-	itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
-
+// InsertSigningOrderRequestOutbox inserts the signing order request into the outbox.
+func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, requestID, orderID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error {
 	message, err := json.Marshal(signingOrderRequest)
 	if err != nil {
 		return fmt.Errorf("error marshalling signing order request: %w", err)
 	}
 
-	_, err = pg.ExecContext(ctx, `insert into signing_order_request_outbox(request_id, order_id, item_id, message_data)
-											values ($1, $2, $3, $4)`, requestID, orderID, itemID, message)
-	if err != nil {
+	const q = `INSERT INTO signing_order_request_outbox (request_id, order_id, item_id, message_data) VALUES ($1, $2, $3, $4)`
+	if _, err := pg.ExecContext(ctx, q, requestID, orderID, itemID, message); err != nil {
 		return fmt.Errorf("error inserting order request outbox row: %w", err)
 	}
 
@@ -1297,7 +1297,6 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 			}
 
 		case timeLimitedV2:
-
 			if so.ValidTo.Value() == nil {
 				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null: %w",
 					metadata.OrderID, metadata.ItemID, err)
@@ -1388,7 +1387,7 @@ func (pg *Postgres) AppendOrderMetadataInt(ctx context.Context, orderID *uuid.UU
 }
 
 // AppendOrderMetadata appends the key and string value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key string, value string) error {
+func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key, value string) error {
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
 	if err != nil {
 		return err

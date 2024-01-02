@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stripe/stripe-go/v72"
+	stripe "github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
@@ -96,10 +96,17 @@ func Router(
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
-		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
 		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
-		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", GetOrderCredsByID(svc)))
+		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
 		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
+
+		// Handle the old endpoint while the new is being rolled out:
+		// - true: the handler uses itemID as the request id, which is the old mode;
+		// - false: the handler uses the requestID from the URI.
+		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, true)))
+		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, false)))
+
+		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", createItemCreds(svc)))
 	})
 
 	return r
@@ -275,81 +282,72 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 	return r
 }
 
-// SetOrderTrialDaysInput - SetOrderTrialDays handler input
-type SetOrderTrialDaysInput struct {
+type setTrialDaysRequest struct {
 	TrialDays int64 `json:"trialDays" valid:"int"`
 }
 
-// SetOrderTrialDays is the handler for cancelling an order
+// SetOrderTrialDays handles requests for setting trial days on orders.
 func SetOrderTrialDays(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			ctx     = r.Context()
-			orderID = new(inputs.ID)
-		)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		ctx := r.Context()
+		orderID := &inputs.ID{}
+
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
+				map[string]interface{}{"orderID": err.Error()},
 			)
 		}
 
 		// validate order merchant and caveats (to make sure this is the right merch)
-		if err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID()); err != nil {
+		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
 			return handlers.ValidationError(
 				"Error validating request merchant and caveats",
-				map[string]interface{}{
-					"orderMerchantAndCaveats": err.Error(),
-				},
+				map[string]interface{}{"orderMerchantAndCaveats": err.Error()},
 			)
 		}
 
-		var input SetOrderTrialDaysInput
-		err := requestutils.ReadJSON(r.Context(), r.Body, &input)
-		if err != nil {
+		req := &setTrialDaysRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(input)
-		if err != nil {
+		if _, err := govalidator.ValidateStruct(req); err != nil {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.SetOrderTrialDays(ctx, orderID.UUID(), input.TrialDays)
-		if err != nil {
+		if err := service.SetOrderTrialDays(ctx, orderID.UUID(), req.TrialDays); err != nil {
 			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	})
 }
 
-// CancelOrder is the handler for cancelling an order
+// CancelOrder handles requests for cancelling orders.
 func CancelOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		ctx := r.Context()
+		orderID := &inputs.ID{}
+
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
+				map[string]interface{}{"orderID": err.Error()},
 			)
 		}
 
-		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
-		if err != nil {
+		oid := *orderID.UUID()
+
+		if err := service.validateOrderMerchantAndCaveats(ctx, oid); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
-		err = service.CancelOrder(*orderID.UUID())
-		if err != nil {
+		if err := service.CancelOrder(oid); err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	})
 }
 
@@ -544,36 +542,32 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 	})
 }
 
-// CreateOrderCredsRequest includes the item ID and blinded credentials which to be signed
+// CreateOrderCredsRequest includes the item ID and blinded credentials which to be signed.
 type CreateOrderCredsRequest struct {
 	ItemID       uuid.UUID `json:"itemId" valid:"-"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
-// CreateOrderCreds is the handler for creating order credentials
-func CreateOrderCreds(service *Service) handlers.AppHandler {
+// CreateOrderCreds handles requests for creating credentials.
+func CreateOrderCreds(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			req    = new(CreateOrderCredsRequest)
-			ctx    = r.Context()
-			logger = logging.Logger(ctx, "skus.CreateOrderCreds")
-		)
+		ctx := r.Context()
+		lg := logging.Logger(ctx, "skus.CreateOrderCreds")
 
-		err := requestutils.ReadJSON(ctx, r.Body, req)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to read body payload")
+		req := &CreateOrderCredsRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
+			lg.Error().Err(err).Msg("failed to read body payload")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to validate struct")
+		if _, err := govalidator.ValidateStruct(req); err != nil {
+			lg.Error().Err(err).Msg("failed to validate struct")
 			return handlers.WrapValidationError(err)
 		}
 
-		var orderID = new(inputs.ID)
+		orderID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			logger.Error().Err(err).Msg("failed to validate order id")
+			lg.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
@@ -582,41 +576,66 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderItem, err := service.Datastore.GetOrderItem(ctx, req.ItemID)
-		if err != nil {
-			logger.Error().Err(err).Msg("error getting the order item for creds")
-			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+		// Use the itemID for the request id so the old credential uniqueness constraint remains enforced.
+		reqID := req.ItemID
+
+		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, reqID, req.BlindedCreds); err != nil {
+			lg.Error().Err(err).Msg("failed to create the order credentials")
+			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
-		// TLV2 check to see if we have credentials signed that match incoming blinded tokens
-		if orderItem.CredentialType == timeLimitedV2 {
-			alreadySubmitted, err := service.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, req.BlindedCreds...)
-			if err != nil {
-				// This is an existing error message so don't want to change it incase client are relying on it.
-				return handlers.WrapError(err, "Error validating credentials exist for order", http.StatusBadRequest)
-			}
-			if alreadySubmitted {
-				// since these are already submitted, no need to create order credentials
-				// return ok
-				return handlers.RenderContent(ctx, nil, w, http.StatusOK)
-			}
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
+// createItemCredsRequest includes the blinded credentials to be signed.
+type createItemCredsRequest struct {
+	BlindedCreds []string `json:"blindedCreds" valid:"base64"`
+}
+
+// createItemCreds handles requests for creating credentials for an item.
+func createItemCreds(svc *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		lg := logging.Logger(ctx, "skus.createItemCreds")
+
+		req := &createItemCredsRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
+			lg.Error().Err(err).Msg("failed to read body payload")
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		// check if we already have a signing request for this order, delete order creds will
-		// delete the prior signing request.  this allows subscriptions to manage how many
-		// order creds are handed out.
-		signingOrderRequests, err := service.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, req.ItemID)
-		if err != nil {
-			// This is an existing error message so don't want to change it incase client are relying on it.
-			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+		if _, err := govalidator.ValidateStruct(req); err != nil {
+			lg.Error().Err(err).Msg("failed to validate struct")
+			return handlers.WrapValidationError(err)
 		}
 
-		if len(signingOrderRequests) > 0 {
-			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
+			lg.Error().Err(err).Msg("failed to validate order id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"orderID": err.Error(),
+			})
 		}
 
-		if err := service.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, req.BlindedCreds); err != nil {
-			logger.Error().Err(err).Msg("failed to create the order credentials")
+		itemID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
+			lg.Error().Err(err).Msg("failed to validate item id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"itemID": err.Error(),
+			})
+		}
+
+		reqID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
+			lg.Error().Err(err).Msg("failed to validate request id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"requestID": err.Error(),
+			})
+		}
+
+		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID(), req.BlindedCreds); err != nil {
+			lg.Error().Err(err).Msg("failed to create the order credentials")
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
@@ -656,84 +675,93 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 	}
 }
 
-// DeleteOrderCreds is the handler for deleting order credentials
+// DeleteOrderCreds handles requests for deleting order credentials.
 func DeleteOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+		ctx := r.Context()
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
+				map[string]interface{}{"orderID": err.Error()},
 			)
 		}
 
-		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
-		if err != nil {
+		id := *orderID.UUID()
+		if err := service.validateOrderMerchantAndCaveats(ctx, id); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
-		// is signed param
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-
-		err = service.DeleteOrderCreds(r.Context(), *orderID.UUID(), isSigned)
-		if err != nil {
+		if err := service.DeleteOrderCreds(ctx, id, isSigned); err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(r.Context(), "Order credentials successfully deleted", w, http.StatusOK)
+		return handlers.RenderContent(ctx, "Order credentials successfully deleted", w, http.StatusOK)
 	}
 }
 
-// GetOrderCredsByID is the handler for fetching order credentials by an item id
-func GetOrderCredsByID(service *Service) handlers.AppHandler {
+// getOrderCredsByID handles requests for fetching order credentials by an item id.
+//
+// Requests may come in via two endpoints:
+// - /{itemID} – legacyMode, reqID == itemID
+// - /items/{itemID}/batches/{requestID} – new mode, reqID == requestID.
+//
+// The legacy mode will be gone after confirming a successful rollout.
+//
+// TODO: Clean up the legacy mode.
+func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		// get the IDs from the URL
-		var (
-			orderID           = new(inputs.ID)
-			itemID            = new(inputs.ID)
-			validationPayload = map[string]interface{}{}
-			err               error
-		)
-
-		// decode and validate orderID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			validationPayload["orderID"] = err.Error()
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"orderID": err.Error(),
+			})
 		}
 
-		// decode and validate itemID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
-			validationPayload["itemID"] = err.Error()
+		itemID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"itemID": err.Error(),
+			})
 		}
 
-		// did we get any validation errors?
-		if len(validationPayload) > 0 {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				validationPayload)
+		var reqID uuid.UUID
+		if legacyMode {
+			reqID = *itemID.UUID()
+		} else {
+			reqIDRaw := &inputs.ID{}
+			if err := inputs.DecodeAndValidateString(ctx, reqIDRaw, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
+				return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+					"requestID": err.Error(),
+				})
+			}
+
+			reqID = *reqIDRaw.UUID()
 		}
 
-		creds, status, err := service.GetItemCredentials(r.Context(), *orderID.UUID(), *itemID.UUID())
+		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), reqID)
 		if err != nil {
-			if errors.Is(err, errSetRetryAfter) {
-				// error specifies a retry after period, add to response header
-				avg, err := service.Datastore.GetOutboxMovAvgDurationSeconds()
-				if err != nil {
-					return handlers.WrapError(err, "Error getting credential retry-after", status)
-				}
-				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
-			} else {
+			if !errors.Is(err, errSetRetryAfter) {
 				return handlers.WrapError(err, "Error getting credentials", status)
 			}
+
+			// Add to response header as error specifies a retry after period.
+			avg, err := svc.Datastore.GetOutboxMovAvgDurationSeconds()
+			if err != nil {
+				return handlers.WrapError(err, "Error getting credential retry-after", status)
+			}
+
+			w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
 		}
+
 		if creds == nil {
-			return handlers.RenderContent(r.Context(), map[string]interface{}{}, w, status)
+			return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
 		}
-		return handlers.RenderContent(r.Context(), creds, w, status)
+
+		return handlers.RenderContent(ctx, creds, w, status)
 	})
 }
 
@@ -841,48 +869,54 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 
 // VerifyCredentialV2 - version 2 of verify credential
 func VerifyCredentialV2(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
 		ctx := r.Context()
-		logger := logging.Logger(ctx, "VerifyCredentialV2")
-		logger.Debug().Msg("starting VerifyCredentialV2 controller")
+		l := logging.Logger(ctx, "VerifyCredentialV2")
 
 		var req = new(VerifyCredentialRequestV2)
 		if err := inputs.DecodeAndValidateReader(ctx, req, r.Body); err != nil {
-			logger.Error().Err(err).Msg("failed to read request")
+			l.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		return service.verifyCredential(ctx, req, w)
-	})
+		appErr := service.verifyCredential(ctx, req, w)
+		if appErr != nil {
+			l.Error().Err(appErr).Msg("failed to verify credential")
+		}
+
+		return appErr
+	}
 }
 
 // VerifyCredentialV1 is the handler for verifying subscription credentials
 func VerifyCredentialV1(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-
-		logger := logging.Logger(r.Context(), "VerifyCredentialV1")
-		logger.Debug().Msg("starting VerifyCredentialV1 controller")
+		l := logging.Logger(r.Context(), "VerifyCredentialV1")
 
 		var req = new(VerifyCredentialRequestV1)
 
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to read request")
+			l.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
-		logger.Debug().Msg("read verify credential post body")
+		l.Debug().Msg("read verify credential post body")
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to validate request")
+			l.Error().Err(err).Msg("failed to validate request")
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
-		logger.Debug().Msg("validated verify credential post body")
+		appErr := service.verifyCredential(ctx, req, w)
+		if appErr != nil {
+			l.Error().Err(appErr).Msg("failed to verify credential")
+		}
 
-		return service.verifyCredential(ctx, req, w)
-	})
+		return appErr
+	}
 }
 
 // WebhookRouter - handles calls from various payment method webhooks informing payments of completion
@@ -1108,151 +1142,124 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-// HandleStripeWebhook is the handler for stripe checkout session webhooks
+// HandleStripeWebhook handles webhook events from Stripe.
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		// get logger
-		sublogger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleStripeWebhook").
-			Logger()
 
-		// get webhook secret from ctx
+		lg := logging.Logger(ctx, "payments").With().Str("func", "HandleStripeWebhook").Logger()
+
 		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
 		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
-			return handlers.WrapError(
-				err, "error getting stripe_webhook_secret from context",
-				http.StatusInternalServerError)
+			lg.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
+			return handlers.WrapError(err, "error getting stripe_webhook_secret from context", http.StatusInternalServerError)
 		}
 
-		b, err := requestutils.Read(r.Context(), r.Body)
+		b, err := requestutils.Read(ctx, r.Body)
 		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to read request body")
+			lg.Error().Err(err).Msg("failed to read request body")
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
 
-		event, err := webhook.ConstructEvent(
-			b, r.Header.Get("Stripe-Signature"), endpointSecret)
+		event, err := webhook.ConstructEvent(b, r.Header.Get("Stripe-Signature"), endpointSecret)
 		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to verify stripe signature")
+			lg.Error().Err(err).Msg("failed to verify stripe signature")
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
-		// log the event
-		sublogger.Debug().Str("event_type", event.Type).Str("data", string(event.Data.Raw)).Msg("webhook event captured")
+		switch event.Type {
+		case StripeInvoiceUpdated, StripeInvoicePaid:
+			// Handle invoice events.
 
-		// Handle invoice events
-		if event.Type == StripeInvoiceUpdated || event.Type == StripeInvoicePaid {
-			// Retrieve invoice from update events
 			var invoice stripe.Invoice
-			err := json.Unmarshal(event.Data.Raw, &invoice)
-			if err != nil {
-				sublogger.Error().Err(err).Msg("error parsing webhook json")
+			if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
+				lg.Error().Err(err).Msg("error parsing webhook json")
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
-			sublogger.Debug().
-				Str("event_type", event.Type).
-				Str("invoice", fmt.Sprintf("%+v", invoice)).Msg("webhook invoice")
 
 			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
-				sublogger.Error().Err(err).Msg("error getting subscription")
+				lg.Error().Err(err).Msg("error getting subscription")
 				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
 
-			sublogger.Debug().
-				Str("subscription", fmt.Sprintf("%+v", subscription)).Msg("corresponding subscription")
-
 			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
-				sublogger.Error().Err(err).Msg("error getting order id from subscription metadata")
+				lg.Error().Err(err).Msg("error getting order id from subscription metadata")
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-
-			sublogger.Debug().
-				Str("orderID", orderID.String()).Msg("order id")
 
 			// If the invoice is paid set order status to paid, otherwise
 			if invoice.Paid {
-				// is this an existing subscription??
 				ok, subID, err := service.Datastore.IsStripeSub(orderID)
 				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
+					lg.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
 					return handlers.WrapError(err, "error looking up payment provider", http.StatusInternalServerError)
 				}
+
+				// Handle renewal.
 				if ok && subID != "" {
-					// okay, this is a subscription renewal, not first time,
-					err = service.RenewOrder(ctx, orderID)
-					if err != nil {
-						sublogger.Error().Err(err).Msg("failed to renew the order")
+					if err := service.RenewOrder(ctx, orderID); err != nil {
+						lg.Error().Err(err).Msg("failed to renew the order")
 						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
 					}
-					// end flow for renew order
-					return handlers.RenderContent(r.Context(), "subscription renewed", w, http.StatusOK)
+
+					return handlers.RenderContent(ctx, "subscription renewed", w, http.StatusOK)
 				}
 
-				// not a renewal, first time
-				// and update the order's expires at as it was just paid
-				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
-				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to update order status")
+				// New subscription.
+				// Update the order's expires at as it was just paid.
+				if err := service.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
+					lg.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 				}
-				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
-				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to update order metadata")
+
+				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+					lg.Error().Err(err).Msg("failed to update order metadata")
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
-				// set paymentProcessor as stripe
-				err = service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod)
-				if err != nil {
-					sublogger.Error().Err(err).Msg("failed to update order to add the payment processor")
+
+				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod); err != nil {
+					lg.Error().Err(err).Msg("failed to update order to add the payment processor")
 					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
 				}
 
-				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
-				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
+				return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
 			}
 
-			sublogger.Debug().
-				Str("orderID", orderID.String()).Msg("order not paid, set pending")
-			err = service.Datastore.UpdateOrder(orderID, "pending")
-			if err != nil {
-				sublogger.Error().Err(err).Msg("failed to update order status")
+			if err := service.Datastore.UpdateOrder(orderID, "pending"); err != nil {
+				lg.Error().Err(err).Msg("failed to update order status")
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
-			sublogger.Debug().
-				Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
-			err = service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID)
-			if err != nil {
-				sublogger.Error().Err(err).Msg("failed to update order metadata")
+
+			if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+				lg.Error().Err(err).Msg("failed to update order metadata")
 				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 			}
-			sublogger.Debug().
-				Str("sub_id", subscription.ID).Msg("set ok response")
-			return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
-		}
 
-		// Handle subscription cancellations
-		if event.Type == StripeCustomerSubscriptionDeleted {
+			return handlers.RenderContent(ctx, "payment failed", w, http.StatusOK)
+
+		case StripeCustomerSubscriptionDeleted:
+			// Handle subscription cancellations
+
 			var subscription stripe.Subscription
-			err := json.Unmarshal(event.Data.Raw, &subscription)
-			if err != nil {
+			if err := json.Unmarshal(event.Data.Raw, &subscription); err != nil {
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
+
 			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-			err = service.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
-			if err != nil {
+
+			if err := service.Datastore.UpdateOrder(orderID, OrderStatusCanceled); err != nil {
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
-			return handlers.RenderContent(r.Context(), "subscription canceled", w, http.StatusOK)
+
+			return handlers.RenderContent(ctx, "subscription canceled", w, http.StatusOK)
 		}
 
-		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
+		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
 	}
 }
 
