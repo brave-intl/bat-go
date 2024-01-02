@@ -81,6 +81,20 @@ func (_d ClientWithPrometheus) FetchBalances(ctx context.Context, APIKey string,
 	return _d.base.FetchBalances(ctx, APIKey, signer, payload)
 }
 
+// FetchValidatedAccount implements Client
+func (_d ClientWithPrometheus) FetchValidatedAccount(ctx context.Context, verificationToken string, recipientID string) (v1 ValidatedAccount, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchValidatedAccount", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.FetchValidatedAccount(ctx, verificationToken, recipientID)
+}
+
 // UploadBulkPayout implements Client
 func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (pap1 *[]PayoutResult, err error) {
 	_since := time.Now()
@@ -93,18 +107,4 @@ func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey stri
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UploadBulkPayout", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UploadBulkPayout(ctx, APIKey, signer, payload)
-}
-
-// ValidateAccount implements Client
-func (_d ClientWithPrometheus) ValidateAccount(ctx context.Context, verificationToken string, recipientID string) (s1 string, s2 string, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "ValidateAccount", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.ValidateAccount(ctx, verificationToken, recipientID)
 }

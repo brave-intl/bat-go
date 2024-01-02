@@ -67,7 +67,9 @@ func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
 	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, test.RandomString())
 	ctx = context.WithValue(ctx, appctx.DisabledWalletGeoCountriesCTXKey, test.RandomString())
 
-	ctx, walletService := wallet.SetupService(ctx)
+	db, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+	walletService := &wallet.Service{Datastore: db}
 	promotionDB, promotionRODB, err := NewPostgres()
 	suite.Require().NoError(err, "unable connect to promotion db")
 	s, err := InitService(
