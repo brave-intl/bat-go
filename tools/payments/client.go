@@ -157,7 +157,7 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 			}
 			err := rc.redis.AddMessages(ctx, stream, messages[i:end]...)
 			if err != nil {
-				return fmt.Errorf("failed to exec prepare transaction commands: %w", err)
+				return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
 			}
 		}
 	}
