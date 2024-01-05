@@ -147,7 +147,6 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 	for payoutID, messages := range prepareGroups {
 		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("prepared transactions")
 		stream := payments.PreparePrefix + payoutID
-
 		err := rc.redis.AddMessages(ctx, stream, messages...)
 		if err != nil {
 			return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
@@ -207,7 +206,6 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 	for payoutID, messages := range submitGroups {
 		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("submitted transactions")
 		stream := payments.SubmitPrefix + payoutID
-
 		err := rc.redis.AddMessages(ctx, stream, messages...)
 		if err != nil {
 			return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
