@@ -215,9 +215,18 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 	for payoutID, messages := range submitGroups {
 		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("submitted transactions")
 		stream := payments.SubmitPrefix + payoutID
-		err := rc.redis.AddMessages(ctx, stream, messages...)
-		if err != nil {
-			return fmt.Errorf("failed to exec submit transaction commands: %w", err)
+
+		// to avoid errors enqueuing large message sets, enqueue them in chunks
+		chunkSize := 10000
+		for i := 0; i < len(messages); i += chunkSize {
+			end := i + chunkSize
+			if len(messages) < end {
+				end = len(messages)
+			}
+			err := rc.redis.AddMessages(ctx, stream, messages[i:end]...)
+			if err != nil {
+				return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
+			}
 		}
 	}
 
