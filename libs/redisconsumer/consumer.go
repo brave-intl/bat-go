@@ -135,7 +135,9 @@ func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, 
 			)
 		}
 		_, err = pipe.Exec(ctx)
-		return err
+		if err != nil {
+			return err
+		}
 	}
 	return err
 }

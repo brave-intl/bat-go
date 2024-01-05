@@ -148,17 +148,9 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("prepared transactions")
 		stream := payments.PreparePrefix + payoutID
 
-		// to avoid errors enqueuing large message sets, enqueue them in chunks
-		chunkSize := 10000
-		for i := 0; i < len(messages); i += chunkSize {
-			end := i + chunkSize
-			if len(messages) < end {
-				end = len(messages)
-			}
-			err := rc.redis.AddMessages(ctx, stream, messages[i:end]...)
-			if err != nil {
-				return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
-			}
+		err := rc.redis.AddMessages(ctx, stream, messages...)
+		if err != nil {
+			return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
 		}
 	}
 
@@ -216,17 +208,9 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 		logger.Info().Str("payoutID", payoutID).Int("messages", len(messages)).Msg("submitted transactions")
 		stream := payments.SubmitPrefix + payoutID
 
-		// to avoid errors enqueuing large message sets, enqueue them in chunks
-		chunkSize := 10000
-		for i := 0; i < len(messages); i += chunkSize {
-			end := i + chunkSize
-			if len(messages) < end {
-				end = len(messages)
-			}
-			err := rc.redis.AddMessages(ctx, stream, messages[i:end]...)
-			if err != nil {
-				return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
-			}
+		err := rc.redis.AddMessages(ctx, stream, messages...)
+		if err != nil {
+			return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
 		}
 	}
 
