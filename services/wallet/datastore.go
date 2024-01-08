@@ -52,26 +52,18 @@ var (
 			Help:        "A counter for seeing how many custodian accounts have been linked 10 times",
 			ConstLabels: prometheus.Labels{"service": "wallet"},
 		})
-	// counter for flagged unusual
-	countLinkingFlaggedUnusual = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name:        "count_linking_flagged_unusual",
-			Help:        "provides a count of unusual linkings flagged results",
-			ConstLabels: prometheus.Labels{"service": "wallet"},
-		})
 )
 
 func init() {
 	prometheus.MustRegister(tooManyCardsCounter)
 	prometheus.MustRegister(metricTxLockGauge)
 	prometheus.MustRegister(tenLinkagesReached)
-	prometheus.MustRegister(countLinkingFlaggedUnusual)
 }
 
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	datastore.Datastore
-	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error
+	LinkWallet(ctx context.Context, id string, providerID string, providerLinkingID uuid.UUID, depositProvider, country string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (bool, error)
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
@@ -94,7 +86,7 @@ type Datastore interface {
 	ConnectCustodialWallet(ctx context.Context, cl *CustodianLink, depositDest string) error
 	// DisconnectCustodialWallet - disconnect the wallet's custodial id
 	DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) error
-	// GetCustodianLinkByWalletID - get the custodian link by ID
+	// GetCustodianLinkByWalletID retrieves the currently linked wallet custodian by walletID.
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
 	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
 	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error)
@@ -560,51 +552,26 @@ var (
 	ErrGeoResetDifferent = errors.New("geo reset is different")
 )
 
-// LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, country string) error {
-	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
-	sublogger.Debug().Msg("linking wallet")
+// LinkWallet links a rewards wallet to the given deposit provider.
+func (pg *Postgres) LinkWallet(ctx context.Context, id string, userDepositDestination string, providerLinkingID uuid.UUID, depositProvider, country string) error {
+	walletID, err := uuid.FromString(id)
+	if err != nil {
+		return fmt.Errorf("invalid wallet id, not uuid: %w", err)
+	}
 
-	// rep check
-	if repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
-		walletID, err := uuid.FromString(ID)
-		if err != nil {
-			sublogger.Warn().Err(err).Msg("invalid wallet id")
-			return fmt.Errorf("invalid wallet id, not uuid: %w", err)
-		}
-		// we have a client, check the value for ID
-		reputable, cohorts, err := repClient.IsLinkingReputable(ctx, walletID, country)
-		if err != nil {
-			sublogger.Warn().Err(err).Msg("failed to check reputation")
-			return fmt.Errorf("failed to check wallet rep: %w", err)
-		}
+	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+	if !ok {
+		return ErrNoReputationClient
+	}
 
-		var (
-			isTooYoung        = false
-			geoResetDifferent = false
-		)
-		for _, v := range cohorts {
-			if isTooYoung = (v == reputation.CohortTooYoung); isTooYoung {
-				break
-			}
-			if geoResetDifferent = (v == reputation.CohortGeoResetDifferent); geoResetDifferent {
-				break
-			}
-		}
-
-		if !reputable && !isTooYoung && !geoResetDifferent {
-			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
-			countLinkingFlaggedUnusual.Inc()
-			return ErrUnusualActivity
-		} else if geoResetDifferent {
-			sublogger.Info().Msg("wallet linking attempt failed - geo reset is different")
-			return ErrGeoResetDifferent
-		}
+	// TODO(clD11): We no longer need to act on the response and only require a successful call to reputation to
+	//  continue linking. As part of the wallet refactor we should clean this up.
+	if _, _, err := repClient.IsLinkingReputable(ctx, walletID, country); err != nil {
+		return fmt.Errorf("failed to check wallet rep: %w", err)
 	}
 
 	ctx, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
-		sublogger.Error().Err(err).Msg("error getting tx")
 		return fmt.Errorf("error getting tx: %w", err)
 	}
 	defer func() {
@@ -613,52 +580,35 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	}()
 
 	metricTxLockGauge.Inc()
-	err = waitAndLockTx(ctx, tx, providerLinkingID)
-	if err != nil {
-		sublogger.Error().Err(err).Msg("error acquiring tx lock")
+	if err := waitAndLockTx(ctx, tx, providerLinkingID); err != nil {
 		return fmt.Errorf("error acquiring tx lock: %w", err)
 	}
 
-	id, err := uuid.FromString(ID)
-	if err != nil {
-		return errorutils.Wrap(err, "error invalid id")
-	}
-
-	// connect custodian link (does the link limit checking in insert)
-	if err = pg.ConnectCustodialWallet(ctx, &CustodianLink{
-		WalletID:  &id,
+	if err := pg.ConnectCustodialWallet(ctx, &CustodianLink{
+		WalletID:  &walletID,
 		Custodian: depositProvider,
 		LinkingID: &providerLinkingID,
 	}, userDepositDestination); err != nil {
-		sublogger.Error().Err(err).
-			Msg("error connect custodian wallet")
 		return fmt.Errorf("error connect custodian wallet: %w", err)
 	}
 
+	// TODO(clD11): the below verified wallets calls were added as a quick fix and should be addressed in the wallet refactor.
 	if VerifiedWalletEnable {
-		err := pg.InsertVerifiedWalletOutboxTx(ctx, tx, id, true)
-		if err != nil {
+		if err := pg.InsertVerifiedWalletOutboxTx(ctx, tx, walletID, true); err != nil {
 			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
 	}
 
 	if directVerifiedWalletEnable {
-		client, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
-		if !ok {
-			return ErrNoReputationClient
+		op := func() (interface{}, error) {
+			return nil, repClient.UpdateReputationSummary(ctx, walletID.String(), true)
 		}
-		upsertReputationSummary := func() (interface{}, error) {
-			return nil, client.UpdateReputationSummary(ctx, ID, true)
-		}
-		_, err = backoff.Retry(ctx, upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
+		if _, err := backoff.Retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors)); err != nil {
 			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
 	}
 
-	err = commit()
-	if err != nil {
-		sublogger.Error().Err(err).Msg("error committing tx")
+	if err := commit(); err != nil {
 		sentry.CaptureException(fmt.Errorf("error failed to commit link wallet transaction: %w", err))
 		return fmt.Errorf("error committing tx: %w", err)
 	}
@@ -693,6 +643,10 @@ func (cl *CustodianLink) GetLinkingIDString() string {
 		return cl.LinkingID.String()
 	}
 	return ""
+}
+
+func (cl *CustodianLink) isLinked() bool {
+	return cl != nil && cl.UnlinkedAt == nil && cl.DisconnectedAt == nil && !cl.LinkedAt.IsZero()
 }
 
 // GetCustodianLinkCount - get the wallet custodian link count across all wallets

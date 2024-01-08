@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/lib/pq"
@@ -32,10 +33,17 @@ const (
 	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
 	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
 
+	ErrNumPerIntervalNotSet  Error = "model: invalid order: numPerInterval must be set"
+	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"
+	ErrInvalidNumPerInterval Error = "model: invalid order: invalid numPerInterval"
+	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
+
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
 	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
 	ErrInvalidOrderRequest     Error = "model: no items to be created"
+
+	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 
 const (
@@ -93,52 +101,59 @@ func (o *Order) IsRadomPayable() bool {
 }
 
 // CreateStripeCheckoutSession creates a Stripe checkout session for the order.
+//
+// Deprecated: Use CreateStripeCheckoutSession function instead of this method.
 func (o *Order) CreateStripeCheckoutSession(
 	email, successURI, cancelURI string,
 	freeTrialDays int64,
 ) (CreateCheckoutSessionResponse, error) {
+	return CreateStripeCheckoutSession(o.ID.String(), email, successURI, cancelURI, freeTrialDays, o.Items)
+}
+
+// CreateStripeCheckoutSession creates a Stripe checkout session for the order.
+func CreateStripeCheckoutSession(
+	oid, email, successURI, cancelURI string,
+	trialDays int64,
+	items []OrderItem,
+) (CreateCheckoutSessionResponse, error) {
 	var custID string
 	if email != "" {
-		// find the existing customer by email
-		// so we can use the customer id instead of a customer email
-		i := customer.List(&stripe.CustomerListParams{
+		// Find the existing customer by email to use the customer id instead email.
+		l := customer.List(&stripe.CustomerListParams{
 			Email: stripe.String(email),
 		})
 
-		for i.Next() {
-			custID = i.Customer().ID
+		for l.Next() {
+			custID = l.Customer().ID
 		}
 	}
 
-	sd := &stripe.CheckoutSessionSubscriptionDataParams{}
-	// If a free trial is set, apply it.
-	if freeTrialDays > 0 {
-		sd.TrialPeriodDays = &freeTrialDays
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		Mode:               stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		SuccessURL:         stripe.String(successURI),
+		CancelURL:          stripe.String(cancelURI),
+		ClientReferenceID:  stripe.String(oid),
+		SubscriptionData:   &stripe.CheckoutSessionSubscriptionDataParams{},
+		LineItems:          OrderItemList(items).stripeLineItems(),
 	}
 
-	params := &stripe.CheckoutSessionParams{
-		PaymentMethodTypes: stripe.StringSlice([]string{
-			"card",
-		}),
-		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL:        stripe.String(successURI),
-		CancelURL:         stripe.String(cancelURI),
-		ClientReferenceID: stripe.String(o.ID.String()),
-		SubscriptionData:  sd,
-		LineItems:         OrderItemList(o.Items).stripeLineItems(),
+	// If a free trial is set, apply it.
+	if trialDays > 0 {
+		params.SubscriptionData.TrialPeriodDays = &trialDays
 	}
 
 	if custID != "" {
-		// try to use existing customer we found by email
+		// Use existing customer if found.
 		params.Customer = stripe.String(custID)
 	} else if email != "" {
-		// if we dont have an existing customer, this CustomerEmail param will create a new one
+		// Otherwise, create a new using email.
 		params.CustomerEmail = stripe.String(email)
 	}
-	// else we have no record of this email for this checkout session
-	// the user will be asked for the email, we cannot send an empty customer email as a param
+	// Otherwise, we have no record of this email for this checkout session.
+	// ? The user will be asked for the email, we cannot send an empty customer email as a param.
 
-	params.SubscriptionData.AddMetadata("orderID", o.ID.String())
+	params.SubscriptionData.AddMetadata("orderID", oid)
 	params.AddExtra("allow_promotion_codes", "true")
 
 	session, err := session.New(params)
@@ -159,6 +174,12 @@ func (o *Order) CreateRadomCheckoutSession(
 }
 
 // CreateRadomCheckoutSessionWithTime creates a Radom checkout session for o.
+//
+// TODO: This must be refactored before it's usable. Issues with the current implementation:
+// - it assumes one item per order;
+// - most of the logic does not belong in here;
+// - metadata information must be passed explisictly instead of being parsed (it's known prior to this place);
+// And more.
 func (o *Order) CreateRadomCheckoutSessionWithTime(
 	ctx context.Context,
 	client radomClient,
@@ -239,6 +260,48 @@ func (o *Order) GetTrialDays() int64 {
 	return *o.TrialDays
 }
 
+func (o *Order) NumPerInterval() (int, error) {
+	numRaw, ok := o.Metadata["numPerInterval"]
+	if !ok {
+		return 0, ErrNumPerIntervalNotSet
+	}
+
+	result, err := numFromAny(numRaw)
+	if err != nil {
+		return 0, ErrInvalidNumPerInterval
+	}
+
+	return result, nil
+}
+
+func (o *Order) NumIntervals() (int, error) {
+	numRaw, ok := o.Metadata["numIntervals"]
+	if !ok {
+		return 0, ErrNumIntervalsNotSet
+	}
+
+	result, err := numFromAny(numRaw)
+	if err != nil {
+		return 0, ErrInvalidNumIntervals
+	}
+
+	return result, nil
+}
+
+// HasItem returns the item if found.
+//
+// It exposes a comma, ok API similar to a map.
+// Today items are stored in a slice, but it might change to a map in the future.
+func (o *Order) HasItem(id uuid.UUID) (*OrderItem, bool) {
+	for i := range o.Items {
+		if uuid.Equal(o.Items[i].ID, id) {
+			return &o.Items[i], true
+		}
+	}
+
+	return nil, false
+}
+
 // OrderItem represents a particular order item.
 type OrderItem struct {
 	ID                        uuid.UUID            `json:"id" db:"id"`
@@ -262,6 +325,25 @@ type OrderItem struct {
 	// TODO: Remove this when products & issuers have been reworked.
 	// The issuer for a product must be created when the product is created.
 	IssuerConfig *IssuerConfig `json:"-" db:"-"`
+}
+
+func (x *OrderItem) IsLeo() bool {
+	if x == nil {
+		return false
+	}
+
+	return x.SKU == "brave-leo-premium"
+}
+
+// OrderNew represents a request to create an order in the database.
+type OrderNew struct {
+	MerchantID            string          `db:"merchant_id"`
+	Currency              string          `db:"currency"`
+	Status                string          `db:"status"`
+	Location              sql.NullString  `db:"location"`
+	TotalPrice            decimal.Decimal `db:"total_price"`
+	AllowedPaymentMethods pq.StringArray  `db:"allowed_payment_methods"`
+	ValidFor              *time.Duration  `db:"valid_for"`
 }
 
 // CreateCheckoutSessionResponse represents a checkout session response.
@@ -541,4 +623,23 @@ func addURLParam(src, name, val string) (string, error) {
 	raw.RawQuery = v.Encode()
 
 	return raw.String(), nil
+}
+
+func numFromAny(raw any) (int, error) {
+	switch v := raw.(type) {
+	case int:
+		return v, nil
+	case int64:
+		return int(v), nil
+	case int32:
+		return int(v), nil
+	case float32:
+		return int(v), nil
+	case float64:
+		return int(v), nil
+	case string:
+		return strconv.Atoi(v)
+	default:
+		return 0, errInvalidNumConversion
+	}
 }

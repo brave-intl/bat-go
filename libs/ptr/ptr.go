@@ -33,3 +33,7 @@ func StringOr(s *string, or string) string {
 func FromTime(t time.Time) *time.Time {
 	return &t
 }
+
+func To[T any](v T) *T {
+	return &v
+}

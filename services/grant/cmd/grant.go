@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
@@ -23,8 +23,6 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -393,17 +391,29 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, promotionService.Jobs()...)
 
-	r.Mount("/v1/promotions", promotion.Router(promotionService))
-	r.Mount("/v2/promotions", promotion.RouterV2(promotionService))
+	// vbat expired var from env
+	vbatExpires, err := time.Parse(time.RFC3339, "2023-11-02T00:00:00Z") // default 11/2/23
+	if err != nil {
+		logger.Panic().Err(err).Msg("failed to parse vbatExpires time")
+	}
+	if os.Getenv("VBAT_EXPIRES") != "" { // use what is in the environment if exists
+		vbatExpires, err = time.Parse(time.RFC3339, os.Getenv("VBAT_EXPIRES"))
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to parse vbatExpires time")
+		}
+	}
 
-	sRouter, err := promotion.SuggestionsRouter(promotionService)
+	r.Mount("/v1/promotions", promotion.Router(promotionService, vbatExpires))
+	r.Mount("/v2/promotions", promotion.RouterV2(promotionService, vbatExpires))
+
+	sRouter, err := promotion.SuggestionsRouter(promotionService, vbatExpires)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to initialize the suggestions router")
 	}
 
 	r.Mount("/v1/suggestions", sRouter)
 
-	sV2Router, err := promotion.SuggestionsV2Router(promotionService)
+	sV2Router, err := promotion.SuggestionsV2Router(promotionService, vbatExpires)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to initialize the suggestions router")
 	}
@@ -411,7 +421,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v2/suggestions", sV2Router)
 
 	// temporarily house batloss events in promotion to avoid widespread conflicts later
-	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
+	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService, vbatExpires))
 
 	skuOrderRepo := repository.NewOrder()
 	skuOrderItemRepo := repository.NewOrderItem()
@@ -494,27 +504,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
-
-	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgres(
-			skuOrderRepo,
-			skuOrderItemRepo,
-			skuOrderPayHistRepo,
-			skuIssuerRepo,
-			"", true, "merch_skus_db",
-		)
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
-		}
-
-		skusService, err := skus.InitService(ctx, skusDB, walletService, skuOrderRepo, skuIssuerRepo)
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("SKUs service initialization failed")
-		}
-		r.Mount("/v1/merchants", skus.MerchantRouter(skusService))
-	}
 
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
@@ -692,21 +681,6 @@ func GrantServer(
 				go srv.JobWorker(ctx, job.Func, job.Cadence)
 			}
 		}
-	}
-	if viper.GetString("environment") != "local" &&
-		viper.GetString("environment") != "development" {
-		// run gemini balance watch so we have balance info in prometheus
-		go func() {
-			// no need to panic here, log the error and move on with serving
-			if err := gemini.WatchGeminiBalance(ctx); err != nil {
-				logger.Error().Err(err).Msg("error launching gemini balance watch")
-			}
-		}()
-		go func() {
-			if err := bitflyer.WatchBitflyerBalance(ctx, 2*time.Minute); err != nil {
-				logger.Error().Err(err).Msg("error launching bitflyer balance watch")
-			}
-		}()
 	}
 
 	go func() {

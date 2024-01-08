@@ -143,7 +143,7 @@ func (v Verifier) verifySigOnlyNotPCRs(message, sig []byte, opts crypto.SignerOp
 		return false, nil, err
 	}
 
-	var userdata []byte = nil
+	var userdata []byte
 	if message != nil {
 		hash := sha256.Sum256(message)
 		userdata = hash[:]

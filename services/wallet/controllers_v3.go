@@ -252,15 +252,14 @@ func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			})
 		}
 
-		xalr := &ZebPayLinkingRequest{}
-		if err := inputs.DecodeAndValidateReader(ctx, xalr, r.Body); err != nil {
+		zplReq := &ZebPayLinkingRequest{}
+		if err := inputs.DecodeAndValidateReader(ctx, zplReq, r.Body); err != nil {
 			return HandleErrorsZebPay(err)
 		}
 
-		country, err := s.LinkZebPayWallet(ctx, *id.UUID(), xalr.VerificationToken)
+		country, err := s.LinkZebPayWallet(ctx, *id.UUID(), zplReq.VerificationToken)
 		if err != nil {
-			l.Error().Err(err).Str("paymentID", id.String()).
-				Msg("failed to link wallet")
+			l.Error().Err(err).Str("paymentID", id.String()).Msg("failed to link wallet")
 			switch {
 			case errors.Is(err, errorutils.ErrInvalidCountry):
 				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)

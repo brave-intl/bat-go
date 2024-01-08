@@ -54,7 +54,8 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		switch ctr.Code {
 		case zebpay.TransferSuccessCode:
 			// Write the Paid status
-			entry, err = zm.SetNextState(ctx, paymentLib.Paid)
+			// entry is unused after this
+			_, err = zm.SetNextState(ctx, paymentLib.Paid)
 			if err != nil {
 				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 			}
@@ -63,6 +64,7 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			zm.backoffFactor = zm.backoffFactor * 2
 		default:
 			// Status unknown. includes TransferFailedCode
+			// entry is unused after this
 			entry, err = zm.SetNextState(ctx, paymentLib.Failed)
 			if err != nil {
 				return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
@@ -87,11 +89,16 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		ctr, err := zm.client.CheckTransfer(ctx, &zebpay.ClientOpts{
 			APIKey: zm.apiKey, SigningKey: zm.signingKey,
 		}, zm.transaction.IdempotencyKey())
+		if err != nil {
+			return zm.transaction, fmt.Errorf("unable to check the transfer: %w", err)
+		}
+
 		if ctr != nil {
 			switch ctr.Code {
 			case zebpay.TransferSuccessCode:
 				// Write the Paid status
-				entry, err = zm.SetNextState(ctx, paymentLib.Paid)
+				// entry is unused after this
+				_, err = zm.SetNextState(ctx, paymentLib.Paid)
 				if err != nil {
 					return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 				}
@@ -99,7 +106,8 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			case zebpay.TransferPendingCode:
 				// Transfer is already Pending, but isn't recorded as such in QLDB. Set it to
 				// Pending in QLDB and proceed.
-				entry, err = zm.SetNextState(ctx, paymentLib.Pending)
+				// entry is unused after this
+				_, err = zm.SetNextState(ctx, paymentLib.Pending)
 				if err != nil {
 					return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 				}
@@ -139,7 +147,8 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			)
 		}
 
-		entry, err = zm.SetNextState(ctx, paymentLib.Pending)
+		// entry is unused after this
+		_, err = zm.SetNextState(ctx, paymentLib.Pending)
 		if err != nil {
 			return zm.transaction, fmt.Errorf("failed to write next state: %w", err)
 		}
@@ -152,6 +161,6 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 }
 
 // Fail implements TxStateMachine for the Zebpay machine.
-func (bm *ZebpayMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
-	return bm.SetNextState(ctx, paymentLib.Failed)
+func (zm *ZebpayMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return zm.SetNextState(ctx, paymentLib.Failed)
 }

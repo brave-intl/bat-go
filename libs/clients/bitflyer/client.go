@@ -10,10 +10,7 @@ import (
 	"net/url"
 	"os"
 	"runtime/debug"
-	"strings"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -27,68 +24,12 @@ import (
 )
 
 var (
-	bfBalanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "bitflyer_account_balance",
-		Help: "A gauge of the current account balance in bitflyer",
-	})
-
 	validSourceFrom = map[string]bool{
 		"tipping":   true,
 		"adrewards": true,
 		"userdrain": true,
 	}
 )
-
-func init() {
-	prometheus.MustRegister(bfBalanceGauge)
-}
-
-// WatchBitflyerBalance periodically checks bitflyer inventory balance for BAT
-func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
-	client, err := New()
-	if err != nil {
-		return fmt.Errorf("failed to create bitflyer client: %w", err)
-	}
-
-	_, err = client.RefreshToken(ctx, TokenPayloadFromCtx(ctx))
-	if err != nil {
-		return fmt.Errorf("failed to get bitflyer access token: %w", err)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(duration):
-			go func() {
-				result, err := client.FetchBalance(ctx)
-				if err != nil {
-					logging.FromContext(ctx).Error().Err(err).
-						Msg("bitflyer client error")
-				} else {
-					found := false
-					for _, inv := range result.Inventory {
-						if strings.ToLower(inv.CurrencyCode) == "bat" {
-							found = true
-							if inv.Amount.LessThan(decimal.NewFromFloat(1.0)) {
-								logging.FromContext(ctx).Error().Err(errors.New("account is empty")).
-									Msg("bitflyer account error")
-							} else {
-								tmp, _ := inv.Amount.Float64()
-								bfBalanceGauge.Set(tmp)
-							}
-							break
-						}
-					}
-					if !found {
-						logging.FromContext(ctx).Error().Err(errors.New("currency code BAT not found in response")).
-							Msg("bitflyer response error")
-					}
-				}
-			}()
-		}
-	}
-}
 
 // Quote returns a quote of BAT prices
 type Quote struct {

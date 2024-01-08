@@ -8,9 +8,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 
@@ -61,15 +59,8 @@ func (r *Order) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, ex
 	return result, nil
 }
 
-// Create creates an order with the given inputs.
-func (r *Order) Create(
-	ctx context.Context,
-	dbi sqlx.QueryerContext,
-	totalPrice decimal.Decimal,
-	merchantID, status, currency, location string,
-	paymentMethods []string,
-	validFor *time.Duration,
-) (*model.Order, error) {
+// Create creates an order with the data in req.
+func (r *Order) Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error) {
 	const q = `INSERT INTO orders
 		(total_price, merchant_id, status, currency, location, allowed_payment_methods, valid_for)
 	VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -79,13 +70,13 @@ func (r *Order) Create(
 	if err := dbi.QueryRowxContext(
 		ctx,
 		q,
-		totalPrice,
-		merchantID,
-		status,
-		currency,
-		location,
-		pq.StringArray(paymentMethods),
-		validFor,
+		oreq.TotalPrice,
+		oreq.MerchantID,
+		oreq.Status,
+		oreq.Currency,
+		oreq.Location,
+		oreq.AllowedPaymentMethods,
+		oreq.ValidFor,
 	).StructScan(result); err != nil {
 		return nil, err
 	}

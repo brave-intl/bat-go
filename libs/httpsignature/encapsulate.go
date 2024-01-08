@@ -39,11 +39,11 @@ func (sr *HTTPSignedRequest) Extract(r *http.Request) (*SignatureParams, error) 
 				return nil, errors.New("invalid encapsulated (request-target) pseudo-header value")
 			}
 			r.Method = strings.ToUpper(method)
-			pUri, err := url.ParseRequestURI(uri)
+			pURI, err := url.ParseRequestURI(uri)
 			if err != nil {
 				return nil, fmt.Errorf("invalid encapsulated (request-target) pseudo-header value: %e", err)
 			}
-			r.URL = pUri
+			r.URL = pURI
 		} else {
 			if !httpguts.ValidHeaderFieldName(k) {
 				return nil, errors.New("invalid encapsulated header name")

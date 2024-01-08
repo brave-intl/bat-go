@@ -15,14 +15,15 @@ import (
 	"testing"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
+	mock_reputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	uphold "github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/go-chi/chi"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -102,7 +103,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 
@@ -162,7 +163,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	w1 := suite.NewWallet(service, "uphold")
 	w2 := suite.NewWallet(service, "uphold")
@@ -248,15 +249,22 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	req, err := http.NewRequest("POST", "/v3/wallet/{paymentID}/claim", bytes.NewBuffer(body))
 	suite.Require().NoError(err, "wallet claim request could not be created")
 
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	repClient := mock_reputation.NewMockClient(ctrl)
+	repClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", info.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.ReputationClientCTXKey, repClient))
 
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
 	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
-	linked, err := service.Datastore.GetWallet(context.Background(), uuid.Must(uuid.FromString(w.ID)))
+	linked, err := service.Datastore.GetWallet(req.Context(), uuid.Must(uuid.FromString(w.ID)))
 	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
 	return linked, rr.Body.String()
 }
@@ -311,7 +319,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -354,7 +362,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 

@@ -1,19 +1,6 @@
 package payments
 
-import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"net/http"
-	"strings"
-	"time"
-
-	paymentLib "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/go-jose/go-jose/v3/jwt"
-	"github.com/shopspring/decimal"
-)
+/* TODO: refactor
 
 // BitflyerMachine is an implementation of TxStateMachine for Bitflyer's use-case.
 // Including the baseStateMachine provides a default implementation of TxStateMachine,
@@ -122,6 +109,8 @@ type inventoryResponse struct {
 
 // Pay implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
+	return nil, fmt.Errorf("unimplemented")
+	/* TODO: rework this
 	err := ctx.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
 		return bm.transaction, err
@@ -140,9 +129,9 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPa
 	if err != nil {
 		return nil, err
 	}
-	/*if !bm.transaction.shouldDryRun() {
+	// if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
-	}*/
+	//}
 	var (
 		entry *paymentLib.AuthenticatedPaymentState
 	)
@@ -245,9 +234,10 @@ func (bm *BitflyerMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPa
 
 // Fail implements TxStateMachine for the Bitflyer machine.
 func (bm *BitflyerMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
-	/*if !bm.transaction.shouldDryRun() {
+	return nil, fmt.Errorf("unimplemented")
+	if !bm.transaction.shouldDryRun() {
 		// Do bitflyer stuff
-	}*/
+	}
 	return bm.SetNextState(ctx, paymentLib.Failed)
 }
 
@@ -454,3 +444,4 @@ func parseJWTExpiration(token string) (time.Time, error) {
 	ts := time.Unix(int64(exp), 0)
 	return ts, nil
 }
+*/

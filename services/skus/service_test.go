@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
@@ -89,7 +90,7 @@ func TestCreateOrderItems(t *testing.T) {
 				Items: []model.OrderItemRequestNew{
 					{
 						CredentialValidDuration:     "P1M",
-						CredentialValidDurationEach: ptrTo("rubbish"),
+						CredentialValidDurationEach: ptr.To("rubbish"),
 					},
 				},
 			},
@@ -120,7 +121,7 @@ func TestCreateOrderItems(t *testing.T) {
 				result: []model.OrderItem{
 					{
 						Currency:    "USD",
-						ValidForISO: ptrTo("P1M"),
+						ValidForISO: ptr.To("P1M"),
 						Location: datastore.NullString{
 							NullString: sql.NullString{
 								Valid:  true,
@@ -142,7 +143,7 @@ func TestCreateOrderItems(t *testing.T) {
 
 					{
 						Currency:    "USD",
-						ValidForISO: ptrTo("P1M"),
+						ValidForISO: ptr.To("P1M"),
 						Location: datastore.NullString{
 							NullString: sql.NullString{
 								Valid:  true,
@@ -206,7 +207,7 @@ func TestCreateOrderItem(t *testing.T) {
 		{
 			name: "invalid_CredentialValidDurationEach",
 			given: &model.OrderItemRequestNew{
-				CredentialValidDurationEach: ptrTo("rubbish"),
+				CredentialValidDurationEach: ptr.To("rubbish"),
 			},
 			exp: tcExpected{
 				err: timeutils.ErrUnsupportedFormat,
@@ -217,7 +218,7 @@ func TestCreateOrderItem(t *testing.T) {
 			name: "invalid_CredentialValidDuration",
 			given: &model.OrderItemRequestNew{
 				CredentialValidDuration:     "rubbish",
-				CredentialValidDurationEach: ptrTo("P1M"),
+				CredentialValidDurationEach: ptr.To("P1M"),
 			},
 			exp: tcExpected{
 				err: timeutils.ErrUnsupportedFormat,
@@ -230,8 +231,8 @@ func TestCreateOrderItem(t *testing.T) {
 				SKU:                         "sku",
 				CredentialType:              "credential_type",
 				CredentialValidDuration:     "P1M",
-				CredentialValidDurationEach: ptrTo("P1D"),
-				IssuanceInterval:            ptrTo("P1M"),
+				CredentialValidDurationEach: ptr.To("P1D"),
+				IssuanceInterval:            ptr.To("P1M"),
 				Price:                       decimal.NewFromInt(10),
 				Location:                    "location",
 				Description:                 "description",
@@ -247,9 +248,9 @@ func TestCreateOrderItem(t *testing.T) {
 					SKU:                       "sku",
 					CredentialType:            "credential_type",
 					ValidFor:                  mustDurationFromISO("P1M"),
-					ValidForISO:               ptrTo("P1M"),
-					EachCredentialValidForISO: ptrTo("P1D"),
-					IssuanceIntervalISO:       ptrTo("P1M"),
+					ValidForISO:               ptr.To("P1M"),
+					EachCredentialValidForISO: ptr.To("P1D"),
+					IssuanceIntervalISO:       ptr.To("P1M"),
 					Price:                     decimal.NewFromInt(10),
 					Location: datastore.NullString{
 						NullString: sql.NullString{
@@ -295,10 +296,6 @@ func TestCreateOrderItem(t *testing.T) {
 			should.Equal(t, tc.exp.result, act)
 		})
 	}
-}
-
-func ptrTo[T any](v T) *T {
-	return &v
 }
 
 func mustDurationFromISO(v string) *time.Duration {

@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -41,9 +42,9 @@ type mockKeystore struct {
 
 func (m mockKeystore) LookupVerifier(
 	ctx context.Context,
-	keyID string,
+	keyID string, updatedAt time.Time,
 ) (context.Context, *Verifier, error) {
-	var verifier Verifier = (Verifier)(mockVerifier{value: m.value})
+	var verifier = (Verifier)(mockVerifier{value: m.value})
 	return ctx, &verifier, nil
 }
 

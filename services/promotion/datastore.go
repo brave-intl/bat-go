@@ -10,12 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
-	"github.com/brave-intl/bat-go/libs/custodian"
-	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -23,7 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
-	"github.com/brave-intl/bat-go/libs/logging"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -74,16 +68,6 @@ type BATLossEvent struct {
 	ReportID int             `db:"report_id" json:"reportId"`
 	Amount   decimal.Decimal `db:"amount" json:"amount"`
 	Platform string          `db:"platform" json:"platform"`
-}
-
-// DrainClaim holds drain claim data
-type DrainClaim struct {
-	BatchID     *uuid.UUID
-	Claim       *Claim
-	Credentials []cbr.CredentialRedemption
-	Wallet      *walletutils.Info
-	Total       decimal.Decimal
-	CodedErr    errorutils.DrainCodified
 }
 
 // Datastore abstracts over the underlying datastore
@@ -138,22 +122,6 @@ type Datastore interface {
 	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (bool, error)
 	// InsertBAPReportEvent inserts a BAP report
 	InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (*uuid.UUID, error)
-	// DrainClaim by marking the claim as drained and inserting a new drain entry
-	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error
-	// InsertBatchDrainClaim insert drain claims
-	DrainClaims(drainClaims []DrainClaim) error
-	// RunNextDrainJob to process deposits if there is one waiting
-	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
-	// RunNextDrainRetryJob toggles failed drain jobs to be reprocessed if eligible
-	RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error
-	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
-	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
-	// SetMintDrainPromotionTotal - set the per promotion total for the mint drain
-	SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error
-	// RunNextMintDrainJob to create new grants from the mint queue
-	RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error)
-	// RunNextGeminiCheckStatus periodically check the status of gemini claim drain transactions
-	RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (bool, error)
 
 	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
 
@@ -165,16 +133,6 @@ type Datastore interface {
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
-	// GetDrainPoll gets the information about a drain poll job
-	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
-	// GetDrainsByBatchID gets the information about a drain poll job
-	GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error)
-	// GetCustodianDrainInfo gets the information about a drain poll job
-	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
-	// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting
-	RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error)
-	// UpdateDrainJobErred - manually update drain job for retry
-	UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid.UUID) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -203,12 +161,6 @@ type ReadOnlyDatastore interface {
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
 	GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (*Claim, error)
-	// GetDrainPoll gets the information about a drain poll job
-	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
-	// GetCustodianDrainInfo gets the information about a drain poll job
-	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
-	// GetDrainsByBatchID gets the information about a drain poll job
-	GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -794,181 +746,6 @@ func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 	return err
 }
 
-// MarkBatchTransferSubmitted mark this batch of transfers submitted
-func (pg *Postgres) MarkBatchTransferSubmitted(ctx context.Context, batchID *uuid.UUID) error {
-	tx, err := pg.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer pg.RollbackTx(tx)
-
-	stmt := "update claim_drain set status = 'complete', completed=true, completed_at = now() where batch_id = $1"
-	if _, err := tx.Exec(stmt, batchID); err == nil {
-		return tx.Commit()
-	}
-	return fmt.Errorf("failed to mark batch transfer submitted: %w", err)
-}
-
-// GetCustodianDrainInfo Get the status of the custodian drain info
-func (pg *Postgres) GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error) {
-	resp := []CustodianDrain{}
-	// get the linked wallet info
-	stmt := `
-select
-	user_deposit_account_provider, user_deposit_destination
-from
-	wallets
-where
-	id = $1
-`
-	var custodian Custodian
-	if err := pg.RawDB().Get(&custodian, stmt, paymentID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	// get all of the drain jobs for this payment id
-	stmt = `
-select
-	batch_id,
-	split_part(credentials->0->>'issuer',':',1) as promotion_id,
-	completed_at,
-	json_array_length(credentials)*0.25 as value,
-	case when erred then 'errored' else 'succeeded' end as state,
-	errcode,
-	transaction_id
-from
-	claim_drain
-where
-	wallet_id = $1
-`
-	type batchedPromotionsDrained struct {
-		DrainInfo
-		BatchID uuid.UUID `db:"batch_id"`
-	}
-
-	var promosDrained = []batchedPromotionsDrained{}
-	if err := pg.RawDB().Select(&promosDrained, stmt, paymentID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	batches := map[uuid.UUID][]DrainInfo{}
-	batchValue := map[uuid.UUID]decimal.Decimal{}
-
-	// chunk all these into related batches
-	for i := 0; i < len(promosDrained); i++ {
-		if _, ok := batches[promosDrained[i].BatchID]; !ok {
-			batches[promosDrained[i].BatchID] = []DrainInfo{}
-		}
-		if _, ok := batchValue[promosDrained[i].BatchID]; !ok {
-			batchValue[promosDrained[i].BatchID] = decimal.Zero
-		}
-		batches[promosDrained[i].BatchID] = append(
-			batches[promosDrained[i].BatchID],
-			DrainInfo{
-				PromotionID:   promosDrained[i].PromotionID,
-				TransactionID: promosDrained[i].TransactionID,
-				CompletedAt:   promosDrained[i].CompletedAt,
-				State:         promosDrained[i].State,
-				ErrCode:       promosDrained[i].ErrCode,
-				Value:         promosDrained[i].Value,
-			},
-		)
-		batchValue[promosDrained[i].BatchID] = batchValue[promosDrained[i].BatchID].Add(promosDrained[i].Value)
-	}
-
-	// for each batch go through and create a custodian drain and add to resp drain
-	// add values along the way
-	for k := range batches {
-		resp = append(resp, CustodianDrain{
-			BatchID:           k,
-			Custodian:         custodian,
-			PromotionsDrained: batches[k],
-			Value:             batchValue[k],
-		})
-	}
-
-	return resp, nil
-}
-
-// GetDrainPoll Get the status of the drain poll job
-func (pg *Postgres) GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error) {
-	type dbDrainPoll struct {
-		ID         *uuid.UUID `db:"batch_id"`
-		Completed  bool       `db:"completed"`
-		Pending    bool       `db:"pending"`
-		Delayed    bool       `db:"delayed"`
-		InProgress bool       `db:"inprogress"`
-	}
-	var (
-		drainPoll = new(dbDrainPoll)
-		err       error
-	)
-
-	statement := `
-select
-	batch_id,
-	bool_and(completed) as completed,
-	bool_or(erred) as delayed,
-	(not bool_and(completed) and not bool_or(erred)) as inprogress,
-	(not bool_or(completed)) as pending
-from
-	claim_drain
-where
-	batch_id = $1
-group by
-	batch_id`
-
-	err = pg.RawDB().Get(drainPoll, statement, drainID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return &DrainPoll{
-				ID:     drainID,
-				Status: "unknown",
-			}, nil
-		}
-		return nil, err
-	}
-
-	if drainPoll.Completed {
-		return &DrainPoll{
-			ID:     drainID,
-			Status: "complete",
-		}, nil
-	}
-
-	if drainPoll.Delayed {
-		return &DrainPoll{
-			ID:     drainID,
-			Status: "delayed",
-		}, nil
-	}
-
-	if drainPoll.Pending {
-		return &DrainPoll{
-			ID:     drainID,
-			Status: "pending",
-		}, nil
-	}
-
-	if drainPoll.InProgress {
-		return &DrainPoll{
-			ID:     drainID,
-			Status: "in_progress",
-		}, nil
-	}
-
-	return &DrainPoll{
-		ID:     drainID,
-		Status: "unknown",
-	}, nil
-}
-
 // GetClaimSummary aggregates the values of a single wallet's claims
 func (pg *Postgres) GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error) {
 	statement := `
@@ -1029,103 +806,6 @@ ORDER BY created_at DESC
 	}
 
 	return nil, nil
-}
-
-// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
-func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error) {
-	// setup a logger
-	logger := logging.Logger(ctx, "promotion.RunNextBatchPaymentsJob")
-	// create a tx
-	tx, err := pg.RawDB().Beginx()
-	attempted := false
-	if err != nil {
-		return attempted, err
-	}
-	defer pg.RollbackTx(tx)
-
-	// first get a lock on the batch id,
-	// only for batches that are all "pending" and have transaction_ids
-
-	statement := `
-		select
-			cd.batch_id
-		from
-			claim_drain cd
-			join wallets w on w.id=cd.wallet_id
-		where
-			cd.erred = false and
-			w.user_deposit_account_provider = 'bitflyer' and
-			cd.batch_id in (select distinct batch_id from claim_drain where status='prepared')
-		group by
-			cd.batch_id
-		having bool_and(transaction_id is not null) = true 
-		   and bool_and(cd.status = 'prepared') = true
-		limit 1
-`
-	var batchID = new(uuid.UUID)
-
-	err = tx.Get(batchID, statement)
-	if err != nil {
-		// no claims to process
-		if errors.Is(err, sql.ErrNoRows) {
-			return attempted, nil
-		}
-		return attempted, fmt.Errorf("batch payment job: sql error %w", err)
-	}
-	attempted = true
-
-	// put a lock on the batch so it is not picked up
-	query := "SELECT pg_advisory_xact_lock(hashtext($1))"
-	_, err = tx.ExecContext(ctx, query, batchID.String())
-	if err != nil {
-		return false, fmt.Errorf("failed to acquire tx lock for batch id %s: %w", batchID.String(), err)
-	}
-
-	// perform submit against payments API
-	err = worker.SubmitBatchTransfer(ctx, batchID)
-	if err != nil {
-
-		var eb *errorutils.ErrorBundle
-		if errors.As(err, &eb) {
-			logger.Error().
-				Str("error bundle", eb.DataToString()).
-				Msg("failed to submit batch transfers: error bundle")
-		}
-		logger.Error().Err(err).Msg("failed to submit batch transfers")
-
-		status, errCode, _ := errToDrainCode(err)
-		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
-		countClaimDrainStatus.With(prometheus.Labels{"custodian": "bitflyer", "status": "failed"}).Inc()
-
-		stmt := "update claim_drain set erred = true, errcode = $1, status = $2 where batch_id = $3"
-		if _, err := tx.Exec(stmt, errCode, status, batchID); err != nil {
-			return attempted, err
-		}
-
-		if err := tx.Commit(); err != nil {
-			return attempted, err
-		}
-
-		return attempted, err
-	}
-
-	_, err = tx.Exec(`
-		update claim_drain set status = 'submitted'	
-			where batch_id = $1 and 
-			      erred = false and 
-			      transaction_id is not null`, batchID)
-	if err != nil {
-		return attempted, err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return attempted, err
-	}
-
-	countClaimDrainStatus.With(prometheus.Labels{"custodian": "bitflyer", "status": "complete"}).Inc()
-
-	return attempted, nil
 }
 
 // RunNextClaimJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
@@ -1333,547 +1013,8 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	return &order, nil
 }
 
-// SetMintDrainPromotionTotal - set the total number of redemptions for this drain job
-func (pg *Postgres) SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error {
-
-	statement := `
-update mint_drain_promotion set total = $1, done = true where
-mint_drain_id=(select id from mint_drain where wallet_id=$2) and
-promotion_id=$3`
-
-	_, err := pg.Exec(statement, total, walletID, promotionID)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
-func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return err
-	}
-	defer pg.RollbackTx(tx)
-
-	var mintDrainJob = MintDrainJob{}
-
-	statement := `
-	insert into mint_drain (wallet_id)
-	values ($1)
-	returning *`
-	err = tx.GetContext(ctx, &mintDrainJob, statement, walletID)
-	if err != nil {
-		return err
-	}
-
-	for _, id := range promotionIDs {
-		_, err = tx.Exec(`
-			insert into mint_drain_promotion
-				(mint_drain_id, promotion_id)
-			values
-				($1, $2)`, mintDrainJob.ID, id)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// DrainClaim by marking the claim as drained and inserting a new drain entry
-func (pg *Postgres) DrainClaim(batchID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return err
-	}
-	defer pg.RollbackTx(tx)
-
-	err = pg.txDrainClaim(tx, batchID, claim, credentials, wallet, total, codedErr)
-	if err != nil {
-		return fmt.Errorf("drain claim: error for claimID %s: %w", claim.ID, err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// DrainClaims marks all drain claim as drained and inserts a new drain entry
-func (pg *Postgres) DrainClaims(drainClaims []DrainClaim) error {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return fmt.Errorf("insert batch drain claim: error could not begin tx: %w", err)
-	}
-	defer pg.RollbackTx(tx)
-
-	for _, d := range drainClaims {
-		err = pg.txDrainClaim(tx, d.BatchID, d.Claim, d.Credentials, d.Wallet, d.Total, d.CodedErr)
-		if err != nil {
-			return fmt.Errorf("insert batch drain claim: error could not insert drain claim for claimID %s: %w",
-				d.Claim.ID, err)
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return fmt.Errorf("insert batch drain claim: error could not commit drain claims: %w", err)
-	}
-
-	return nil
-}
-
-func (pg *Postgres) txDrainClaim(tx *sqlx.Tx, batchID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption,
-	wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error {
-
-	credentialsJSON, err := json.Marshal(credentials)
-	if err != nil {
-		return err
-	}
-
-	var claimID *uuid.UUID
-	// if the claim is not nil, we should set it to drained, as we are in drained state
-	// this often happens when the wallet is mismatched
-	if claim != nil {
-		_, err = tx.Exec(`update claims set drained = true, drained_at = now() where id = $1 and not drained`, claim.ID)
-		if err != nil {
-			return fmt.Errorf("failed to set claim as drained: %w", err)
-		}
-		claimID = &claim.ID
-	} else {
-		claimID = nil
-	}
-
-	var claimDrain = DrainJob{}
-
-	if codedErr == nil {
-		statement := `
-		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, updated_at)
-		values ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
-		returning *`
-		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, batchID, claim.ID, &wallet.UserDepositDestination)
-		if err != nil {
-			return err
-		}
-	} else {
-		code, _ := codedErr.DrainCode()
-
-		// insert errored claim drain item
-		statement := `
-		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, erred, errcode, updated_at)
-		values ($1, $2, $3, $4, $5, $6, true, $7, CURRENT_TIMESTAMP)
-		returning *`
-		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total,
-			batchID, claimID, &wallet.UserDepositDestination, code)
-		if err != nil {
-			return fmt.Errorf("failed to insert erred drain job: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// errToDrainCode - given a drain related processing error, generate a code and retriable flag
-func errToDrainCode(err error) (string, string, bool) {
-	var (
-		status    string
-		errCode   string
-		retriable bool
-	)
-
-	if err == nil {
-		return "", "", false
-	}
-
-	status = "failed"
-
-	var eb *errorutils.ErrorBundle
-	if errors.As(err, &eb) {
-		// if this is an error bundle, check the "data" for a codified type
-		if c, ok := eb.Data().(errorutils.Codified); ok {
-			errCode, retriable = c.DrainCode()
-			return status, strings.ToLower(errCode), retriable
-		} else if c, ok := eb.Data().(errorutils.DrainCodified); ok {
-			errCode, retriable = c.DrainCode()
-			return status, strings.ToLower(errCode), retriable
-		}
-	}
-
-	// possible protocol errors
-	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
-		errCode = "marshal_transfer"
-	} else if errors.Is(err, errorutils.ErrCreateTransferRequest) {
-		errCode = "create_transfer"
-	} else if errors.Is(err, errorutils.ErrSignTransferRequest) {
-		errCode = "sign_transfer"
-	} else if errors.Is(err, errorutils.ErrFailedClientRequest) {
-		errCode = "failed_client"
-		retriable = true
-	} else if errors.Is(err, errorutils.ErrFailedBodyRead) {
-		errCode = "failed_response_body"
-		retriable = true
-	} else if errors.Is(err, errorutils.ErrFailedBodyUnmarshal) {
-		errCode = "failed_response_unmarshal"
-		retriable = true
-	} else if errors.Is(err, errReputationServiceFailure) {
-		errCode = "reputation-service-failure"
-		retriable = true
-	} else if errors.Is(err, errWalletNotReputable) {
-		errCode = "reputation-failed"
-		status = "reputation-failed"
-		retriable = false
-	} else if errors.Is(err, errWalletDrainLimitExceeded) {
-		errCode = "exceeded-withdrawal-limit"
-		status = "exceeded-withdrawal-limit"
-		retriable = false
-	} else {
-		errCode = "unknown"
-		var bfe *clients.BitflyerError
-		if errors.As(err, &bfe) {
-			// possible wallet provider specific errors
-			if len(bfe.ErrorIDs) > 0 {
-				errCode = fmt.Sprintf("bitflyer_%s", bfe.ErrorIDs[0])
-			}
-		}
-	}
-	return status, strings.ToLower(errCode), retriable
-}
-
-// DrainJob - definition of a drain job
-type DrainJob struct {
-	ID                 uuid.UUID       `db:"id"`
-	ClaimID            *uuid.UUID      `db:"claim_id"`
-	Credentials        string          `db:"credentials"`
-	WalletID           uuid.UUID       `db:"wallet_id"`
-	Total              decimal.Decimal `db:"total"`
-	TransactionID      *string         `db:"transaction_id"`
-	Erred              bool            `db:"erred"`
-	ErrCode            *string         `db:"errcode"`
-	Status             *string         `db:"status"`
-	BatchID            *uuid.UUID      `db:"batch_id"`
-	Completed          bool            `db:"completed"`
-	CompletedAt        pq.NullTime     `db:"completed_at"`
-	UpdatedAt          pq.NullTime     `db:"updated_at"`
-	DepositDestination *string         `db:"deposit_destination"`
-}
-
-var txStatusToStatus = map[string]string{
-	"bitflyer-consolidate": "prepared",
-	txnStatusGeminiPending: txnStatusGeminiPending,
-}
-
-// RunNextDrainJob to process deposits if there is one waiting
-func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
-
-	// setup a logger
-	logger := logging.Logger(ctx, "promotion.RunNextDrainJob")
-
-	tx, err := pg.RawDB().Beginx()
-	attempted := false
-	if err != nil {
-		return attempted, err
-	}
-	defer pg.RollbackTx(tx)
-
-	statement := `
-select *
-from claim_drain
-where not erred and transaction_id is null
-and (status is null or status not in ('complete', 'reputation-failed', 'failed', 'prepared', 'gemini-pending', 'submitted'))
-for update skip locked
-limit 1`
-
-	jobs := []DrainJob{}
-	err = tx.Select(&jobs, statement)
-	if err != nil {
-		return attempted, err
-	}
-
-	if len(jobs) != 1 {
-		return attempted, nil
-	}
-
-	job := jobs[0]
-	attempted = true
-
-	// set job status to initialized
-	_, err = tx.Exec(`
-		update claim_drain set
-			status = 'initialized'
-		where id = $1`, job.ID)
-	if err != nil {
-		return attempted, err
-	}
-
-	var credentials []cbr.CredentialRedemption
-	err = json.Unmarshal([]byte(job.Credentials), &credentials)
-	if err != nil {
-		return attempted, err
-	}
-
-	if job.Status != nil && (*job.Status == "retry-bypass-cbr" || *job.Status == "manual-retry") {
-		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
-	}
-
-	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job)
-	if err != nil || txn == nil {
-		// log the error from redeem and transfer
-		logger.Error().Err(err).
-			Interface("claim_drain_id", job.ID).
-			Msg("failed to redeem and transfer funds")
-		// do not need to capture wallet is not reputable
-		if !errors.Is(err, errWalletNotReputable) &&
-			!errors.Is(err, errWalletDrainLimitExceeded) &&
-			!errors.Is(err, cbr.ErrDupRedeem) {
-			// do not sentry log not reputable or drain limit exceeded, or duplicate redemption
-			sentry.CaptureException(err)
-		}
-
-		// record as error (retriable or not)
-		status, errCode, _ := errToDrainCode(err)
-		if _, err := tx.Exec(`
-				update claim_drain set
-					erred = true,
-					errcode=$1,
-					status=$3
-				where id = $2`, errCode, job.ID, status); err == nil {
-			_ = tx.Commit()
-		}
-		return attempted, err
-	}
-
-	// if the txn cannot be set as complete immediately then get the status code and update the job
-	if status, ok := txStatusToStatus[txn.Status]; ok {
-		_, err = tx.Exec(`
-			update claim_drain set
-				transaction_id = $1,
-				status = $2
-			where id = $3`, txn.ID, status, job.ID)
-		if err != nil {
-			return attempted, err
-		}
-	} else {
-		countClaimDrainStatus.With(prometheus.Labels{"custodian": "uphold", "status": "complete"}).Inc()
-		_, err = tx.Exec(`
-			update claim_drain set
-				transaction_id = $1,
-				completed = true,
-				completed_at = now(),
-				status = 'complete'
-			where id = $2`, txn.ID, job.ID)
-		if err != nil {
-			return attempted, err
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return attempted, err
-	}
-
-	return attempted, nil
-}
-
-// RunNextDrainRetryJob - toggles failed drain jobs to be reprocessed if eligible
-func (pg *Postgres) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			walletID, err := worker.FetchAdminAttestationWalletID(ctx)
-			if err != nil {
-				return fmt.Errorf("drain retry job: failed to retrieve walletID: %w", err)
-			}
-			query := `
-					UPDATE claim_drain
-					SET erred = FALSE, status = 'retry-bypass-cbr'
-					WHERE wallet_id = $1 AND erred = TRUE AND errcode = 'reputation-failed' AND status = 'reputation-failed'
-				`
-			result, err := pg.ExecContext(ctx, query, walletID.String())
-			if err != nil {
-				err = fmt.Errorf("drain retry job: failed to update drain job for walletID %s: %w ", walletID, err)
-				logging.FromContext(ctx).Error().Err(err).Msg("")
-				sentry.CaptureException(err)
-			} else {
-				rowsAffected, err := result.RowsAffected()
-				if err != nil {
-					err = fmt.Errorf("drain retry job: failed to get rows affected for walletID %s: %w ", walletID, err)
-					logging.FromContext(ctx).Error().Err(err).Msg("")
-					sentry.CaptureException(err)
-				}
-				if rowsAffected > 0 {
-					logging.FromContext(ctx).Info().
-						Msgf("drain retry job: successfully updated drain job for walletID %s", walletID)
-				}
-			}
-		}
-	}
-}
-
-// MintDrainJob - Job structure for the mint_drain queue
-type MintDrainJob struct {
-	ID       uuid.UUID       `db:"id"`
-	WalletID uuid.UUID       `db:"wallet_id"`
-	Total    decimal.Decimal `db:"total"`
-	Done     bool            `db:"done"`
-	Status   string          `db:"status"`
-	Erred    bool            `db:"erred"`
-}
-
-// MintDrainPromotion - a list of promotions associated with a mint job
-type MintDrainPromotion struct {
-	MintJobID   uuid.UUID       `db:"mint_drain_id"`
-	PromotionID uuid.UUID       `db:"promotion_id"`
-	Done        bool            `db:"done"`
-	Total       decimal.Decimal `db:"total"`
-}
-
-const (
-	// MintDrainJobPending - pending status for the mint_drain job
-	MintDrainJobPending = "pending"
-	// MintDrainJobFailed - failed status for the mint_drain job
-	MintDrainJobFailed = "failed"
-	// MintDrainJobComplete - complete status for the mint_drain job
-	MintDrainJobComplete = "complete"
-)
-
-// RunNextMintDrainJob to process mints vg
-func (pg *Postgres) RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error) {
-
-	// setup a logger
-	logger := logging.Logger(ctx, "promotion.RunNextMintDrainJob")
-
-	// get and parse the correct transfer promotion id to create claims on
-	braveTransferPromotionIDs, ok := ctx.Value(appctx.BraveTransferPromotionIDCTXKey).([]string)
-	if !ok {
-		logger.Error().Err(errMissingTransferPromotion).
-			Msg("MintJob: missing transfer promotion id")
-		return false, errMissingTransferPromotion
-	}
-
-	tx, err := pg.RawDB().Beginx()
-	attempted := false
-	if err != nil {
-		return attempted, err
-	}
-	defer pg.RollbackTx(tx)
-
-	// get the mint job. only the ones that have finished all the promotion totals
-	statement := `
-select md.*,
-	(select sum(mdp.total) from mint_drain_promotion as mdp where mdp.mint_drain_id=md.id) as total,
-	(select bool_and(mdp.done) from mint_drain_promotion as mdp where mdp.mint_drain_id=md.id) as done
-from mint_drain as md
-where not md.erred and md.status = 'pending' and
-(select bool_and(done) from mint_drain_promotion where mint_drain_id=md.id)
-for update of md skip locked
-limit 1;
-`
-
-	job := MintDrainJob{}
-	err = tx.Get(&job, statement)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return attempted, nil
-		}
-		return attempted, err
-	}
-	// are all of the claims associated with all of the promotions drained?
-
-	statement = `
-select
-	bool_and(c.drained)
-from
-	mint_drain_promotion mdp
-	join claims c
-		on (c.promotion_id=mdp.promotion_id)
-where
-	mdp.mint_drain_id = $1
-	and c.wallet_id= $2
-`
-	var drained bool
-	err = tx.Get(&drained, statement, job.ID, job.WalletID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return attempted, nil
-		}
-		return attempted, err
-	}
-
-	if !drained {
-		return attempted, nil
-	}
-
-	// yes? set status to complete and mint the grants
-	promoIDs, err := toUUIDs(braveTransferPromotionIDs...)
-	if err != nil {
-		// log the error from redeem and transfer
-		logger.Error().Err(err).Msg("failed to derive promotion ids from configuration")
-		return attempted, err
-	}
-
-	attempted = true
-
-	// mint the grant to the wallet's deposit destination
-	statement = `
-select
-	w.user_deposit_destination
-from
-	wallets w
-where
-	w.id = $1
-`
-	var (
-		depositDestination string
-	)
-	err = tx.Get(&depositDestination, statement, job.WalletID)
-	if err != nil {
-		return attempted, err
-	}
-
-	if depositDestination == "" {
-		return attempted, errors.New("wallet is not verified")
-	}
-
-	depositDestinationUUID, err := uuid.FromString(depositDestination)
-	if err != nil {
-		return attempted, errors.New("destination invalid wallet id")
-	}
-
-	err = worker.MintGrant(ctx, depositDestinationUUID, job.Total, promoIDs...)
-	if err != nil {
-		// log the error from redeem and transfer
-		logger.Error().Err(err).Msg("failed to mint grants")
-		if _, err := tx.Exec(`update mint_drain set erred = true where id = $1`, job.ID); err != nil {
-			pg.RollbackTx(tx)
-		}
-		_ = tx.Commit()
-		return attempted, err
-	}
-
-	if _, err := tx.Exec(`update mint_drain set status = 'complete' where id = $1`, job.ID); err != nil {
-		pg.RollbackTx(tx)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return attempted, err
-	}
-
-	return attempted, nil
-}
-
 // UpdateOrder updates the orders status.
+//
 //	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
@@ -1953,87 +1094,6 @@ func (pg *Postgres) UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid
 	return nil
 }
 
-// RunNextGeminiCheckStatus periodically check the status of gemini claim drain transactions
-func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (bool, error) {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return false, fmt.Errorf("gemini check status job: failed to begin transaction: %w", err)
-	}
-	defer pg.RollbackTx(tx)
-
-	var drainJob DrainJob
-	err = tx.Get(&drainJob, `
-									select * from claim_drain 
-									where status = $1 and transaction_id is not null 
-									  and updated_at < NOW() - interval '10 MINUTES'									
-									order by updated_at asc
-									for update skip locked limit 1
-									    `, txnStatusGeminiPending)
-	if err != nil {
-		// no drains to process
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, fmt.Errorf("gemini check status job: sql error %w", err)
-	}
-
-	settlementTx := custodian.Transaction{
-		SettlementID: ptr.String(drainJob.TransactionID),
-		Type:         "drain",
-		Destination:  ptr.String(drainJob.DepositDestination),
-		Channel:      "wallet",
-	}
-	txRef := gemini.GenerateTxRef(&settlementTx)
-
-	transactionInfo, err := worker.GetGeminiTxnStatus(ctx, txRef)
-	if err != nil || transactionInfo == nil {
-
-		// update the erred claim drain so it goes to back of queue
-		query := `update claim_drain set status = $1, updated_at = now() where id = $2`
-		if _, err := tx.ExecContext(ctx, query, txnStatusGeminiPending, drainJob.ID); err != nil {
-			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
-		}
-
-		if err := tx.Commit(); err != nil {
-			return true, fmt.Errorf("failed to commit update status for txn %s: %w", *drainJob.TransactionID, err)
-		}
-
-		return true, fmt.Errorf("failed to get status for txn %s: %w", *drainJob.TransactionID, err)
-	}
-
-	switch transactionInfo.Status {
-	case "complete":
-		query := `update claim_drain set completed = true, completed_at = now(), status = 'complete' where id = $1`
-		if _, err := tx.ExecContext(ctx, query, drainJob.ID); err != nil {
-			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
-		}
-	case "pending":
-		query := `update claim_drain set status = $1, updated_at = now() where id = $2`
-		if _, err := tx.ExecContext(ctx, query, txnStatusGeminiPending, drainJob.ID); err != nil {
-			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
-		}
-	case "failed":
-		query := `update claim_drain set status = 'failed', erred = true, errcode = $1 where id = $2`
-		if _, err := tx.ExecContext(ctx, query, transactionInfo.Note, drainJob.ID); err != nil {
-			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
-		}
-	default:
-		return true, fmt.Errorf("failed to update status for txn %s: unknown status %s",
-			*drainJob.TransactionID, transactionInfo.Status)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return true, fmt.Errorf("failed to commit update status for txn %s: %w", *drainJob.TransactionID, err)
-	}
-
-	if transactionInfo.Status == "complete" || transactionInfo.Status == "failed" {
-		countClaimDrainStatus.With(prometheus.Labels{"custodian": "gemini", "status": transactionInfo.Status}).Inc()
-	}
-
-	return true, nil
-}
-
 func toUUIDs(a ...string) ([]uuid.UUID, error) {
 	var (
 		b = []uuid.UUID{}
@@ -2048,21 +1108,68 @@ func toUUIDs(a ...string) ([]uuid.UUID, error) {
 	return b, nil
 }
 
-// GetDrainsByBatchID - get the drain by the batch id
-func (pg *Postgres) GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error) {
-	resp := []DrainTransfer{}
-	// get the linked wallet info
-	stmt := `
-select
-	transaction_id, total, deposit_destination
-from
-	claim_drain
-where
-	batch_id = $1
-`
-	if err := pg.RawDB().Select(&resp, stmt, batchID); err != nil {
-		return nil, err
+// errToDrainCode - given a drain related processing error, generate a code and retriable flag
+func errToDrainCode(err error) (string, string, bool) {
+	var (
+		status    string
+		errCode   string
+		retriable bool
+	)
+
+	if err == nil {
+		return "", "", false
 	}
 
-	return resp, nil
+	status = "failed"
+
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		// if this is an error bundle, check the "data" for a codified type
+		if c, ok := eb.Data().(errorutils.Codified); ok {
+			errCode, retriable = c.DrainCode()
+			return status, strings.ToLower(errCode), retriable
+		} else if c, ok := eb.Data().(errorutils.DrainCodified); ok {
+			errCode, retriable = c.DrainCode()
+			return status, strings.ToLower(errCode), retriable
+		}
+	}
+
+	// possible protocol errors
+	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
+		errCode = "marshal_transfer"
+	} else if errors.Is(err, errorutils.ErrCreateTransferRequest) {
+		errCode = "create_transfer"
+	} else if errors.Is(err, errorutils.ErrSignTransferRequest) {
+		errCode = "sign_transfer"
+	} else if errors.Is(err, errorutils.ErrFailedClientRequest) {
+		errCode = "failed_client"
+		retriable = true
+	} else if errors.Is(err, errorutils.ErrFailedBodyRead) {
+		errCode = "failed_response_body"
+		retriable = true
+	} else if errors.Is(err, errorutils.ErrFailedBodyUnmarshal) {
+		errCode = "failed_response_unmarshal"
+		retriable = true
+	} else if errors.Is(err, errReputationServiceFailure) {
+		errCode = "reputation-service-failure"
+		retriable = true
+	} else if errors.Is(err, errWalletNotReputable) {
+		errCode = "reputation-failed"
+		status = "reputation-failed"
+		retriable = false
+	} else if errors.Is(err, errWalletDrainLimitExceeded) {
+		errCode = "exceeded-withdrawal-limit"
+		status = "exceeded-withdrawal-limit"
+		retriable = false
+	} else {
+		errCode = "unknown"
+		var bfe *clients.BitflyerError
+		if errors.As(err, &bfe) {
+			// possible wallet provider specific errors
+			if len(bfe.ErrorIDs) > 0 {
+				errCode = fmt.Sprintf("bitflyer_%s", bfe.ErrorIDs[0])
+			}
+		}
+	}
+	return status, strings.ToLower(errCode), retriable
 }

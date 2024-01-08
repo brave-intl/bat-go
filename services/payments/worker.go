@@ -148,22 +148,23 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 
 // HandlePrepareConfigMessage creates a new prepare consumer, waiting for all messages to be consumed
 func (w *Worker) HandlePrepareConfigMessage(ctx context.Context, stream, id string, data []byte) error {
-	return w.handleConfigMessage(w.HandlePrepareMessage, ctx, id, data)
+	return w.handleConfigMessage(ctx, w.HandlePrepareMessage, id, data)
 }
 
 // HandleSubmitConfigMessage creates a new submit consumer, waiting for all messages to be consumed
 func (w *Worker) HandleSubmitConfigMessage(ctx context.Context, stream, id string, data []byte) error {
-	return w.handleConfigMessage(w.HandleSubmitMessage, ctx, id, data)
+	return w.handleConfigMessage(ctx, w.HandleSubmitMessage, id, data)
 }
 
 // handleConfigMessage is a generic handler which creates a consumer, waiting for all messages to be consumed
-func (w *Worker) handleConfigMessage(handle redisconsumer.MessageHandler, ctx context.Context, id string, data []byte) error {
+func (w *Worker) handleConfigMessage(ctx context.Context, handle redisconsumer.MessageHandler, id string, data []byte) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
 	}
 
 	consumerCtx, cancelFunc := context.WithCancel(ctx)
+	defer cancelFunc()
 
 	config := payments.WorkerConfig{}
 	err = json.Unmarshal(data, &config)

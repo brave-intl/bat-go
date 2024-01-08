@@ -2,7 +2,8 @@
 
 <!-- What does this pr do? Use the fixes syntax where possible (fixes #x) -->
 
-### Type of change ( select one )
+
+### Type of Change
 
 - [ ] Product feature
 - [ ] Bug fix
@@ -12,13 +13,15 @@
 
 <!-- Provide link if applicable. -->
 
+
 ### Tested Environments
 
 - [ ] Development
 - [ ] Staging
 - [ ] Production
 
-### Before submitting this PR:
+
+### Before Requesting Review
 
 - [ ] Does your code build cleanly without any errors or warnings?
 - [ ] Have you used auto closing keywords?
@@ -28,9 +31,10 @@
 - [ ] Have you squashed all intermediate commits?
 - [ ] Is there a clear title that explains what the PR does?
 - [ ] Have you used intuitive function, variable and other naming?
-- [ ] Have you requested security / privacy review if needed
+- [ ] Have you requested security and/or privacy review if needed
 - [ ] Have you performed a self review of this PR?
 
-### Manual Test Plan:
+
+### Manual Test Plan
 
 <!-- if needed - e.g. prod branch release PR, otherwise remove this section -->

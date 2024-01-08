@@ -49,8 +49,6 @@ type contentInfo struct {
 // and Enveloped Data are supported (1.2.840.113549.1.7.3)
 var ErrUnsupportedContentType = errors.New("pkcs7: cannot parse data: unimplemented content type")
 
-type unsignedData []byte
-
 var (
 	// Signed Data OIDs
 	OIDData                   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 1}
