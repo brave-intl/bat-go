@@ -29,8 +29,8 @@ func (c *Challenge) Get(ctx context.Context, dbi sqlx.QueryerContext, id string)
 	return result, nil
 }
 
-// Insert persists a model.Challenge to the database.
-func (c *Challenge) Insert(ctx context.Context, dbi sqlx.ExecerContext, chl model.Challenge) error {
+// Upsert persists a model.Challenge to the database.
+func (c *Challenge) Upsert(ctx context.Context, dbi sqlx.ExecerContext, chl model.Challenge) error {
 	const q = `insert into challenge (id, created_at, nonce) values($1, $2, $3) on conflict (id) do update set created_at = $2, nonce = $3`
 
 	result, err := dbi.ExecContext(ctx, q, chl.ID, chl.CreatedAt, chl.Nonce)
@@ -51,10 +51,10 @@ func (c *Challenge) Insert(ctx context.Context, dbi sqlx.ExecerContext, chl mode
 }
 
 // Delete removes a model.Challenge from the database identified by the ID.
-func (c *Challenge) Delete(ctx context.Context, dbi sqlx.ExecerContext, chl model.Challenge) error {
+func (c *Challenge) Delete(ctx context.Context, dbi sqlx.ExecerContext, id string) error {
 	const q = `delete from challenge where id = $1`
 
-	result, err := dbi.ExecContext(ctx, q, chl.ID)
+	result, err := dbi.ExecContext(ctx, q, id)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,6 @@
 create table challenge (
     id text PRIMARY KEY,
-    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at timestamp WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     nonce text NOT NULL,
     constraint challenge_nonce unique (nonce)
 );

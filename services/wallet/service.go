@@ -109,8 +109,8 @@ type GeoValidator interface {
 
 type challengeRepo interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id string) (model.Challenge, error)
-	Insert(ctx context.Context, dbi sqlx.ExecerContext, chl model.Challenge) error
-	Delete(ctx context.Context, dbi sqlx.ExecerContext, chl model.Challenge) error
+	Upsert(ctx context.Context, dbi sqlx.ExecerContext, chl model.Challenge) error
+	Delete(ctx context.Context, dbi sqlx.ExecerContext, id string) error
 }
 
 type allowListRepo interface {
@@ -763,7 +763,7 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 		return err
 	}
 
-	if err := service.chlRepo.Delete(ctx, txn, chl); err != nil {
+	if err := service.chlRepo.Delete(ctx, txn, chl.ID); err != nil {
 		return err
 	}
 
@@ -794,7 +794,7 @@ func (service *Service) linkCustodialAccount(ctx context.Context, wID string, us
 
 func (service *Service) CreateChallenge(ctx context.Context, id string) (model.Challenge, error) {
 	chl := model.NewChallenge(id)
-	if err := service.chlRepo.Insert(ctx, service.Datastore.RawDB(), chl); err != nil {
+	if err := service.chlRepo.Upsert(ctx, service.Datastore.RawDB(), chl); err != nil {
 		return model.Challenge{}, fmt.Errorf("error creating challenge: %w", err)
 	}
 	return chl, nil

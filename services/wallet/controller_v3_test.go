@@ -492,7 +492,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	// create nonce
 	chl := model.NewChallenge(w.ID)
 
-	err = chlRep.Insert(context.TODO(), pg.RawDB(), chl)
+	err = chlRep.Upsert(context.TODO(), pg.RawDB(), chl)
 	suite.Require().NoError(err)
 
 	dac := wallet.DAppConfig{
