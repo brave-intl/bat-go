@@ -184,7 +184,7 @@ func newSolMsgParser(paymentID, solPub, nonce string) solMsgParser {
 	}
 }
 
-// parse a linking message and return the rewards part.
+// parse parses a linking message and returns the rewards part.
 // For a message to parse successfully it must be a valid format and successfully match the
 // configured parser parameters paymentID, solPub and nonce.
 //
