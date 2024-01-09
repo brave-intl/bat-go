@@ -688,7 +688,7 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 // - create repos for credentials;
 // - move the corresponding methods there;
 // - make those methods work on per-item basis.
-func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
+func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID *uuid.UUID, isSigned bool) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err
@@ -720,7 +720,20 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	if doTlv2 {
-		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
+		var itemIDs []*uuid.UUID
+		if reqID == nil {
+			// legacy, so put all of the orders' items in a list to be hard deleted
+			for _, v := range order.Items {
+				itemIDs = append(itemIDs, &v.ID)
+			}
+		} else {
+			// there is a request id, pass it along to the delete order creds as an "item id"
+			// this will allow for legacy credentials using the request id of the order's item id
+			// to be deleted, otherwise we do not delete said credentials for multiple device support
+			itemIDs = append(itemIDs, reqID)
+		}
+
+		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID, itemIDs...); err != nil {
 			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 		}
 	}

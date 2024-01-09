@@ -107,6 +107,7 @@ func Router(
 		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, false)))
 
 		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", createItemCreds(svc)))
+		cr.Method(http.MethodDelete, "/items/{itemID}/batches/{requestID}", metricsMwr("DeleteOrderItemCreds", authMwr(deleteItemCreds(svc))))
 	})
 
 	return r
@@ -588,6 +589,47 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 	}
 }
 
+// deleteItemCreds handles requests for deleting credentials for an item.
+func deleteItemCreds(svc *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		lg := logging.Logger(ctx, "skus.deleteItemCreds")
+
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
+			lg.Error().Err(err).Msg("failed to validate order id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"orderID": err.Error(),
+			})
+		}
+
+		itemID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
+			lg.Error().Err(err).Msg("failed to validate item id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"itemID": err.Error(),
+			})
+		}
+
+		reqID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
+			lg.Error().Err(err).Msg("failed to validate request id")
+			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				"requestID": err.Error(),
+			})
+		}
+
+		isSigned := r.URL.Query().Get("isSigned") == "true"
+
+		if err := svc.DeleteOrderCreds(ctx, *orderID.UUID(), reqID.UUID(), isSigned); err != nil {
+			lg.Error().Err(err).Msg("failed to delete the order credentials")
+			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
 // createItemCredsRequest includes the blinded credentials to be signed.
 type createItemCredsRequest struct {
 	BlindedCreds []string `json:"blindedCreds" valid:"base64"`
@@ -693,7 +735,7 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-		if err := service.DeleteOrderCreds(ctx, id, isSigned); err != nil {
+		if err := service.DeleteOrderCreds(ctx, id, nil, isSigned); err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 
