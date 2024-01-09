@@ -18,8 +18,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	mockgemini "github.com/brave-intl/bat-go/libs/clients/gemini/mock"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
@@ -35,6 +33,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
@@ -196,14 +196,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	}
 
 	var (
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
 		// add the datastore to the context
 		ctx = middleware.AddKeyID(context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret)), idFrom.String())
 		r   = httptest.NewRequest(
@@ -215,14 +207,12 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 				}`, tokenString)),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil, nil)
+		s, mock        = initSvcWithMockDB(t)
 		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
 		rw             = httptest.NewRecorder()
 	)
 
 	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mockSQLCustodianLink(mock, "bitflyer")
 
 	// begin linking tx
 	mock.ExpectBegin()
@@ -238,6 +228,8 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	// SHOULD SKIP THE linking limit checks
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "bitflyer").WillReturnRows(linkingIDRows)
+
+	mockSQLCustodianLink(mock, "bitflyer")
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -256,7 +248,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	// commit transaction
 	mock.ExpectCommit()
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, s.Datastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
@@ -299,14 +291,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		accountID = uuid.NewV4()
 		idTo      = accountID
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
+		s, mock = initSvcWithMockDB(t)
+
 		linkingInfo = "this is the fake jwt for linking_info"
 
 		// setup mock clients
@@ -324,14 +310,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 				}`, linkingInfo, idTo)),
 		)
 
-		mtc = &mockMtc{}
-		gem = &mockGemini{
-			fnGetIssuingCountry: func(acc gemini.ValidatedAccount, fallback bool) string {
-				return "US"
-			},
-		}
-
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -346,7 +324,6 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		nil,
 	)
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -390,6 +367,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	// not before linked
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
+
+	mockSQLCustodianLink(mock, "gemini")
 
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
@@ -485,6 +464,8 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	// not before linked
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
 
+	mockSQLCustodianLink(mock, "gemini")
+
 	// perform again, make sure we check haslinkedprio
 	hasPriorRows := sqlmock.NewRows([]string{"result"}).
 		AddRow(true)
@@ -542,14 +523,8 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		accountID = uuid.NewV4()
 		idTo      = accountID
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
+		s, mock = initSvcWithMockDB(t)
+
 		linkingInfo = "this is the fake jwt for linking_info"
 
 		// setup mock clients
@@ -567,14 +542,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 				}`, linkingInfo, idTo)),
 		)
 
-		mtc = &mockMtc{}
-		gem = &mockGemini{
-			fnGetIssuingCountry: func(acc gemini.ValidatedAccount, fallback bool) string {
-				return "US"
-			},
-		}
-
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
@@ -589,7 +556,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		nil,
 	)
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -624,6 +590,8 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 
 	// not before linked
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
+
+	mockSQLCustodianLink(mock, "gemini")
 
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
@@ -688,30 +656,11 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
 		accountID = uuid.NewV4()
 		idTo      = accountID
-
-		// setup db mocks
-		db, _, _  = sqlmock.New()
-		datastore = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
-		mtc = &mockMtc{
-			fnLinkFailureZP: func(cc string) {
-				assert.Equal(t, "IN", cc)
-			},
-		}
-
-		gem = &mockGemini{}
-
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
-		handler = wallet.LinkZebPayDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
+		s, _      = initSvcWithMockDB(t)
+		handler   = wallet.LinkZebPayDepositAccountV3(s)
+		rw        = httptest.NewRecorder()
 	)
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
@@ -764,38 +713,19 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 	}
 
 	var (
-		// setup test variables
 		idFrom    = uuid.NewV4()
 		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
 		accountID = uuid.NewV4()
 		idTo      = accountID
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
-		// setup mock clients
 		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
 
-		mtc = &mockMtc{
-			fnLinkSuccessZP: func(cc string) {
-				assert.Equal(t, "IN", cc)
-			},
-		}
+		s, mock = initSvcWithMockDB(t)
 
-		gem = &mockGemini{}
-
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
@@ -828,8 +758,6 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		nil,
 	)
 
-	mockSQLCustodianLink(mock, "zebpay")
-
 	// begin linking tx
 	mock.ExpectBegin()
 
@@ -842,6 +770,8 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "zebpay").WillReturnRows(linkingIDRows)
+
+	mockSQLCustodianLink(mock, "zebpay")
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -891,14 +821,6 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		accountID = uuid.NewV4()
 		idTo      = accountID
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
 		linkingInfo = "this is the fake jwt for linking_info"
 
 		// setup mock clients
@@ -915,20 +837,12 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
+		s, mock = initSvcWithMockDB(t)
 
-		mtc = &mockMtc{}
-		gem = &mockGemini{
-			fnGetIssuingCountry: func(acc gemini.ValidatedAccount, fallback bool) string {
-				return "GB"
-			},
-		}
-
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -938,7 +852,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		ValidDocuments: []gemini.ValidDocument{
 			{
 				Type:           "passport",
-				IssuingCountry: "GB",
+				IssuingCountry: "US",
 			},
 		},
 	}
@@ -974,6 +888,8 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
 
+	mockSQLCustodianLink(mock, "gemini")
+
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -1006,7 +922,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	err := json.Unmarshal(b, &l)
 	require.NoError(t, err)
 
-	assert.Equal(t, "GB", l.GeoCountry)
+	assert.Equal(t, "US", l.GeoCountry)
 }
 
 func TestDisconnectCustodianLinkV3(t *testing.T) {
@@ -1020,24 +936,13 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 		idFrom = uuid.NewV4()
 		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
 		// this is our main request
 		r = httptest.NewRequest(
 			"DELETE",
 			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
 
-		mtc = &mockMtc{}
-		gem = &mockGemini{}
+		s, mock = initSvcWithMockDB(t)
 
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc, gem)
 		handler = wallet.DisconnectCustodianLinkV3(s)
 		w       = httptest.NewRecorder()
 	)
@@ -1054,7 +959,6 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
@@ -1092,6 +996,31 @@ func mockSQLCustodianLink(mock sqlmock.Sqlmock, custodian string) {
 		AddRow(uuid.NewV4().String(), custodian, uuid.NewV4().String(), time.Now(), time.Now(), time.Now())
 	mock.ExpectQuery("^select(.+) from wallet_custodian(.+)").
 		WillReturnRows(clRow)
+}
+
+func initSvcWithMockDB(t *testing.T) (*wallet.Service, sqlmock.Sqlmock) {
+	db, mock, _ := sqlmock.New()
+	datastore := wallet.Datastore(
+		&wallet.Postgres{
+			Postgres: datastoreutils.Postgres{
+				DB: sqlx.NewDb(db, "postgres"),
+			},
+		})
+
+	mtc := &mockMtc{}
+
+	gem := &mockGemini{
+		fnGetIssuingCountry: func(acc gemini.ValidatedAccount, fallback bool) string {
+			return "US"
+		},
+	}
+
+	dappConf := wallet.DAppConfig{}
+
+	s, err := wallet.InitService(datastore, nil, nil, nil, nil, nil, nil, nil, mtc, gem, dappConf)
+	require.NoError(t, err)
+
+	return s, mock
 }
 
 type mockGemini struct {

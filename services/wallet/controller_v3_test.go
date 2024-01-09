@@ -7,12 +7,15 @@ import (
 	"context"
 	"crypto"
 	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	mock_reputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
@@ -22,10 +25,15 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
+	"github.com/brave-intl/bat-go/services/wallet/model"
+	"github.com/brave-intl/bat-go/services/wallet/storage"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -75,10 +83,6 @@ func (suite *WalletControllersTestSuite) CleanDB() {
 	}
 }
 
-func noUUID() *uuid.UUID {
-	return nil
-}
-
 func (suite *WalletControllersTestSuite) FundWallet(w *uphold.Wallet, probi decimal.Decimal) decimal.Decimal {
 	ctx := context.Background()
 	balanceBefore, err := w.GetBalance(ctx, true)
@@ -103,7 +107,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	w1 := suite.NewWallet(service, "uphold")
 
@@ -163,7 +167,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	w1 := suite.NewWallet(service, "uphold")
 	w2 := suite.NewWallet(service, "uphold")
@@ -269,9 +273,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	return linked, rr.Body.String()
 }
 
-func (suite *WalletControllersTestSuite) createBody(
-	tx string,
-) string {
+func (suite *WalletControllersTestSuite) createBody(tx string) string {
 	reqBody, _ := json.Marshal(wallet.UpholdCreationRequest{
 		SignedCreationRequest: tx,
 	})
@@ -319,7 +321,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -362,7 +364,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil)
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -414,11 +416,165 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	}`, notSignedResponse, "field is not valid")
 }
 
-func (suite *WalletControllersTestSuite) getWallet(
-	service *wallet.Service,
-	paymentId uuid.UUID,
-	code int,
-) string {
+func (suite *WalletControllersTestSuite) TestChallenges_Success() {
+	paymentID := uuid.NewV4()
+
+	body := struct {
+		PaymentID uuid.UUID `json:"paymentId"`
+	}{
+		PaymentID: paymentID,
+	}
+
+	b, err := json.Marshal(body)
+	suite.Require().NoError(err)
+
+	r := httptest.NewRequest(http.MethodPost, "/v3/wallet/challenges", bytes.NewBuffer(b))
+	r.Header.Set("origin", "https://my-dapp.com")
+
+	rw := httptest.NewRecorder()
+
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	chlRep := storage.NewChallenge()
+
+	dac := wallet.DAppConfig{
+		AllowedOrigin: "https://my-dapp.com",
+	}
+
+	s, err := wallet.InitService(pg, nil, chlRep, nil, nil, nil, nil, nil, nil, nil, dac)
+	suite.Require().NoError(err)
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+	svr.Handler.ServeHTTP(rw, r)
+	suite.Require().Equal(http.StatusCreated, rw.Code)
+	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+
+	type chlResp struct {
+		Nonce string `json:"challengeId"`
+	}
+
+	var resp chlResp
+	err = json.Unmarshal(rw.Body.Bytes(), &resp)
+	suite.Require().NoError(err)
+
+	chlRepo := storage.NewChallenge()
+	chl, err := chlRepo.Get(context.TODO(), pg.RawDB(), paymentID)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(chl.Nonce, resp.Nonce)
+}
+
+func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
+	viper.Set("enable-link-drain-flag", "true")
+
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	chlRep := storage.NewChallenge()
+	allowList := storage.NewAllowList()
+
+	// create the wallet
+	pub, priv, err := ed25519.GenerateKey(nil)
+	suite.Require().NoError(err)
+
+	paymentID := uuid.NewV4()
+	w := &walletutils.Info{
+		ID:          paymentID.String(),
+		Provider:    "brave",
+		PublicKey:   hex.EncodeToString(pub),
+		AltCurrency: ptrTo(altcurrency.BAT),
+	}
+	err = pg.InsertWallet(context.TODO(), w)
+	suite.Require().NoError(err)
+
+	whitelistWallet(suite.T(), pg, w.ID)
+
+	// create nonce
+	chl := model.NewChallenge(paymentID)
+
+	err = chlRep.Upsert(context.TODO(), pg.RawDB(), chl)
+	suite.Require().NoError(err)
+
+	dac := wallet.DAppConfig{
+		AllowedOrigin: "https://my-dapp.com",
+	}
+
+	s, err := wallet.InitService(pg, nil, chlRep, allowList, nil, nil, nil, nil, nil, nil, dac)
+	suite.Require().NoError(err)
+
+	// create linking message
+	solPub, msg, solSig := createAndSignMessage(suite.T(), w.ID, priv, chl.Nonce)
+
+	// make request
+	body := struct {
+		SolanaPublicKey string `json:"solanaPublicKey"`
+		Message         string `json:"message"`
+		SolanaSignature string `json:"solanaSignature"`
+	}{
+		SolanaPublicKey: solPub,
+		Message:         msg,
+		SolanaSignature: solSig,
+	}
+
+	b, err := json.Marshal(body)
+	suite.Require().NoError(err)
+
+	r := httptest.NewRequest(http.MethodPost, "/v3/wallet/solana/"+w.ID+"/connect", bytes.NewBuffer(b))
+	r.Header.Set("origin", "https://my-dapp.com")
+
+	rw := httptest.NewRecorder()
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+	svr.Handler.ServeHTTP(rw, r)
+	suite.Require().Equal(http.StatusOK, rw.Code)
+	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+
+	// assert
+	actual, err := pg.GetWallet(context.TODO(), paymentID)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(solPub, actual.UserDepositDestination)
+
+	// after a successful linking the challenge should be removed from the database.
+	_, actualErr := chlRep.Get(context.TODO(), pg.RawDB(), paymentID)
+	suite.Assert().ErrorIs(actualErr, model.ErrNotFound)
+}
+
+func whitelistWallet(t *testing.T, pg wallet.Datastore, Id string) {
+	const q = `insert into allow_list (payment_id, created_at) values($1, $2)`
+	_, err := pg.RawDB().Exec(q, Id, time.Now())
+	require.NoError(t, err)
+}
+
+func createAndSignMessage(t *testing.T, paymentID string, rewardsPrivKey ed25519.PrivateKey, nonce string) (solPub, msg, solSig string) {
+	// Create and sign the rewards message.
+	// The message has the format <rewardsMessage> = <rewards-payment-id>.<nonce>
+	rewardsMsg := paymentID + "." + nonce
+	sig, err := rewardsPrivKey.Sign(rand.Reader, []byte(rewardsMsg), crypto.Hash(0))
+	require.NoError(t, err)
+
+	rewardsSig := base64.URLEncoding.EncodeToString(sig)
+	rewardsPart := rewardsMsg + "." + rewardsSig
+
+	// Create the linking message and sign with the Solana key.
+	pub, priv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+
+	solPub = base58.Encode(pub)
+
+	const msgTmpl = "<some-text>:%s\n<some-text>:%s\n<some-text>:%s"
+	msg = fmt.Sprintf(msgTmpl, paymentID, solPub, rewardsPart)
+
+	sig, err = priv.Sign(rand.Reader, []byte(msg), crypto.Hash(0))
+	require.NoError(t, err)
+
+	solSig = base64.URLEncoding.EncodeToString(sig)
+
+	return
+}
+
+func (suite *WalletControllersTestSuite) getWallet(service *wallet.Service, paymentId uuid.UUID, code int) string {
 	handler := handlers.AppHandler(wallet.GetWalletV3)
 
 	req, err := http.NewRequest("GET", "/v3/wallet/"+paymentId.String(), nil)
@@ -515,11 +671,7 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 	return rr.Body.String()
 }
 
-func (suite *WalletControllersTestSuite) SignRequest(
-	req *http.Request,
-	publicKey httpsignature.Ed25519PubKey,
-	privateKey ed25519.PrivateKey,
-) {
+func (suite *WalletControllersTestSuite) SignRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) {
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = hex.EncodeToString(publicKey)
@@ -527,4 +679,18 @@ func (suite *WalletControllersTestSuite) SignRequest(
 
 	err := s.Sign(privateKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
+}
+
+func setupRouter(service *wallet.Service) *chi.Mux {
+	mw := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+	s := "https://my-dapp.com"
+	r := chi.NewRouter()
+	r.Mount("/v3", wallet.RegisterRoutes(context.TODO(), service, r, mw, wallet.NewDAppCorsMw(s)))
+	return r
+}
+
+func ptrTo[T any](v T) *T {
+	return &v
 }

@@ -80,6 +80,7 @@ services:
       - TEST_RUN
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
+      - "DAPP_ALLOWED_CORS_ORIGINS=https://my-dapp.com"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -167,6 +168,7 @@ services:
       - TEST_RUN
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
+      - "DAPP_ALLOWED_CORS_ORIGINS=https://my-dapp.com"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
