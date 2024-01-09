@@ -232,7 +232,8 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 		for i := 0; i < runs; i++ {
 			go func() {
 				defer wg.Done()
-				err = pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.Provider, "")
+				err := pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.Provider)
+				suite.Require().NoError(err)
 			}()
 		}
 		wg.Wait()
@@ -272,7 +273,7 @@ func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUI
 		err := pg.UpsertWallet(ctx, walletInfo)
 		suite.Require().NoError(err, "save wallet should succeed")
 
-		err = pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID, "uphold", "")
+		err = pg.LinkWallet(ctx, walletInfo.ID, userDepositDestination, providerLinkingID, "uphold")
 		suite.Require().NoError(err, "link wallet should succeed")
 	}
 
@@ -322,7 +323,8 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 	for i := 0; i < len(wallets); i++ {
 		go func(index int) {
 			defer wg.Done()
-			err = pg.LinkWallet(ctx, wallets[index].ID, userDepositDestination, providerLinkingID, wallets[index].Provider, "")
+			// Once we reach the limit this will return an error which is expected hence we can ignore it.
+			_ = pg.LinkWallet(ctx, wallets[index].ID, userDepositDestination, providerLinkingID, wallets[index].Provider)
 		}(i)
 	}
 	wg.Wait()
