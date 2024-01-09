@@ -461,7 +461,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		if dis, ok := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool); ok && dis {
+		if dis, ok := ctx.Value(appctx.DisableSolanaLinkingCTXKey).(bool); ok && dis {
 			return handlers.ValidationError("Connecting Brave Rewards to Solana is temporarily unavailable. Please try again later", nil)
 		}
 
@@ -523,10 +523,6 @@ type challengeResponse struct {
 
 func CreateChallenge(s *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-
-		l := logging.Logger(ctx, "wallet")
-
 		b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			return handlers.WrapError(err, "error reading body", http.StatusBadRequest)
@@ -541,9 +537,11 @@ func CreateChallenge(s *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		chl, err := s.CreateChallenge(ctx, chlReq.PaymentID.String())
+		ctx := r.Context()
+
+		chl, err := s.CreateChallenge(ctx, chlReq.PaymentID)
 		if err != nil {
-			l.Error().Err(err).Msg("error creating challenge")
+			logging.Logger(ctx, "wallet").Error().Err(err).Msg("error creating challenge")
 			return handlers.WrapError(model.ErrInternalServer, "error creating challenge", http.StatusInternalServerError)
 		}
 

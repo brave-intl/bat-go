@@ -24,27 +24,27 @@ type AllowListEntry struct {
 }
 
 type Challenge struct {
-	ID        string    `db:"id"`
+	PaymentID uuid.UUID `db:"payment_id"`
 	CreatedAt time.Time `db:"created_at"`
 	Nonce     string    `db:"nonce"`
 }
 
-func NewChallenge(id string) Challenge {
+func NewChallenge(paymentID uuid.UUID) Challenge {
 	return Challenge{
-		ID:        id,
+		PaymentID: paymentID,
 		CreatedAt: time.Now(),
 		Nonce:     base64.URLEncoding.EncodeToString(uuid.NewV4().Bytes()),
 	}
 }
 
-func (c Challenge) IsValid(now time.Time) error {
+func (c *Challenge) IsValid(now time.Time) error {
 	if c.hasExpired(now) {
 		return ErrChallengeExpired
 	}
 	return nil
 }
 
-func (c Challenge) hasExpired(now time.Time) bool {
+func (c *Challenge) hasExpired(now time.Time) bool {
 	expiresAt := c.CreatedAt.Add(5 * time.Minute)
 	return expiresAt.Before(now)
 }

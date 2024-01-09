@@ -185,6 +185,7 @@ func newSolMsgParser(paymentID, solPub, nonce string) solMsgParser {
 }
 
 // parse parses a linking message and returns the rewards part.
+//
 // For a message to parse successfully it must be a valid format and successfully match the
 // configured parser parameters paymentID, solPub and nonce.
 //
@@ -192,15 +193,26 @@ func newSolMsgParser(paymentID, solPub, nonce string) solMsgParser {
 // <some-text>:<rewards-payment-id>
 // <some-text>:<solana-address>
 // <some-text>:<rewards-payment-id>.<nonce>.<rewardsSignature>
-func (s solMsgParser) parse(msg string) (rewMsg, error) {
-	n := strings.Split(msg, "\n")
-	if len(n) != 3 {
+//
+// The final part is referred to as the rewards message and has the
+// format <rewards-payment-id>.<nonce>.<rewardsSignature> we only need to compare
+// the <rewards-payment-id>.<nonce>. when parsing.
+//
+// The returned rewMsg will contain both the message and signature. For example,
+//
+//	rewMsg {
+//	    msg: <rewards-payment-id>.<nonce>,
+//	    sig: <rewardsSignature>,
+//	}
+func (s *solMsgParser) parse(msg string) (rewMsg, error) {
+	lines := strings.Split(msg, "\n")
+	if len(lines) != 3 {
 		return rewMsg{}, errInvalidPartsLineBreak
 	}
 
-	var parts []string
-	for i := range n {
-		p := strings.Split(n[i], ":")
+	parts := make([]string, 0, 3)
+	for i := range lines {
+		p := strings.Split(lines[i], ":")
 		if len(p) != 2 {
 			return rewMsg{}, errInvalidPartsColon
 		}
@@ -219,6 +231,7 @@ func (s solMsgParser) parse(msg string) (rewMsg, error) {
 		return rewMsg{}, errInvalidSolanaPubKey
 	}
 
+	// Compare the final part minus the signature.
 	exp := s.paymentID + "." + s.nonce + "."
 	for i := range exp {
 		if parts[2][i] != exp[i] {

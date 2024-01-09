@@ -459,7 +459,7 @@ func (suite *WalletControllersTestSuite) TestChallenges_Success() {
 	suite.Require().NoError(err)
 
 	chlRepo := storage.NewChallenge()
-	chl, err := chlRepo.Get(context.TODO(), pg.RawDB(), paymentID.String())
+	chl, err := chlRepo.Get(context.TODO(), pg.RawDB(), paymentID)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(chl.Nonce, resp.Nonce)
@@ -478,8 +478,9 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	suite.Require().NoError(err)
 
+	paymentID := uuid.NewV4()
 	w := &walletutils.Info{
-		ID:          uuid.NewV4().String(),
+		ID:          paymentID.String(),
 		Provider:    "brave",
 		PublicKey:   hex.EncodeToString(pub),
 		AltCurrency: ptrTo(altcurrency.BAT),
@@ -490,7 +491,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	whitelistWallet(suite.T(), pg, w.ID)
 
 	// create nonce
-	chl := model.NewChallenge(w.ID)
+	chl := model.NewChallenge(paymentID)
 
 	err = chlRep.Upsert(context.TODO(), pg.RawDB(), chl)
 	suite.Require().NoError(err)
@@ -530,16 +531,13 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
 
 	// assert
-	paymentID, err := uuid.FromString(w.ID)
-	suite.Require().NoError(err)
-
 	actual, err := pg.GetWallet(context.TODO(), paymentID)
 	suite.Require().NoError(err)
 
 	suite.Require().Equal(solPub, actual.UserDepositDestination)
 
 	// after a successful linking the challenge should be removed from the database.
-	_, actualErr := chlRep.Get(context.TODO(), pg.RawDB(), w.ID)
+	_, actualErr := chlRep.Get(context.TODO(), pg.RawDB(), paymentID)
 	suite.Assert().ErrorIs(actualErr, model.ErrNotFound)
 }
 

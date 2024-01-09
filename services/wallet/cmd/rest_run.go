@@ -29,7 +29,7 @@ func WalletRestRun(command *cobra.Command, args []string) {
 
 	router := cmd.SetupRouter(ctx)
 
-	origin := os.Getenv("DAPP_ALLOWED_ORIGINS")
+	origin := os.Getenv("DAPP_ALLOWED_CORS_ORIGINS")
 	if origin == "" {
 		logger.Panic().Msg("dapp origin env missing")
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
+	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 )
 
@@ -23,8 +24,8 @@ func TestChallenge_Get(t *testing.T) {
 	}()
 
 	type tcGiven struct {
-		id   string
-		chal model.Challenge
+		paymentID uuid.UUID
+		chal      model.Challenge
 	}
 
 	type exp struct {
@@ -42,15 +43,15 @@ func TestChallenge_Get(t *testing.T) {
 		{
 			name: "get",
 			given: tcGiven{
-				id: "1",
+				paymentID: uuid.FromStringOrNil("f6d43f0c-db24-4d65-9f02-b000ff8ec782"),
 				chal: model.Challenge{
-					ID:        "1",
+					PaymentID: uuid.FromStringOrNil("f6d43f0c-db24-4d65-9f02-b000ff8ec782"),
 					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
 					Nonce:     "nonce-1",
 				}},
 			exp: exp{
 				chal: model.Challenge{
-					ID:        "1",
+					PaymentID: uuid.FromStringOrNil("f6d43f0c-db24-4d65-9f02-b000ff8ec782"),
 					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
 					Nonce:     "nonce-1",
 				},
@@ -60,9 +61,9 @@ func TestChallenge_Get(t *testing.T) {
 		{
 			name: "not_found",
 			given: tcGiven{
-				id: "some-random-id",
+				paymentID: uuid.FromStringOrNil("1b8c218f-2585-49c1-90cd-b82006eb9865"),
 				chal: model.Challenge{
-					ID:        "2",
+					PaymentID: uuid.FromStringOrNil("54e4a78e-2c69-4fb2-8d72-47921bb0b374"),
 					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
 					Nonce:     "nonce-2",
 				}},
@@ -72,22 +73,24 @@ func TestChallenge_Get(t *testing.T) {
 		},
 	}
 
-	const q = `insert into challenge (id, created_at, nonce) values($1, $2, $3)`
+	const q = `insert into challenge (payment_id, created_at, nonce) values($1, $2, $3)`
 
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			_, err1 := dbi.ExecContext(ctx, q, tc.given.chal.ID, tc.given.chal.CreatedAt, tc.given.chal.Nonce)
+			_, err1 := dbi.ExecContext(ctx, q, tc.given.chal.PaymentID, tc.given.chal.CreatedAt, tc.given.chal.Nonce)
 			must.NoError(t, err1)
 
 			c := Challenge{}
-			actual, err2 := c.Get(ctx, dbi, tc.given.id)
-			must.Equal(t, tc.exp.err, err2)
+			actual, err2 := c.Get(ctx, dbi, tc.given.paymentID)
 
-			must.Equal(t, tc.exp.chal.ID, actual.ID)
-			must.Equal(t, tc.exp.chal.CreatedAt, actual.CreatedAt)
-			must.Equal(t, tc.exp.chal.Nonce, actual.Nonce)
+			should.Equal(t, tc.exp.err, err2)
+			should.Equal(t, tc.exp.chal.PaymentID, actual.PaymentID)
+			should.Equal(t, tc.exp.chal.CreatedAt, actual.CreatedAt)
+			should.Equal(t, tc.exp.chal.Nonce, actual.Nonce)
 		})
 	}
 }
@@ -100,13 +103,13 @@ func TestChallenge_Upsert(t *testing.T) {
 		_, _ = dbi.Exec("TRUNCATE_TABLE challenge;")
 	}()
 
-	const q = `select * from challenge where id = $1`
+	const q = `select * from challenge where payment_id = $1`
 
 	chlRepo := &Challenge{}
 
 	t.Run("insert", func(t *testing.T) {
 		exp := model.Challenge{
-			ID:        "1",
+			PaymentID: uuid.FromStringOrNil("66e4751f-cd72-4bb0-aebd-66c50a2e8c45"),
 			CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
 			Nonce:     "a",
 		}
@@ -115,19 +118,19 @@ func TestChallenge_Upsert(t *testing.T) {
 		must.NoError(t, err1)
 
 		var actual model.Challenge
-		err2 := sqlx.GetContext(context.TODO(), dbi, &actual, q, exp.ID)
+		err2 := sqlx.GetContext(context.TODO(), dbi, &actual, q, exp.PaymentID)
 		must.NoError(t, err2)
 
-		must.Equal(t, exp.ID, actual.ID)
-		must.Equal(t, exp.CreatedAt, actual.CreatedAt)
-		must.Equal(t, exp.Nonce, actual.Nonce)
+		should.Equal(t, exp.PaymentID, actual.PaymentID)
+		should.Equal(t, exp.CreatedAt, actual.CreatedAt)
+		should.Equal(t, exp.Nonce, actual.Nonce)
 	})
 
 	t.Run("upsert", func(t *testing.T) {
 		ctx := context.Background()
 
 		exp := model.Challenge{
-			ID:        "1",
+			PaymentID: uuid.FromStringOrNil("66e4751f-cd72-4bb0-aebd-66c50a2e8c45"),
 			CreatedAt: time.Date(2024, 12, 1, 1, 1, 1, 0, time.UTC),
 			Nonce:     "b",
 		}
@@ -136,12 +139,12 @@ func TestChallenge_Upsert(t *testing.T) {
 		must.NoError(t, err1)
 
 		var actual model.Challenge
-		err2 := sqlx.GetContext(ctx, dbi, &actual, q, exp.ID)
+		err2 := sqlx.GetContext(ctx, dbi, &actual, q, exp.PaymentID)
 		must.NoError(t, err2)
 
-		must.Equal(t, exp.ID, actual.ID)
-		must.Equal(t, exp.CreatedAt, actual.CreatedAt)
-		must.Equal(t, exp.Nonce, actual.Nonce)
+		should.Equal(t, exp.PaymentID, actual.PaymentID)
+		should.Equal(t, exp.CreatedAt, actual.CreatedAt)
+		should.Equal(t, exp.Nonce, actual.Nonce)
 	})
 }
 
@@ -154,8 +157,8 @@ func TestChallenge_Delete(t *testing.T) {
 	}()
 
 	type tcGiven struct {
-		id   string
-		chal model.Challenge
+		paymentID uuid.UUID
+		chal      model.Challenge
 	}
 
 	type exp struct {
@@ -172,10 +175,10 @@ func TestChallenge_Delete(t *testing.T) {
 		{
 			name: "delete",
 			given: tcGiven{
-				id: "1",
+				paymentID: uuid.FromStringOrNil("66e4751f-cd72-4bb0-aebd-66c50a2e8c45"),
 				chal: model.Challenge{
-					ID:    "1",
-					Nonce: "nonce-1",
+					PaymentID: uuid.FromStringOrNil("66e4751f-cd72-4bb0-aebd-66c50a2e8c45"),
+					Nonce:     "nonce-1",
 				}},
 			exp: exp{
 				err: nil,
@@ -184,9 +187,9 @@ func TestChallenge_Delete(t *testing.T) {
 		{
 			name: "no_rows_deleted",
 			given: tcGiven{
-				id: "some-random-id",
+				paymentID: uuid.FromStringOrNil("34fe675b-aebf-4209-90b6-a7ba4452087a"),
 				chal: model.Challenge{
-					ID:        "2",
+					PaymentID: uuid.FromStringOrNil("f6d43f0c-db24-4d65-9f02-b000ff8ec782"),
 					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
 					Nonce:     "nonce-2",
 				}},
@@ -196,18 +199,20 @@ func TestChallenge_Delete(t *testing.T) {
 		},
 	}
 
-	const q = `insert into challenge (id, created_at, nonce) values($1, $2, $3)`
+	const q = `insert into challenge (payment_id, created_at, nonce) values($1, $2, $3)`
 
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			_, err1 := dbi.ExecContext(ctx, q, tc.given.chal.ID, tc.given.chal.CreatedAt, tc.given.chal.Nonce)
+			_, err1 := dbi.ExecContext(ctx, q, tc.given.chal.PaymentID, tc.given.chal.CreatedAt, tc.given.chal.Nonce)
 			must.NoError(t, err1)
 
 			c := Challenge{}
-			err2 := c.Delete(ctx, dbi, tc.given.id)
-			must.Equal(t, tc.exp.err, err2)
+			err2 := c.Delete(ctx, dbi, tc.given.paymentID)
+			should.Equal(t, tc.exp.err, err2)
 		})
 	}
 }
@@ -267,17 +272,19 @@ func TestAllowList_GetAllowListEntry(t *testing.T) {
 
 	const q = `insert into allow_list (payment_id, created_at) values($1, $2)`
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			_, err1 := dbi.ExecContext(ctx, q, tt.given.allow.PaymentID, tt.given.allow.CreatedAt)
+			_, err1 := dbi.ExecContext(ctx, q, tc.given.allow.PaymentID, tc.given.allow.CreatedAt)
 			must.NoError(t, err1)
 
 			a := &AllowList{}
-			actual, err2 := a.GetAllowListEntry(ctx, dbi, tt.given.paymentID)
-			must.Equal(t, tt.exp.err, err2)
-			must.Equal(t, tt.exp.allow, actual)
+			actual, err2 := a.GetAllowListEntry(ctx, dbi, tc.given.paymentID)
+			should.Equal(t, tc.exp.err, err2)
+			should.Equal(t, tc.exp.allow, actual)
 		})
 	}
 }

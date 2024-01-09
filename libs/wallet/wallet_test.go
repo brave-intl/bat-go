@@ -55,7 +55,9 @@ func TestInfo_LinkSolanaAddress(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
 			wallet := tc.given.w
 			err := wallet.LinkSolanaAddress(context.TODO(), tc.given.s)
@@ -115,9 +117,12 @@ func TestVerifySolanaSignature(t *testing.T) {
 			},
 		},
 	}
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
-			tc.assertErr(t, verifySolanaSignature(tc.given.solPub, tc.given.msg, tc.given.solSig))
+			err := verifySolanaSignature(tc.given.solPub, tc.given.msg, tc.given.solSig)
+			tc.assertErr(t, err)
 		})
 	}
 }
@@ -219,12 +224,14 @@ func TestSolMsgParser_parse(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
 			msgParser := tc.given.msgParser
 			actual, err := msgParser.parse(tc.given.msg)
-			assert.Equal(t, tc.exp.rewMsg, actual)
 			assert.Equal(t, tc.exp.err, err)
+			assert.Equal(t, tc.exp.rewMsg, actual)
 		})
 	}
 }
@@ -290,9 +297,12 @@ func TestVerifyRewardsSignature(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
-			tc.assertErr(t, verifyRewardsSignature(tc.given.pub, tc.given.msg, tc.given.sig))
+			err := verifyRewardsSignature(tc.given.pub, tc.given.msg, tc.given.sig)
+			tc.assertErr(t, err)
 		})
 	}
 }

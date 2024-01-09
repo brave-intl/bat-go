@@ -108,9 +108,9 @@ type GeoValidator interface {
 }
 
 type challengeRepo interface {
-	Get(ctx context.Context, dbi sqlx.QueryerContext, id string) (model.Challenge, error)
+	Get(ctx context.Context, dbi sqlx.QueryerContext, paymentID uuid.UUID) (model.Challenge, error)
 	Upsert(ctx context.Context, dbi sqlx.ExecerContext, chl model.Challenge) error
-	Delete(ctx context.Context, dbi sqlx.ExecerContext, id string) error
+	Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error
 }
 
 type allowListRepo interface {
@@ -276,7 +276,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	mtc := metric.New()
 	gemx := newGeminix("passport", "drivers_license", "national_identity_card", "passport_card")
 
-	dappAO := os.Getenv("DAPP_ALLOWED_ORIGINS")
+	dappAO := os.Getenv("DAPP_ALLOWED_CORS_ORIGINS")
 	if dappAO == "" {
 		l.Panic().Err(errors.New("dapp allowed origins missing")).Msg("failed to initialize wallet service")
 	}
@@ -730,7 +730,7 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 	}
 	defer rollback()
 
-	chl, err := service.chlRepo.Get(ctx, txn, paymentID.String())
+	chl, err := service.chlRepo.Get(ctx, txn, paymentID)
 	if err != nil {
 		return err
 	}
@@ -763,7 +763,7 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 		return err
 	}
 
-	if err := service.chlRepo.Delete(ctx, txn, chl.ID); err != nil {
+	if err := service.chlRepo.Delete(ctx, txn, chl.PaymentID); err != nil {
 		return err
 	}
 
@@ -792,8 +792,8 @@ func (service *Service) linkCustodialAccount(ctx context.Context, wID string, us
 	return service.Datastore.LinkWallet(ctx, walletID.String(), userDepositDestination, providerLinkingID, depositProvider)
 }
 
-func (service *Service) CreateChallenge(ctx context.Context, id string) (model.Challenge, error) {
-	chl := model.NewChallenge(id)
+func (service *Service) CreateChallenge(ctx context.Context, paymentID uuid.UUID) (model.Challenge, error) {
+	chl := model.NewChallenge(paymentID)
 	if err := service.chlRepo.Upsert(ctx, service.Datastore.RawDB(), chl); err != nil {
 		return model.Challenge{}, fmt.Errorf("error creating challenge: %w", err)
 	}
