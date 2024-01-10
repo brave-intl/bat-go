@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
@@ -1294,6 +1294,10 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
 			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
 			validationErrMap["request-body"] = err.Error()
+		}
+
+		if len(validationErrMap) != 0 {
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
 
 		// validate the receipt
