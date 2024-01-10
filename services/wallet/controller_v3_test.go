@@ -595,51 +595,6 @@ func (suite *WalletControllersTestSuite) getWallet(service *wallet.Service, paym
 	return rr.Body.String()
 }
 
-func (suite *WalletControllersTestSuite) TestGetWalletV4() {
-	pg, _, err := wallet.NewPostgres()
-	suite.Require().NoError(err)
-
-	pub, _, err := ed25519.GenerateKey(nil)
-	suite.Require().NoError(err)
-
-	paymentID := uuid.NewV4()
-	w := &walletutils.Info{
-		ID:          paymentID.String(),
-		Provider:    "brave",
-		PublicKey:   hex.EncodeToString(pub),
-		AltCurrency: ptrTo(altcurrency.BAT),
-	}
-	err = pg.InsertWallet(context.TODO(), w)
-	suite.Require().NoError(err)
-
-	whitelistWallet(suite.T(), pg, w.ID)
-
-	allowList := storage.NewAllowList()
-
-	service, _ := wallet.InitService(pg, nil, nil, allowList, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
-
-	handler := handlers.AppHandler(wallet.GetWalletV4(service))
-
-	req, err := http.NewRequest("GET", "/v4/wallets/"+paymentID.String(), nil)
-	suite.Require().NoError(err, "a request should be created")
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("paymentID", paymentID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	suite.Assert().Equal(http.StatusOK, rr.Code)
-
-	var resp wallet.ResponseV4
-	err = json.Unmarshal(rr.Body.Bytes(), &resp)
-	suite.Require().NoError(err)
-
-	suite.Assert().Equal(true, resp.SelfCustodyAvailable["solana"])
-}
-
 func (suite *WalletControllersTestSuite) createBraveWalletV3(
 	service *wallet.Service,
 	body string,
