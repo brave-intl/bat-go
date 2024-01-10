@@ -386,7 +386,7 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
 		r.Get("/{paymentID}",
 			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"GetWalletV4", GetWalletV4)).ServeHTTP)
+				"GetWalletV4", GetWalletV4(s))).ServeHTTP)
 		// get wallet balance routes
 		r.Get("/uphold/{paymentID}",
 			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
