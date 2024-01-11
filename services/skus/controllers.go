@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1269,42 +1270,44 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 
 		var (
 			ctx              = r.Context()
-			req              SubmitReceiptRequestV1     // the body of the request
 			orderID          = new(inputs.ID)           // the order id
 			validationErrMap = map[string]interface{}{} // for tracking our validation errors
 		)
 
 		logger := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
 
-		// validate the order id
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			logger.Warn().Err(err).Msg("Failed to decode/validate order id from url")
 			validationErrMap["orderID"] = err.Error()
 		}
 
-		// read the payload
 		payload, err := requestutils.Read(r.Context(), r.Body)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
 			validationErrMap["request-body"] = err.Error()
+		}
+
+		if len(validationErrMap) != 0 {
+			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
 
 		// TODO(clD11): remove when no longer needed
 		logger.Info().Interface("payload_byte", payload).Str("payload_str", string(payload)).Msg("payload")
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
+		req, err := decodeSubmitReceiptReq(payload)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to decode submit receipt")
 			validationErrMap["request-body"] = err.Error()
+			return handlers.ValidationError("Error validating request", validationErrMap)
+		}
+
+		if err := validateSubmitReceiptReq(req); err != nil {
+			logger.Warn().Err(err).Msg("Failed to validate submit receipt")
+			validationErrMap["request-body"] = err.Error()
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
 
 		// TODO(clD11): remove when no longer needed
 		logger.Info().Interface("req_decoded", req).Msg("req decoded")
-
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
 
 		// validate the receipt
 		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req)
@@ -1355,6 +1358,36 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			Vendor:     req.Type.String(),
 		}, w, http.StatusOK)
 	})
+}
+
+func decodeSubmitReceiptReq(payload []byte) (SubmitReceiptRequestV1, error) {
+	buf := make([]byte, base64.StdEncoding.DecodedLen(len(payload)))
+
+	n, err := base64.StdEncoding.Decode(buf, payload)
+	if err != nil {
+		return SubmitReceiptRequestV1{}, fmt.Errorf("failed to decode input base64: %w", err)
+	}
+
+	var req SubmitReceiptRequestV1
+	if err := json.Unmarshal(buf[:n], &req); err != nil {
+		return SubmitReceiptRequestV1{}, fmt.Errorf("failed to decode input json: %w", err)
+	}
+
+	return req, nil
+}
+
+const errRawReceiptRequired model.Error = "raw receipt is empty"
+
+func validateSubmitReceiptReq(req SubmitReceiptRequestV1) error {
+	if req.Blob == "" {
+		return errRawReceiptRequired
+	}
+
+	if req.Type != "ios" && req.Type != "android" {
+		return fmt.Errorf("invalid type got %s", req.Type)
+	}
+
+	return nil
 }
 
 func NewCORSMwr(opts cors.Options, methods ...string) func(next http.Handler) http.Handler {
