@@ -498,6 +498,8 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 			switch {
 			case errors.Is(err, model.ErrWalletNotWhitelisted):
 				return handlers.WrapError(model.ErrWalletNotWhitelisted, "rewards wallet not whitelisted", http.StatusForbidden)
+			case errors.Is(err, model.ErrChallengeNotFound):
+				return handlers.WrapError(model.ErrChallengeNotFound, "linking challenge not found", http.StatusNotFound)
 			case errors.Is(err, model.ErrChallengeExpired):
 				return handlers.WrapError(model.ErrChallengeExpired, "linking challenge expired", http.StatusUnauthorized)
 			case errors.Is(err, model.ErrWalletNotFound):
@@ -505,7 +507,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 			case errors.As(err, &solErr):
 				return handlers.WrapError(solErr, "invalid solana linking message", http.StatusUnauthorized)
 			default:
-				return handlers.WrapError(model.ErrInternalServer, "internal server error", http.StatusInternalServerError)
+				return handlers.WrapError(err, "internal server error", http.StatusInternalServerError)
 			}
 		}
 

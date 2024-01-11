@@ -59,7 +59,7 @@ func TestChallenge_Get(t *testing.T) {
 			},
 		},
 		{
-			name: "not_found",
+			name: "challenge_not_found",
 			given: tcGiven{
 				paymentID: uuid.FromStringOrNil("1b8c218f-2585-49c1-90cd-b82006eb9865"),
 				chal: model.Challenge{
@@ -68,7 +68,7 @@ func TestChallenge_Get(t *testing.T) {
 					Nonce:     "nonce-2",
 				}},
 			exp: exp{
-				err: model.ErrNotFound,
+				err: model.ErrChallengeNotFound,
 			},
 		},
 	}
