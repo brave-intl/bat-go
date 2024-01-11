@@ -1323,10 +1323,6 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			}
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("error validating request", validationErrMap)
-		}
 		// does this external id exist already
 		exists, err := service.ExternalIDExists(ctx, externalID)
 		if err != nil {
