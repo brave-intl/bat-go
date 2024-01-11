@@ -1289,12 +1289,18 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			validationErrMap["request-body"] = err.Error()
 		}
 
+		// TODO(clD11): remove when no longer needed
+		logger.Info().Interface("payload_byte", payload).Str("payload_str", string(payload)).Msg("payload")
+
 		// validate the payload
 		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
 			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
 			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
 			validationErrMap["request-body"] = err.Error()
 		}
+
+		// TODO(clD11): remove when no longer needed
+		logger.Info().Interface("req_decoded", req).Msg("req decoded")
 
 		if len(validationErrMap) != 0 {
 			return handlers.ValidationError("Error validating request", validationErrMap)
@@ -1323,10 +1329,6 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			}
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("error validating request", validationErrMap)
-		}
 		// does this external id exist already
 		exists, err := service.ExternalIDExists(ctx, externalID)
 		if err != nil {

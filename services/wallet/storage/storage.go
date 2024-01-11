@@ -21,7 +21,7 @@ func (c *Challenge) Get(ctx context.Context, dbi sqlx.QueryerContext, paymentID 
 	var result model.Challenge
 	if err := sqlx.GetContext(ctx, dbi, &result, q, paymentID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return result, model.ErrNotFound
+			return result, model.ErrChallengeNotFound
 		}
 		return result, err
 	}

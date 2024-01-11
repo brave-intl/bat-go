@@ -10,6 +10,7 @@ import (
 const (
 	ErrWalletNotWhitelisted Error = "model: wallet not whitelisted"
 	ErrNotFound             Error = "model: not found"
+	ErrChallengeNotFound    Error = "model: challenge not found"
 	ErrChallengeExpired     Error = "model: challenge expired"
 	ErrNoRowsDeleted        Error = "model: no rows deleted"
 	ErrNotInserted          Error = "model: not inserted"

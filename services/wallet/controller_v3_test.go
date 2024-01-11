@@ -538,7 +538,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 
 	// after a successful linking the challenge should be removed from the database.
 	_, actualErr := chlRep.Get(context.TODO(), pg.RawDB(), paymentID)
-	suite.Assert().ErrorIs(actualErr, model.ErrNotFound)
+	suite.Assert().ErrorIs(actualErr, model.ErrChallengeNotFound)
 }
 
 func whitelistWallet(t *testing.T, pg wallet.Datastore, Id string) {
