@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"net/http"
+	"strings"
+
 	// pprof imports
 	_ "net/http/pprof"
 	"os"
@@ -29,12 +31,12 @@ func WalletRestRun(command *cobra.Command, args []string) {
 
 	router := cmd.SetupRouter(ctx)
 
-	origin := os.Getenv("DAPP_ALLOWED_CORS_ORIGINS")
-	if origin == "" {
+	origins := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
+	if len(origins) == 0 || strings.TrimSpace(origins[0]) == "" {
 		logger.Panic().Msg("dapp origin env missing")
 	}
 
-	wallet.RegisterRoutes(ctx, service, router, middleware.InstrumentHandler, wallet.NewDAppCorsMw(origin))
+	wallet.RegisterRoutes(ctx, service, router, middleware.InstrumentHandler, wallet.NewDAppCorsMw(origins))
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {

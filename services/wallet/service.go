@@ -398,10 +398,10 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 
 // TODO(clD11): WR. Move once we address the rest_run.go and grant.go start functions.
 
-func NewDAppCorsMw(origin string) func(next http.Handler) http.Handler {
+func NewDAppCorsMw(origins []string) func(next http.Handler) http.Handler {
 	opts := cors.Options{
 		Debug:            false,
-		AllowedOrigins:   []string{origin},
+		AllowedOrigins:   origins,
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{""},
 		AllowedMethods:   []string{http.MethodPost},
