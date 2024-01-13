@@ -685,7 +685,10 @@ func setupRouter(service *wallet.Service) *chi.Mux {
 	mw := func(name string, h http.Handler) http.Handler {
 		return h
 	}
-	s := "https://my-dapp.com"
+	s := []string{
+		"http://localhost:3000",
+		"https://my-dapp.com",
+	}
 	r := chi.NewRouter()
 	r.Mount("/v3", wallet.RegisterRoutes(context.TODO(), service, r, mw, wallet.NewDAppCorsMw(s)))
 	return r
