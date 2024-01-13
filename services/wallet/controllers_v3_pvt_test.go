@@ -993,15 +993,14 @@ func TestIsAllowedOrigin(t *testing.T) {
 			exp: true,
 		},
 		{
-			name: "not_allowed_empty_origin",
+			name: "empty_origin",
 			given: tcGiven{
-				origin:         "",
 				allowedOrigins: []string{"random-1", "random-2", "random-3", "test"},
 			},
 			exp: false,
 		},
 		{
-			name: "not_allowed_not_in_list",
+			name: "origin_not_in_allowed_origins",
 			given: tcGiven{
 				origin:         "test",
 				allowedOrigins: []string{"random-1", "random-2", "random-3", "random-4"},
