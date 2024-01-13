@@ -149,7 +149,7 @@ type Service struct {
 }
 
 type DAppConfig struct {
-	AllowedOrigin string
+	AllowedOrigin []string
 }
 
 // InitService creates a new instances of the wallet service.
@@ -276,8 +276,8 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	mtc := metric.New()
 	gemx := newGeminix("passport", "drivers_license", "national_identity_card", "passport_card")
 
-	dappAO := os.Getenv("DAPP_ALLOWED_CORS_ORIGINS")
-	if dappAO == "" {
+	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
+	if len(dappAO) == 0 {
 		l.Panic().Err(errors.New("dapp allowed origins missing")).Msg("failed to initialize wallet service")
 	}
 
@@ -398,10 +398,10 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 
 // TODO(clD11): WR. Move once we address the rest_run.go and grant.go start functions.
 
-func NewDAppCorsMw(origin string) func(next http.Handler) http.Handler {
+func NewDAppCorsMw(origins []string) func(next http.Handler) http.Handler {
 	opts := cors.Options{
 		Debug:            false,
-		AllowedOrigins:   []string{origin},
+		AllowedOrigins:   origins,
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{""},
 		AllowedMethods:   []string{http.MethodPost},
