@@ -508,7 +508,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 			case errors.As(err, &solErr):
 				return handlers.WrapError(solErr, "invalid solana linking message", http.StatusUnauthorized)
 			default:
-				return handlers.WrapError(err, "internal server error", http.StatusInternalServerError)
+				return handlers.WrapError(model.ErrInternalServer, "internal server error", http.StatusInternalServerError)
 			}
 		}
 
