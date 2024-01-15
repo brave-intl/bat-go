@@ -149,7 +149,7 @@ type Service struct {
 }
 
 type DAppConfig struct {
-	AllowedOrigin []string
+	AllowedOrigins []string
 }
 
 // InitService creates a new instances of the wallet service.
@@ -282,7 +282,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	}
 
 	dappConf := DAppConfig{
-		AllowedOrigin: dappAO,
+		AllowedOrigins: dappAO,
 	}
 
 	s, err := InitService(db, roDB, chlRepo, alRepo, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)

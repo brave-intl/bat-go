@@ -439,7 +439,7 @@ func (suite *WalletControllersTestSuite) TestChallenges_Success() {
 	chlRep := storage.NewChallenge()
 
 	dac := wallet.DAppConfig{
-		AllowedOrigin: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
+		AllowedOrigins: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
 	}
 
 	s, err := wallet.InitService(pg, nil, chlRep, nil, nil, nil, nil, nil, nil, nil, dac)
@@ -497,7 +497,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	suite.Require().NoError(err)
 
 	dac := wallet.DAppConfig{
-		AllowedOrigin: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
+		AllowedOrigins: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
 	}
 
 	s, err := wallet.InitService(pg, nil, chlRep, allowList, nil, nil, nil, nil, nil, nil, dac)

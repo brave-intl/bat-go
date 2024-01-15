@@ -468,7 +468,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 		l := logging.Logger(ctx, "wallet")
 
 		o := r.Header.Get("Origin")
-		if !isAllowedOrigin(o, s.dappConf.AllowedOrigin) {
+		if !isAllowedOrigin(o, s.dappConf.AllowedOrigins) {
 			l.Error().Err(errOriginForbidden).Str("origin", strOr(o, "empty")).Msg("error linking solana address")
 			return handlers.WrapError(errOriginForbidden, "request origin forbidden", http.StatusForbidden)
 		}
