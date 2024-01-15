@@ -439,7 +439,7 @@ func (suite *WalletControllersTestSuite) TestChallenges_Success() {
 	chlRep := storage.NewChallenge()
 
 	dac := wallet.DAppConfig{
-		AllowedOrigin: "https://my-dapp.com",
+		AllowedOrigins: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
 	}
 
 	s, err := wallet.InitService(pg, nil, chlRep, nil, nil, nil, nil, nil, nil, nil, dac)
@@ -497,7 +497,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	suite.Require().NoError(err)
 
 	dac := wallet.DAppConfig{
-		AllowedOrigin: "https://my-dapp.com",
+		AllowedOrigins: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
 	}
 
 	s, err := wallet.InitService(pg, nil, chlRep, allowList, nil, nil, nil, nil, nil, nil, dac)
@@ -521,14 +521,14 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	suite.Require().NoError(err)
 
 	r := httptest.NewRequest(http.MethodPost, "/v3/wallet/solana/"+w.ID+"/connect", bytes.NewBuffer(b))
-	r.Header.Set("origin", "https://my-dapp.com")
+	r.Header.Set("origin", "https://my-dapp-2.com")
 
 	rw := httptest.NewRecorder()
 
 	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
 	svr.Handler.ServeHTTP(rw, r)
 	suite.Require().Equal(http.StatusOK, rw.Code)
-	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+	suite.Require().Equal("https://my-dapp-2.com", rw.Header().Get("Access-Control-Allow-Origin"))
 
 	// assert
 	actual, err := pg.GetWallet(context.TODO(), paymentID)
@@ -685,7 +685,7 @@ func setupRouter(service *wallet.Service) *chi.Mux {
 	mw := func(name string, h http.Handler) http.Handler {
 		return h
 	}
-	s := "https://my-dapp.com"
+	s := []string{"https://my-dapp.com", "https://my-dapp-2.com"}
 	r := chi.NewRouter()
 	r.Mount("/v3", wallet.RegisterRoutes(context.TODO(), service, r, mw, wallet.NewDAppCorsMw(s)))
 	return r

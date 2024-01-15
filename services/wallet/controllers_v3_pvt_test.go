@@ -1,4 +1,4 @@
-package wallet_test
+package wallet
 
 import (
 	"bytes"
@@ -28,7 +28,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
@@ -44,15 +43,15 @@ func TestCreateBraveWalletV3(t *testing.T) {
 	defer mockCtrl.Finish()
 	var (
 		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
+		datastore   = Datastore(
+			&Postgres{
 				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 		// add the datastore to the context
 		ctx     = context.Background()
-		handler = wallet.CreateBraveWalletV3
+		handler = CreateBraveWalletV3
 		r       = httptest.NewRequest("POST", "/v3/wallet/brave", nil)
 	)
 	// no logger, setup
@@ -66,10 +65,10 @@ func TestCreateBraveWalletV3(t *testing.T) {
 
 	// setup keypair
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	must(t, "failed to generate keypair", err)
+	require.NoError(t, err)
 
 	err = signRequest(r, publicKey, privKey)
-	must(t, "failed to sign request", err)
+	require.NoError(t, err)
 
 	r = r.WithContext(ctx)
 
@@ -85,15 +84,15 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	defer mockCtrl.Finish()
 	var (
 		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
+		datastore   = Datastore(
+			&Postgres{
 				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 		// add the datastore to the context
 		ctx     = context.Background()
-		handler = wallet.CreateUpholdWalletV3
+		handler = CreateUpholdWalletV3
 		r       = httptest.NewRequest("POST", "/v3/wallet/uphold", bytes.NewBufferString(`{
 				"signedCreationRequest": "eyJib2R5Ijp7ImRlbm9taW5hdGlvbiI6eyJhbW91bnQiOiIwIiwiY3VycmVuY3kiOiJCQVQifSwiZGVzdGluYXRpb24iOiJhNmRmZjJiYS1kMGQxLTQxYzQtOGU1Ni1hMjYwNWJjYWY0YWYifSwiaGVhZGVycyI6eyJkaWdlc3QiOiJTSEEtMjU2PWR2RTAzVHdpRmFSR0c0MUxLSkR4aUk2a3c5M0h0cTNsclB3VllldE5VY1E9Iiwic2lnbmF0dXJlIjoia2V5SWQ9XCJwcmltYXJ5XCIsYWxnb3JpdGhtPVwiZWQyNTUxOVwiLGhlYWRlcnM9XCJkaWdlc3RcIixzaWduYXR1cmU9XCJkcXBQdERESXE0djNiS1V5eHB6Q3Vyd01nSzRmTWk1MUJjakRLc2pTak90K1h1MElZZlBTMWxEZ01aRkhiaWJqcGh0MVd3V3l5enFad3lVNW0yN1FDUT09XCIifSwib2N0ZXRzIjoie1wiZGVub21pbmF0aW9uXCI6e1wiYW1vdW50XCI6XCIwXCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImE2ZGZmMmJhLWQwZDEtNDFjNC04ZTU2LWEyNjA1YmNhZjRhZlwifSJ9"}`))
 	)
@@ -118,14 +117,14 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 func TestGetWalletV3(t *testing.T) {
 	var (
 		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
+		datastore   = Datastore(
+			&Postgres{
 				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
+		roDatastore = ReadOnlyDatastore(
+			&Postgres{
 				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
@@ -134,7 +133,7 @@ func TestGetWalletV3(t *testing.T) {
 		ctx     = context.Background()
 		id      = uuid.NewV4()
 		r       = httptest.NewRequest("GET", fmt.Sprintf("/v3/wallet/%s", id), nil)
-		handler = wallet.GetWalletV3
+		handler = GetWalletV3
 		rw      = httptest.NewRecorder()
 		rows    = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
 			AddRow(id, "brave", "", "12345", id, id)
@@ -157,7 +156,7 @@ func TestGetWalletV3(t *testing.T) {
 }
 
 func TestLinkBitFlyerWalletV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+	VerifiedWalletEnable = true
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -182,7 +181,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 
 	externalAccountID := hex.EncodeToString(h.Sum(nil))
 
-	linkingInfo := wallet.BitFlyerLinkingInfo{
+	linkingInfo := BitFlyerLinkingInfo{
 		DepositID:         idTo.String(),
 		RequestID:         "1",
 		AccountHash:       accountHash.String(),
@@ -208,7 +207,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
 		s, mock        = initSvcWithMockDB(t)
-		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
+		handler        = LinkBitFlyerDepositAccountV3(s)
 		rw             = httptest.NewRecorder()
 	)
 
@@ -218,7 +217,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, accountHash.String())
+	linkingID := uuid.NewV5(ClaimNamespace, accountHash.String())
 
 	// acquire lock for linkingID
 	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
@@ -238,7 +237,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(wallet.ClaimNamespace, accountHash.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(ClaimNamespace, accountHash.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "bitflyer", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -271,7 +270,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
-	var l wallet.LinkDepositAccountResponse
+	var l LinkDepositAccountResponse
 	err = json.Unmarshal(b, &l)
 	require.NoError(t, err)
 
@@ -279,7 +278,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+	VerifiedWalletEnable = true
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -310,7 +309,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 				}`, linkingInfo, idTo)),
 		)
 
-		handler = wallet.LinkGeminiDepositAccountV3(s)
+		handler = LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
 
@@ -359,7 +358,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
+	linkingID := uuid.NewV5(ClaimNamespace, idTo.String())
 
 	// acquire lock for linkingID
 	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
@@ -391,7 +390,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -410,7 +409,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
-	var l wallet.LinkDepositAccountResponse
+	var l LinkDepositAccountResponse
 	err := json.Unmarshal(b, &l)
 	require.NoError(t, err)
 
@@ -421,7 +420,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		"DELETE",
 		fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
 
-	handler = wallet.DisconnectCustodianLinkV3(s)
+	handler = DisconnectCustodianLinkV3(s)
 	rw = httptest.NewRecorder()
 
 	// create transaction
@@ -443,7 +442,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	router.ServeHTTP(rw, r)
 
 	if resp := rw.Result(); resp.StatusCode != http.StatusOK {
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+		t.Errorf("invalid response expected %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	// ban the country now
@@ -469,7 +468,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 	// perform again, make sure we check haslinkedprio
 	hasPriorRows := sqlmock.NewRows([]string{"result"}).
 		AddRow(true)
-	mock.ExpectQuery("^select exists(select 1 from wallet_custodian (.+)").WithArgs(uuid.NewV5(wallet.ClaimNamespace, accountID.String()), idFrom).WillReturnRows(hasPriorRows)
+	mock.ExpectQuery("^select exists(select 1 from wallet_custodian (.+)").WithArgs(uuid.NewV5(ClaimNamespace, accountID.String()), idFrom).WillReturnRows(hasPriorRows)
 
 	max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	open = sqlmock.NewRows([]string{"used"}).AddRow(0)
@@ -492,7 +491,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -511,7 +510,7 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+	VerifiedWalletEnable = true
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -542,7 +541,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 				}`, linkingInfo, idTo)),
 		)
 
-		handler = wallet.LinkGeminiDepositAccountV3(s)
+		handler = LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
 
@@ -582,7 +581,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
+	linkingID := uuid.NewV5(ClaimNamespace, idTo.String())
 
 	// acquire lock for linkingID
 	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
@@ -614,7 +613,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -633,7 +632,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
-	var l wallet.LinkDepositAccountResponse
+	var l LinkDepositAccountResponse
 	err := json.Unmarshal(b, &l)
 	require.NoError(t, err)
 }
@@ -657,7 +656,7 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 		accountID = uuid.NewV4()
 		idTo      = accountID
 		s, _      = initSvcWithMockDB(t)
-		handler   = wallet.LinkZebPayDepositAccountV3(s)
+		handler   = LinkZebPayDepositAccountV3(s)
 		rw        = httptest.NewRecorder()
 	)
 
@@ -694,13 +693,13 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusForbidden, rw.Code, string(b))
 
-	var l wallet.LinkDepositAccountResponse
+	var l LinkDepositAccountResponse
 	err = json.Unmarshal(b, &l)
 	require.NoError(t, err)
 }
 
 func TestLinkZebPayWalletV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+	VerifiedWalletEnable = true
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -722,7 +721,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 
 		s, mock = initSvcWithMockDB(t)
 
-		handler = wallet.LinkZebPayDepositAccountV3(s)
+		handler = LinkZebPayDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
 
@@ -762,7 +761,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
+	linkingID := uuid.NewV5(ClaimNamespace, idTo.String())
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
 
 	// acquire lock for linkingID
@@ -782,7 +781,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "zebpay", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "zebpay", uuid.NewV5(ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "zebpay", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -801,7 +800,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
-	var l wallet.LinkDepositAccountResponse
+	var l LinkDepositAccountResponse
 	err = json.Unmarshal(b, &l)
 	require.NoError(t, err)
 
@@ -809,7 +808,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 }
 
 func TestLinkGeminiWalletV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+	VerifiedWalletEnable = true
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -839,7 +838,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		)
 		s, mock = initSvcWithMockDB(t)
 
-		handler = wallet.LinkGeminiDepositAccountV3(s)
+		handler = LinkGeminiDepositAccountV3(s)
 		rw      = httptest.NewRecorder()
 	)
 
@@ -879,7 +878,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
+	linkingID := uuid.NewV5(ClaimNamespace, idTo.String())
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
 
 	// acquire lock for linkingID
@@ -899,7 +898,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -918,7 +917,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
-	var l wallet.LinkDepositAccountResponse
+	var l LinkDepositAccountResponse
 	err := json.Unmarshal(b, &l)
 	require.NoError(t, err)
 
@@ -926,7 +925,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 }
 
 func TestDisconnectCustodianLinkV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+	VerifiedWalletEnable = true
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -943,7 +942,7 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 
 		s, mock = initSvcWithMockDB(t)
 
-		handler = wallet.DisconnectCustodianLinkV3(s)
+		handler = DisconnectCustodianLinkV3(s)
 		w       = httptest.NewRecorder()
 	)
 
@@ -968,13 +967,55 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	router.ServeHTTP(w, r)
 
 	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+		t.Errorf("invalid response expected %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 }
 
-func must(t *testing.T, msg string, err error) {
-	if err != nil {
-		t.Errorf("%s: %s\n", msg, err)
+func TestIsAllowedOrigin(t *testing.T) {
+	type tcGiven struct {
+		origin         string
+		allowedOrigins []string
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "allowed",
+			given: tcGiven{
+				origin:         "test",
+				allowedOrigins: []string{"random-1", "random-2", "random-3", "test"},
+			},
+			exp: true,
+		},
+		{
+			name: "empty_origin",
+			given: tcGiven{
+				allowedOrigins: []string{"random-1", "random-2", "random-3", "test"},
+			},
+			exp: false,
+		},
+		{
+			name: "origin_not_in_allowed_origins",
+			given: tcGiven{
+				origin:         "test",
+				allowedOrigins: []string{"random-1", "random-2", "random-3", "random-4"},
+			},
+			exp: false,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := isAllowedOrigin(tc.given.origin, tc.given.allowedOrigins)
+			assert.Equal(t, tc.exp, actual)
+		})
 	}
 }
 
@@ -998,10 +1039,10 @@ func mockSQLCustodianLink(mock sqlmock.Sqlmock, custodian string) {
 		WillReturnRows(clRow)
 }
 
-func initSvcWithMockDB(t *testing.T) (*wallet.Service, sqlmock.Sqlmock) {
+func initSvcWithMockDB(t *testing.T) (*Service, sqlmock.Sqlmock) {
 	db, mock, _ := sqlmock.New()
-	datastore := wallet.Datastore(
-		&wallet.Postgres{
+	datastore := Datastore(
+		&Postgres{
 			Postgres: datastoreutils.Postgres{
 				DB: sqlx.NewDb(db, "postgres"),
 			},
@@ -1015,9 +1056,9 @@ func initSvcWithMockDB(t *testing.T) (*wallet.Service, sqlmock.Sqlmock) {
 		},
 	}
 
-	dappConf := wallet.DAppConfig{}
+	dappConf := DAppConfig{}
 
-	s, err := wallet.InitService(datastore, nil, nil, nil, nil, nil, nil, nil, mtc, gem, dappConf)
+	s, err := InitService(datastore, nil, nil, nil, nil, nil, nil, nil, mtc, gem, dappConf)
 	require.NoError(t, err)
 
 	return s, mock
