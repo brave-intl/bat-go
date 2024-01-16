@@ -627,3 +627,11 @@ func noOpMw() func(next http.Handler) http.Handler {
 		})
 	}
 }
+
+func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
+	var s httpsignature.SignatureParams
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = hex.EncodeToString(publicKey)
+	s.Headers = []string{"digest", "(request-target)"}
+	return s.Sign(privateKey, crypto.Hash(0), req)
+}

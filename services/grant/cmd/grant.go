@@ -355,11 +355,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
 	ctx, walletService = wallet.SetupService(ctx)
-	origin := os.Getenv("DAPP_ALLOWED_CORS_ORIGINS")
-	if origin == "" {
+	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
+	if len(dappAO) == 0 {
 		logger.Panic().Msg("dapp origin env missing")
 	}
-	r = wallet.RegisterRoutes(ctx, walletService, r, middleware.InstrumentHandler, wallet.NewDAppCorsMw(origin))
+	r = wallet.RegisterRoutes(ctx, walletService, r, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO))
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {

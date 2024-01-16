@@ -467,7 +467,8 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 
 		l := logging.Logger(ctx, "wallet")
 
-		if o := r.Header.Get("Origin"); o != s.dappConf.AllowedOrigin {
+		o := r.Header.Get("Origin")
+		if !isAllowedOrigin(o, s.dappConf.AllowedOrigins) {
 			l.Error().Err(errOriginForbidden).Str("origin", strOr(o, "empty")).Msg("error linking solana address")
 			return handlers.WrapError(errOriginForbidden, "request origin forbidden", http.StatusForbidden)
 		}
@@ -507,7 +508,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 			case errors.As(err, &solErr):
 				return handlers.WrapError(solErr, "invalid solana linking message", http.StatusUnauthorized)
 			default:
-				return handlers.WrapError(err, "internal server error", http.StatusInternalServerError)
+				return handlers.WrapError(model.ErrInternalServer, "internal server error", http.StatusInternalServerError)
 			}
 		}
 
@@ -815,6 +816,20 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 
 		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
+}
+
+func isAllowedOrigin(origin string, allowedOrigins []string) bool {
+	if origin == "" {
+		return false
+	}
+
+	for i := range allowedOrigins {
+		if allowedOrigins[i] == origin {
+			return true
+		}
+	}
+
+	return false
 }
 
 func strOr(a string, b string) string {
