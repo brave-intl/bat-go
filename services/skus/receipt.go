@@ -42,8 +42,6 @@ const (
 )
 
 var (
-	errClientMisconfigured = errors.New("misconfigured client")
-
 	errPurchaseUserCanceled      = errors.New("purchase is canceled by user")
 	errPurchaseSystemCanceled    = errors.New("purchase is canceled by google playstore")
 	errPurchaseReplacedCanceled  = errors.New("purchase is canceled and replaced")
