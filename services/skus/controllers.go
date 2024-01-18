@@ -764,13 +764,13 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 				}
 			}
 			return handlers.WrapError(err, "Error getting credentials", http.StatusNotFound)
-		} else {
-			if creds == nil {
-				return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
-			}
-
-			return handlers.RenderContent(ctx, creds, w, status)
 		}
+
+		if creds == nil {
+			return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
+		}
+
+		return handlers.RenderContent(ctx, creds, w, status)
 	})
 }
 
