@@ -365,6 +365,7 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 				"LinkZebPayDepositAccount", LinkZebPayDepositAccountV3(s))).ServeHTTP)
 
 			r.Method(http.MethodPost, "/solana/{paymentID}/connect", metricsMw("LinkSolanaAddress", dAppCorsMw(LinkSolanaAddress(s))))
+			r.Method(http.MethodOptions, "/solana/{paymentID}/connect", metricsMw("LinkSolanaAddressOptions", dAppCorsMw(noOpHandler())))
 		}
 
 		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
@@ -377,6 +378,7 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 		r.Get("/uphold/{paymentID}", middleware.InstrumentHandlerFunc("GetUpholdWalletBalance", GetUpholdWalletBalanceV3))
 
 		r.Post("/challenges", middleware.RateLimiter(ctx, 2)(metricsMw("CreateChallenge", dAppCorsMw(CreateChallenge(s)))).ServeHTTP)
+		r.Options("/challenges", middleware.RateLimiter(ctx, 2)(metricsMw("CreateChallengeOptions", dAppCorsMw(noOpHandler()))).ServeHTTP)
 	})
 
 	r.Route("/v4/wallets", func(r chi.Router) {
@@ -409,6 +411,12 @@ func NewDAppCorsMw(origins []string) func(next http.Handler) http.Handler {
 		MaxAge:           300,
 	}
 	return cors.Handler(opts)
+}
+
+func noOpHandler() http.Handler {
+	return http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		return
+	})
 }
 
 // SubmitAnonCardTransaction validates and submits a transaction on behalf of an anonymous card

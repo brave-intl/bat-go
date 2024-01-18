@@ -465,6 +465,25 @@ func (suite *WalletControllersTestSuite) TestChallenges_Success() {
 	suite.Assert().Equal(chl.Nonce, resp.Nonce)
 }
 
+func (suite *WalletControllersTestSuite) TestChallenges_Options() {
+	req := httptest.NewRequest(http.MethodOptions, "/v3/wallet/challenges", nil)
+	req.Header.Add("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Add("Access-Control-Request-Headers", "Content-Type")
+	req.Header.Set("origin", "https://my-dapp.com")
+
+	rw := httptest.NewRecorder()
+
+	s := wallet.Service{}
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(&s)}
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+	suite.Require().Equal(http.MethodPost, rw.Header().Get("Access-Control-Allow-Methods"))
+	suite.Require().Equal("Content-Type", rw.Header().Get("Access-Control-Allow-Headers"))
+}
+
 func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	viper.Set("enable-link-drain-flag", "true")
 
@@ -539,6 +558,27 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	// after a successful linking the challenge should be removed from the database.
 	_, actualErr := chlRep.Get(context.TODO(), pg.RawDB(), paymentID)
 	suite.Assert().ErrorIs(actualErr, model.ErrChallengeNotFound)
+}
+
+func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Options() {
+	viper.Set("enable-link-drain-flag", "true")
+
+	req := httptest.NewRequest(http.MethodOptions, "/v3/wallet/solana/ae51dce3-08e9-4beb-8a70-c51d064bb7d1/connect", nil)
+	req.Header.Add("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Add("Access-Control-Request-Headers", "Content-Type")
+	req.Header.Set("origin", "https://my-dapp.com")
+
+	rw := httptest.NewRecorder()
+
+	s := wallet.Service{}
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(&s)}
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+	suite.Require().Equal(http.MethodPost, rw.Header().Get("Access-Control-Allow-Methods"))
+	suite.Require().Equal("Content-Type", rw.Header().Get("Access-Control-Allow-Headers"))
 }
 
 func whitelistWallet(t *testing.T, pg wallet.Datastore, Id string) {
