@@ -761,7 +761,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 		if legacyMode {
 			suCreds, ok := creds.([]OrderCreds)
 			if !ok {
-				return handlers.WrapError(err, "Error getting credentials", http.StatusNotFound)
+				return handlers.WrapError(err, "Error getting credentials", http.StatusInternalServerError)
 			}
 
 			for i := range suCreds {
