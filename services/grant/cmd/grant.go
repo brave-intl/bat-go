@@ -497,7 +497,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 				"/",
 				middleware.InstrumentHandler(
 					"CreateOrderNew",
-					corsMwrPost(handlers.AppHandler(orderh.Create)),
+					corsMwrPost(handlers.AppHandler(orderh.CreateNew)),
 				),
 			)
 		} else {
