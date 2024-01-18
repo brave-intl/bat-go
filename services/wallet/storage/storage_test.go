@@ -313,16 +313,16 @@ func TestChallenge_DeleteAfter(t *testing.T) {
 
 			c := Challenge{}
 
-			for i := range tc.given.challenges {
-				err := c.Upsert(ctx, dbi, tc.given.challenges[i])
+			for j := range tc.given.challenges {
+				err := c.Upsert(ctx, dbi, tc.given.challenges[j])
 				must.NoError(t, err)
 			}
 
 			err := c.DeleteAfter(ctx, dbi, tc.given.interval)
 			must.Equal(t, tc.exp.errDel, err)
 
-			for i := range tc.given.challenges {
-				_, err := c.Get(ctx, dbi, tc.given.challenges[i].PaymentID)
+			for j := range tc.given.challenges {
+				_, err := c.Get(ctx, dbi, tc.given.challenges[j].PaymentID)
 				must.Equal(t, tc.exp.errGet, err)
 			}
 		})
