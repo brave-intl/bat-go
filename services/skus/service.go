@@ -91,6 +91,11 @@ type orderStoreSvc interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 }
 
+type vendorReceiptValidator interface {
+	validateApple(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
+	validateGoogle(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
+}
+
 // Service contains datastore
 type Service struct {
 	orderRepo  orderStoreSvc
@@ -113,6 +118,8 @@ type Service struct {
 	retry              backoff.RetryFunc
 	radomClient        *radom.InstrumentedClient
 	radomSellerAddress string
+
+	vendorReceiptValid vendorReceiptValidator
 }
 
 // PauseWorker - pause worker until time specified
@@ -159,8 +166,6 @@ func (s *Service) InitKafka(ctx context.Context) error {
 // InitService creates a service using the passed datastore and clients configured from the environment.
 func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service, orderRepo orderStoreSvc, issuerRepo issuerStore) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
-	// setup the in app purchase clients
-	initClients(ctx)
 
 	// setup stripe if exists in context and enabled
 	scClient := &client.API{}
@@ -233,6 +238,17 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		}
 	}
 
+	cl := &http.Client{
+		Transport: &dumpTransport{},
+		Timeout:   30 * time.Second,
+	}
+
+	playKey, _ := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte)
+	rcptValidator, err := newReceiptVerifier(cl, playKey)
+	if err != nil {
+		return nil, err
+	}
+
 	service := &Service{
 		orderRepo:  orderRepo,
 		issuerRepo: issuerRepo,
@@ -247,6 +263,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		retry:              backoff.Retry,
 		radomClient:        radomClient,
 		radomSellerAddress: radomSellerAddress,
+		vendorReceiptValid: rcptValidator,
 	}
 
 	// setup runnable jobs
@@ -1559,13 +1576,12 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	}
 
 	// have order, now validate the receipt from the notification
-	_, err = s.validateReceipt(ctx, &o.ID, SubmitReceiptRequestV1{
+	if _, err := s.vendorReceiptValid.validateGoogle(ctx, SubmitReceiptRequestV1{
 		Type:           "android",
 		Blob:           dn.SubscriptionNotification.PurchaseToken,
 		Package:        dn.PackageName,
 		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("failed to validate purchase token: %w", err)
 	}
 
@@ -1597,17 +1613,16 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	return nil
 }
 
-// validateReceipt - perform receipt validation
-func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, receipt interface{}) (string, error) {
-	// based on the vendor call the vendor specific apis to check the status of the receipt,
-	if v, ok := receipt.(SubmitReceiptRequestV1); ok {
-		// and get back the external id
-		if fn, ok := receiptValidationFns[v.Type]; ok {
-			return fn(ctx, receipt)
-		}
+// validateReceipt validates receipt.
+func (s *Service) validateReceipt(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
+	switch receipt.Type {
+	case appleVendor:
+		return s.vendorReceiptValid.validateApple(ctx, receipt)
+	case googleVendor:
+		return s.vendorReceiptValid.validateGoogle(ctx, receipt)
+	default:
+		return "", errorutils.ErrNotImplemented
 	}
-
-	return "", errorutils.ErrNotImplemented
 }
 
 // UpdateOrderStatusPaidWithMetadata - update the order status with metadata
