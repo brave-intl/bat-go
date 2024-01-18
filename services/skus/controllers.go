@@ -757,11 +757,20 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
 		}
 
-		if creds == nil {
-			return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
-		}
+		if legacyMode {
+			for _, oc := range creds.([]OrderCreds) {
+				if uuid.Equal(oc.ID, *itemID.UUID()) {
+					return handlers.RenderContent(ctx, oc, w, status)
+				}
+			}
+			return handlers.WrapError(err, "Error getting credentials", http.StatusNotFound)
+		} else {
+			if creds == nil {
+				return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
+			}
 
-		return handlers.RenderContent(ctx, creds, w, status)
+			return handlers.RenderContent(ctx, creds, w, status)
+		}
 	})
 }
 
