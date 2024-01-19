@@ -742,7 +742,8 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			reqID = *reqIDRaw.UUID()
 		}
 
-		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), reqID)
+		itemIDv := *itemID.UUID()
+		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), itemIDv, reqID)
 		if err != nil {
 			if !errors.Is(err, errSetRetryAfter) {
 				return handlers.WrapError(err, "Error getting credentials", status)
@@ -755,6 +756,21 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			}
 
 			w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
+		}
+
+		if legacyMode {
+			suCreds, ok := creds.([]OrderCreds)
+			if !ok {
+				return handlers.WrapError(err, "Error getting credentials", http.StatusInternalServerError)
+			}
+
+			for i := range suCreds {
+				if uuid.Equal(suCreds[i].ID, itemIDv) {
+					return handlers.RenderContent(ctx, suCreds[i], w, status)
+				}
+			}
+
+			return handlers.WrapError(err, "Error getting credentials", http.StatusNotFound)
 		}
 
 		if creds == nil {
