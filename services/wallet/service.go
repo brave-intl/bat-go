@@ -295,10 +295,17 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		l.Error().Err(err).Msg("failed to initialize custodian regions")
 	}
 
+	decJob := deleteExpiredChallengeTask{exec: db.RawDB(), deleter: chlRepo, deleteAfterMin: 5}
+
 	s.jobs = []srv.Job{
 		{
 			Func:    s.RefreshCustodianRegionsWorker,
 			Cadence: 15 * time.Minute,
+			Workers: 1,
+		},
+		{
+			Func:    decJob.deleteExpiredChallenges,
+			Cadence: 10 * time.Minute,
 			Workers: 1,
 		},
 	}
@@ -1049,4 +1056,21 @@ func parseZebPayClaims(ctx context.Context, verificationToken string) (claimsZP,
 	}
 
 	return claims, nil
+}
+
+type deleter interface {
+	DeleteAfter(ctx context.Context, dbi sqlx.ExecerContext, interval time.Duration) error
+}
+
+type deleteExpiredChallengeTask struct {
+	exec           sqlx.ExecerContext
+	deleter        deleter
+	deleteAfterMin time.Duration
+}
+
+func (d *deleteExpiredChallengeTask) deleteExpiredChallenges(ctx context.Context) (bool, error) {
+	if err := d.deleter.DeleteAfter(ctx, d.exec, d.deleteAfterMin); err != nil && !errors.Is(err, model.ErrNoRowsDeleted) {
+		return false, fmt.Errorf("error deleting expired challenges: %w", err)
+	}
+	return true, nil
 }
