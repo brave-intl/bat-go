@@ -373,10 +373,8 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
-	// overwrite the receipt validation function for this test
-	receiptValidationFns = map[Vendor]func(context.Context, interface{}) (string, error){
-		appleVendor: validateIOSReceipt,
-		googleVendor: func(ctx context.Context, v interface{}) (string, error) {
+	suite.service.vendorReceiptValid = &mockVendorReceiptValidator{
+		fnValidateGoogle: func(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
 			return "my external id", nil
 		},
 	}
@@ -1889,4 +1887,25 @@ func newCORSOptsEnv() cors.Options {
 	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
 
 	return NewCORSOpts(origins, dbg)
+}
+
+type mockVendorReceiptValidator struct {
+	fnValidateApple  func(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
+	fnValidateGoogle func(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
+}
+
+func (v *mockVendorReceiptValidator) validateApple(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
+	if v.fnValidateApple == nil {
+		return "apple_defaul", nil
+	}
+
+	return v.fnValidateApple(ctx, receipt)
+}
+
+func (v *mockVendorReceiptValidator) validateGoogle(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
+	if v.fnValidateGoogle == nil {
+		return "google_default", nil
+	}
+
+	return v.fnValidateGoogle(ctx, receipt)
 }
