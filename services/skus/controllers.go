@@ -1286,8 +1286,8 @@ func SubmitReceipt(svc *Service) handlers.AppHandler {
 
 		l := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
 
-		ordIDRaw := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, ordIDRaw, chi.URLParam(r, "orderID")); err != nil {
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			l.Warn().Err(err).Msg("failed to decode orderID")
 
 			return handlers.ValidationError("Error validating request", map[string]interface{}{"orderID": err.Error()})
@@ -1314,8 +1314,6 @@ func SubmitReceipt(svc *Service) handlers.AppHandler {
 
 		// TODO(clD11): remove when no longer needed.
 		l.Info().Interface("req_decoded", req).Msg("req decoded")
-
-		orderID := ordIDRaw.UUID()
 
 		extID, err := svc.validateReceipt(ctx, req)
 		if err != nil {
@@ -1362,7 +1360,7 @@ func SubmitReceipt(svc *Service) handlers.AppHandler {
 			paymentProcessor: vnd,
 		}
 
-		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, orderID, mdata); err != nil {
+		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), mdata); err != nil {
 			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
 		}

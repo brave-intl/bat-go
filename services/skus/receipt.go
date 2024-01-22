@@ -15,10 +15,12 @@ import (
 
 	"github.com/awa/go-iap/appstore"
 	"github.com/awa/go-iap/playstore"
-	androidpublisher "google.golang.org/api/androidpublisher/v3"
+	"google.golang.org/api/androidpublisher/v3"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
@@ -41,6 +43,10 @@ const (
 	purchaseValidationErrCode    = "validation_failed"
 )
 
+const (
+	errNoInAppTx model.Error = "no in app info in response"
+)
+
 var (
 	errPurchaseUserCanceled      = errors.New("purchase is canceled by user")
 	errPurchaseSystemCanceled    = errors.New("purchase is canceled by google playstore")
@@ -53,8 +59,6 @@ var (
 	errPurchaseFailed        = errors.New("purchase failed")
 
 	errPurchaseExpired = errors.New("purchase expired")
-
-	errNoInAppTx = errors.New("no in app info in response")
 )
 
 type dumpTransport struct{}
