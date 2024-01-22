@@ -389,17 +389,17 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 	})
 
 	r.Route("/v4/wallets", func(r chi.Router) {
-		r.Use(middleware.RateLimiter(ctx, 2))
-		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
-		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
-		r.Get("/{paymentID}",
-			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"GetWalletV4", GetWalletV4(s))).ServeHTTP)
-		// get wallet balance routes
-		r.Get("/uphold/{paymentID}",
-			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"GetUpholdWalletBalanceV4", GetUpholdWalletBalanceV4)).ServeHTTP)
+		r.Post("/", middleware.RateLimiter(ctx, 2)(
+			middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s))).ServeHTTP)
+
+		r.Patch("/{paymentID}", middleware.RateLimiter(ctx, 2)(middleware.HTTPSignedOnly(s)(
+			middleware.InstrumentHandlerFunc("UpdateWalletV4", UpdateWalletV4(s)))).ServeHTTP)
+
+		r.Get("/{paymentID}", middleware.RateLimiter(ctx, 7)(middleware.HTTPSignedOnly(s)(
+			middleware.InstrumentHandlerFunc("GetWalletV4", GetWalletV4(s)))).ServeHTTP)
+
+		r.Get("/uphold/{paymentID}", middleware.RateLimiter(ctx, 2)(middleware.HTTPSignedOnly(s)(
+			middleware.InstrumentHandlerFunc("GetUpholdWalletBalanceV4", GetUpholdWalletBalanceV4))).ServeHTTP)
 	})
 
 	return r

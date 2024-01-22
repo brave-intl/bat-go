@@ -24,6 +24,10 @@ type AllowListEntry struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
+func (a AllowListEntry) IsAllowed(paymentID uuid.UUID) bool {
+	return !uuid.Equal(a.PaymentID, uuid.Nil) && uuid.Equal(a.PaymentID, paymentID)
+}
+
 type Challenge struct {
 	PaymentID uuid.UUID `db:"payment_id"`
 	CreatedAt time.Time `db:"created_at"`

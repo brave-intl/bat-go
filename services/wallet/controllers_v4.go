@@ -201,13 +201,14 @@ func GetWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handl
 			return handlers.WrapError(err, "no such wallet", http.StatusNotFound)
 		}
 
-		if _, err := s.allowListRepo.GetAllowListEntry(ctx, s.Datastore.RawDB(), paymentID); err != nil && !errors.Is(err, model.ErrNotFound) {
+		allow, err := s.allowListRepo.GetAllowListEntry(ctx, s.Datastore.RawDB(), paymentID)
+		if err != nil && !errors.Is(err, model.ErrNotFound) {
 			return handlers.WrapError(err, "error getting allow list entry from storage", http.StatusInternalServerError)
 		}
 
-		solSelfCustody := !errors.Is(err, model.ErrNotFound)
+		isSelfCustAvail := allow.IsAllowed(paymentID)
 
-		resp := infoToResponseV4(info, solSelfCustody)
+		resp := infoToResponseV4(info, isSelfCustAvail)
 
 		return handlers.RenderContent(ctx, resp, w, http.StatusOK)
 	}
