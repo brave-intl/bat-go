@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/jmoiron/sqlx"
@@ -55,6 +56,28 @@ func (c *Challenge) Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentI
 	const q = `delete from challenge where payment_id = $1`
 
 	result, err := dbi.ExecContext(ctx, q, paymentID)
+	if err != nil {
+		return err
+	}
+
+	row, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if row == 0 {
+		return model.ErrNoRowsDeleted
+	}
+
+	return nil
+}
+
+// DeleteAfter removes model.Challenge's from the database where their created at plus the specified interval it
+// less than the current time. The interval should be specified in minutes.
+func (c *Challenge) DeleteAfter(ctx context.Context, dbi sqlx.ExecerContext, interval time.Duration) error {
+	const q = `delete from challenge where created_at + interval '1 min' * $1 < now()`
+
+	result, err := dbi.ExecContext(ctx, q, interval)
 	if err != nil {
 		return err
 	}

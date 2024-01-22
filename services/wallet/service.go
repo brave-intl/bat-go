@@ -295,10 +295,17 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		l.Error().Err(err).Msg("failed to initialize custodian regions")
 	}
 
+	decJob := deleteExpiredChallengeTask{exec: db.RawDB(), deleter: chlRepo, deleteAfterMin: 5}
+
 	s.jobs = []srv.Job{
 		{
 			Func:    s.RefreshCustodianRegionsWorker,
 			Cadence: 15 * time.Minute,
+			Workers: 1,
+		},
+		{
+			Func:    decJob.deleteExpiredChallenges,
+			Cadence: 10 * time.Minute,
 			Workers: 1,
 		},
 	}
@@ -382,17 +389,17 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 	})
 
 	r.Route("/v4/wallets", func(r chi.Router) {
-		r.Use(middleware.RateLimiter(ctx, 2))
-		r.Post("/", middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s)))
-		r.Patch("/{paymentID}", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"UpdateWalletV4", UpdateWalletV4(s))).ServeHTTP)
-		r.Get("/{paymentID}",
-			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"GetWalletV4", GetWalletV4(s))).ServeHTTP)
-		// get wallet balance routes
-		r.Get("/uphold/{paymentID}",
-			middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"GetUpholdWalletBalanceV4", GetUpholdWalletBalanceV4)).ServeHTTP)
+		r.Post("/", middleware.RateLimiter(ctx, 2)(
+			middleware.InstrumentHandlerFunc("CreateWalletV4", CreateWalletV4(s))).ServeHTTP)
+
+		r.Patch("/{paymentID}", middleware.RateLimiter(ctx, 2)(middleware.HTTPSignedOnly(s)(
+			middleware.InstrumentHandlerFunc("UpdateWalletV4", UpdateWalletV4(s)))).ServeHTTP)
+
+		r.Get("/{paymentID}", middleware.RateLimiter(ctx, 7)(middleware.HTTPSignedOnly(s)(
+			middleware.InstrumentHandlerFunc("GetWalletV4", GetWalletV4(s)))).ServeHTTP)
+
+		r.Get("/uphold/{paymentID}", middleware.RateLimiter(ctx, 2)(middleware.HTTPSignedOnly(s)(
+			middleware.InstrumentHandlerFunc("GetUpholdWalletBalanceV4", GetUpholdWalletBalanceV4))).ServeHTTP)
 	})
 
 	return r
@@ -1049,4 +1056,21 @@ func parseZebPayClaims(ctx context.Context, verificationToken string) (claimsZP,
 	}
 
 	return claims, nil
+}
+
+type deleter interface {
+	DeleteAfter(ctx context.Context, dbi sqlx.ExecerContext, interval time.Duration) error
+}
+
+type deleteExpiredChallengeTask struct {
+	exec           sqlx.ExecerContext
+	deleter        deleter
+	deleteAfterMin time.Duration
+}
+
+func (d *deleteExpiredChallengeTask) deleteExpiredChallenges(ctx context.Context) (bool, error) {
+	if err := d.deleter.DeleteAfter(ctx, d.exec, d.deleteAfterMin); err != nil && !errors.Is(err, model.ErrNoRowsDeleted) {
+		return false, fmt.Errorf("error deleting expired challenges: %w", err)
+	}
+	return true, nil
 }

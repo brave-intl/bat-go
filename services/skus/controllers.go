@@ -1279,97 +1279,95 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-// SubmitReceipt submit a vendor verifiable receipt that proves order is paid
-func SubmitReceipt(service *Service) handlers.AppHandler {
+// SubmitReceipt handles receipt submission requests.
+func SubmitReceipt(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		var (
-			ctx              = r.Context()
-			req              SubmitReceiptRequestV1     // the body of the request
-			orderID          = new(inputs.ID)           // the order id
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
+		l := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
 
-		logger := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
+		orderID := &inputs.ID{}
+		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
+			l.Warn().Err(err).Msg("failed to decode orderID")
 
-		// validate the order id
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			logger.Warn().Err(err).Msg("Failed to decode/validate order id from url")
-			validationErrMap["orderID"] = err.Error()
+			return handlers.ValidationError("Error validating request", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
+		payload, err := requestutils.Read(ctx, r.Body)
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
-			validationErrMap["request-body"] = err.Error()
+			l.Warn().Err(err).Msg("failed to read body")
+
+			return handlers.ValidationError("Error validating request", map[string]interface{}{"request-body": err.Error()})
 		}
 
-		// TODO(clD11): remove when no longer needed
-		logger.Info().Interface("payload_byte", payload).Str("payload_str", string(payload)).Msg("payload")
+		// TODO(clD11): remove when no longer needed.
+		payloadS := string(payload)
+		l.Info().Interface("payload_byte", payload).Str("payload_str", payloadS).Msg("payload")
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
-			validationErrMap["request-body"] = err.Error()
+		req := SubmitReceiptRequestV1{}
+		if err := inputs.DecodeAndValidate(ctx, &req, payload); err != nil {
+			l.Debug().Str("payload", payloadS).Msg("failed to decode payload")
+			l.Warn().Err(err).Msg("failed to decode payload")
+
+			return handlers.ValidationError("Error validating request", map[string]interface{}{"request-body": err.Error()})
 		}
 
-		// TODO(clD11): remove when no longer needed
-		logger.Info().Interface("req_decoded", req).Msg("req decoded")
+		// TODO(clD11): remove when no longer needed.
+		l.Info().Interface("req_decoded", req).Msg("req decoded")
 
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		// validate the receipt
-		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req)
+		extID, err := svc.validateReceipt(ctx, req)
 		if err != nil {
 			if errors.Is(err, errNotFound) {
 				return handlers.WrapError(err, "order not found", http.StatusNotFound)
 			}
-			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
-			validationErrMap["receiptErrors"] = err.Error()
-			// return codified errors for application
-			if errors.Is(err, errPurchaseFailed) {
-				return handlers.CodedValidationError(err.Error(), purchaseFailedErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchasePending) {
-				return handlers.CodedValidationError(err.Error(), purchasePendingErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseDeferred) {
-				return handlers.CodedValidationError(err.Error(), purchaseDeferredErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseStatusUnknown) {
-				return handlers.CodedValidationError(err.Error(), purchaseStatusUnknownErrCode, validationErrMap)
-			} else {
-				// unknown error
-				return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, validationErrMap)
+
+			l.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+			errStr := err.Error()
+			verrs := map[string]interface{}{"receiptErrors": errStr}
+
+			switch {
+			case errors.Is(err, errPurchaseFailed):
+				return handlers.CodedValidationError(errStr, purchaseFailedErrCode, verrs)
+			case errors.Is(err, errPurchasePending):
+				return handlers.CodedValidationError(errStr, purchasePendingErrCode, verrs)
+			case errors.Is(err, errPurchaseDeferred):
+				return handlers.CodedValidationError(errStr, purchaseDeferredErrCode, verrs)
+			case errors.Is(err, errPurchaseStatusUnknown):
+				return handlers.CodedValidationError(errStr, purchaseStatusUnknownErrCode, verrs)
+			default:
+				return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, verrs)
 			}
 		}
 
-		// does this external id exist already
-		exists, err := service.ExternalIDExists(ctx, externalID)
-		if err != nil {
-			logger.Warn().Err(err).Msg("failed to lookup external id existance")
-			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+		{
+			exists, err := svc.ExternalIDExists(ctx, extID)
+			if err != nil {
+				l.Warn().Err(err).Msg("failed to lookup external id")
+
+				return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+			}
+
+			if exists {
+				return handlers.WrapError(err, "receipt has already been submitted", http.StatusBadRequest)
+			}
 		}
 
-		if exists {
-			return handlers.WrapError(err, "receipt has already been submitted", http.StatusBadRequest)
+		vnd := req.Type.String()
+		mdata := datastore.Metadata{
+			"vendor":         vnd,
+			"externalID":     extID,
+			paymentProcessor: vnd,
 		}
 
-		// set order paid and include the vendor and external id to metadata
-		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
-			"vendor":         req.Type.String(),
-			"externalID":     externalID,
-			paymentProcessor: req.Type.String(),
-		}); err != nil {
-			logger.Warn().Err(err).Msg("Failed to update the order with appropriate metadata")
+		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), mdata); err != nil {
+			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), SubmitReceiptResponseV1{
-			ExternalID: externalID,
-			Vendor:     req.Type.String(),
-		}, w, http.StatusOK)
+		result := SubmitReceiptResponseV1{ExternalID: extID, Vendor: vnd}
+
+		return handlers.RenderContent(ctx, result, w, http.StatusOK)
 	})
 }
 

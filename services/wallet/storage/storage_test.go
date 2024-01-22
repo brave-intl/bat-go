@@ -217,6 +217,118 @@ func TestChallenge_Delete(t *testing.T) {
 	}
 }
 
+func TestChallenge_DeleteAfter(t *testing.T) {
+	dbi, err := setupDBI()
+	must.NoError(t, err)
+
+	defer func() {
+		_, _ = dbi.Exec("TRUNCATE_TABLE challenge;")
+	}()
+
+	type tcGiven struct {
+		interval   time.Duration
+		challenges []model.Challenge
+	}
+
+	type exp struct {
+		errDel error
+		errGet error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   exp
+	}
+
+	tests := []testCase{
+		{
+			name: "delete_single",
+			given: tcGiven{
+				interval: 1,
+				challenges: []model.Challenge{
+					{
+						PaymentID: uuid.NewV4(),
+						CreatedAt: time.Now().Add(-6 * time.Minute),
+						Nonce:     "nonce-1",
+					},
+				},
+			},
+			exp: exp{
+				errDel: nil,
+				errGet: model.ErrChallengeNotFound,
+			},
+		},
+		{
+			name: "delete_multiple",
+			given: tcGiven{
+				interval: 1,
+				challenges: []model.Challenge{
+					{
+						PaymentID: uuid.NewV4(),
+						CreatedAt: time.Now().Add(-6 * time.Minute),
+						Nonce:     "nonce-1",
+					},
+					{
+						PaymentID: uuid.NewV4(),
+						CreatedAt: time.Now().Add(-10 * time.Minute),
+						Nonce:     "nonce-2",
+					},
+				},
+			},
+			exp: exp{
+				errDel: nil,
+				errGet: model.ErrChallengeNotFound,
+			},
+		},
+		{
+			name: "delete_none",
+			given: tcGiven{
+				interval: 1,
+				challenges: []model.Challenge{
+					{
+						PaymentID: uuid.NewV4(),
+						CreatedAt: time.Now(),
+						Nonce:     "nonce-1",
+					},
+					{
+						PaymentID: uuid.NewV4(),
+						CreatedAt: time.Now(),
+						Nonce:     "nonce-2",
+					},
+				},
+			},
+			exp: exp{
+				errDel: model.ErrNoRowsDeleted,
+				errGet: nil,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			c := Challenge{}
+
+			for j := range tc.given.challenges {
+				err := c.Upsert(ctx, dbi, tc.given.challenges[j])
+				must.NoError(t, err)
+			}
+
+			err := c.DeleteAfter(ctx, dbi, tc.given.interval)
+			must.Equal(t, tc.exp.errDel, err)
+
+			for j := range tc.given.challenges {
+				_, err := c.Get(ctx, dbi, tc.given.challenges[j].PaymentID)
+				must.Equal(t, tc.exp.errGet, err)
+			}
+		})
+	}
+}
+
 func TestAllowList_GetAllowListEntry(t *testing.T) {
 	dbi, err := setupDBI()
 	must.NoError(t, err)

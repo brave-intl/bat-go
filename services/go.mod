@@ -46,6 +46,7 @@ require (
 	github.com/stripe/stripe-go/v72 v72.122.0
 	golang.org/x/crypto v0.15.0
 	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd
+	google.golang.org/api v0.134.0
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.6.0
 )
@@ -131,7 +132,6 @@ require (
 	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/sys v0.14.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	google.golang.org/api v0.134.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230803162519-f966b187b2e5 // indirect
 	google.golang.org/grpc v1.58.3 // indirect
