@@ -92,8 +92,8 @@ type orderStoreSvc interface {
 }
 
 type vendorReceiptValidator interface {
-	validateApple(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
-	validateGoogle(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
+	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
+	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
 }
 
 // Service contains datastore
@@ -1576,8 +1576,8 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	}
 
 	// have order, now validate the receipt from the notification
-	if _, err := s.vendorReceiptValid.validateGoogle(ctx, SubmitReceiptRequestV1{
-		Type:           "android",
+	if _, err := s.vendorReceiptValid.validateGoogle(ctx, model.ReceiptRequest{
+		Type:           model.VendorGoogle,
 		Blob:           dn.SubscriptionNotification.PurchaseToken,
 		Package:        dn.PackageName,
 		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
@@ -1614,12 +1614,12 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 }
 
 // validateReceipt validates receipt.
-func (s *Service) validateReceipt(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
-	switch receipt.Type {
-	case appleVendor:
-		return s.vendorReceiptValid.validateApple(ctx, receipt)
-	case googleVendor:
-		return s.vendorReceiptValid.validateGoogle(ctx, receipt)
+func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	switch req.Type {
+	case model.VendorApple:
+		return s.vendorReceiptValid.validateApple(ctx, req)
+	case model.VendorGoogle:
+		return s.vendorReceiptValid.validateGoogle(ctx, req)
 	default:
 		return "", errorutils.ErrNotImplemented
 	}

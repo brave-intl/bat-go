@@ -114,22 +114,22 @@ func newReceiptVerifier(cl *http.Client, playKey []byte) (*receiptVerifier, erro
 }
 
 // validateApple validates Apple App Store receipt.
-func (v *receiptVerifier) validateApple(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
+func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
 	l := logging.Logger(ctx, "skus").With().Str("func", "validateReceiptApple").Logger()
 
 	sharedKey, sharedKeyOK := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
 
-	req := appstore.IAPRequest{
-		ReceiptData:            receipt.Blob,
+	asreq := appstore.IAPRequest{
+		ReceiptData:            req.Blob,
 		ExcludeOldTransactions: true,
 	}
 
 	if sharedKeyOK && len(sharedKey) > 0 {
-		req.Password = sharedKey
+		asreq.Password = sharedKey
 	}
 
 	resp := &appstore.IAPResponse{}
-	if err := v.appStoreCl.Verify(ctx, req, resp); err != nil {
+	if err := v.appStoreCl.Verify(ctx, asreq, resp); err != nil {
 		l.Error().Err(err).Msg("failed to verify receipt")
 
 		return "", fmt.Errorf("failed to verify receipt: %w", err)
@@ -146,12 +146,12 @@ func (v *receiptVerifier) validateApple(ctx context.Context, receipt SubmitRecei
 }
 
 // validateGoogle validates Google Store receipt.
-func (v *receiptVerifier) validateGoogle(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
+func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
 	l := logging.Logger(ctx, "skus").With().Str("func", "validateReceiptGoogle").Logger()
 
-	l.Debug().Str("receipt", fmt.Sprintf("%+v", receipt)).Msg("about to verify subscription")
+	l.Debug().Str("receipt", fmt.Sprintf("%+v", req)).Msg("about to verify subscription")
 
-	resp, err := v.playStoreCl.VerifySubscription(ctx, receipt.Package, receipt.SubscriptionID, receipt.Blob)
+	resp, err := v.playStoreCl.VerifySubscription(ctx, req.Package, req.SubscriptionID, req.Blob)
 	if err != nil {
 		l.Error().Err(err).Msg("failed to verify subscription")
 		return "", errPurchaseFailed
@@ -174,7 +174,7 @@ func (v *receiptVerifier) validateGoogle(ctx context.Context, receipt SubmitRece
 	// Check that the order was paid.
 	switch *resp.PaymentState {
 	case androidPaymentStatePaid, androidPaymentStateTrial:
-		return receipt.Blob, nil
+		return req.Blob, nil
 
 	case androidPaymentStatePending:
 		// Checl for cancel reason.
