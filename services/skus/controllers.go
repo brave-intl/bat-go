@@ -33,6 +33,10 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
+const (
+	reqBodyLimit10MB = 10 << 20
+)
+
 type middlewareFn func(next http.Handler) http.Handler
 
 func Router(
@@ -1380,7 +1384,7 @@ func createOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *Servic
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "createOrderFromReceipt").Logger()
 
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 10<<20))
+	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 	if err != nil {
 		lg.Warn().Err(err).Msg("failed to read request")
 
