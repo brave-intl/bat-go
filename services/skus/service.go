@@ -89,6 +89,7 @@ const (
 
 type orderStoreSvc interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 }
 
 type vendorReceiptValidator interface {
@@ -1652,6 +1653,30 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	return commit()
+}
+
+func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
+	// 1. Find out what's being purchased from SubscriptionID.
+
+	// 2. Craft a request for creating an order.
+
+	// 3. Create an order.
+
+	// 4. Properly store it.
+
+	// mdata := datastore.Metadata{
+	// 	"vendor":         req.Type.String(),
+	// 	"externalID":     extID,
+	// 	paymentProcessor: req.Type.String(),
+	// }
+
+	// if err := s.UpdateOrderStatusPaidWithMetadata(ctx, ord.ID, mdata); err != nil {
+	// 	return nil, err
+	// }
+
+	// 5. Return it back.
+
+	return &model.Order{}, nil
 }
 
 func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*Order, error) {

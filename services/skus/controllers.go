@@ -1352,11 +1352,10 @@ func SubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler 
 			}
 		}
 
-		vnd := req.Type.String()
 		mdata := datastore.Metadata{
-			"vendor":         vnd,
+			"vendor":         req.Type.String(),
 			"externalID":     extID,
-			paymentProcessor: vnd,
+			paymentProcessor: req.Type.String(),
 		}
 
 		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), mdata); err != nil {
@@ -1367,7 +1366,7 @@ func SubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler 
 		result := struct {
 			ExternalID string `json:"externalId"`
 			Vendor     string `json:"vendor"`
-		}{ExternalID: extID, Vendor: vnd}
+		}{ExternalID: extID, Vendor: req.Type.String()}
 
 		return handlers.RenderContent(ctx, result, w, http.StatusOK)
 	})
@@ -1415,37 +1414,30 @@ func createOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *Servic
 	}
 
 	{
-		exists, err := svc.ExternalIDExists(ctx, extID)
-		if err != nil {
+		ord, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
+		if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
 			lg.Warn().Err(err).Msg("failed to lookup external id")
 
 			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
 		}
 
-		if exists {
-			return handlers.WrapError(err, "receipt has already been submitted", http.StatusBadRequest)
+		if err == nil {
+			result := model.CreateOrderWithReceiptResponse{ID: ord.ID.String()}
+
+			return handlers.RenderContent(ctx, result, w, http.StatusConflict)
 		}
 	}
 
-	vnd := req.Type.String()
-	mdata := datastore.Metadata{
-		"vendor":         vnd,
-		"externalID":     extID,
-		paymentProcessor: vnd,
+	ord, err := svc.createOrderWithReceipt(ctx, req, extID)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to create order")
+
+		return handlers.WrapError(err, "failed to create order", http.StatusInternalServerError)
 	}
 
-	_ = mdata
+	result := model.CreateOrderWithReceiptResponse{ID: ord.ID.String()}
 
-	// if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), mdata); err != nil {
-	// 	l.Warn().Err(err).Msg("failed to update order with vendor metadata")
-	// 	return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
-	// }
-
-	result := struct {
-		OrderID string `json:"order_id"`
-	}{OrderID: ""}
-
-	return handlers.RenderContent(ctx, result, w, http.StatusOK)
+	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
 
 }
 

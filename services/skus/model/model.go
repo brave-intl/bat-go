@@ -631,6 +631,10 @@ type ReceiptRequest struct {
 	SubscriptionID string `json:"subscription_id" validate:"-"`
 }
 
+type CreateOrderWithReceiptResponse struct {
+	ID string `json:"id"`
+}
+
 func addURLParam(src, name, val string) (string, error) {
 	raw, err := url.Parse(src)
 	if err != nil {
