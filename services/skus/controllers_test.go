@@ -47,11 +47,11 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/skus/handler"
-	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
