@@ -1662,12 +1662,12 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		- brave.leo.monthly -> brave-leo-premium
 		- brave.leo.yearly -> brave-leo-premium-year
 	*/
-
 	oreq, err := newCreateOrderReqNewLeoForRcpt(req.SubscriptionID)
 	if err != nil {
 		return nil, err
 	}
 
+	// 2. Craft a request for creating an order.
 	items, err := createOrderItems(&oreq)
 	if err != nil {
 		return nil, err
@@ -1679,28 +1679,19 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		return nil, err
 	}
 
-	_ = ordNew
-
-	// 2. Craft a request for creating an order.
-	// Hardcode stuff from Subs.
-
 	// 3. Create an order.
+	order, err := s.createOrder(ctx, &oreq, ordNew, items)
+	if err != nil {
+		return nil, err
+	}
 
-	// 4. Properly store it.
+	// 4. Properly update metadata.
+	mdata := newMobileOrderMdata(req, extID)
+	if err := s.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
+		return nil, err
+	}
 
-	// mdata := datastore.Metadata{
-	// 	"vendor":         req.Type.String(),
-	// 	"externalID":     extID,
-	// 	paymentProcessor: req.Type.String(),
-	// }
-
-	// if err := s.UpdateOrderStatusPaidWithMetadata(ctx, ord.ID, mdata); err != nil {
-	// 	return nil, err
-	// }
-
-	// 5. Return it back.
-
-	return &model.Order{}, nil
+	return order, nil
 }
 
 func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*Order, error) {
@@ -1714,6 +1705,10 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
+	return s.createOrder(ctx, req, ordNew, items)
+}
+
+func (s *Service) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
@@ -1759,9 +1754,17 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		}
 	}
 
-	if numIntervals > 0 {
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numIntervals", numIntervals); err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	if err := s.updateOrderIntvals(ctx, order.ID, items, numIntervals); err != nil {
+		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	}
+
+	return order, nil
+}
+
+func (s *Service) updateOrderIntvals(ctx context.Context, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
+	if nintvals > 0 {
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numIntervals", nintvals); err != nil {
+			return err
 		}
 	}
 
@@ -1772,12 +1775,12 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 			numPerInterval = 192
 		}
 
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", numPerInterval); err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numPerInterval", numPerInterval); err != nil {
+			return err
 		}
 	}
 
-	return order, nil
+	return nil
 }
 
 // createOrderIssuers checks that the issuer exists for the item's product.
@@ -2035,6 +2038,16 @@ func newOrderItemReqNewLeo() model.OrderItemRequestNew {
 			ProductID: "prod_O9uKDYsRPXNgfB",
 			ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
 		},
+	}
+
+	return result
+}
+
+func newMobileOrderMdata(req model.ReceiptRequest, extID string) datastore.Metadata {
+	result := datastore.Metadata{
+		"externalID":     extID,
+		paymentProcessor: req.Type.String(),
+		"vendor":         req.Type.String(),
 	}
 
 	return result

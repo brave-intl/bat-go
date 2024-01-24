@@ -22,7 +22,6 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -1352,11 +1351,7 @@ func SubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler 
 			}
 		}
 
-		mdata := datastore.Metadata{
-			"vendor":         req.Type.String(),
-			"externalID":     extID,
-			paymentProcessor: req.Type.String(),
-		}
+		mdata := newMobileOrderMdata(req, extID)
 
 		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), mdata); err != nil {
 			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
