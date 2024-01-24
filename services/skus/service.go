@@ -1655,45 +1655,6 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	return commit()
 }
 
-func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
-	// 1. Find out what's being purchased from SubscriptionID.
-	/*
-		Android:
-		- brave.leo.monthly -> brave-leo-premium
-		- brave.leo.yearly -> brave-leo-premium-year
-	*/
-	oreq, err := newCreateOrderReqNewLeoForRcpt(req.SubscriptionID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 2. Craft a request for creating an order.
-	items, err := createOrderItems(&oreq)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use status paid as it's been already paid in-app.
-	ordNew, err := newOrderNewForReq(&oreq, items, model.MerchID, model.OrderStatusPaid)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Create an order.
-	order, err := s.createOrder(ctx, &oreq, ordNew, items)
-	if err != nil {
-		return nil, err
-	}
-
-	// 4. Properly update metadata.
-	mdata := newMobileOrderMdata(req, extID)
-	if err := s.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
-		return nil, err
-	}
-
-	return order, nil
-}
-
 func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*Order, error) {
 	items, err := createOrderItems(req)
 	if err != nil {
@@ -1876,6 +1837,45 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		return handlers.RenderContent(ctx, &blindedCredVrfResult{ID: cred.TokenPreimage}, w, http.StatusOK)
 	}
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+}
+
+func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
+	// 1. Find out what's being purchased from SubscriptionID.
+	/*
+		Android:
+		- brave.leo.monthly -> brave-leo-premium
+		- brave.leo.yearly -> brave-leo-premium-year
+	*/
+	oreq, err := newCreateOrderReqNewLeoForRcpt(req.SubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Craft a request for creating an order.
+	items, err := createOrderItems(&oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use status paid as it's been already paid in-app.
+	ordNew, err := newOrderNewForReq(&oreq, items, model.MerchID, model.OrderStatusPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Create an order.
+	order, err := s.createOrder(ctx, &oreq, ordNew, items)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Properly update metadata.
+	mdata := newMobileOrderMdata(req, extID)
+	if err := s.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
+		return nil, err
+	}
+
+	return order, nil
 }
 
 func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem, merchID, status string) (*model.OrderNew, error) {
