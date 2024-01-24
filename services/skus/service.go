@@ -1659,6 +1659,7 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	// 1. Find out what's being purchased from SubscriptionID.
 
 	// 2. Craft a request for creating an order.
+	// Hardcode stuff from Subs.
 
 	// 3. Create an order.
 
