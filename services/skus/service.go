@@ -1657,6 +1657,29 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
 	// 1. Find out what's being purchased from SubscriptionID.
+	/*
+		Android:
+		- brave.leo.monthly -> brave-leo-premium
+		- brave.leo.yearly -> brave-leo-premium-year
+	*/
+
+	oreq, err := newCreateOrderReqNewLeoForRcpt(req.SubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	items, err := createOrderItems(&oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use status paid as it's been already paid in-app.
+	ordNew, err := newOrderNewForReq(&oreq, items, model.MerchID, model.OrderStatusPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = ordNew
 
 	// 2. Craft a request for creating an order.
 	// Hardcode stuff from Subs.
@@ -1686,16 +1709,10 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	// Check for number of items to be above 0.
-	//
-	// Validation should already have taken care of this.
-	// This method does not know about it, hence the explicit check.
-	nitems := len(items)
-	if nitems == 0 {
-		return nil, model.ErrInvalidOrderRequest
+	ordNew, err := newOrderNewForReq(req, items, model.MerchID, model.OrderStatusPending)
+	if err != nil {
+		return nil, err
 	}
-
-	const merchID = "brave.com"
 
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
@@ -1703,48 +1720,12 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	numIntervals, err := s.createOrderIssuers(ctx, tx, merchID, items)
+	numIntervals, err := s.createOrderIssuers(ctx, tx, model.MerchID, items)
 	if err != nil {
 		return nil, err
 	}
 
-	oreq := &model.OrderNew{
-		MerchantID:            merchID,
-		Currency:              req.Currency,
-		Status:                model.OrderStatusPending,
-		TotalPrice:            model.OrderItemList(items).TotalCost(),
-		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
-	}
-
-	if oreq.TotalPrice.IsZero() {
-		oreq.Status = model.OrderStatusPaid
-	}
-
-	// Location on the order is only defined when there is only one item.
-	//
-	// Multi-item orders have NULL location.
-	if nitems == 1 && items[0].Location.Valid {
-		oreq.Location.Valid = true
-		oreq.Location.String = items[0].Location.String
-	}
-
-	{
-		// Use validFor from the first item.
-		//
-		// TODO: Deprecate the use of valid_for:
-		// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
-		//
-		// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
-		// It does not make any sense, but it's working because there is only one item normally.
-		var vf time.Duration
-		if items[0].ValidFor != nil {
-			vf = *items[0].ValidFor
-		}
-
-		oreq.ValidFor = &vf
-	}
-
-	order, err := s.Datastore.CreateOrder(ctx, tx, oreq, items)
+	order, err := s.Datastore.CreateOrder(ctx, tx, ordNew, items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
@@ -1787,7 +1768,7 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 	// Backporting changes from https://github.com/brave-intl/bat-go/pull/1998.
 	{
 		numPerInterval := 2
-		if nitems == 1 && items[0].IsLeo() {
+		if len(items) == 1 && items[0].IsLeo() {
 			numPerInterval = 192
 		}
 
@@ -1894,6 +1875,56 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
 }
 
+func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem, merchID, status string) (*model.OrderNew, error) {
+	// Check for number of items to be above 0.
+	//
+	// Validation should already have taken care of this.
+	// This function does not know about it, hence the explicit check.
+	nitems := len(items)
+	if nitems == 0 {
+		return nil, model.ErrInvalidOrderRequest
+	}
+
+	result := &model.OrderNew{
+		MerchantID: merchID,
+		Currency:   req.Currency,
+		// Status:                model.OrderStatusPending,
+		Status:                status,
+		TotalPrice:            model.OrderItemList(items).TotalCost(),
+		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
+	}
+
+	if result.TotalPrice.IsZero() {
+		result.Status = model.OrderStatusPaid
+	}
+
+	// Location on the order is only defined when there is only one item.
+	//
+	// Multi-item orders have NULL location.
+	if nitems == 1 && items[0].Location.Valid {
+		result.Location.Valid = true
+		result.Location.String = items[0].Location.String
+	}
+
+	{
+		// Use validFor from the first item.
+		//
+		// TODO: Deprecate the use of valid_for:
+		// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
+		//
+		// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
+		// It does not make any sense, but it's working because there is only one item normally.
+		var vf time.Duration
+		if items[0].ValidFor != nil {
+			vf = *items[0].ValidFor
+		}
+
+		result.ValidFor = &vf
+	}
+
+	return result, nil
+}
+
 func createOrderItems(req *model.CreateOrderRequestNew) ([]model.OrderItem, error) {
 	result := make([]model.OrderItem, 0)
 
@@ -1955,6 +1986,58 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 	}
 
 	return result, nil
+}
+
+func newCreateOrderReqNewLeoForRcpt(subID string) (model.CreateOrderRequestNew, error) {
+	var result model.CreateOrderRequestNew
+	switch subID {
+	case "brave.leo.monthly":
+		result = newCreateOrderReqNewLeo()
+	default:
+		return model.CreateOrderRequestNew{}, model.ErrInvalidMobileProduct
+	}
+
+	return result, nil
+}
+
+func newCreateOrderReqNewLeo() model.CreateOrderRequestNew {
+	result := model.CreateOrderRequestNew{
+		// No email.
+		Currency: "USD",
+
+		// TODO: make it changeable by env.
+		StripeMetadata: &model.OrderStripeMetadata{
+			SuccessURI: "https://account.brave.com/account/?intent=provision",
+			CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+		},
+		PaymentMethods: []string{"stripe"},
+
+		Items: []model.OrderItemRequestNew{newOrderItemReqNewLeo()},
+	}
+
+	return result
+}
+
+func newOrderItemReqNewLeo() model.OrderItemRequestNew {
+	result := model.OrderItemRequestNew{
+		Quantity:                    1,
+		IssuerTokenBuffer:           3,
+		SKU:                         "brave-leo-premium",
+		Location:                    "leo.brave.com",
+		Description:                 "Premium access to Leo",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("15.00"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		IssuanceInterval:            ptrTo("P1D"),
+		// TODO: make it changeable by env.
+		StripeMetadata: &model.ItemStripeMetadata{
+			ProductID: "prod_O9uKDYsRPXNgfB",
+			ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+		},
+	}
+
+	return result
 }
 
 func durationFromISO(v string) (time.Duration, error) {
