@@ -121,6 +121,7 @@ type Service struct {
 	radomSellerAddress string
 
 	vendorReceiptValid vendorReceiptValidator
+	payProcCfg         *premiumPaymentProcConfig
 }
 
 // PauseWorker - pause worker until time specified
@@ -250,6 +251,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		return nil, err
 	}
 
+	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
+	if err != nil {
+		return nil, err
+	}
+
 	service := &Service{
 		orderRepo:  orderRepo,
 		issuerRepo: issuerRepo,
@@ -265,6 +271,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		radomClient:        radomClient,
 		radomSellerAddress: radomSellerAddress,
 		vendorReceiptValid: rcptValidator,
+		payProcCfg:         newPaymentProcessorConfig(env),
 	}
 
 	// setup runnable jobs
@@ -1846,7 +1853,7 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		- brave.leo.monthly -> brave-leo-premium
 		- brave.leo.yearly -> brave-leo-premium-year
 	*/
-	oreq, err := newCreateOrderReqNewLeoForRcpt(req.SubscriptionID)
+	oreq, err := newCreateOrderReqNewLeoForRcpt(s.payProcCfg, req.SubscriptionID)
 	if err != nil {
 		return nil, err
 	}
@@ -1989,58 +1996,6 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 	}
 
 	return result, nil
-}
-
-func newCreateOrderReqNewLeoForRcpt(subID string) (model.CreateOrderRequestNew, error) {
-	var result model.CreateOrderRequestNew
-	switch subID {
-	case "brave.leo.monthly":
-		result = newCreateOrderReqNewLeo()
-	default:
-		return model.CreateOrderRequestNew{}, model.ErrInvalidMobileProduct
-	}
-
-	return result, nil
-}
-
-func newCreateOrderReqNewLeo() model.CreateOrderRequestNew {
-	result := model.CreateOrderRequestNew{
-		// No email.
-		Currency: "USD",
-
-		// TODO: make it changeable by env.
-		StripeMetadata: &model.OrderStripeMetadata{
-			SuccessURI: "https://account.brave.com/account/?intent=provision",
-			CancelURI:  "https://account.brave.com/plans/?intent=checkout",
-		},
-		PaymentMethods: []string{"stripe"},
-
-		Items: []model.OrderItemRequestNew{newOrderItemReqNewLeo()},
-	}
-
-	return result
-}
-
-func newOrderItemReqNewLeo() model.OrderItemRequestNew {
-	result := model.OrderItemRequestNew{
-		Quantity:                    1,
-		IssuerTokenBuffer:           3,
-		SKU:                         "brave-leo-premium",
-		Location:                    "leo.brave.com",
-		Description:                 "Premium access to Leo",
-		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1M",
-		Price:                       decimal.RequireFromString("15.00"),
-		CredentialValidDurationEach: ptrTo("P1D"),
-		IssuanceInterval:            ptrTo("P1D"),
-		// TODO: make it changeable by env.
-		StripeMetadata: &model.ItemStripeMetadata{
-			ProductID: "prod_O9uKDYsRPXNgfB",
-			ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
-		},
-	}
-
-	return result
 }
 
 func newMobileOrderMdata(req model.ReceiptRequest, extID string) datastore.Metadata {

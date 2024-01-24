@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/shopspring/decimal"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
@@ -122,4 +126,86 @@ func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 	}
 	valid, ok := skuMap[env][sku]
 	return valid && ok, nil
+}
+
+func newCreateOrderReqNewLeoForRcpt(ppcfg *premiumPaymentProcConfig, subID string) (model.CreateOrderRequestNew, error) {
+	var result model.CreateOrderRequestNew
+	switch subID {
+	case "brave.leo.monthly":
+		result = newCreateOrderReqNewLeo(ppcfg)
+	default:
+		return model.CreateOrderRequestNew{}, model.ErrInvalidMobileProduct
+	}
+
+	return result, nil
+}
+
+func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig) model.CreateOrderRequestNew {
+	result := model.CreateOrderRequestNew{
+		// No email.
+		Currency: "USD",
+
+		// TODO: make it changeable by env.
+		StripeMetadata: &model.OrderStripeMetadata{
+			SuccessURI: ppcfg.SuccessURI,
+			CancelURI:  ppcfg.CancelURI,
+		},
+		PaymentMethods: []string{"stripe"},
+
+		Items: []model.OrderItemRequestNew{newOrderItemReqNewLeo()},
+	}
+
+	return result
+}
+
+func newOrderItemReqNewLeo() model.OrderItemRequestNew {
+	result := model.OrderItemRequestNew{
+		Quantity:                    1,
+		IssuerTokenBuffer:           3,
+		SKU:                         "brave-leo-premium",
+		Location:                    "leo.brave.com",
+		Description:                 "Premium access to Leo",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("15.00"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		IssuanceInterval:            ptrTo("P1D"),
+		// TODO: make it changeable by env.
+		StripeMetadata: &model.ItemStripeMetadata{
+			ProductID: "prod_O9uKDYsRPXNgfB",
+			ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+		},
+	}
+
+	return result
+}
+
+type premiumPaymentProcConfig struct {
+	SuccessURI string
+	CancelURI  string
+}
+
+func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
+	result := &premiumPaymentProcConfig{}
+
+	switch env {
+	case "prod", "production":
+		result.SuccessURI = "https://account.brave.com/account/?intent=provision"
+		result.CancelURI = "https://account.brave.com/plans/?intent=checkout"
+
+	case "sandbox", "staging":
+		result.SuccessURI = "https://account.bravesoftware.com/account/?intent=provision"
+		result.CancelURI = "https://account.bravesoftware.com/plans/?intent=checkout"
+
+	case "dev", "development":
+		result.SuccessURI = "https://account.brave.software/account/?intent=provision"
+		result.CancelURI = "https://account.brave.software/plans/?intent=checkout"
+
+	default:
+		// "local", "test", etc use the same settings as development.
+		result.SuccessURI = "https://account.brave.software/account/?intent=provision"
+		result.CancelURI = "https://account.brave.software/plans/?intent=checkout"
+	}
+
+	return result
 }
