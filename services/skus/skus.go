@@ -233,6 +233,7 @@ func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
 	return result
 }
 
+//nolint:unused
 func newOrderItemRequestsNewSet(env string) map[string]model.OrderItemRequestNew {
 	leom := model.OrderItemRequestNew{
 		Quantity:          1,
