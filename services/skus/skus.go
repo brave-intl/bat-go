@@ -128,18 +128,29 @@ func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 	return valid && ok, nil
 }
 
-func newCreateOrderReqNewLeoForRcpt(ppcfg *premiumPaymentProcConfig, subID string) (model.CreateOrderRequestNew, error) {
-	var result model.CreateOrderRequestNew
-	switch subID {
-	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly":
-		result = newCreateOrderReqNewLeo(ppcfg, newOrderItemReqNewLeo())
-	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly":
-		result = newCreateOrderReqNewLeo(ppcfg, newOrderItemReqNewLeoAnnual())
-	default:
-		return model.CreateOrderRequestNew{}, model.ErrInvalidMobileProduct
+func newOrderItemReqForSubID(set map[string]model.OrderItemRequestNew, subID string) (model.OrderItemRequestNew, error) {
+	key, err := skuNameByMobileName(subID)
+	if err != nil {
+		return model.OrderItemRequestNew{}, model.ErrInvalidMobileProduct
+	}
+
+	result, ok := set[key]
+	if !ok {
+		return model.OrderItemRequestNew{}, model.ErrInvalidMobileProduct
 	}
 
 	return result, nil
+}
+
+func skuNameByMobileName(subID string) (string, error) {
+	switch subID {
+	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly":
+		return "brave-leo-premium", nil
+	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly":
+		return "brave-leo-premium-year", nil
+	default:
+		return "", model.ErrInvalidMobileProduct
+	}
 }
 
 func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig, item model.OrderItemRequestNew) model.CreateOrderRequestNew {
@@ -154,50 +165,6 @@ func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig, item model.OrderIt
 		PaymentMethods: []string{"stripe"},
 
 		Items: []model.OrderItemRequestNew{item},
-	}
-
-	return result
-}
-
-func newOrderItemReqNewLeo() model.OrderItemRequestNew {
-	result := model.OrderItemRequestNew{
-		Quantity:                    1,
-		IssuerTokenBuffer:           3,
-		SKU:                         "brave-leo-premium",
-		Location:                    "leo.brave.com",
-		Description:                 "Premium access to Leo",
-		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1M",
-		Price:                       decimal.RequireFromString("15.00"),
-		CredentialValidDurationEach: ptrTo("P1D"),
-		IssuanceInterval:            ptrTo("P1D"),
-		// TODO: make it changeable by env.
-		StripeMetadata: &model.ItemStripeMetadata{
-			ProductID: "prod_O9uKDYsRPXNgfB",
-			ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
-		},
-	}
-
-	return result
-}
-
-func newOrderItemReqNewLeoAnnual() model.OrderItemRequestNew {
-	result := model.OrderItemRequestNew{
-		Quantity:                    1,
-		IssuerTokenBuffer:           3,
-		SKU:                         "brave-leo-premium-year",
-		Location:                    "leo.brave.com",
-		Description:                 "Premium access to Leo Yearly",
-		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1Y",
-		Price:                       decimal.RequireFromString("135.00"),
-		CredentialValidDurationEach: ptrTo("P1D"),
-		IssuanceInterval:            ptrTo("P1D"),
-		// TODO: make it changeable by env.
-		StripeMetadata: &model.ItemStripeMetadata{
-			ProductID: "prod_O9uKDYsRPXNgfB",
-			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
-		},
 	}
 
 	return result
@@ -233,8 +200,7 @@ func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
 	return result
 }
 
-//nolint:unused
-func newOrderItemRequestsNewSet(env string) map[string]model.OrderItemRequestNew {
+func newOrderItemRequestsNewLeoSet(env string) map[string]model.OrderItemRequestNew {
 	leom := model.OrderItemRequestNew{
 		Quantity:          1,
 		IssuerTokenBuffer: 3,
@@ -289,14 +255,35 @@ func newOrderItemRequestsNewSet(env string) map[string]model.OrderItemRequestNew
 			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
 		}
 	case "dev", "development":
+		leom.Location = "leo.brave.software"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+		}
 
+		leoa.Location = "leo.brave.software"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
+		}
 	default:
 		// "local", "test", etc use the same settings as development.
+		leom.Location = "leo.brave.software"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+		}
+
+		leoa.Location = "leo.brave.software"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
+		}
 	}
 
 	result := map[string]model.OrderItemRequestNew{
-		"brave-leo-premium":      leom,
-		"brave-leo-premium-year": leoa,
+		leom.SKU: leom,
+		leoa.SKU: leoa,
 	}
 
 	return result

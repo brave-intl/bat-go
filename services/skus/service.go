@@ -122,6 +122,7 @@ type Service struct {
 
 	vendorReceiptValid vendorReceiptValidator
 	payProcCfg         *premiumPaymentProcConfig
+	newItemReqSet      map[string]model.OrderItemRequestNew
 }
 
 // PauseWorker - pause worker until time specified
@@ -272,7 +273,8 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		radomSellerAddress: radomSellerAddress,
 		vendorReceiptValid: rcptValidator,
 
-		payProcCfg: newPaymentProcessorConfig(env),
+		payProcCfg:    newPaymentProcessorConfig(env),
+		newItemReqSet: newOrderItemRequestsNewLeoSet(env),
 	}
 
 	// setup runnable jobs
@@ -1854,10 +1856,12 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		- brave.leo.monthly -> brave-leo-premium
 		- brave.leo.yearly -> brave-leo-premium-year
 	*/
-	oreq, err := newCreateOrderReqNewLeoForRcpt(s.payProcCfg, req.SubscriptionID)
+	itemNew, err := newOrderItemReqForSubID(s.newItemReqSet, req.SubscriptionID)
 	if err != nil {
 		return nil, err
 	}
+
+	oreq := newCreateOrderReqNewLeo(s.payProcCfg, itemNew)
 
 	// 2. Craft a request for creating an order.
 	items, err := createOrderItems(&oreq)
