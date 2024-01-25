@@ -94,7 +94,7 @@ func TestService_DeleteTLV2(t *testing.T) {
 			).Return(nil)
 
 			actual := svc.deleteTLV2(ctx, nil, tc.given.ord, tc.given.reqID)
-			should.Equal(t, nil, actual)
+			should.Equal(t, tc.exp.err, actual)
 		})
 	}
 }
