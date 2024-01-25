@@ -232,3 +232,71 @@ func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
 
 	return result
 }
+
+func newOrderItemRequestsNewSet(env string) map[string]model.OrderItemRequestNew {
+	leom := model.OrderItemRequestNew{
+		Quantity:          1,
+		IssuerTokenBuffer: 3,
+		SKU:               "brave-leo-premium",
+		// Location depends on env.
+		Description:                 "Premium access to Leo",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("15.00"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		IssuanceInterval:            ptrTo("P1D"),
+		// StripeMetadata depends on env.
+	}
+
+	leoa := model.OrderItemRequestNew{
+		Quantity:          1,
+		IssuerTokenBuffer: 3,
+		SKU:               "brave-leo-premium-year",
+		// Location depends on env.
+		Description:                 "Premium access to Leo Yearly",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1Y",
+		Price:                       decimal.RequireFromString("150.00"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		IssuanceInterval:            ptrTo("P1D"),
+		// StripeMetadata depends on env.
+	}
+
+	switch env {
+	case "prod", "production":
+		leom.Location = "leo.brave.com"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_O9uKDYsRPXNgfB",
+			ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+		}
+
+		leoa.Location = "leo.brave.com"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_O9uKDYsRPXNgfB",
+			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+		}
+	case "sandbox", "staging":
+		leom.Location = "leo.bravesoftware.com"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OKRYJ77wYOk771",
+			ItemID:    "price_1NXmfTBSm1mtrN9nYjSNMs4X",
+		}
+
+		leoa.Location = "leo.bravesoftware.com"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OKRYJ77wYOk771",
+			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+		}
+	case "dev", "development":
+
+	default:
+		// "local", "test", etc use the same settings as development.
+	}
+
+	result := map[string]model.OrderItemRequestNew{
+		"brave-leo-premium":      leom,
+		"brave-leo-premium-year": leoa,
+	}
+
+	return result
+}
