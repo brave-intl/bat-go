@@ -83,7 +83,7 @@ type Datastore interface {
 	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
 	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
-	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, itemIDs ...*uuid.UUID) error
+	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, itemIDs ...uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
@@ -796,19 +796,20 @@ func (pg *Postgres) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *
 
 // DeleteTimeLimitedV2OrderCredsByOrderTx performs a hard delete for all time limited v2 order
 // credentials for a given OrderID.
-func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, itemIDs ...*uuid.UUID) error {
-	// legacy, if the request id matches the item id on the time limited v2 creds, we actually want to delete the record,
-	// otherwise we will keep these credentials here for multiple device refresh capabilities
-	query, args, err := sqlx.In("delete from time_limited_v2_order_creds where order_id = ? and item_id in (?)", orderID, itemIDs)
+func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, itemIDs ...uuid.UUID) error {
+	// Legacy, if the request id matches the item id on the tlv2 creds, we actually want to delete the record.
+	// Otherwise we will keep these credentials here for multiple device refresh capabilities.
+	const q = "DELETE FROM time_limited_v2_order_creds WHERE order_id = ? AND item_id in (?)"
+	query, args, err := sqlx.In(q, orderID, itemIDs)
 	if err != nil {
 		return fmt.Errorf("error creating delete query for order with item ids: %w", err)
 	}
 
-	query = tx.Rebind(query)
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
+	query = dbi.Rebind(query)
+	if _, err := dbi.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 	}
+
 	return nil
 }
 

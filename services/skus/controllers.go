@@ -621,7 +621,7 @@ func deleteItemCreds(svc *Service) handlers.AppHandler {
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
 
-		if err := svc.DeleteOrderCreds(ctx, *orderID.UUID(), reqID.UUID(), isSigned); err != nil {
+		if err := svc.DeleteOrderCreds(ctx, *orderID.UUID(), *reqID.UUID(), isSigned); err != nil {
 			lg.Error().Err(err).Msg("failed to delete the order credentials")
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
@@ -735,7 +735,7 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-		if err := service.DeleteOrderCreds(ctx, id, nil, isSigned); err != nil {
+		if err := service.DeleteOrderCreds(ctx, id, uuid.Nil, isSigned); err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
 

@@ -237,9 +237,9 @@ func (mr *MockDatastoreMockRecorder) DeleteSingleUseOrderCredsByOrderTx(ctx, tx,
 }
 
 // DeleteTimeLimitedV2OrderCredsByOrderTx mocks base method.
-func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID go_uuid.UUID, itemIDs ...*go_uuid.UUID) error {
+func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, dbi sqlx.ExtContext, orderID go_uuid.UUID, itemIDs ...go_uuid.UUID) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, tx, orderID}
+	varargs := []interface{}{ctx, dbi, orderID}
 	for _, a := range itemIDs {
 		varargs = append(varargs, a)
 	}
@@ -249,9 +249,9 @@ func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Conte
 }
 
 // DeleteTimeLimitedV2OrderCredsByOrderTx indicates an expected call of DeleteTimeLimitedV2OrderCredsByOrderTx.
-func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID interface{}, itemIDs ...interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, orderID interface{}, itemIDs ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, tx, orderID}, itemIDs...)
+	varargs := append([]interface{}{ctx, dbi, orderID}, itemIDs...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrderTx), varargs...)
 }
 

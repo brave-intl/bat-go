@@ -227,7 +227,7 @@ func (_d DatastoreWithPrometheus) DeleteSingleUseOrderCredsByOrderTx(ctx context
 }
 
 // DeleteTimeLimitedV2OrderCredsByOrderTx implements Datastore
-func (_d DatastoreWithPrometheus) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, itemIDs ...*uuid.UUID) (err error) {
+func (_d DatastoreWithPrometheus) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, itemIDs ...uuid.UUID) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -237,7 +237,7 @@ func (_d DatastoreWithPrometheus) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx con
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteTimeLimitedV2OrderCredsByOrderTx", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID, itemIDs...)
+	return _d.base.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, orderID, itemIDs...)
 }
 
 // ExternalIDExists implements Datastore
