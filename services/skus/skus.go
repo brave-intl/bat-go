@@ -132,7 +132,9 @@ func newCreateOrderReqNewLeoForRcpt(ppcfg *premiumPaymentProcConfig, subID strin
 	var result model.CreateOrderRequestNew
 	switch subID {
 	case "brave.leo.monthly":
-		result = newCreateOrderReqNewLeo(ppcfg)
+		result = newCreateOrderReqNewLeo(ppcfg, newOrderItemReqNewLeo())
+	case "brave.leo.yearly":
+		result = newCreateOrderReqNewLeo(ppcfg, newOrderItemReqNewLeoAnnual())
 	default:
 		return model.CreateOrderRequestNew{}, model.ErrInvalidMobileProduct
 	}
@@ -140,19 +142,18 @@ func newCreateOrderReqNewLeoForRcpt(ppcfg *premiumPaymentProcConfig, subID strin
 	return result, nil
 }
 
-func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig) model.CreateOrderRequestNew {
+func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig, item model.OrderItemRequestNew) model.CreateOrderRequestNew {
 	result := model.CreateOrderRequestNew{
 		// No email.
 		Currency: "USD",
 
-		// TODO: make it changeable by env.
 		StripeMetadata: &model.OrderStripeMetadata{
 			SuccessURI: ppcfg.SuccessURI,
 			CancelURI:  ppcfg.CancelURI,
 		},
 		PaymentMethods: []string{"stripe"},
 
-		Items: []model.OrderItemRequestNew{newOrderItemReqNewLeo()},
+		Items: []model.OrderItemRequestNew{item},
 	}
 
 	return result
@@ -174,6 +175,28 @@ func newOrderItemReqNewLeo() model.OrderItemRequestNew {
 		StripeMetadata: &model.ItemStripeMetadata{
 			ProductID: "prod_O9uKDYsRPXNgfB",
 			ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+		},
+	}
+
+	return result
+}
+
+func newOrderItemReqNewLeoAnnual() model.OrderItemRequestNew {
+	result := model.OrderItemRequestNew{
+		Quantity:                    1,
+		IssuerTokenBuffer:           3,
+		SKU:                         "brave-leo-premium-year",
+		Location:                    "leo.brave.com",
+		Description:                 "Premium access to Leo Yearly",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1Y",
+		Price:                       decimal.RequireFromString("135.00"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		IssuanceInterval:            ptrTo("P1D"),
+		// TODO: make it changeable by env.
+		StripeMetadata: &model.ItemStripeMetadata{
+			ProductID: "prod_O9uKDYsRPXNgfB",
+			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
 		},
 	}
 
