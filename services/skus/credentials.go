@@ -688,7 +688,7 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 // - create repos for credentials;
 // - move the corresponding methods there;
 // - make those methods work on per-item basis.
-func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID *uuid.UUID, isSigned bool) error {
+func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID uuid.UUID, isSigned bool) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err
@@ -720,20 +720,7 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID
 	}
 
 	if doTlv2 {
-		var itemIDs []*uuid.UUID
-		if reqID == nil {
-			// legacy, so put all of the orders' items in a list to be hard deleted
-			for _, v := range order.Items {
-				itemIDs = append(itemIDs, &v.ID)
-			}
-		} else {
-			// there is a request id, pass it along to the delete order creds as an "item id"
-			// this will allow for legacy credentials using the request id of the order's item id
-			// to be deleted, otherwise we do not delete said credentials for multiple device support
-			itemIDs = append(itemIDs, reqID)
-		}
-
-		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID, itemIDs...); err != nil {
+		if err := s.deleteTLV2(ctx, tx, order, reqID); err != nil {
 			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 		}
 	}
@@ -747,6 +734,22 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID
 	}
 
 	return nil
+}
+
+func (s *Service) deleteTLV2(ctx context.Context, dbi sqlx.ExtContext, order *model.Order, reqID uuid.UUID) error {
+	// Pass the request id as an "item id", which will allow for legacy credentials to be deleted.
+	// Otherwise, do not delete said credentials for multiple device support.
+	if !uuid.Equal(reqID, uuid.Nil) {
+		return s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, order.ID, reqID)
+	}
+
+	itemIDs := make([]uuid.UUID, 0, len(order.Items))
+	// Legacy, delete all items.
+	for i := range order.Items {
+		itemIDs = append(itemIDs, order.Items[i].ID)
+	}
+
+	return s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, order.ID, itemIDs...)
 }
 
 // checkNumBlindedCreds checks the number of submitted blinded credentials.
