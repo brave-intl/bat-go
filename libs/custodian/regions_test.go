@@ -34,7 +34,7 @@ func TestVerdictBlockList(t *testing.T) {
 	}
 }
 
-func TestRegions_DecodeAndValidate(t *testing.T) {
+func TestRegions_Decode(t *testing.T) {
 	type tcGiven struct {
 		input []byte
 	}
