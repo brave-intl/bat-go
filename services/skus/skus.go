@@ -131,9 +131,9 @@ func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 func newCreateOrderReqNewLeoForRcpt(ppcfg *premiumPaymentProcConfig, subID string) (model.CreateOrderRequestNew, error) {
 	var result model.CreateOrderRequestNew
 	switch subID {
-	case "brave.leo.monthly":
+	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly":
 		result = newCreateOrderReqNewLeo(ppcfg, newOrderItemReqNewLeo())
-	case "brave.leo.yearly":
+	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly":
 		result = newCreateOrderReqNewLeo(ppcfg, newOrderItemReqNewLeoAnnual())
 	default:
 		return model.CreateOrderRequestNew{}, model.ErrInvalidMobileProduct
