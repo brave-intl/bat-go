@@ -271,7 +271,8 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		radomClient:        radomClient,
 		radomSellerAddress: radomSellerAddress,
 		vendorReceiptValid: rcptValidator,
-		payProcCfg:         newPaymentProcessorConfig(env),
+
+		payProcCfg: newPaymentProcessorConfig(env),
 	}
 
 	// setup runnable jobs
@@ -1896,9 +1897,8 @@ func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem
 	}
 
 	result := &model.OrderNew{
-		MerchantID: merchID,
-		Currency:   req.Currency,
-		// Status:                model.OrderStatusPending,
+		MerchantID:            merchID,
+		Currency:              req.Currency,
 		Status:                status,
 		TotalPrice:            model.OrderItemList(items).TotalCost(),
 		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
