@@ -249,3 +249,136 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 		})
 	}
 }
+
+func TestNewCreateOrderReqNewLeo(t *testing.T) {
+	type tcGiven struct {
+		ppcfg *premiumPaymentProcConfig
+		item  model.OrderItemRequestNew
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   model.CreateOrderRequestNew
+	}
+
+	tests := []testCase{
+		{
+			name: "development_leo_monthly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("development"),
+				item:  newOrderItemReqNewLeoSet("development")["brave-leo-premium"],
+			},
+
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.brave.software/account/?intent=provision",
+					CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				},
+				PaymentMethods: []string{"stripe"},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           3,
+						SKU:                         "brave-leo-premium",
+						Location:                    "leo.brave.software",
+						Description:                 "Premium access to Leo",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("15.00"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						IssuanceInterval:            ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_OtZCXOCIO3AJE6",
+							ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "staging_leo_yearly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("staging"),
+				item:  newOrderItemReqNewLeoSet("staging")["brave-leo-premium-year"],
+			},
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
+					CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
+				},
+				PaymentMethods: []string{"stripe"},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           3,
+						SKU:                         "brave-leo-premium-year",
+						Location:                    "leo.bravesoftware.com",
+						Description:                 "Premium access to Leo Yearly",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1Y",
+						Price:                       decimal.RequireFromString("150.00"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						IssuanceInterval:            ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_OKRYJ77wYOk771",
+							ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "production_leo_monthly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("production"),
+				item:  newOrderItemReqNewLeoSet("production")["brave-leo-premium"],
+			},
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.brave.com/account/?intent=provision",
+					CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+				},
+				PaymentMethods: []string{"stripe"},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           3,
+						SKU:                         "brave-leo-premium",
+						Location:                    "leo.brave.com",
+						Description:                 "Premium access to Leo",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("15.00"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						IssuanceInterval:            ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_O9uKDYsRPXNgfB",
+							ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newCreateOrderReqNewLeo(tc.given.ppcfg, tc.given.item)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
