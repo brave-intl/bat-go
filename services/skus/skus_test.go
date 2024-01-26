@@ -382,3 +382,182 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 		})
 	}
 }
+
+func TestNewOrderItemReqNewLeoSet(t *testing.T) {
+	type testCase struct {
+		name  string
+		given string
+		exp   map[string]model.OrderItemRequestNew
+	}
+
+	tests := []testCase{
+		{
+			name:  "production",
+			given: "production",
+			exp: map[string]model.OrderItemRequestNew{
+				"brave-leo-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium",
+					Location:                    "leo.brave.com",
+					Description:                 "Premium access to Leo",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("15.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_O9uKDYsRPXNgfB",
+						ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+					},
+				},
+
+				"brave-leo-premium-year": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium-year",
+					Location:                    "leo.brave.com",
+					Description:                 "Premium access to Leo Yearly",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1Y",
+					Price:                       decimal.RequireFromString("150.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_O9uKDYsRPXNgfB",
+						ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+					},
+				},
+			},
+		},
+
+		{
+			name:  "staging",
+			given: "staging",
+			exp: map[string]model.OrderItemRequestNew{
+				"brave-leo-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium",
+					Location:                    "leo.bravesoftware.com",
+					Description:                 "Premium access to Leo",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("15.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_OKRYJ77wYOk771",
+						ItemID:    "price_1NXmfTBSm1mtrN9nYjSNMs4X",
+					},
+				},
+
+				"brave-leo-premium-year": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium-year",
+					Location:                    "leo.bravesoftware.com",
+					Description:                 "Premium access to Leo Yearly",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1Y",
+					Price:                       decimal.RequireFromString("150.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_OKRYJ77wYOk771",
+						ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+					},
+				},
+			},
+		},
+
+		{
+			name:  "development",
+			given: "development",
+			exp: map[string]model.OrderItemRequestNew{
+				"brave-leo-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium",
+					Location:                    "leo.brave.software",
+					Description:                 "Premium access to Leo",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("15.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_OtZCXOCIO3AJE6",
+						ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+					},
+				},
+
+				"brave-leo-premium-year": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium-year",
+					Location:                    "leo.brave.software",
+					Description:                 "Premium access to Leo Yearly",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1Y",
+					Price:                       decimal.RequireFromString("150.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_OtZCXOCIO3AJE6",
+						ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
+					},
+				},
+			},
+		},
+
+		{
+			name:  "unrecognised_defaults_to_development",
+			given: "garbage_environment",
+			exp: map[string]model.OrderItemRequestNew{
+				"brave-leo-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium",
+					Location:                    "leo.brave.software",
+					Description:                 "Premium access to Leo",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("15.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_OtZCXOCIO3AJE6",
+						ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+					},
+				},
+
+				"brave-leo-premium-year": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           3,
+					SKU:                         "brave-leo-premium-year",
+					Location:                    "leo.brave.software",
+					Description:                 "Premium access to Leo Yearly",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1Y",
+					Price:                       decimal.RequireFromString("150.00"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					IssuanceInterval:            ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_OtZCXOCIO3AJE6",
+						ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newOrderItemReqNewLeoSet(tc.given)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
