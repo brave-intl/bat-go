@@ -130,16 +130,6 @@ func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID s
 			return nil, &QLDBTransitionHistoryNotFoundError{}
 		}
 
-		merkleValid, err := revisionValidInTree(ctx, q.sdkClient, &latestHistoryItem)
-		if err != nil {
-			//return nil, fmt.Errorf("failed to verify Merkle tree: %w", err)
-			logger.Warn().Err(err).Msg("failed to verify Merkle tree")
-		}
-		if !merkleValid {
-			//return nil, fmt.Errorf("invalid Merkle tree for record: %#v", latestHistoryItem)
-			logger.Warn().Msg("invalid Merkle tree for record")
-		}
-
 		tmp := paymentLib.PaymentStateHistory(stateHistory)
 		return &tmp, nil
 	})
