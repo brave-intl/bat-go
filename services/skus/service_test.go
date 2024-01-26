@@ -297,3 +297,12 @@ func TestCreateOrderItem(t *testing.T) {
 		})
 	}
 }
+
+func mustDurationFromISO(v string) *time.Duration {
+	result, err := durationFromISO(v)
+	if err != nil {
+		panic(err)
+	}
+
+	return &result
+}
