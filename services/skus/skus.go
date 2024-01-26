@@ -144,9 +144,9 @@ func newOrderItemReqForSubID(set map[string]model.OrderItemRequestNew, subID str
 
 func skuNameByMobileName(subID string) (string, error) {
 	switch subID {
-	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly":
+	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly", "braveleo.monthly":
 		return "brave-leo-premium", nil
-	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly":
+	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly", "braveleo.yearly":
 		return "brave-leo-premium-year", nil
 	default:
 		return "", model.ErrInvalidMobileProduct
@@ -200,7 +200,7 @@ func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
 	return result
 }
 
-func newOrderItemRequestsNewLeoSet(env string) map[string]model.OrderItemRequestNew {
+func newOrderItemReqNewLeoSet(env string) map[string]model.OrderItemRequestNew {
 	leom := model.OrderItemRequestNew{
 		Quantity:          1,
 		IssuerTokenBuffer: 3,

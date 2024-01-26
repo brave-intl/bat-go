@@ -1298,14 +1298,14 @@ func SubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler 
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			l.Warn().Err(err).Msg("failed to decode orderID")
 
-			return handlers.ValidationError("Error validating request", map[string]interface{}{"orderID": err.Error()})
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
 		payload, err := requestutils.Read(ctx, r.Body)
 		if err != nil {
 			l.Warn().Err(err).Msg("failed to read body")
 
-			return handlers.ValidationError("Error validating request", map[string]interface{}{"request-body": err.Error()})
+			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 		}
 
 		// TODO(clD11): remove when no longer needed.

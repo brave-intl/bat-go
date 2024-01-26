@@ -274,7 +274,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		vendorReceiptValid: rcptValidator,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
-		newItemReqSet: newOrderItemRequestsNewLeoSet(env),
+		newItemReqSet: newOrderItemReqNewLeoSet(env),
 	}
 
 	// setup runnable jobs
@@ -1881,7 +1881,7 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		return nil, err
 	}
 
-	// 4. Properly update metadata.
+	// 4. Save mobile metadata.
 	mdata := newMobileOrderMdata(req, extID)
 	if err := s.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
 		return nil, err
