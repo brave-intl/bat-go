@@ -44,6 +44,8 @@ var (
 	errItemDoesNotExist       model.Error = "order item does not exist for order"
 	errCredsAlreadySubmitted  model.Error = "credentials already submitted"
 
+	errMaxActiveOrderCredsExceeded model.Error = "maximum active order credentials exceeded"
+
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
 	retryPolicy      = retrypolicy.DefaultRetry
 	dontRetryCodes   = map[int]struct{}{
@@ -736,10 +738,22 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID
 	return nil
 }
 
+// maxTLV2ActiveItemCreds is the max number of credentials an item is allowed to have in the given day
+const maxTLV2ActiveOrderCreds = 10
+
 func (s *Service) deleteTLV2(ctx context.Context, dbi sqlx.ExtContext, order *model.Order, reqID uuid.UUID) error {
+
 	// Pass the request id as an "item id", which will allow for legacy credentials to be deleted.
 	// Otherwise, do not delete said credentials for multiple device support.
 	if !uuid.Equal(reqID, uuid.Nil) {
+		// check if we already have N active credentials on this item for the current day
+		activeCreds, err := s.Datastore.GetCountActiveOrderCreds(ctx, dbi, order.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get count of active order credentials: %w", err)
+		}
+		if activeCreds > maxTLV2ActiveOrderCreds {
+			return errMaxActiveOrderCredsExceeded
+		}
 		return s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, order.ID, reqID)
 	}
 

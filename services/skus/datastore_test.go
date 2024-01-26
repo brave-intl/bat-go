@@ -151,6 +151,24 @@ func (suite *PostgresTestSuite) TestGetOrderByExternalID() {
 	}
 }
 
+func (suite *PostgresTestSuite) TestCountActiveOrderCreds_Success() {
+	env := os.Getenv("ENV")
+	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
+
+	// create paid order with two order items
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited,
+		devBraveSearchPremiumYearTimeLimited})
+
+	orderCredentials := suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited,
+		devBraveSearchPremiumYearTimeLimited)
+
+	// both order items have same orderID so can use the first element to retrieve all order creds
+	count, err := suite.storage.GetCountActiveOrderCreds(ctx, suite.storage.RawDB(), orderCredentials[0].OrderID)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(count, 2)
+}
+
 func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrder_Success() {
 	env := os.Getenv("ENV")
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)

@@ -254,6 +254,20 @@ func (_d DatastoreWithPrometheus) ExternalIDExists(ctx context.Context, s1 strin
 	return _d.base.ExternalIDExists(ctx, s1)
 }
 
+// GetCountActiveOrderCreds implements Datastore
+func (_d DatastoreWithPrometheus) GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) (i1 int, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCountActiveOrderCreds", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCountActiveOrderCreds(ctx, dbi, orderID)
+}
+
 // GetIssuerByPublicKey implements Datastore
 func (_d DatastoreWithPrometheus) GetIssuerByPublicKey(publicKey string) (ip1 *Issuer, err error) {
 	_since := time.Now()

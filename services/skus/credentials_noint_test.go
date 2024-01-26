@@ -88,6 +88,11 @@ func TestService_DeleteTLV2(t *testing.T) {
 			svc := &Service{Datastore: ds}
 
 			ctx := context.Background()
+			if tc.given.reqID != uuid.Nil {
+				ds.EXPECT().GetCountActiveOrderCreds(
+					tc.exp.args[0], tc.exp.args[1], tc.exp.args[2],
+				).Return(0, nil)
+			}
 
 			ds.EXPECT().DeleteTimeLimitedV2OrderCredsByOrderTx(
 				tc.exp.args[0], tc.exp.args[1], tc.exp.args[2], tc.exp.args[3],
