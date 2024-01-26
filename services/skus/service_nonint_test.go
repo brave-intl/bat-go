@@ -1,10 +1,15 @@
 package skus
 
 import (
+	"database/sql"
 	"testing"
+	"time"
 
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 
@@ -438,4 +443,285 @@ func TestNewMobileOrderMdata(t *testing.T) {
 			should.Equal(t, tc.exp, actual)
 		})
 	}
+}
+
+func TestNewOrderNewForReq(t *testing.T) {
+	type tcGiven struct {
+		merchID string
+		status  string
+		req     *model.CreateOrderRequestNew
+		items   []model.OrderItem
+	}
+
+	type tcExpected struct {
+		ord *model.OrderNew
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_items",
+			given: tcGiven{
+				merchID: model.MerchID,
+				status:  model.OrderStatusPending,
+				req: &model.CreateOrderRequestNew{
+					Currency:       "USD",
+					PaymentMethods: []string{"stripe"},
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrInvalidOrderRequest,
+			},
+		},
+
+		{
+			name: "total_zero_paid",
+			given: tcGiven{
+				merchID: model.MerchID,
+				status:  model.OrderStatusPending,
+				req: &model.CreateOrderRequestNew{
+					Currency:       "USD",
+					PaymentMethods: []string{"stripe"},
+				},
+				items: []model.OrderItem{
+					{
+						SKU:            "sku",
+						Currency:       "USD",
+						CredentialType: "credential_type",
+						Price:          decimal.NewFromInt(0),
+						Quantity:       1,
+						Subtotal:       decimal.NewFromInt(0),
+					},
+				},
+			},
+			exp: tcExpected{
+				ord: &model.OrderNew{
+					MerchantID:            "brave.com",
+					Currency:              "USD",
+					Status:                model.OrderStatusPaid,
+					TotalPrice:            decimal.NewFromInt(0),
+					AllowedPaymentMethods: pq.StringArray([]string{"stripe"}),
+					ValidFor:              ptrTo(time.Duration(0)),
+				},
+			},
+		},
+
+		{
+			name: "one_item_use_location",
+			given: tcGiven{
+				merchID: model.MerchID,
+				status:  model.OrderStatusPending,
+				req: &model.CreateOrderRequestNew{
+					Currency:       "USD",
+					PaymentMethods: []string{"stripe"},
+				},
+				items: []model.OrderItem{
+					{
+						SKU:            "sku",
+						Currency:       "USD",
+						CredentialType: "credential_type",
+						Price:          decimal.NewFromInt(1),
+						Quantity:       1,
+						Subtotal:       decimal.NewFromInt(1),
+						Location: datastore.NullString{
+							NullString: sql.NullString{
+								String: "location",
+								Valid:  true,
+							},
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				ord: &model.OrderNew{
+					MerchantID:            "brave.com",
+					Currency:              "USD",
+					Status:                model.OrderStatusPending,
+					TotalPrice:            decimal.NewFromInt(1),
+					AllowedPaymentMethods: pq.StringArray([]string{"stripe"}),
+					ValidFor:              ptrTo(time.Duration(0)),
+					Location: sql.NullString{
+						String: "location",
+						Valid:  true,
+					},
+				},
+			},
+		},
+
+		{
+			name: "two_items_no_location",
+			given: tcGiven{
+				merchID: model.MerchID,
+				status:  model.OrderStatusPending,
+				req: &model.CreateOrderRequestNew{
+					Currency:       "USD",
+					PaymentMethods: []string{"stripe"},
+				},
+				items: []model.OrderItem{
+					{
+						SKU:            "sku01",
+						Currency:       "USD",
+						CredentialType: "credential_type",
+						Price:          decimal.NewFromInt(1),
+						Quantity:       1,
+						Subtotal:       decimal.NewFromInt(1),
+						Location: datastore.NullString{
+							NullString: sql.NullString{
+								String: "location01",
+								Valid:  true,
+							},
+						},
+					},
+
+					{
+						SKU:            "sku02",
+						Currency:       "USD",
+						CredentialType: "credential_type",
+						Price:          decimal.NewFromInt(1),
+						Quantity:       1,
+						Subtotal:       decimal.NewFromInt(1),
+						Location: datastore.NullString{
+							NullString: sql.NullString{
+								String: "location02",
+								Valid:  true,
+							},
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				ord: &model.OrderNew{
+					MerchantID:            "brave.com",
+					Currency:              "USD",
+					Status:                model.OrderStatusPending,
+					TotalPrice:            decimal.NewFromInt(2),
+					AllowedPaymentMethods: pq.StringArray([]string{"stripe"}),
+					ValidFor:              ptrTo(time.Duration(0)),
+				},
+			},
+		},
+
+		{
+			name: "valid_for_from_first_item",
+			given: tcGiven{
+				merchID: model.MerchID,
+				status:  model.OrderStatusPending,
+				req: &model.CreateOrderRequestNew{
+					Currency:       "USD",
+					PaymentMethods: []string{"stripe"},
+				},
+				items: []model.OrderItem{
+					{
+						SKU:            "sku01",
+						Currency:       "USD",
+						CredentialType: "credential_type",
+						Price:          decimal.NewFromInt(1),
+						Quantity:       1,
+						Subtotal:       decimal.NewFromInt(1),
+						Location: datastore.NullString{
+							NullString: sql.NullString{
+								String: "location01",
+								Valid:  true,
+							},
+						},
+						ValidFor: ptrTo(time.Duration(24 * 30 * time.Hour)),
+					},
+
+					{
+						SKU:            "sku02",
+						Currency:       "USD",
+						CredentialType: "credential_type",
+						Price:          decimal.NewFromInt(1),
+						Quantity:       1,
+						Subtotal:       decimal.NewFromInt(1),
+						Location: datastore.NullString{
+							NullString: sql.NullString{
+								String: "location02",
+								Valid:  true,
+							},
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				ord: &model.OrderNew{
+					MerchantID:            "brave.com",
+					Currency:              "USD",
+					Status:                model.OrderStatusPending,
+					TotalPrice:            decimal.NewFromInt(2),
+					AllowedPaymentMethods: pq.StringArray([]string{"stripe"}),
+					ValidFor:              ptrTo(time.Duration(24 * 30 * time.Hour)),
+				},
+			},
+		},
+
+		{
+			name: "explicit_paid",
+			given: tcGiven{
+				merchID: model.MerchID,
+				status:  model.OrderStatusPaid,
+				req: &model.CreateOrderRequestNew{
+					Currency:       "USD",
+					PaymentMethods: []string{"stripe"},
+				},
+				items: []model.OrderItem{
+					{
+						SKU:            "sku",
+						Currency:       "USD",
+						CredentialType: "credential_type",
+						Price:          decimal.NewFromInt(1),
+						Quantity:       1,
+						Subtotal:       decimal.NewFromInt(1),
+						Location: datastore.NullString{
+							NullString: sql.NullString{
+								String: "location",
+								Valid:  true,
+							},
+						},
+						ValidFor: ptrTo(time.Duration(24 * 30 * time.Hour)),
+					},
+				},
+			},
+			exp: tcExpected{
+				ord: &model.OrderNew{
+					MerchantID:            "brave.com",
+					Currency:              "USD",
+					Status:                model.OrderStatusPaid,
+					TotalPrice:            decimal.NewFromInt(1),
+					AllowedPaymentMethods: pq.StringArray([]string{"stripe"}),
+					ValidFor:              ptrTo(time.Duration(24 * 30 * time.Hour)),
+					Location: sql.NullString{
+						String: "location",
+						Valid:  true,
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := newOrderNewForReq(tc.given.req, tc.given.items, tc.given.merchID, tc.given.status)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.ord, actual)
+		})
+	}
+}
+
+func mustDurationFromISO(v string) *time.Duration {
+	result, err := durationFromISO(v)
+	if err != nil {
+		panic(err)
+	}
+
+	return &result
 }
