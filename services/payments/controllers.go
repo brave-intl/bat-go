@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"crypto"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -212,6 +213,10 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// get the history of the transaction from qldb
 		history, err := service.datastore.GetPaymentStateHistory(ctx, submitRequest.DocumentID)
 		if err != nil {
+			var notFound *QLDBTransitionHistoryNotFoundError
+			if errors.As(err, &notFound) {
+				return handlers.WrapError(err, "document id not found in history", http.StatusNotFound)
+			}
 			return handlers.WrapError(err, "failed to get history from document id", http.StatusInternalServerError)
 		}
 
@@ -244,8 +249,8 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			Cause:   err,
 			Message: "submitted",
 			Code:    code,
-			Data:    paymentLib.SubmitResponse{
-				Status: status,
+			Data: paymentLib.SubmitResponse{
+				Status:         status,
 				PaymentDetails: authenticatedState.PaymentDetails,
 			},
 		}
