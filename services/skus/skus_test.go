@@ -561,3 +561,111 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 		})
 	}
 }
+
+func TestPaymentProcessorConfig(t *testing.T) {
+	type testCase struct {
+		name     string
+		env      string
+		expected *premiumPaymentProcConfig
+	}
+
+	tests := []testCase{
+		{
+			name: "prod",
+			env:  "prod",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.com/account/?intent=provision",
+				CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "production",
+			env:  "production",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.com/account/?intent=provision",
+				CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "sandbox",
+			env:  "sandbox",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
+				CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "staging",
+			env:  "staging",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
+				CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "dev",
+			env:  "dev",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.software/account/?intent=provision",
+				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "development",
+			env:  "development",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.software/account/?intent=provision",
+				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "local",
+			env:  "local",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.software/account/?intent=provision",
+				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "test",
+			env:  "test",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.software/account/?intent=provision",
+				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "garbage",
+			env:  "garbage",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.software/account/?intent=provision",
+				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+			},
+		},
+
+		{
+			name: "empty_env",
+			expected: &premiumPaymentProcConfig{
+				SuccessURI: "https://account.brave.software/account/?intent=provision",
+				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newPaymentProcessorConfig(tc.env)
+			should.Equal(t, tc.expected, actual)
+		})
+	}
+}
