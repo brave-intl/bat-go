@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	jose "github.com/go-jose/go-jose/v3"
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -148,6 +149,25 @@ type HTTPClient struct {
 	client *clients.SimpleHTTPClient
 }
 
+var (
+	// ErrInvalidServerURL - invalid server url error
+	ErrInvalidServerURL = errors.New("invalid zebpay server url")
+)
+
+// NewWithContext returns a new HTTPClient, retrieving the base URL from the context
+func NewWithContext(ctx context.Context, httpClient http.Client) (Client, error) {
+	serverURL, ok := ctx.Value(appctx.ZebpayServerURLCTXKey).(string)
+	if !ok || len(serverURL) == 0 {
+		return nil, ErrInvalidServerURL
+	}
+
+	client, err := clients.NewWithHTTPClient(serverURL, "", &httpClient) // authentication bearer token is set per api call
+	if err != nil {
+		return nil, err
+	}
+	return NewClientWithPrometheus(&HTTPClient{client}, "zebpay_client"), err
+}
+
 // New returns a new HTTPClient, retrieving the base URL from the environment
 func New() (Client, error) {
 	serverEnvKey := "ZEBPAY_SERVER"
@@ -155,7 +175,7 @@ func New() (Client, error) {
 	if len(serverURL) == 0 {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
-	proxy := os.Getenv("HTTP_PROXY")
+	proxy := os.Getenv("ZEBPAY_PROXY")
 	client, err := clients.NewWithProxy("zebpay", serverURL, "", proxy) // authentication bearer token is set per api call
 	if err != nil {
 		return nil, err

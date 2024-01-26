@@ -31,7 +31,6 @@ import (
 	// pull in grants module. setup code is in init
 	_ "github.com/brave-intl/bat-go/services/grant/cmd"
 	// pull in payments service
-	_ "github.com/brave-intl/bat-go/services/nitro"
 	_ "github.com/brave-intl/bat-go/services/payments/cmd"
 )
 

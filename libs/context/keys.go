@@ -78,6 +78,11 @@ const (
 	// GeminiTokenCTXKey - context key for gemini token
 	GeminiTokenCTXKey CTXKey = "gemini_token_url"
 
+	// ZebpayServerURLCTXKey - context key for zebpay server url
+	ZebpayServerURLCTXKey CTXKey = "zebpay_server_url"
+	// ZebpayProxyURLCTXKey - context key for zebpay proxy url
+	ZebpayProxyURLCTXKey CTXKey = "zebpay_proxy_url"
+
 	// for skus ac validation
 
 	// SkusGeminiClientCTXKey - context key for the build time of code
