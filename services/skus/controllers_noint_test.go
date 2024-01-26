@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -113,12 +113,30 @@ func TestCollectValidationErrors_ReceiptRequest(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			verr := valid.StructCtx(context.TODO(), tc.given)
-			require.Equal(t, tc.exp.noErr, verr == nil)
+			must.Equal(t, tc.exp.noErr, verr == nil)
 
 			act, ok := collectValidationErrors(verr)
 
-			assert.Equal(t, tc.exp.ok, ok)
-			assert.Equal(t, tc.exp.result, act)
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.result, act)
 		})
 	}
+}
+
+func TestParseSubmitReceiptRequest(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		const raw = `ewogICAgInBhY2thZ2UiOiAiY29tLmJyYXZlLmJyb3dzZXJfbmlnaHRseSIsCiAgICAicmF3X3JlY2VpcHQiOiAiYWFuaWRmY3BuY2dsbmpnaGttZmxna2toLkFPLUoxT3pxOUJMZFJ4YVVER2lOZ2JHaG5yaUNjUmpMYWNGZEFxdWNlbWJkMVMxV0JiaXZvREd1d1VsWGd3NkFYWVhvRWV2VXBUSHNmSXJLUDFJRU45WEpRQmhiOHhXX1VSTnlYdHVGSEFzOGktTGZ5MHJNVEU0IiwKICAgICJzdWJzY3JpcHRpb25faWQiOiAibmlnaHRseS5icmF2ZXZwbi5tb250aGx5IiwKICAgICJ0eXBlIjogImFuZHJvaWQiCn0KCg==`
+
+		exp := model.ReceiptRequest{
+			Type:           model.VendorGoogle,
+			Blob:           "aanidfcpncglnjghkmflgkkh.AO-J1Ozq9BLdRxaUDGiNgbGhnriCcRjLacFdAqucembd1S1WBbivoDGuwUlXgw6AXYXoEevUpTHsfIrKP1IEN9XJQBhb8xW_URNyXtuFHAs8i-Lfy0rMTE4",
+			Package:        "com.brave.browser_nightly",
+			SubscriptionID: "nightly.bravevpn.monthly",
+		}
+
+		actual, err := parseSubmitReceiptRequest([]byte(raw))
+		must.Equal(t, nil, err)
+
+		should.Equal(t, exp, actual)
+	})
 }
