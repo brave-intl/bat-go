@@ -1850,18 +1850,41 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 }
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
+	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
+}
+
+// paidOrderCreator creates an order and sets its status to paid.
+//
+// This interface exists because in its current form Service is hardly testable.
+type paidOrderCreator interface {
+	createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+}
+
+// createOrderWithReceipt creates a paid order with the supplied inputs.
+//
+// The function does not re-fetch the order after the final update to metadata.
+// This might change if there is such a need.
+func createOrderWithReceipt(
+	ctx context.Context,
+	svc paidOrderCreator,
+	itemReqSet map[string]model.OrderItemRequestNew,
+	ppcfg *premiumPaymentProcConfig,
+	req model.ReceiptRequest,
+	extID string,
+) (*model.Order, error) {
 	// 1. Find out what's being purchased from SubscriptionID.
 	/*
 		Android:
 		- brave.leo.monthly -> brave-leo-premium
 		- brave.leo.yearly -> brave-leo-premium-year
 	*/
-	itemNew, err := newOrderItemReqForSubID(s.newItemReqSet, req.SubscriptionID)
+	itemNew, err := newOrderItemReqForSubID(itemReqSet, req.SubscriptionID)
 	if err != nil {
 		return nil, err
 	}
 
-	oreq := newCreateOrderReqNewLeo(s.payProcCfg, itemNew)
+	oreq := newCreateOrderReqNewLeo(ppcfg, itemNew)
 
 	// 2. Craft a request for creating an order.
 	items, err := createOrderItems(&oreq)
@@ -1876,16 +1899,20 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	}
 
 	// 3. Create an order.
-	order, err := s.createOrder(ctx, &oreq, ordNew, items)
+	order, err := svc.createOrder(ctx, &oreq, ordNew, items)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Save mobile metadata.
 	mdata := newMobileOrderMdata(req, extID)
-	if err := s.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
+	if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
 		return nil, err
 	}
+
+	// Not re-fetching the order after updating metadata.
+	// At the moment, the only caller of this code is only interested
+	// in the order id.
 
 	return order, nil
 }

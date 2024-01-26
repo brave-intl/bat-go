@@ -1,6 +1,7 @@
 package skus
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 	"time"
@@ -715,4 +716,157 @@ func TestNewOrderNewForReq(t *testing.T) {
 			should.Equal(t, tc.exp.ord, actual)
 		})
 	}
+}
+
+func TestCreateOrderWithReceipt(t *testing.T) {
+	type tcGiven struct {
+		svc   *mockPaidOrderCreator
+		set   map[string]model.OrderItemRequestNew
+		ppcfg *premiumPaymentProcConfig
+		req   model.ReceiptRequest
+		extID string
+	}
+
+	type tcExpected struct {
+		ord *model.Order
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_in_newOrderItemReqForSubID",
+			given: tcGiven{
+				svc:   &mockPaidOrderCreator{},
+				set:   newOrderItemReqNewLeoSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "invalid",
+				},
+			},
+			exp: tcExpected{err: model.ErrInvalidMobileProduct},
+		},
+
+		{
+			name: "error_in_createOrder",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return nil, model.Error("something went wrong")
+					},
+				},
+				set:   newOrderItemReqNewLeoSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.leo.monthly",
+				},
+			},
+			exp: tcExpected{err: model.Error("something went wrong")},
+		},
+
+		{
+			name: "error_in_UpdateOrderStatusPaidWithMetadata",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return &model.Order{}, nil
+					},
+
+					fnUpdateOrderStatusPaidWithMetadata: func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
+						return model.Error("something went wrong")
+					},
+				},
+				set:   newOrderItemReqNewLeoSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.leo.monthly",
+				},
+			},
+			exp: tcExpected{err: model.Error("something went wrong")},
+		},
+
+		{
+			name: "successful_case",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
+							Items: []model.OrderItem{
+								{ID: uuid.Must(uuid.FromString("22482ad4-e43b-44bd-860e-99e617ad9f6d"))},
+							},
+						}
+
+						return result, nil
+					},
+				},
+				set:   newOrderItemReqNewLeoSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.leo.monthly",
+				},
+			},
+			exp: tcExpected{
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
+					Items: []model.OrderItem{
+						{ID: uuid.Must(uuid.FromString("22482ad4-e43b-44bd-860e-99e617ad9f6d"))},
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := createOrderWithReceipt(context.Background(), tc.given.svc, tc.given.set, tc.given.ppcfg, tc.given.req, tc.given.extID)
+			must.Equal(t, tc.exp.err, err)
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.ord, actual)
+		})
+	}
+}
+
+type mockPaidOrderCreator struct {
+	fnCreateOrder                       func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	fnUpdateOrderStatusPaidWithMetadata func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+}
+
+func (s *mockPaidOrderCreator) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	if s.fnCreateOrder == nil {
+		return &model.Order{}, nil
+	}
+
+	return s.fnCreateOrder(ctx, req, ordNew, items)
+}
+
+func (s *mockPaidOrderCreator) UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
+	if s.fnUpdateOrderStatusPaidWithMetadata == nil {
+		return nil
+	}
+
+	return s.fnUpdateOrderStatusPaidWithMetadata(ctx, oid, mdata)
 }
