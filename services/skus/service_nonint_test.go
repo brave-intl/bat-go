@@ -379,3 +379,63 @@ func TestDoItemsHaveSUOrTlv2(t *testing.T) {
 		})
 	}
 }
+
+func TestNewMobileOrderMdata(t *testing.T) {
+	type tcGiven struct {
+		extID string
+		req   model.ReceiptRequest
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   datastore.Metadata
+	}
+
+	tests := []testCase{
+		{
+			name: "android",
+			given: tcGiven{
+				extID: "extID",
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "subID",
+				},
+			},
+			exp: datastore.Metadata{
+				"externalID":       "extID",
+				"paymentProcessor": "android",
+				"vendor":           "android",
+			},
+		},
+
+		{
+			name: "ios",
+			given: tcGiven{
+				extID: "extID",
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "subID",
+				},
+			},
+			exp: datastore.Metadata{
+				"externalID":       "extID",
+				"paymentProcessor": "ios",
+				"vendor":           "ios",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newMobileOrderMdata(tc.given.req, tc.given.extID)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
