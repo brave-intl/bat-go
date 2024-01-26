@@ -5,10 +5,13 @@ import (
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -19,8 +22,13 @@ import (
 	"github.com/brave-intl/bat-go/libs/middleware"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
+)
+
+const (
+	reqBodyLimit10MB = 10 << 20
 )
 
 // LinkDepositAccountResponse is the response returned by the linking endpoints.
@@ -441,49 +449,145 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 	}
 }
 
-// GetWalletV3 - produces an http handler for the service s which handles getting of brave wallets
+const errOriginForbidden model.Error = "request origin forbidden"
+
+type linkSolanaAddrRequest struct {
+	SolanaPublicKey string `json:"solanaPublicKey" valid:"length(32|44)"`
+	Message         string `json:"message" valid:"required"`
+	SolanaSignature string `json:"solanaSignature" valid:"required"`
+}
+
+func LinkSolanaAddress(s *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		if dis, ok := ctx.Value(appctx.DisableSolanaLinkingCTXKey).(bool); ok && dis {
+			return handlers.ValidationError("Connecting Brave Rewards to Solana is temporarily unavailable. Please try again later", nil)
+		}
+
+		l := logging.Logger(ctx, "wallet")
+
+		o := r.Header.Get("Origin")
+		if !isAllowedOrigin(o, s.dappConf.AllowedOrigins) {
+			l.Error().Err(errOriginForbidden).Str("origin", strOr(o, "empty")).Msg("error linking solana address")
+			return handlers.WrapError(errOriginForbidden, "request origin forbidden", http.StatusForbidden)
+		}
+
+		var paymentID inputs.ID
+		if err := inputs.DecodeAndValidateString(ctx, &paymentID, chi.URLParam(r, "paymentID")); err != nil {
+			return handlers.WrapError(err, "invalid paymentID", http.StatusBadRequest)
+		}
+
+		b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		if err != nil {
+			return handlers.WrapError(err, "error reading body", http.StatusBadRequest)
+		}
+
+		var solReq linkSolanaAddrRequest
+		if err := json.Unmarshal(b, &solReq); err != nil {
+			return handlers.WrapError(err, "error decoding body", http.StatusBadRequest)
+		}
+
+		if _, err := govalidator.ValidateStruct(solReq); err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		if err := s.LinkSolanaAddress(ctx, *paymentID.UUID(), solReq); err != nil {
+			l.Error().Err(err).Msg("error linking solana address")
+
+			var solErr *walletutils.LinkSolanaAddressError
+			switch {
+			case errors.Is(err, model.ErrWalletNotWhitelisted):
+				return handlers.WrapError(model.ErrWalletNotWhitelisted, "rewards wallet not whitelisted", http.StatusForbidden)
+			case errors.Is(err, model.ErrChallengeNotFound):
+				return handlers.WrapError(model.ErrChallengeNotFound, "linking challenge not found", http.StatusNotFound)
+			case errors.Is(err, model.ErrChallengeExpired):
+				return handlers.WrapError(model.ErrChallengeExpired, "linking challenge expired", http.StatusUnauthorized)
+			case errors.Is(err, model.ErrWalletNotFound):
+				return handlers.WrapError(model.ErrWalletNotFound, "rewards wallet not found", http.StatusNotFound)
+			case errors.As(err, &solErr):
+				return handlers.WrapError(solErr, "invalid solana linking message", http.StatusUnauthorized)
+			default:
+				return handlers.WrapError(model.ErrInternalServer, "internal server error", http.StatusInternalServerError)
+			}
+		}
+
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
+type challengeRequest struct {
+	PaymentID uuid.UUID `json:"paymentId" valid:"required"`
+}
+
+type challengeResponse struct {
+	Nonce string `json:"challengeId"`
+}
+
+func CreateChallenge(s *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		if err != nil {
+			return handlers.WrapError(err, "error reading body", http.StatusBadRequest)
+		}
+
+		var chlReq challengeRequest
+		if err := json.Unmarshal(b, &chlReq); err != nil {
+			return handlers.WrapError(err, "error decoding body", http.StatusBadRequest)
+		}
+
+		if _, err := govalidator.ValidateStruct(chlReq); err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		ctx := r.Context()
+
+		chl, err := s.CreateChallenge(ctx, chlReq.PaymentID)
+		if err != nil {
+			logging.Logger(ctx, "wallet").Error().Err(err).Msg("error creating challenge")
+			return handlers.WrapError(model.ErrInternalServer, "error creating challenge", http.StatusInternalServerError)
+		}
+
+		resp := challengeResponse{
+			Nonce: chl.Nonce,
+		}
+
+		return handlers.RenderContent(ctx, resp, w, http.StatusCreated)
+	}
+}
+
+// GetWalletV3 returns a rewards wallet for the given paymentID.
 func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var ctx = r.Context()
-	// get logger from context
-	logger := logging.Logger(ctx, "wallet.GetWalletV3")
+
+	l := logging.Logger(ctx, "wallet.GetWalletV3")
 
 	var id = new(inputs.ID)
 	if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
-		logger.Warn().Str("paymentId", err.Error()).Msg("failed to decode and validate paymentID from url")
-		return handlers.ValidationError(
-			"Error validating paymentID url parameter",
-			map[string]interface{}{
-				"paymentId": err.Error(),
-			},
-		)
+		l.Warn().Err(err).Str("paymentID", id.String()).Msg("failed to decode and validate paymentID from url")
+		return handlers.ValidationError("Error validating paymentID url parameter", map[string]interface{}{
+			"paymentId": err.Error(),
+		})
 	}
 
-	var (
-		roDB ReadOnlyDatastore
-		ok   bool
-	)
-
-	// get datastore from context
-	if roDB, ok = ctx.Value(appctx.RODatastoreCTXKey).(ReadOnlyDatastore); !ok {
-		logger.Error().Msg("unable to get read only datastore from context")
+	// TODO(clD11): this should be removed from ctx as part of wallet refactor. Note, the service would have already
+	//  panicked at startup if the db is missing. However, as a precaution we should stop processing.
+	roDB, ok := ctx.Value(appctx.RODatastoreCTXKey).(ReadOnlyDatastore)
+	if !ok {
+		return handlers.WrapError(errorutils.ErrInternalServerError, "db missing from context", http.StatusInternalServerError)
 	}
 
-	// get wallet from datastore
 	info, err := roDB.GetWallet(ctx, *id.UUID())
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
-			return handlers.WrapError(err, "no such wallet", http.StatusNotFound)
-		}
-		logger.Warn().Err(err).Str("id", id.String()).Msg("unable to get wallet")
+		l.Error().Err(err).Str("paymentID", id.String()).Msg("error getting wallet")
 		return handlers.WrapError(err, "error getting wallet from storage", http.StatusInternalServerError)
 	}
+
 	if info == nil {
-		logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
+		l.Info().Str("paymentID", id.String()).Msg("wallet not found")
 		return handlers.WrapError(err, "no such wallet", http.StatusNotFound)
 	}
 
-	// render the wallet
 	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusOK)
 }
 
@@ -712,4 +816,25 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 
 		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
 	}
+}
+
+func isAllowedOrigin(origin string, allowedOrigins []string) bool {
+	if origin == "" {
+		return false
+	}
+
+	for i := range allowedOrigins {
+		if allowedOrigins[i] == origin {
+			return true
+		}
+	}
+
+	return false
+}
+
+func strOr(a string, b string) string {
+	if a == "" {
+		return b
+	}
+	return a
 }

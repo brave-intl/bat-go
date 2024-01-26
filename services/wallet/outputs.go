@@ -163,6 +163,74 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	return resp
 }
 
+// ResponseV4 - wallet creation response
+type ResponseV4 struct {
+	PaymentID              string                           `json:"paymentId"`
+	DepositAccountProvider *DepositAccountProviderDetailsV3 `json:"depositAccountProvider,omitempty"`
+	WalletProvider         *ProviderDetailsV3               `json:"walletProvider,omitempty"`
+	AltCurrency            string                           `json:"altcurrency"`
+	PublicKey              string                           `json:"publicKey"`
+	SelfCustodyAvailable   map[string]bool                  `json:"selfCustodyAvailable"`
+}
+
+func infoToResponseV4(info *walletutils.Info, selfCustody bool) ResponseV4 {
+	var (
+		linkingID        string
+		anonymousAddress string
+	)
+	if info == nil {
+		return ResponseV4{}
+	}
+
+	var altCurrency = convertAltCurrency(info.AltCurrency)
+
+	if info.ProviderLinkingID == nil {
+		linkingID = ""
+	} else {
+		linkingID = info.ProviderLinkingID.String()
+	}
+
+	if info.AnonymousAddress == nil {
+		anonymousAddress = ""
+	} else {
+		anonymousAddress = info.AnonymousAddress.String()
+	}
+
+	// common to all wallets
+	resp := ResponseV4{
+		PaymentID:   info.ID,
+		AltCurrency: altCurrency,
+		PublicKey:   info.PublicKey,
+		WalletProvider: &ProviderDetailsV3{
+			Name: info.Provider,
+		},
+		SelfCustodyAvailable: map[string]bool{
+			"solana": selfCustody,
+		},
+	}
+
+	// setup the wallet provider (anon card uphold)
+	if info.Provider == "uphold" {
+		// this is a uphold provided wallet (anon card based)
+		resp.WalletProvider.ID = info.ProviderID
+		resp.WalletProvider.AnonymousAddress = anonymousAddress
+		resp.WalletProvider.LinkingID = linkingID
+	}
+
+	// now setup user deposit account
+	if info.UserDepositAccountProvider != nil {
+		// this brave wallet has a linked deposit account
+		resp.DepositAccountProvider = &DepositAccountProviderDetailsV3{
+			Name:             info.UserDepositAccountProvider,
+			ID:               &info.UserDepositDestination,
+			LinkingID:        linkingID,
+			AnonymousAddress: anonymousAddress,
+		}
+	}
+
+	return resp
+}
+
 // BalanceResponseV3 - wallet creation response
 type BalanceResponseV3 struct {
 	Total       float64 `json:"total"`

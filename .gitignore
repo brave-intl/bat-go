@@ -37,3 +37,6 @@ share-0.gpg
 
 fetch-quote.json
 main/main
+
+go.work
+go.work.sum

@@ -39,6 +39,7 @@ var (
 		"bnb":    "binancecoin",
 		"boa":    "bosagora",
 		"bob":    "bobs_repair",
+		"bonk":   "bonk",
 		"boo":    "boo",
 		"booty":  "candybooty",
 		"box":    "box-token",
