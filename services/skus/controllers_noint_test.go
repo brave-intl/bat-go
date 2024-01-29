@@ -2,11 +2,14 @@ package skus
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+
+	"github.com/brave-intl/bat-go/libs/handlers"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -139,4 +142,96 @@ func TestParseSubmitReceiptRequest(t *testing.T) {
 
 		should.Equal(t, exp, actual)
 	})
+}
+
+func TestHandleReceiptErr(t *testing.T) {
+	tests := []struct {
+		name  string
+		given error
+		exp   *handlers.AppError
+	}{
+		{
+			name: "nil",
+			exp: &handlers.AppError{
+				Message: "Unexpected error",
+				Code:    http.StatusInternalServerError,
+				Data:    map[string]interface{}{},
+			},
+		},
+
+		{
+			name:  "errPurchaseFailed",
+			given: errPurchaseFailed,
+			exp: &handlers.AppError{
+				Message:   "Error " + errPurchaseFailed.Error(),
+				Code:      http.StatusBadRequest,
+				ErrorCode: purchaseFailedErrCode,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseFailed.Error()},
+				},
+			},
+		},
+
+		{
+			name:  "errPurchasePending",
+			given: errPurchasePending,
+			exp: &handlers.AppError{
+				Message:   "Error " + errPurchasePending.Error(),
+				Code:      http.StatusBadRequest,
+				ErrorCode: purchasePendingErrCode,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]interface{}{"receiptErrors": errPurchasePending.Error()},
+				},
+			},
+		},
+
+		{
+			name:  "errPurchaseDeferred",
+			given: errPurchaseDeferred,
+			exp: &handlers.AppError{
+				Message:   "Error " + errPurchaseDeferred.Error(),
+				Code:      http.StatusBadRequest,
+				ErrorCode: purchaseDeferredErrCode,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseDeferred.Error()},
+				},
+			},
+		},
+
+		{
+			name:  "errPurchaseStatusUnknown",
+			given: errPurchaseStatusUnknown,
+			exp: &handlers.AppError{
+				Message:   "Error " + errPurchaseStatusUnknown.Error(),
+				Code:      http.StatusBadRequest,
+				ErrorCode: purchaseStatusUnknownErrCode,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseStatusUnknown.Error()},
+				},
+			},
+		},
+
+		{
+			name:  "errSomethingElse",
+			given: model.Error("something else"),
+			exp: &handlers.AppError{
+				Message:   "Error something else",
+				Code:      http.StatusBadRequest,
+				ErrorCode: purchaseValidationErrCode,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]interface{}{"receiptErrors": "something else"},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := handleReceiptErr(tc.given)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
 }

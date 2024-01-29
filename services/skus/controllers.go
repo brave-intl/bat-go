@@ -1458,13 +1458,20 @@ func NewCORSOpts(origins []string, dbg bool) cors.Options {
 }
 
 func handleReceiptErr(err error) *handlers.AppError {
+	if err == nil {
+		return &handlers.AppError{
+			Message: "Unexpected error",
+			Code:    http.StatusInternalServerError,
+			Data:    map[string]interface{}{},
+		}
+	}
+
 	errStr := err.Error()
 	result := &handlers.AppError{
 		Message: "Error " + errStr,
-		// ErrorCode: errorCode,
-		Code: http.StatusBadRequest,
+		Code:    http.StatusBadRequest,
 		Data: map[string]interface{}{
-			"validationErrors": map[string]interface{}{"receiptErrors": err},
+			"validationErrors": map[string]interface{}{"receiptErrors": errStr},
 		},
 	}
 
