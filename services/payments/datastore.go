@@ -105,7 +105,6 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 }
 
 func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error) {
-	logger := logging.Logger(ctx, "payments.setupLedger")
 
 	stateHistory, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		result, err := txn.Execute(
