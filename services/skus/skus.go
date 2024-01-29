@@ -159,8 +159,8 @@ func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig, item model.OrderIt
 		Currency: "USD",
 
 		StripeMetadata: &model.OrderStripeMetadata{
-			SuccessURI: ppcfg.SuccessURI,
-			CancelURI:  ppcfg.CancelURI,
+			SuccessURI: ppcfg.successURI,
+			CancelURI:  ppcfg.cancelURI,
 		},
 		PaymentMethods: []string{"stripe"},
 
@@ -171,8 +171,8 @@ func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig, item model.OrderIt
 }
 
 type premiumPaymentProcConfig struct {
-	SuccessURI string
-	CancelURI  string
+	successURI string
+	cancelURI  string
 }
 
 func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
@@ -180,21 +180,21 @@ func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
 
 	switch env {
 	case "prod", "production":
-		result.SuccessURI = "https://account.brave.com/account/?intent=provision"
-		result.CancelURI = "https://account.brave.com/plans/?intent=checkout"
+		result.successURI = "https://account.brave.com/account/?intent=provision"
+		result.cancelURI = "https://account.brave.com/plans/?intent=checkout"
 
 	case "sandbox", "staging":
-		result.SuccessURI = "https://account.bravesoftware.com/account/?intent=provision"
-		result.CancelURI = "https://account.bravesoftware.com/plans/?intent=checkout"
+		result.successURI = "https://account.bravesoftware.com/account/?intent=provision"
+		result.cancelURI = "https://account.bravesoftware.com/plans/?intent=checkout"
 
 	case "dev", "development":
-		result.SuccessURI = "https://account.brave.software/account/?intent=provision"
-		result.CancelURI = "https://account.brave.software/plans/?intent=checkout"
+		result.successURI = "https://account.brave.software/account/?intent=provision"
+		result.cancelURI = "https://account.brave.software/plans/?intent=checkout"
 
 	default:
 		// "local", "test", etc use the same settings as development.
-		result.SuccessURI = "https://account.brave.software/account/?intent=provision"
-		result.CancelURI = "https://account.brave.software/plans/?intent=checkout"
+		result.successURI = "https://account.brave.software/account/?intent=provision"
+		result.cancelURI = "https://account.brave.software/plans/?intent=checkout"
 	}
 
 	return result

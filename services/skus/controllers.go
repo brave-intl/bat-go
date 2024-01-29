@@ -98,9 +98,11 @@ func Router(
 	)
 
 	// Receipt validation.
-	valid := validator.New()
-	r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc, valid))))
-	r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(createOrderFromReceipt(svc, valid))))
+	{
+		valid := validator.New()
+		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc, valid))))
+		r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(createOrderFromReceipt(svc, valid))))
+	}
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
@@ -1368,9 +1370,9 @@ func SubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler 
 }
 
 func createOrderFromReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		return createOrderFromReceiptH(w, r, svc, valid)
-	})
+	}
 }
 
 func createOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {

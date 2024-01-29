@@ -574,8 +574,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "prod",
 			env:  "prod",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.com/account/?intent=provision",
-				CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+				successURI: "https://account.brave.com/account/?intent=provision",
+				cancelURI:  "https://account.brave.com/plans/?intent=checkout",
 			},
 		},
 
@@ -583,8 +583,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "production",
 			env:  "production",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.com/account/?intent=provision",
-				CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+				successURI: "https://account.brave.com/account/?intent=provision",
+				cancelURI:  "https://account.brave.com/plans/?intent=checkout",
 			},
 		},
 
@@ -592,8 +592,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "sandbox",
 			env:  "sandbox",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
-				CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
+				successURI: "https://account.bravesoftware.com/account/?intent=provision",
+				cancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
 			},
 		},
 
@@ -601,8 +601,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "staging",
 			env:  "staging",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
-				CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
+				successURI: "https://account.bravesoftware.com/account/?intent=provision",
+				cancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
 			},
 		},
 
@@ -610,8 +610,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "dev",
 			env:  "dev",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.software/account/?intent=provision",
-				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				successURI: "https://account.brave.software/account/?intent=provision",
+				cancelURI:  "https://account.brave.software/plans/?intent=checkout",
 			},
 		},
 
@@ -619,8 +619,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "development",
 			env:  "development",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.software/account/?intent=provision",
-				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				successURI: "https://account.brave.software/account/?intent=provision",
+				cancelURI:  "https://account.brave.software/plans/?intent=checkout",
 			},
 		},
 
@@ -628,8 +628,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "local",
 			env:  "local",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.software/account/?intent=provision",
-				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				successURI: "https://account.brave.software/account/?intent=provision",
+				cancelURI:  "https://account.brave.software/plans/?intent=checkout",
 			},
 		},
 
@@ -637,8 +637,8 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "test",
 			env:  "test",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.software/account/?intent=provision",
-				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				successURI: "https://account.brave.software/account/?intent=provision",
+				cancelURI:  "https://account.brave.software/plans/?intent=checkout",
 			},
 		},
 
@@ -646,16 +646,16 @@ func TestPaymentProcessorConfig(t *testing.T) {
 			name: "garbage",
 			env:  "garbage",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.software/account/?intent=provision",
-				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				successURI: "https://account.brave.software/account/?intent=provision",
+				cancelURI:  "https://account.brave.software/plans/?intent=checkout",
 			},
 		},
 
 		{
 			name: "empty_env",
 			expected: &premiumPaymentProcConfig{
-				SuccessURI: "https://account.brave.software/account/?intent=provision",
-				CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				successURI: "https://account.brave.software/account/?intent=provision",
+				cancelURI:  "https://account.brave.software/plans/?intent=checkout",
 			},
 		},
 	}
