@@ -1459,20 +1459,29 @@ func NewCORSOpts(origins []string, dbg bool) cors.Options {
 
 func handleReceiptErr(err error) *handlers.AppError {
 	errStr := err.Error()
-	verrs := map[string]interface{}{"receiptErrors": errStr}
+	result := &handlers.AppError{
+		Message: "Error " + errStr,
+		// ErrorCode: errorCode,
+		Code: http.StatusBadRequest,
+		Data: map[string]interface{}{
+			"validationErrors": map[string]interface{}{"receiptErrors": err},
+		},
+	}
 
 	switch {
 	case errors.Is(err, errPurchaseFailed):
-		return handlers.CodedValidationError(errStr, purchaseFailedErrCode, verrs)
+		result.ErrorCode = purchaseFailedErrCode
 	case errors.Is(err, errPurchasePending):
-		return handlers.CodedValidationError(errStr, purchasePendingErrCode, verrs)
+		result.ErrorCode = purchasePendingErrCode
 	case errors.Is(err, errPurchaseDeferred):
-		return handlers.CodedValidationError(errStr, purchaseDeferredErrCode, verrs)
+		result.ErrorCode = purchaseDeferredErrCode
 	case errors.Is(err, errPurchaseStatusUnknown):
-		return handlers.CodedValidationError(errStr, purchaseStatusUnknownErrCode, verrs)
+		result.ErrorCode = purchaseStatusUnknownErrCode
 	default:
-		return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, verrs)
+		result.ErrorCode = purchaseValidationErrCode
 	}
+
+	return result
 }
 
 func parseSubmitReceiptRequest(raw []byte) (model.ReceiptRequest, error) {
