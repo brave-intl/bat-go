@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
@@ -16,6 +17,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
+	"google.golang.org/api/idtoken"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -948,64 +950,130 @@ func WebhookRouter(service *Service) chi.Router {
 // HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		var (
-			ctx              = r.Context()
-			req              = new(AndroidNotification)
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
+		l := logging.Logger(ctx, "payments").With().Str("func", "HandleAndroidWebhook").Logger()
 
-		// get logger
-		logger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleAndroidWebhook").
-			Logger()
+		if err := service.gcpValidator.validate(ctx, r); err != nil {
+			l.Error().Err(err).Msg("invalid request")
+			return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+		}
 
-		// read the payload
 		payload, err := requestutils.Read(r.Context(), r.Body)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to read the payload")
+			l.Error().Err(err).Msg("failed to read payload")
 			return handlers.WrapValidationError(err)
 		}
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).
-				Msg("failed to decode and validate the payload")
+		l.Info().Str("payload", string(payload)).Msg("")
+
+		var validationErrMap = map[string]interface{}{}
+
+		var req AndroidNotification
+		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
 			validationErrMap["request-body-decode"] = err.Error()
+			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
 
-		// extract out the Developer notification
+		l.Info().Interface("req", req).Msg("")
+
 		dn, err := req.Message.GetDeveloperNotification()
 		if err != nil {
 			validationErrMap["invalid-developer-notification"] = err.Error()
+			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
+
+		l.Info().Interface("developer_notification", dn).Msg("")
 
 		if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-			logger.Error().Interface("validation-errors", validationErrMap).
-				Msg("failed to get developer notification from message")
 			validationErrMap["invalid-developer-notification-token"] = "notification has no purchase token"
+			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
-		}
+		l.Info().Msg("verify_developer_notification")
 
 		err = service.verifyDeveloperNotification(ctx, dn)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to verify subscription notification")
+			l.Error().Err(err).Msg("failed to verify subscription notification")
 			switch {
 			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify subscription notification",
-					http.StatusNotFound)
+				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusNotFound)
 			default:
-				return handlers.WrapError(err, "failed to verify subscription notification",
-					http.StatusInternalServerError)
+				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
 			}
 		}
 
 		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
 	}
+}
+
+const (
+	errAuthHeaderEmpty  model.Error = "skus: gcp authorization header is empty"
+	errAuthHeaderFormat model.Error = "skus: gcp authorization header invalid format"
+	errInvalidIssuer    model.Error = "skus: gcp invalid issuer"
+	errInvalidEmail     model.Error = "skus: gcp invalid email"
+	errEmailNotVerified model.Error = "skus: gcp email not verified"
+)
+
+type gcpTokenValidator interface {
+	Validate(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error)
+}
+
+type gcpValidatorConfig struct {
+	audience       string
+	issuer         string
+	serviceAccount string
+	disabled       bool
+}
+
+type gcpPushNotificationValidator struct {
+	validator gcpTokenValidator
+	cfg       gcpValidatorConfig
+}
+
+func newGcpPushNotificationValidator(gcpTokenValidator gcpTokenValidator, cfg gcpValidatorConfig) *gcpPushNotificationValidator {
+	return &gcpPushNotificationValidator{
+		validator: gcpTokenValidator,
+		cfg:       cfg,
+	}
+}
+
+func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Request) error {
+	if g.cfg.disabled {
+		return nil
+	}
+
+	ah := r.Header.Get("Authorization")
+	if ah == "" {
+		return errAuthHeaderEmpty
+	}
+
+	token := strings.Split(ah, " ")
+	if len(token) != 2 {
+		return errAuthHeaderFormat
+	}
+
+	p, err := g.validator.Validate(ctx, token[1], g.cfg.audience)
+	if err != nil {
+		return fmt.Errorf("invalid authentication token: %w", err)
+	}
+
+	if p.Issuer == "" || p.Issuer != g.cfg.issuer {
+		return errInvalidIssuer
+	}
+
+	if p.Claims["email"] != g.cfg.serviceAccount {
+		return errInvalidEmail
+	}
+
+	if p.Claims["email_verified"] != true {
+		return errEmailNotVerified
+	}
+
+	return nil
 }
 
 // HandleIOSWebhook is the handler for ios iap webhooks

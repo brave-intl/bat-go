@@ -379,6 +379,8 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 		},
 	}
 
+	suite.service.gcpValidator = &mockGcpRequestValidator{}
+
 	handler := HandleAndroidWebhook(suite.service)
 
 	// notification message
@@ -1908,4 +1910,15 @@ func (v *mockVendorReceiptValidator) validateGoogle(ctx context.Context, receipt
 	}
 
 	return v.fnValidateGoogle(ctx, receipt)
+}
+
+type mockGcpRequestValidator struct {
+	fnValidate func(ctx context.Context, r *http.Request) error
+}
+
+func (m *mockGcpRequestValidator) validate(ctx context.Context, r *http.Request) error {
+	if m.fnValidate == nil {
+		return nil
+	}
+	return m.fnValidate(ctx, r)
 }
