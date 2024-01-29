@@ -261,19 +261,18 @@ func (anm *AndroidNotificationMessage) Validate(ctx context.Context) error {
 
 // GetDeveloperNotification - Extract the developer notification from the android notification message
 func (anm *AndroidNotificationMessage) GetDeveloperNotification() (*DeveloperNotification, error) {
-
 	var devNotification = new(DeveloperNotification)
 	buf := make([]byte, base64.StdEncoding.DecodedLen(len([]byte(anm.Data))))
 
-	// base64 decode the bytes
 	n, err := base64.StdEncoding.Decode(buf, []byte(anm.Data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode input base64: %w", err)
 	}
-	// read the json values
+
 	if err := json.Unmarshal(buf[:n], devNotification); err != nil {
 		return nil, fmt.Errorf("failed to decode input json: %w", err)
 	}
+
 	return devNotification, nil
 }
 
