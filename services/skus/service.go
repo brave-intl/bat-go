@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
+	"google.golang.org/api/idtoken"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -97,6 +99,10 @@ type vendorReceiptValidator interface {
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
 }
 
+type gcpRequestValidator interface {
+	validate(ctx context.Context, r *http.Request) error
+}
+
 // Service contains datastore
 type Service struct {
 	orderRepo  orderStoreSvc
@@ -121,8 +127,10 @@ type Service struct {
 	radomSellerAddress string
 
 	vendorReceiptValid vendorReceiptValidator
-	payProcCfg         *premiumPaymentProcConfig
-	newItemReqSet      map[string]model.OrderItemRequestNew
+	gcpValidator       gcpRequestValidator
+
+	payProcCfg    *premiumPaymentProcConfig
+	newItemReqSet map[string]model.OrderItemRequestNew
 }
 
 // PauseWorker - pause worker until time specified
@@ -257,6 +265,40 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		return nil, err
 	}
 
+	idv, err := idtoken.NewValidator(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	disabled, _ := strconv.ParseBool(os.Getenv("GCP_PUSH_NOTIFICATION"))
+	if disabled {
+		sublogger.Warn().Msg("gcp push notification is disabled")
+	}
+
+	aud := os.Getenv("GCP_PUSH_SUBSCRIPTION_AUDIENCE")
+	if aud == "" {
+		sublogger.Warn().Msg("gcp push subscription audience is empty")
+	}
+
+	iss := os.Getenv("GCP_CERT_ISSUER")
+	if iss == "" {
+		sublogger.Warn().Msg("gcp cert issuer is empty")
+	}
+
+	sa := os.Getenv("GCP_PUSH_SUBSCRIPTION_SERVICE_ACCOUNT")
+	if sa == "" {
+		sublogger.Warn().Msg("gcp push subscription service account is empty")
+	}
+
+	conf := gcpValidatorConfig{
+		audience:       aud,
+		issuer:         iss,
+		serviceAccount: sa,
+		disabled:       disabled,
+	}
+
+	gcpValidator := newGcpPushNotificationValidator(idv, conf)
+
 	service := &Service{
 		orderRepo:  orderRepo,
 		issuerRepo: issuerRepo,
@@ -271,7 +313,9 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		retry:              backoff.Retry,
 		radomClient:        radomClient,
 		radomSellerAddress: radomSellerAddress,
+
 		vendorReceiptValid: rcptValidator,
+		gcpValidator:       gcpValidator,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
 		newItemReqSet: newOrderItemReqNewLeoSet(env),
