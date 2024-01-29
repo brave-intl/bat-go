@@ -56,7 +56,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 			name: "invalid_authentication_token",
 			given: tcGiven{
 				req: newRequest("Bearer: some-token"),
-				tokenValidator: mockGcpTokenValidator{validate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
+				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					return nil, errors.New("error")
 				}},
 			},
@@ -68,7 +68,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 			name: "invalid_issuer_empty",
 			given: tcGiven{
 				req: newRequest("Bearer: some-token"),
-				tokenValidator: mockGcpTokenValidator{validate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
+				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					return &idtoken.Payload{}, nil
 				}},
 			},
@@ -83,7 +83,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 				cfg: gcpValidatorConfig{
 					issuer: "issuer-1",
 				},
-				tokenValidator: mockGcpTokenValidator{validate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
+				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					return &idtoken.Payload{Issuer: "issuer-2"}, nil
 				}},
 			},
@@ -99,7 +99,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 					issuer:         "issuer-1",
 					serviceAccount: "service-account-1",
 				},
-				tokenValidator: mockGcpTokenValidator{validate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
+				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					issuer := "issuer-1"
 					claims := map[string]interface{}{"email": "service-account-2"}
 					return &idtoken.Payload{Issuer: issuer, Claims: claims}, nil
@@ -117,7 +117,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 					issuer:         "issuer-1",
 					serviceAccount: "service-account-1",
 				},
-				tokenValidator: mockGcpTokenValidator{validate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
+				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					issuer := "issuer-1"
 					claims := map[string]interface{}{"email": "service-account-1"}
 					return &idtoken.Payload{Issuer: issuer, Claims: claims}, nil
@@ -135,7 +135,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 					issuer:         "issuer-1",
 					serviceAccount: "service-account-1",
 				},
-				tokenValidator: mockGcpTokenValidator{validate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
+				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					issuer := "issuer-1"
 					claims := map[string]interface{}{"email": "service-account-1", "email_verified": true}
 					return &idtoken.Payload{Issuer: issuer, Claims: claims}, nil
@@ -165,12 +165,12 @@ func newRequest(headerValue string) *http.Request {
 }
 
 type mockGcpTokenValidator struct {
-	validate func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error)
+	fnValidate func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error)
 }
 
 func (m mockGcpTokenValidator) Validate(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
-	if m.validate == nil {
+	if m.fnValidate == nil {
 		return nil, nil
 	}
-	return m.validate(ctx, idToken, audience)
+	return m.fnValidate(ctx, idToken, audience)
 }
