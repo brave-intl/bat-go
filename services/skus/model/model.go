@@ -37,6 +37,7 @@ const (
 	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"
 	ErrInvalidNumPerInterval Error = "model: invalid order: invalid numPerInterval"
 	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
+	ErrInvalidMobileProduct  Error = "model: invalid mobile product"
 
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
@@ -47,6 +48,7 @@ const (
 )
 
 const (
+	MerchID             = "brave.com"
 	StripePaymentMethod = "stripe"
 	RadomPaymentMethod  = "radom"
 
@@ -59,10 +61,22 @@ const (
 	issuerOverlapDefault = 5
 )
 
+const (
+	VendorApple  Vendor = "ios"
+	VendorGoogle Vendor = "android"
+)
+
 var (
 	emptyCreateCheckoutSessionResp CreateCheckoutSessionResponse
 	emptyOrderTimeBounds           OrderTimeBounds
 )
+
+// Vendor represents an app store vendor.
+type Vendor string
+
+func (v Vendor) String() string {
+	return string(v)
+}
 
 type radomClient interface {
 	CreateCheckoutSession(ctx context.Context, req *radom.CheckoutSessionRequest) (*radom.CheckoutSessionResponse, error)
@@ -609,6 +623,18 @@ type IssuerConfig struct {
 
 func (c *IssuerConfig) NumIntervals() int {
 	return c.Buffer + c.Overlap
+}
+
+// ReceiptRequest represents a receipt submitted by a mobile or web client.
+type ReceiptRequest struct {
+	Type           Vendor `json:"type" validate:"required,oneof=ios android"`
+	Blob           string `json:"raw_receipt" validate:"required"`
+	Package        string `json:"package" validate:"-"`
+	SubscriptionID string `json:"subscription_id" validate:"-"`
+}
+
+type CreateOrderWithReceiptResponse struct {
+	ID string `json:"id"`
 }
 
 func addURLParam(src, name, val string) (string, error) {
