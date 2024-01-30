@@ -595,37 +595,32 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 func deleteItemCreds(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		lg := logging.Logger(ctx, "skus.deleteItemCreds")
+		lg := logging.Logger(ctx, "skus").With().Str("func", "deleteItemCreds").Logger()
 
-		orderID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
 			lg.Error().Err(err).Msg("failed to validate order id")
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+			return handlers.ValidationError("request url parameter", map[string]interface{}{
 				"orderID": err.Error(),
 			})
 		}
 
-		itemID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
-			lg.Error().Err(err).Msg("failed to validate item id")
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
-				"itemID": err.Error(),
-			})
-		}
-
-		reqID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
+		reqID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "reqID"))
+		if err != nil {
 			lg.Error().Err(err).Msg("failed to validate request id")
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
-				"requestID": err.Error(),
+			return handlers.ValidationError("request url parameter", map[string]interface{}{
+				"itemID": err.Error(),
 			})
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
 
-		if err := svc.DeleteOrderCreds(ctx, *orderID.UUID(), *reqID.UUID(), isSigned); err != nil {
+		if err := svc.DeleteOrderCreds(ctx, orderID, reqID, isSigned); err != nil {
+			if errors.Is(err, model.ErrOrderNotFound) || errors.Is(err, ErrOrderHasNoItems) {
+				return handlers.WrapError(err, "order or item not found", http.StatusNotFound)
+			}
 			lg.Error().Err(err).Msg("failed to delete the order credentials")
-			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
+			return handlers.WrapError(err, "error deleting credentials", http.StatusInternalServerError)
 		}
 
 		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
