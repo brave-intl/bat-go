@@ -722,7 +722,7 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID
 	}
 
 	if doTlv2 {
-		if err := s.deleteTLV2(ctx, tx, order, reqID); err != nil {
+		if err := s.deleteTLV2(ctx, tx, order, reqID, time.Now()); err != nil {
 			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 		}
 	}
@@ -741,13 +741,13 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID
 // maxTLV2ActiveItemCreds is the max number of credentials an item is allowed to have in the given day
 const maxTLV2ActiveOrderCreds = 10
 
-func (s *Service) deleteTLV2(ctx context.Context, dbi sqlx.ExtContext, order *model.Order, reqID uuid.UUID) error {
+func (s *Service) deleteTLV2(ctx context.Context, dbi sqlx.ExtContext, order *model.Order, reqID uuid.UUID, now time.Time) error {
 
 	// Pass the request id as an "item id", which will allow for legacy credentials to be deleted.
 	// Otherwise, do not delete said credentials for multiple device support.
 	if !uuid.Equal(reqID, uuid.Nil) {
 		// check if we already have N active credentials on this item for the current day
-		activeCreds, err := s.Datastore.GetCountActiveOrderCreds(ctx, dbi, order.ID)
+		activeCreds, err := s.Datastore.GetCountActiveOrderCreds(ctx, dbi, order.ID, now)
 		if err != nil {
 			return fmt.Errorf("failed to get count of active order credentials: %w", err)
 		}

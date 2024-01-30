@@ -163,7 +163,7 @@ func (suite *PostgresTestSuite) TestCountActiveOrderCreds_Success() {
 		devBraveSearchPremiumYearTimeLimited)
 
 	// both order items have same orderID so can use the first element to retrieve all order creds
-	currentlyActiveOrderCredentialsCount, err := suite.storage.GetCountActiveOrderCreds(ctx, suite.storage.RawDB(), orderCredentials[0].OrderID)
+	currentlyActiveOrderCredentialsCount, err := suite.storage.GetCountActiveOrderCreds(ctx, suite.storage.RawDB(), orderCredentials[0].OrderID, time.Now())
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(2, currentlyActiveOrderCredentialsCount)

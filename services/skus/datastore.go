@@ -85,7 +85,7 @@ type Datastore interface {
 	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, itemIDs ...uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
-	GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) (int, error)
+	GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, now time.Time) (int, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
 	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error)
@@ -1037,14 +1037,14 @@ func (pg *Postgres) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, o
 }
 
 // GetCountActiveOrderCreds returns the count of order creds currently active on an order
-func (pg *Postgres) GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) (int, error) {
+func (pg *Postgres) GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, now time.Time) (int, error) {
 	query := `
 		select count(1) from time_limited_v2_order_creds
-		where order_id = $1 and now() > valid_from and valid_to > now() group by request_id
+		where order_id = $1 and $2 > valid_from and valid_to > $2 group by request_id
 	`
 
 	var activeCredCount int
-	if err := sqlx.GetContext(ctx, dbi, &activeCredCount, query, orderID); err != nil {
+	if err := sqlx.GetContext(ctx, dbi, &activeCredCount, query, orderID, now); err != nil {
 		return 0, fmt.Errorf("error getting active credential count: %w", err)
 	}
 

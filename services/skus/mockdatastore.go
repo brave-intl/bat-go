@@ -272,18 +272,18 @@ func (mr *MockDatastoreMockRecorder) ExternalIDExists(arg0, arg1 interface{}) *g
 }
 
 // GetCountActiveOrderCreds mocks base method.
-func (m *MockDatastore) GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID go_uuid.UUID) (int, error) {
+func (m *MockDatastore) GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID go_uuid.UUID, now time.Time) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCountActiveOrderCreds", ctx, dbi, orderID)
+	ret := m.ctrl.Call(m, "GetCountActiveOrderCreds", ctx, dbi, orderID, now)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCountActiveOrderCreds indicates an expected call of GetCountActiveOrderCreds.
-func (mr *MockDatastoreMockRecorder) GetCountActiveOrderCreds(ctx, dbi, orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetCountActiveOrderCreds(ctx, dbi, orderID, now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCountActiveOrderCreds", reflect.TypeOf((*MockDatastore)(nil).GetCountActiveOrderCreds), ctx, dbi, orderID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCountActiveOrderCreds", reflect.TypeOf((*MockDatastore)(nil).GetCountActiveOrderCreds), ctx, dbi, orderID, now)
 }
 
 // GetIssuerByPublicKey mocks base method.

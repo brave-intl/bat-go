@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
@@ -29,6 +30,8 @@ func TestService_DeleteTLV2(t *testing.T) {
 		exp   tcExpected
 	}
 
+	now := time.Now()
+
 	tests := []testCase{
 		{
 			name: "request_id_specified",
@@ -42,6 +45,7 @@ func TestService_DeleteTLV2(t *testing.T) {
 					gomock.Nil(), // dbi
 					gomock.Eq(uuid.Must(uuid.FromString("a6b72f11-c886-49ee-b4f4-913eaa0984ae"))),
 					gomock.Eq([]uuid.UUID{uuid.Must(uuid.FromString("d10cf2ae-30d8-4ada-965c-11c582968f26"))}),
+					gomock.Eq(now),
 				},
 			},
 		},
@@ -69,6 +73,7 @@ func TestService_DeleteTLV2(t *testing.T) {
 						uuid.Must(uuid.FromString("ed437d36-182b-460f-8213-2ce3d4bb5c93")),
 						uuid.Must(uuid.FromString("d3e62075-996f-4bed-bbc7-f6cd324b83e0")),
 					}),
+					gomock.Eq(now),
 				},
 			},
 		},
@@ -78,7 +83,7 @@ func TestService_DeleteTLV2(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			must.Equal(t, 4, len(tc.exp.args))
+			must.Equal(t, 5, len(tc.exp.args))
 
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
@@ -90,7 +95,7 @@ func TestService_DeleteTLV2(t *testing.T) {
 			ctx := context.Background()
 			if tc.given.reqID != uuid.Nil {
 				ds.EXPECT().GetCountActiveOrderCreds(
-					tc.exp.args[0], tc.exp.args[1], tc.exp.args[2],
+					tc.exp.args[0], tc.exp.args[1], tc.exp.args[2], tc.exp.args[4],
 				).Return(0, nil)
 			}
 
@@ -98,7 +103,7 @@ func TestService_DeleteTLV2(t *testing.T) {
 				tc.exp.args[0], tc.exp.args[1], tc.exp.args[2], tc.exp.args[3],
 			).Return(nil)
 
-			actual := svc.deleteTLV2(ctx, nil, tc.given.ord, tc.given.reqID)
+			actual := svc.deleteTLV2(ctx, nil, tc.given.ord, tc.given.reqID, now)
 			should.Equal(t, tc.exp.err, actual)
 		})
 	}
