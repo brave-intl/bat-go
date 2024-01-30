@@ -155,18 +155,19 @@ func (suite *PostgresTestSuite) TestCountActiveOrderCreds_Success() {
 	env := os.Getenv("ENV")
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
 
-	// create paid order with two order items
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited,
-		devBraveSearchPremiumYearTimeLimited})
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{
+		devBraveFirewallVPNPremiumTimeLimited,
+		devBraveSearchPremiumYearTimeLimited,
+	})
 
-	orderCredentials := suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited,
-		devBraveSearchPremiumYearTimeLimited)
+	creds := suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited, devBraveSearchPremiumYearTimeLimited)
 
-	// both order items have same orderID so can use the first element to retrieve all order creds
-	currentlyActiveOrderCredentialsCount, err := suite.storage.GetCountActiveOrderCreds(ctx, suite.storage.RawDB(), orderCredentials[0].OrderID, time.Now())
+	actual, err := suite.storage.GetCountActiveOrderCreds(ctx, suite.storage.RawDB(), creds[0].OrderID, time.Now())
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(2, currentlyActiveOrderCredentialsCount)
+	const expected = 2
+
+	suite.Assert().Equal(expected, actual)
 }
 
 func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrder_Success() {

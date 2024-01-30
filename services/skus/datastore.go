@@ -1036,15 +1036,13 @@ func (pg *Postgres) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, o
 	return result, nil
 }
 
-// GetCountActiveOrderCreds returns the count of order creds currently active on an order
+// GetCountActiveOrderCreds returns the count of order creds currently active on an order.
 func (pg *Postgres) GetCountActiveOrderCreds(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, now time.Time) (int, error) {
-	query := `
-		select count(1) from time_limited_v2_order_creds
-		where order_id = $1 and $2 > valid_from and valid_to > $2 group by request_id
-	`
+	const q = `SELECT COUNT(1) FROM time_limited_v2_order_creds
+		WHERE order_id = $1 AND valid_from < $2 AND valid_to > $2 GROUP BY request_id`
 
 	var activeCredCount int
-	if err := sqlx.GetContext(ctx, dbi, &activeCredCount, query, orderID, now); err != nil {
+	if err := sqlx.GetContext(ctx, dbi, &activeCredCount, q, orderID, now); err != nil {
 		return 0, fmt.Errorf("error getting active credential count: %w", err)
 	}
 

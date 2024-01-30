@@ -626,11 +626,16 @@ func deleteItemCreds(svc *Service) handlers.AppHandler {
 		isSigned := r.URL.Query().Get("isSigned") == "true"
 
 		if err := svc.DeleteOrderCreds(ctx, orderID, reqID, isSigned); err != nil {
-			if errors.Is(err, model.ErrOrderNotFound) || errors.Is(err, ErrOrderHasNoItems) {
-				return handlers.WrapError(err, "order or item not found", http.StatusNotFound)
-			}
 			lg.Error().Err(err).Msg("failed to delete the order credentials")
-			return handlers.WrapError(err, "error deleting credentials", http.StatusInternalServerError)
+
+			switch {
+			case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, ErrOrderHasNoItems):
+				return handlers.WrapError(err, "order or item not found", http.StatusNotFound)
+			case errors.Is(err, errExceededMaxActiveOrderCreds):
+				return handlers.WrapError(err, errExceededMaxActiveOrderCreds.Error(), http.StatusUnprocessableEntity)
+			default:
+				return handlers.WrapError(err, "error deleting credentials", http.StatusInternalServerError)
+			}
 		}
 
 		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
