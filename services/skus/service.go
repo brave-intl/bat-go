@@ -91,11 +91,12 @@ const (
 
 type orderStoreSvc interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 }
 
 type vendorReceiptValidator interface {
-	validateApple(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
-	validateGoogle(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error)
+	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
+	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
 }
 
 type gcpRequestValidator interface {
@@ -127,6 +128,9 @@ type Service struct {
 
 	vendorReceiptValid vendorReceiptValidator
 	gcpValidator       gcpRequestValidator
+
+	payProcCfg    *premiumPaymentProcConfig
+	newItemReqSet map[string]model.OrderItemRequestNew
 }
 
 // PauseWorker - pause worker until time specified
@@ -256,6 +260,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		return nil, err
 	}
 
+	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
+	if err != nil {
+		return nil, err
+	}
+
 	idv, err := idtoken.NewValidator(ctx)
 	if err != nil {
 		return nil, err
@@ -304,8 +313,12 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		retry:              backoff.Retry,
 		radomClient:        radomClient,
 		radomSellerAddress: radomSellerAddress,
+
 		vendorReceiptValid: rcptValidator,
 		gcpValidator:       gcpValidator,
+
+		payProcCfg:    newPaymentProcessorConfig(env),
+		newItemReqSet: newOrderItemReqNewLeoSet(env),
 	}
 
 	// setup runnable jobs
@@ -1618,8 +1631,8 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	}
 
 	// have order, now validate the receipt from the notification
-	if _, err := s.vendorReceiptValid.validateGoogle(ctx, SubmitReceiptRequestV1{
-		Type:           "android",
+	if _, err := s.vendorReceiptValid.validateGoogle(ctx, model.ReceiptRequest{
+		Type:           model.VendorGoogle,
 		Blob:           dn.SubscriptionNotification.PurchaseToken,
 		Package:        dn.PackageName,
 		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
@@ -1656,12 +1669,12 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 }
 
 // validateReceipt validates receipt.
-func (s *Service) validateReceipt(ctx context.Context, receipt SubmitReceiptRequestV1) (string, error) {
-	switch receipt.Type {
-	case appleVendor:
-		return s.vendorReceiptValid.validateApple(ctx, receipt)
-	case googleVendor:
-		return s.vendorReceiptValid.validateGoogle(ctx, receipt)
+func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	switch req.Type {
+	case model.VendorApple:
+		return s.vendorReceiptValid.validateApple(ctx, req)
+	case model.VendorGoogle:
+		return s.vendorReceiptValid.validateGoogle(ctx, req)
 	default:
 		return "", errorutils.ErrNotImplemented
 	}
@@ -1702,65 +1715,27 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	// Check for number of items to be above 0.
-	//
-	// Validation should already have taken care of this.
-	// This method does not know about it, hence the explicit check.
-	nitems := len(items)
-	if nitems == 0 {
-		return nil, model.ErrInvalidOrderRequest
+	ordNew, err := newOrderNewForReq(req, items, model.MerchID, model.OrderStatusPending)
+	if err != nil {
+		return nil, err
 	}
 
-	const merchID = "brave.com"
+	return s.createOrder(ctx, req, ordNew, items)
+}
 
+func (s *Service) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	numIntervals, err := s.createOrderIssuers(ctx, tx, merchID, items)
+	numIntervals, err := s.createOrderIssuers(ctx, tx, model.MerchID, items)
 	if err != nil {
 		return nil, err
 	}
 
-	oreq := &model.OrderNew{
-		MerchantID:            merchID,
-		Currency:              req.Currency,
-		Status:                model.OrderStatusPending,
-		TotalPrice:            model.OrderItemList(items).TotalCost(),
-		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
-	}
-
-	if oreq.TotalPrice.IsZero() {
-		oreq.Status = model.OrderStatusPaid
-	}
-
-	// Location on the order is only defined when there is only one item.
-	//
-	// Multi-item orders have NULL location.
-	if nitems == 1 && items[0].Location.Valid {
-		oreq.Location.Valid = true
-		oreq.Location.String = items[0].Location.String
-	}
-
-	{
-		// Use validFor from the first item.
-		//
-		// TODO: Deprecate the use of valid_for:
-		// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
-		//
-		// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
-		// It does not make any sense, but it's working because there is only one item normally.
-		var vf time.Duration
-		if items[0].ValidFor != nil {
-			vf = *items[0].ValidFor
-		}
-
-		oreq.ValidFor = &vf
-	}
-
-	order, err := s.Datastore.CreateOrder(ctx, tx, oreq, items)
+	order, err := s.Datastore.CreateOrder(ctx, tx, ordNew, items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
@@ -1794,25 +1769,33 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		}
 	}
 
-	if numIntervals > 0 {
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numIntervals", numIntervals); err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	if err := s.updateOrderIntvals(ctx, order.ID, items, numIntervals); err != nil {
+		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	}
+
+	return order, nil
+}
+
+func (s *Service) updateOrderIntvals(ctx context.Context, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
+	if nintvals > 0 {
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numIntervals", nintvals); err != nil {
+			return err
 		}
 	}
 
 	// Backporting changes from https://github.com/brave-intl/bat-go/pull/1998.
 	{
 		numPerInterval := 2
-		if nitems == 1 && items[0].IsLeo() {
+		if len(items) == 1 && items[0].IsLeo() {
 			numPerInterval = 192
 		}
 
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", numPerInterval); err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numPerInterval", numPerInterval); err != nil {
+			return err
 		}
 	}
 
-	return order, nil
+	return nil
 }
 
 // createOrderIssuers checks that the issuer exists for the item's product.
@@ -1910,6 +1893,123 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
 }
 
+func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
+	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
+}
+
+// paidOrderCreator creates an order and sets its status to paid.
+//
+// This interface exists because in its current form Service is hardly testable.
+type paidOrderCreator interface {
+	createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+}
+
+// createOrderWithReceipt creates a paid order with the supplied inputs.
+//
+// The function does not re-fetch the order after the final update to metadata.
+// This might change if there is such a need.
+func createOrderWithReceipt(
+	ctx context.Context,
+	svc paidOrderCreator,
+	itemReqSet map[string]model.OrderItemRequestNew,
+	ppcfg *premiumPaymentProcConfig,
+	req model.ReceiptRequest,
+	extID string,
+) (*model.Order, error) {
+	// 1. Find out what's being purchased from SubscriptionID.
+	/*
+		Android:
+		- brave.leo.monthly -> brave-leo-premium
+		- brave.leo.yearly -> brave-leo-premium-year
+	*/
+	itemNew, err := newOrderItemReqForSubID(itemReqSet, req.SubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	oreq := newCreateOrderReqNewLeo(ppcfg, itemNew)
+
+	// 2. Craft a request for creating an order.
+	items, err := createOrderItems(&oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use status paid as it's been already paid in-app.
+	ordNew, err := newOrderNewForReq(&oreq, items, model.MerchID, model.OrderStatusPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Create an order.
+	order, err := svc.createOrder(ctx, &oreq, ordNew, items)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Save mobile metadata.
+	mdata := newMobileOrderMdata(req, extID)
+	if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
+		return nil, err
+	}
+
+	// Not re-fetching the order after updating metadata.
+	// At the moment, the only caller of this code is only interested
+	// in the order id.
+
+	return order, nil
+}
+
+func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem, merchID, status string) (*model.OrderNew, error) {
+	// Check for number of items to be above 0.
+	//
+	// Validation should already have taken care of this.
+	// This function does not know about it, hence the explicit check.
+	nitems := len(items)
+	if nitems == 0 {
+		return nil, model.ErrInvalidOrderRequest
+	}
+
+	result := &model.OrderNew{
+		MerchantID:            merchID,
+		Currency:              req.Currency,
+		Status:                status,
+		TotalPrice:            model.OrderItemList(items).TotalCost(),
+		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
+	}
+
+	if result.TotalPrice.IsZero() {
+		result.Status = model.OrderStatusPaid
+	}
+
+	// Location on the order is only defined when there is only one item.
+	//
+	// Multi-item orders have NULL location.
+	if nitems == 1 && items[0].Location.Valid {
+		result.Location.Valid = true
+		result.Location.String = items[0].Location.String
+	}
+
+	{
+		// Use validFor from the first item.
+		//
+		// TODO: Deprecate the use of valid_for:
+		// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
+		//
+		// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
+		// It does not make any sense, but it's working because there is only one item normally.
+		var vf time.Duration
+		if items[0].ValidFor != nil {
+			vf = *items[0].ValidFor
+		}
+
+		result.ValidFor = &vf
+	}
+
+	return result, nil
+}
+
 func createOrderItems(req *model.CreateOrderRequestNew) ([]model.OrderItem, error) {
 	result := make([]model.OrderItem, 0)
 
@@ -1971,6 +2071,16 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 	}
 
 	return result, nil
+}
+
+func newMobileOrderMdata(req model.ReceiptRequest, extID string) datastore.Metadata {
+	result := datastore.Metadata{
+		"externalID":     extID,
+		paymentProcessor: req.Type.String(),
+		"vendor":         req.Type.String(),
+	}
+
+	return result
 }
 
 func durationFromISO(v string) (time.Duration, error) {
