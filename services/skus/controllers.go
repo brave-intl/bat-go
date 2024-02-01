@@ -1405,22 +1405,6 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-type legacyOrderHandler struct {
-	svc   *Service
-	lg    *zerolog.Logger
-	valid *validator.Validate
-}
-
-func newLegacyOrderHandler(svc *Service, lg *zerolog.Logger, valid *validator.Validate) *legacyOrderHandler {
-	result := &legacyOrderHandler{
-		svc:   svc,
-		lg:    lg,
-		valid: valid,
-	}
-
-	return result
-}
-
 // submitReceipt handles receipt submission requests.
 func (h *legacyOrderHandler) submitReceipt(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
@@ -1701,4 +1685,20 @@ func collectValidationErrors(err error) (map[string]string, bool) {
 	}
 
 	return result, true
+}
+
+type legacyOrderHandler struct {
+	svc   *Service
+	lg    *zerolog.Logger
+	valid *validator.Validate
+}
+
+func newLegacyOrderHandler(svc *Service, lg *zerolog.Logger, valid *validator.Validate) *legacyOrderHandler {
+	result := &legacyOrderHandler{
+		svc:   svc,
+		lg:    lg,
+		valid: valid,
+	}
+
+	return result
 }
