@@ -1898,7 +1898,11 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 }
 
 func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extID string) error {
-	ord, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), extID)
+	return checkOrderReceipt(ctx, s.Datastore.RawDB(), s.orderRepo, orderID, extID)
+}
+
+func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
+	ord, err := repo.GetByExternalID(ctx, dbi, extID)
 	if err != nil {
 		return err
 	}

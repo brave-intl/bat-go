@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -15,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
 func TestCheckNumBlindedCreds(t *testing.T) {
@@ -846,6 +848,96 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			}
 
 			should.Equal(t, tc.exp.ord, actual)
+		})
+	}
+}
+
+func TestService_checkOrderReceipt(t *testing.T) {
+	type tcGiven struct {
+		orderID uuid.UUID
+		extID   string
+		repo    *repository.MockOrder
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				extID:   "extID_01",
+				repo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: model.ErrOrderNotFound,
+		},
+
+		{
+			name: "some_error",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				extID:   "extID_01",
+				repo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return nil, model.Error("some error")
+					},
+				},
+			},
+			exp: model.Error("some error"),
+		},
+
+		{
+			name: "order_receipt_dont_match",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				extID:   "extID_01",
+				repo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("decade00-0000-4000-a000-000000000000")),
+						}
+
+						return result, nil
+					},
+				},
+			},
+			exp: model.ErrNoMatchOrderReceipt,
+		},
+
+		{
+			name: "happy_path",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				extID:   "extID_01",
+				repo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+						}
+
+						return result, nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			actual := checkOrderReceipt(ctx, nil, tc.given.repo, tc.given.orderID, tc.given.extID)
+			should.Equal(t, tc.exp, actual)
 		})
 	}
 }

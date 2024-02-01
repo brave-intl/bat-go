@@ -102,9 +102,9 @@ func Router(
 	// Receipt validation.
 	{
 		valid := validator.New()
-		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(submitReceipt(svc, valid))))
-		r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(createOrderFromReceipt(svc, valid))))
-		r.Method(http.MethodPatch, "/{orderID}/receipt", metricsMwr("checkOrderReceipt", authMwr(checkOrderReceipt(svc, valid))))
+		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(submitReceiptH(svc, valid))))
+		r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(createOrderFromReceiptH(svc, valid))))
+		r.Method(http.MethodPatch, "/{orderID}/receipt", metricsMwr("checkOrderReceipt", authMwr(checkOrderReceiptH(svc, valid))))
 	}
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
@@ -1400,8 +1400,8 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-// submitReceipt handles receipt submission requests.
-func submitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+// submitReceiptH handles receipt submission requests.
+func submitReceiptH(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
@@ -1481,13 +1481,13 @@ func submitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler 
 	})
 }
 
-func createOrderFromReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+func createOrderFromReceiptH(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return createOrderFromReceiptH(w, r, svc, valid)
+		return createOrderFromReceipth(w, r, svc, valid)
 	}
 }
 
-func createOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
+func createOrderFromReceipth(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
 	ctx := r.Context()
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "createOrderFromReceipt").Logger()
@@ -1550,13 +1550,13 @@ func createOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *Servic
 
 }
 
-func checkOrderReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+func checkOrderReceiptH(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return checkOrderReceiptH(w, r, svc, valid)
+		return checkOrderReceipth(w, r, svc, valid)
 	}
 }
 
-func checkOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
+func checkOrderReceipth(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
 	ctx := r.Context()
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "checkOrderReceipt").Logger()
