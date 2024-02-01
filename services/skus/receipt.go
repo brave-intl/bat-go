@@ -158,8 +158,6 @@ func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptR
 	}
 
 	// Check order expiration.
-	// There seems to be a mistake here?
-	// Unix expects nanoseconds as the second param, but ms are passed.
 	if time.Unix(0, resp.ExpiryTimeMillis*int64(time.Millisecond)).Before(time.Now()) {
 		return "", errPurchaseExpired
 	}
@@ -177,7 +175,7 @@ func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptR
 		return req.Blob, nil
 
 	case androidPaymentStatePending:
-		// Checl for cancel reason.
+		// Check for cancel reason.
 		switch resp.CancelReason {
 		case androidCancelReasonUser:
 			return "", errPurchaseUserCanceled

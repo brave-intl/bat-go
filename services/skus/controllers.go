@@ -102,8 +102,9 @@ func Router(
 	// Receipt validation.
 	{
 		valid := validator.New()
-		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc, valid))))
+		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(submitReceipt(svc, valid))))
 		r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(createOrderFromReceipt(svc, valid))))
+		r.Method(http.MethodPatch, "/{orderID}/receipt", metricsMwr("checkOrderReceipt", authMwr(checkOrderReceipt(svc, valid))))
 	}
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
@@ -1399,18 +1400,19 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-// SubmitReceipt handles receipt submission requests.
-func SubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+// submitReceipt handles receipt submission requests.
+func submitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
 		l := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
 
-		orderID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
 			l.Warn().Err(err).Msg("failed to decode orderID")
 
-			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+			// Preserve the legacy error in case anything depends on it.
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": inputs.ErrIDDecodeNotUUID})
 		}
 
 		payload, err := requestutils.Read(ctx, r.Body)
@@ -1465,7 +1467,7 @@ func SubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler 
 
 		mdata := newMobileOrderMdata(req, extID)
 
-		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), mdata); err != nil {
+		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
 			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
 		}
@@ -1546,6 +1548,70 @@ func createOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *Servic
 
 	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
 
+}
+
+func checkOrderReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		return checkOrderReceiptH(w, r, svc, valid)
+	}
+}
+
+func checkOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
+	ctx := r.Context()
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "checkOrderReceipt").Logger()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to parse orderID")
+
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to read request")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	req, err := parseSubmitReceiptRequest(raw)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to deserialize request")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	if err := valid.StructCtx(ctx, &req); err != nil {
+		verrs, ok := collectValidationErrors(err)
+		if !ok {
+			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		}
+
+		return handlers.ValidationError("request", verrs)
+	}
+
+	extID, err := svc.validateReceipt(ctx, req)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+		return handleReceiptErr(err)
+	}
+
+	if err := svc.checkOrderReceipt(ctx, orderID, extID); err != nil {
+		lg.Warn().Err(err).Msg("failed to check order receipt")
+
+		switch {
+		case errors.Is(err, model.ErrOrderNotFound):
+			return handlers.WrapError(err, "order not found by receipt", http.StatusNotFound)
+		case errors.Is(err, model.ErrNoMatchOrderReceipt):
+			return handlers.WrapError(err, "order_id does not match receipt order", http.StatusFailedDependency)
+		default:
+			return handlers.WrapError(model.ErrSomethingWentWrong, "failed to check order receipt", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func NewCORSMwr(opts cors.Options, methods ...string) func(next http.Handler) http.Handler {
