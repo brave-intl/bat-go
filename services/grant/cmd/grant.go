@@ -478,7 +478,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 		r.Mount("/v1/credentials", skus.CredentialRouter(skusService, authMwr))
 		r.Mount("/v2/credentials", skus.CredentialV2Router(skusService, authMwr))
-		r.Mount("/v1/orders", skus.Router(skusService, authMwr, middleware.InstrumentHandler, corsOpts))
+		r.Mount("/v1/orders", skus.Router(logger, skusService, authMwr, middleware.InstrumentHandler, corsOpts))
 
 		subr := chi.NewRouter()
 		orderh := handler.NewOrder(skusService)

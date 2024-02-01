@@ -23,6 +23,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"
+	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -1022,7 +1023,8 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 		return h
 	}
 
-	router := Router(suite.service, authMwr, instrumentHandler, newCORSOptsEnv())
+	lg := zerolog.Nop()
+	router := Router(&lg, suite.service, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	router.Mount("/vote", VoteRouter(suite.service, instrumentHandler))
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -1540,7 +1542,8 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		return h
 	}
 
-	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
+	lg := zerolog.Nop()
+	router := Router(&lg, skuService, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1686,7 +1689,8 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		return h
 	}
 
-	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
+	lg := zerolog.Nop()
+	router := Router(&lg, skuService, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1803,7 +1807,8 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 		return h
 	}
 
-	router := Router(service, authMwr, instrumentHandler, newCORSOptsEnv())
+	lg := zerolog.Nop()
+	router := Router(&lg, service, authMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
