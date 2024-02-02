@@ -1897,6 +1897,23 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
 }
 
+func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extID string) error {
+	return checkOrderReceipt(ctx, s.Datastore.RawDB(), s.orderRepo, orderID, extID)
+}
+
+func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
+	ord, err := repo.GetByExternalID(ctx, dbi, extID)
+	if err != nil {
+		return err
+	}
+
+	if !uuid.Equal(orderID, ord.ID) {
+		return model.ErrNoMatchOrderReceipt
+	}
+
+	return nil
+}
+
 // paidOrderCreator creates an order and sets its status to paid.
 //
 // This interface exists because in its current form Service is hardly testable.
