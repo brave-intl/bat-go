@@ -162,7 +162,6 @@ func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig, item model.OrderIt
 			SuccessURI: ppcfg.successURI,
 			CancelURI:  ppcfg.cancelURI,
 		},
-		PaymentMethods: []string{"stripe"},
 
 		Items: []model.OrderItemRequestNew{item},
 	}

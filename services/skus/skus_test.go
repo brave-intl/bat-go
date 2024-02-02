@@ -277,7 +277,6 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 					SuccessURI: "https://account.brave.software/account/?intent=provision",
 					CancelURI:  "https://account.brave.software/plans/?intent=checkout",
 				},
-				PaymentMethods: []string{"stripe"},
 
 				Items: []model.OrderItemRequestNew{
 					{
@@ -313,7 +312,6 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 					SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
 					CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
 				},
-				PaymentMethods: []string{"stripe"},
 
 				Items: []model.OrderItemRequestNew{
 					{
@@ -349,7 +347,6 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 					SuccessURI: "https://account.brave.com/account/?intent=provision",
 					CancelURI:  "https://account.brave.com/plans/?intent=checkout",
 				},
-				PaymentMethods: []string{"stripe"},
 
 				Items: []model.OrderItemRequestNew{
 					{
