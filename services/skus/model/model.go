@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	ErrSomethingWentWrong                     Error = "something went wrong"
 	ErrOrderNotFound                          Error = "model: order not found"
 	ErrOrderItemNotFound                      Error = "model: order item not found"
 	ErrIssuerNotFound                         Error = "model: issuer not found"
@@ -38,6 +39,7 @@ const (
 	ErrInvalidNumPerInterval Error = "model: invalid order: invalid numPerInterval"
 	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
 	ErrInvalidMobileProduct  Error = "model: invalid mobile product"
+	ErrNoMatchOrderReceipt   Error = "model: order_id does not match receipt order"
 
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
