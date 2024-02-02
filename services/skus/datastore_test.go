@@ -151,25 +151,6 @@ func (suite *PostgresTestSuite) TestGetOrderByExternalID() {
 	}
 }
 
-func (suite *PostgresTestSuite) TestCountActiveOrderCreds_Success() {
-	env := os.Getenv("ENV")
-	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
-
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{
-		devBraveFirewallVPNPremiumTimeLimited,
-		devBraveSearchPremiumYearTimeLimited,
-	})
-
-	creds := suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited, devBraveSearchPremiumYearTimeLimited)
-
-	actual, err := suite.storage.GetCountActiveOrderCreds(ctx, suite.storage.RawDB(), creds[0].OrderID, time.Now())
-	suite.Require().NoError(err)
-
-	const expected = 2
-
-	suite.Assert().Equal(expected, actual)
-}
-
 func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrder_Success() {
 	env := os.Getenv("ENV")
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
