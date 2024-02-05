@@ -505,6 +505,8 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 				return handlers.WrapError(model.ErrChallengeExpired, "linking challenge expired", http.StatusUnauthorized)
 			case errors.Is(err, model.ErrWalletNotFound):
 				return handlers.WrapError(model.ErrWalletNotFound, "rewards wallet not found", http.StatusNotFound)
+			case errors.Is(err, ErrTooManyCardsLinked):
+				return handlers.WrapError(ErrTooManyCardsLinked, "too many wallets linked", http.StatusConflict)
 			case errors.As(err, &solErr):
 				return handlers.WrapError(solErr, "invalid solana linking message", http.StatusUnauthorized)
 			default:
