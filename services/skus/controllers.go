@@ -596,6 +596,9 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 
 		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, reqID, req.BlindedCreds); err != nil {
 			lg.Error().Err(err).Msg("failed to create the order credentials")
+			if errors.Is(err, errCredsAlreadySubmittedMismatch) {
+				return handlers.WrapError(err, "Order credentials already exist", http.StatusConflict)
+			}
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
@@ -651,6 +654,9 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 
 		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID(), req.BlindedCreds); err != nil {
 			lg.Error().Err(err).Msg("failed to create the order credentials")
+			if errors.Is(err, errCredsAlreadySubmittedMismatch) {
+				return handlers.WrapError(err, "Order credentials already exist", http.StatusConflict)
+			}
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
