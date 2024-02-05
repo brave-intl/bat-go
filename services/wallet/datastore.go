@@ -424,6 +424,10 @@ func getEnvMaxCards(custodian string) int {
 		if v, err := strconv.Atoi(os.Getenv("ZEBPAY_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
+	case "solana":
+		if v, err := strconv.Atoi(os.Getenv("SOLANA_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
 	}
 	return 4
 }
