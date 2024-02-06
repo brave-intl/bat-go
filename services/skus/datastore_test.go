@@ -17,6 +17,7 @@ import (
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -663,4 +664,98 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 	}
 
 	return orderCredentials
+}
+
+func (suite *PostgresTestSuite) TestAreTimeLimitedV2CredsSubmitted() {
+	type tcGiven struct {
+		reqID         uuid.UUID
+		blindedCreds  []string
+		timeAwareCrds TimeAwareSubIssuedCreds
+	}
+
+	type exp struct {
+		submittedCreds AreTimeLimitedV2CredsSubmittedResult
+		mustErr        must.ErrorAssertionFunc
+	}
+
+	type testCases struct {
+		name  string
+		given tcGiven
+		exp   exp
+	}
+
+	tests := []testCases{
+		{
+			name: "no_creds",
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorContains(t, err, "invalid parameter to tlv2 creds signed")
+				},
+			},
+		},
+		{
+			name: "already_submitted_true_and_mismatch_true",
+			given: tcGiven{
+				reqID: uuid.NewV4(),
+				timeAwareCrds: TimeAwareSubIssuedCreds{
+					RequestID:    uuid.NewV4().String(),
+					BlindedCreds: []string{"test-cred"},
+				},
+				blindedCreds: []string{"test-cred"},
+			},
+			exp: exp{
+				submittedCreds: AreTimeLimitedV2CredsSubmittedResult{AlreadySubmitted: true, Mismatch: true},
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		suite.T().Cleanup(func() {
+			_, err := suite.storage.RawDB().Exec("truncate table time_limited_v2_order_creds")
+			must.NoError(suite.T(), err)
+		})
+
+		suite.T().Run(tc.name, func(t *testing.T) {
+
+			ctx := context.Background()
+
+			{
+				ir := repository.NewIssuer()
+				issuer, err1 := ir.Create(ctx, suite.storage.RawDB(), model.IssuerNew{
+					MerchantID: test.RandomString(),
+					PublicKey:  test.RandomString(),
+				})
+				must.NoError(t, err1)
+
+				order := &model.OrderNew{Status: OrderStatusPending}
+				items := []model.OrderItem{{}}
+
+				o, err2 := suite.storage.CreateOrder(ctx, suite.storage.RawDB(), order, items)
+				must.NoError(t, err2)
+
+				tx, err3 := suite.storage.BeginTx()
+				must.NoError(t, err3)
+
+				tc.given.timeAwareCrds.IssuerID = issuer.ID
+				tc.given.timeAwareCrds.OrderID = o.ID
+				tc.given.timeAwareCrds.ItemID = o.Items[0].ID
+
+				err4 := suite.storage.InsertTimeLimitedV2OrderCredsTx(ctx, tx, tc.given.timeAwareCrds)
+				must.NoError(t, err4)
+
+				err5 := tx.Commit()
+				must.NoError(t, err5)
+			}
+
+			actual, err := suite.storage.AreTimeLimitedV2CredsSubmitted(ctx, uuid.NewV4(), tc.given.blindedCreds...)
+			tc.exp.mustErr(t, err)
+
+			should.Equal(t, tc.exp.submittedCreds, actual)
+		})
+	}
 }
