@@ -31,11 +31,7 @@ var (
 
 // Decode - implement decodable
 func (cc *CoingeckoCoin) Decode(ctx context.Context, v []byte) error {
-	var (
-		c  string
-		ok bool
-	)
-
+	idToSymbol := ctx.Value(appctx.CoingeckoIDToSymbolCTXKey).(map[string]string)
 	symbolToID := ctx.Value(appctx.CoingeckoSymbolToIDCTXKey).(map[string]string)
 	contractToID := ctx.Value(appctx.CoingeckoContractToIDCTXKey).(map[string]string)
 
@@ -44,13 +40,21 @@ func (cc *CoingeckoCoin) Decode(ctx context.Context, v []byte) error {
 		return ErrCoingeckoCoinEmpty
 	}
 
-	if c, ok = symbolToID[coin]; !ok {
-		if c, ok = contractToID[coin]; !ok {
-			c = coin
-		}
+	if _, ok := idToSymbol[coin]; ok {
+		*cc = CoingeckoCoin{input: coin, coin: coin}
+		return nil
 	}
 
-	*cc = CoingeckoCoin{input: coin, coin: c}
+	if c, ok := symbolToID[coin]; ok {
+		*cc = CoingeckoCoin{input: coin, coin: c}
+		return nil
+	}
+
+	if c, ok := contractToID[coin]; ok {
+		*cc = CoingeckoCoin{input: coin, coin: c}
+		return nil
+	}
+
 	return nil
 }
 
