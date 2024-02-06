@@ -85,14 +85,14 @@ func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt64(arg0, arg1, arg2, 
 }
 
 // AreTimeLimitedV2CredsSubmitted mocks base method.
-func (m *MockDatastore) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID go_uuid.UUID, blindedCreds ...string) (*AreTimeLimitedV2CredsSubmittedResult, error) {
+func (m *MockDatastore) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID go_uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, requestID}
 	for _, a := range blindedCreds {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AreTimeLimitedV2CredsSubmitted", varargs...)
-	ret0, _ := ret[0].(*AreTimeLimitedV2CredsSubmittedResult)
+	ret0, _ := ret[0].(AreTimeLimitedV2CredsSubmittedResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1258,4 +1258,46 @@ func (m *MockissuerStore) GetByPubKey(ctx context.Context, dbi sqlx.QueryerConte
 func (mr *MockissuerStoreMockRecorder) GetByPubKey(ctx, dbi, pubKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByPubKey", reflect.TypeOf((*MockissuerStore)(nil).GetByPubKey), ctx, dbi, pubKey)
+}
+
+// MockgetContext is a mock of getContext interface.
+type MockgetContext struct {
+	ctrl     *gomock.Controller
+	recorder *MockgetContextMockRecorder
+}
+
+// MockgetContextMockRecorder is the mock recorder for MockgetContext.
+type MockgetContextMockRecorder struct {
+	mock *MockgetContext
+}
+
+// NewMockgetContext creates a new mock instance.
+func NewMockgetContext(ctrl *gomock.Controller) *MockgetContext {
+	mock := &MockgetContext{ctrl: ctrl}
+	mock.recorder = &MockgetContextMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockgetContext) EXPECT() *MockgetContextMockRecorder {
+	return m.recorder
+}
+
+// GetContext mocks base method.
+func (m *MockgetContext) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, dest, query}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetContext", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GetContext indicates an expected call of GetContext.
+func (mr *MockgetContextMockRecorder) GetContext(ctx, dest, query interface{}, args ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, dest, query}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContext", reflect.TypeOf((*MockgetContext)(nil).GetContext), varargs...)
 }

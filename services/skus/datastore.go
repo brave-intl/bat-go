@@ -80,7 +80,7 @@ type Datastore interface {
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
-	AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (*AreTimeLimitedV2CredsSubmittedResult, error)
+	AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
 	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error

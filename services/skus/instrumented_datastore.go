@@ -87,7 +87,7 @@ func (_d DatastoreWithPrometheus) AppendOrderMetadataInt64(ctx context.Context, 
 }
 
 // AreTimeLimitedV2CredsSubmitted implements Datastore
-func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (ap1 *AreTimeLimitedV2CredsSubmittedResult, err error) {
+func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (a1 AreTimeLimitedV2CredsSubmittedResult, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
