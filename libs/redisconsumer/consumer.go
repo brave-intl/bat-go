@@ -139,7 +139,7 @@ func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, 
 
 func chunkMessages(messages []interface{}) [][]interface{} {
 	var chunks [][]interface{}
-	chunkSize := 10000
+	chunkSize := 500
 	for i := 0; i < len(messages); i += chunkSize {
 		end := i + chunkSize
 		if len(messages) < end {
