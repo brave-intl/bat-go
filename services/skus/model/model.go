@@ -636,7 +636,7 @@ type ReceiptRequest struct {
 }
 
 type CreateOrderWithReceiptResponse struct {
-	ID string `json:"id"`
+	ID string `json:"orderId"`
 }
 
 func addURLParam(src, name, val string) (string, error) {
