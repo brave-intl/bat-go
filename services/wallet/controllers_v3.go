@@ -519,7 +519,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 }
 
 type challengeRequest struct {
-	PaymentID uuid.UUID `json:"paymentId" valid:"required"`
+	PaymentID uuid.UUID `json:"paymentId"`
 }
 
 type challengeResponse struct {
@@ -538,8 +538,10 @@ func CreateChallenge(s *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error decoding body", http.StatusBadRequest)
 		}
 
-		if _, err := govalidator.ValidateStruct(chlReq); err != nil {
-			return handlers.WrapValidationError(err)
+		if uuid.Equal(chlReq.PaymentID, uuid.Nil) {
+			return handlers.ValidationError("request", map[string]interface{}{
+				"paymentID": "cannot be nil or empty",
+			})
 		}
 
 		ctx := r.Context()
