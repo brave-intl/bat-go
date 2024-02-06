@@ -684,6 +684,8 @@ func (suite *PostgresTestSuite) TestAreTimeLimitedV2CredsSubmitted() {
 		exp   exp
 	}
 
+	sharedId := uuid.NewV4()
+
 	tests := []testCases{
 		{
 			name: "no_creds",
@@ -694,7 +696,7 @@ func (suite *PostgresTestSuite) TestAreTimeLimitedV2CredsSubmitted() {
 			},
 		},
 		{
-			name: "already_submitted_true_and_mismatch_true",
+			name: "already_submitted_true_and_mismatch_false",
 			given: tcGiven{
 				reqID: uuid.NewV4(),
 				timeAwareCrds: TimeAwareSubIssuedCreds{
@@ -704,7 +706,24 @@ func (suite *PostgresTestSuite) TestAreTimeLimitedV2CredsSubmitted() {
 				blindedCreds: []string{"test-cred"},
 			},
 			exp: exp{
-				submittedCreds: AreTimeLimitedV2CredsSubmittedResult{AlreadySubmitted: true, Mismatch: true},
+				submittedCreds: AreTimeLimitedV2CredsSubmittedResult{AlreadySubmitted: true, Mismatch: false},
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+		{
+			name: "already_submitted_false_and_mismatch_true",
+			given: tcGiven{
+				reqID: sharedId,
+				timeAwareCrds: TimeAwareSubIssuedCreds{
+					RequestID:    sharedId.String(),
+					BlindedCreds: []string{"other-cred"},
+				},
+				blindedCreds: []string{"new-cred"},
+			},
+			exp: exp{
+				submittedCreds: AreTimeLimitedV2CredsSubmittedResult{AlreadySubmitted: false, Mismatch: true},
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
 					must.NoError(t, err)
 				},
@@ -752,7 +771,7 @@ func (suite *PostgresTestSuite) TestAreTimeLimitedV2CredsSubmitted() {
 				must.NoError(t, err5)
 			}
 
-			actual, err := suite.storage.AreTimeLimitedV2CredsSubmitted(ctx, uuid.NewV4(), tc.given.blindedCreds...)
+			actual, err := suite.storage.AreTimeLimitedV2CredsSubmitted(ctx, tc.given.reqID, tc.given.blindedCreds...)
 			tc.exp.mustErr(t, err)
 
 			should.Equal(t, tc.exp.submittedCreds, actual)

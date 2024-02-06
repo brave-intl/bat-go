@@ -975,7 +975,7 @@ func areTimeLimitedV2CredsSubmitted(ctx context.Context, dbi getContext, request
 			select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1
 		) as already_submitted,
 		exists(
-			select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1 and request_id != $2
+			select 1 from time_limited_v2_order_creds where blinded_creds->>0 != $1 and request_id = $2
 		) as mismatch
 	`
 	err := dbi.GetContext(ctx, &result, query, blindedCreds[0], requestID)
