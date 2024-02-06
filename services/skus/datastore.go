@@ -955,7 +955,7 @@ type AreTimeLimitedV2CredsSubmittedResult struct {
 	Mismatch         bool `db:"mismatch"`
 }
 
-func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (*AreTimeLimitedV2CredsSubmittedResult, error) {
+func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
 	return areTimeLimitedV2CredsSubmitted(ctx, pg.RawDB(), requestID, blindedCreds...)
 }
 
@@ -963,14 +963,14 @@ type getContext interface {
 	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
 }
 
-func areTimeLimitedV2CredsSubmitted(ctx context.Context, dbi getContext, requestID uuid.UUID, blindedCreds ...string) (*AreTimeLimitedV2CredsSubmittedResult, error) {
-	if len(blindedCreds) < 1 {
-		return nil, errors.New("invalid parameter to tlv2 creds signed")
-	}
-
+func areTimeLimitedV2CredsSubmitted(ctx context.Context, dbi getContext, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
 	var result = AreTimeLimitedV2CredsSubmittedResult{}
 
-	query := `
+	if len(blindedCreds) < 1 {
+		return result, errors.New("invalid parameter to tlv2 creds signed")
+	}
+
+	const query = `
 		select exists(
 			select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1
 		) as already_submitted,
@@ -980,10 +980,10 @@ func areTimeLimitedV2CredsSubmitted(ctx context.Context, dbi getContext, request
 	`
 	err := dbi.GetContext(ctx, &result, query, blindedCreds[0], requestID)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 
-	return &result, nil
+	return result, nil
 }
 
 // GetTimeLimitedV2OrderCredsByOrder returns all the non expired time limited v2 order credentials for a given order.
