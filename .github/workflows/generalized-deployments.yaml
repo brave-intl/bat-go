@@ -4,6 +4,7 @@ on:
       - master
       - dev
       - prod
+      - nitro-payments-dev
 
 name: Generalized Deployments
 jobs:
