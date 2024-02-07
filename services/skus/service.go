@@ -1602,19 +1602,22 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, errNotFound)
 	}
 
-	// check if we are past the expiration date on transaction or the order was revoked
+	// Check if we are past the expiration date on transaction or the order was revoked.
+	now := time.Now()
+	if now.After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
+		(txInfo.RevocationDate > 0 && now.After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)))) {
 
-	if time.Now().After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
-		(txInfo.RevocationDate > 0 && time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)))) {
-		// past our tx expires/renewal time
-		if err = s.CancelOrder(o.ID); err != nil {
+		if err := s.Datastore.UpdateOrder(o.ID, model.OrderStatusCanceled); err != nil {
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
 		}
-	} else {
-		if err = s.RenewOrder(ctx, o.ID); err != nil {
-			return fmt.Errorf("failed to renew subscription in skus: %w", err)
-		}
+
+		return nil
 	}
+
+	if err := s.RenewOrder(ctx, o.ID); err != nil {
+		return fmt.Errorf("failed to renew subscription in skus: %w", err)
+	}
+
 	return nil
 }
 

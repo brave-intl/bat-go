@@ -962,7 +962,7 @@ func WebhookRouter(service *Service) chi.Router {
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
 	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
-	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
+	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(service)))
 	return r
 }
 
@@ -1095,68 +1095,51 @@ func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Req
 	return nil
 }
 
-// HandleIOSWebhook is the handler for ios iap webhooks
-func HandleIOSWebhook(service *Service) handlers.AppHandler {
+func handleIOSWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		var (
-			ctx              = r.Context()
-			req              = new(IOSNotification)
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
+		l := logging.Logger(ctx, "skus").With().Str("func", "handleIOSWebhook").Logger()
 
-		// get logger
-		logger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleIOSWebhook").
-			Logger()
-
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to read the payload")
-			// no need to go further
-			return handlers.WrapValidationError(err)
+			l.Error().Err(err).Msg("error reading request body")
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("failed to decode and validate the payload")
-			validationErrMap["request-body-decode"] = err.Error()
+		req := &IOSNotification{}
+		if err := inputs.DecodeAndValidate(ctx, req, data); err != nil {
+			l.Warn().Err(err).Msg("failed to decode and validate the payload")
+
+			return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
 		}
 
-		// transaction info
 		txInfo, err := req.GetTransactionInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get transaction info from message")
-			validationErrMap["invalid-transaction-info"] = err.Error()
+			l.Warn().Err(err).Msg("failed to get transaction info from message")
+
+			return handlers.ValidationError("request", map[string]interface{}{"invalid-transaction-info": err.Error()})
 		}
 
-		// renewal info
 		renewalInfo, err := req.GetRenewalInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get renewal info from message")
-			validationErrMap["invalid-renewal-info"] = err.Error()
+			l.Warn().Err(err).Msg("failed to get renewal info from message")
+
+			return handlers.ValidationError("request", map[string]interface{}{"invalid-renewal-info": err.Error()})
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
-		}
+		if err := service.verifyIOSNotification(ctx, txInfo, renewalInfo); err != nil {
+			l.Error().Err(err).Msg("failed to verify ios subscription notification")
 
-		err = service.verifyIOSNotification(ctx, txInfo, renewalInfo)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to verify ios subscription notification")
 			switch {
 			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify ios subscription notification",
-					http.StatusNotFound)
+				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusNotFound)
 			default:
-				return handlers.WrapError(err, "failed to verify ios subscription notification",
-					http.StatusInternalServerError)
+				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusInternalServerError)
 			}
 		}
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 

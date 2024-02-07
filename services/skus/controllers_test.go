@@ -345,7 +345,7 @@ func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
 	err := suite.service.Datastore.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
-	handler := HandleIOSWebhook(suite.service)
+	handler := handleIOSWebhook(suite.service)
 
 	// create a jws message to send
 	body := []byte{}

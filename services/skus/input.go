@@ -244,12 +244,8 @@ type IOSNotification struct {
 
 // Decode - implement Decodable interface
 func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
-	logger := logging.Logger(ctx, "IOSNotification.Decode")
-	logger.Debug().Msg("starting IOSNotification.Decode")
-
 	// json unmarshal the notification
 	if err := json.Unmarshal(data, iosn); err != nil {
-		logger.Error().Msg("failed to json unmarshal body")
 		return errorutils.Wrap(err, "error unmarshalling body")
 	}
 
@@ -266,8 +262,6 @@ func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
 
 // Validate - implement Validable interface
 func (iosn *IOSNotification) Validate(ctx context.Context) error {
-	logger := logging.Logger(ctx, "IOSNotification.Validate")
-
 	// extract the public key from the jws
 	pk, err := extractPublicKey(iosn.SignedPayload)
 	if err != nil {
@@ -278,7 +272,6 @@ func (iosn *IOSNotification) Validate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to verify jws payload in request: %w", err)
 	}
-	logger.Debug().Msg("validated ios notification")
 
 	iosn.payload = payload
 
