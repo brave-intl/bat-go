@@ -1588,6 +1588,8 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 		return errors.New("notification has no tx or renewal")
 	}
 
+	// TODO: The documentation says nothing about these conditions.
+	// Shall this be gone?
 	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
 		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
 	}
@@ -1604,9 +1606,8 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 
 	// Check if we are past the expiration date on transaction or the order was revoked.
 	now := time.Now()
-	if now.After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
-		(txInfo.RevocationDate > 0 && now.After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)))) {
 
+	if shouldCancelOrderIOS(txInfo, now) {
 		if err := s.Datastore.UpdateOrder(o.ID, model.OrderStatusCanceled); err != nil {
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
 		}
@@ -2130,4 +2131,28 @@ type tlv1CredPresentation struct {
 
 func ptrTo[T any](v T) *T {
 	return &v
+}
+
+func shouldCancelOrderIOS(info *appstore.JWSTransactionDecodedPayload, now time.Time) bool {
+	tx := (*appStoreTransaction)(info)
+
+	return tx.hasExpired(now) || tx.isRevoked(now)
+}
+
+type appStoreTransaction appstore.JWSTransactionDecodedPayload
+
+func (x *appStoreTransaction) hasExpired(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.ExpiresDate > 0 && now.After(time.UnixMilli(x.ExpiresDate))
+}
+
+func (x *appStoreTransaction) isRevoked(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
 }
