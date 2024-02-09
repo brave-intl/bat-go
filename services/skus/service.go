@@ -669,7 +669,7 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 
 	// Try to find by order_id in Stripe.
 	params := &stripe.SubscriptionSearchParams{}
-	params.Query = fmt.Sprintf("metadata['orderID']:'%s'", orderID.String())
+	params.Query = fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String())
 
 	ctx := context.TODO()
 
