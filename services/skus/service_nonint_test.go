@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"database/sql"
+	"net/http"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+	"github.com/stripe/stripe-go/v72"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 
@@ -1052,6 +1054,62 @@ func TestShouldCancelOrderIOS(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := shouldCancelOrderIOS(tc.given.info, tc.given.now)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestIsErrStripeNotFound(t *testing.T) {
+	tests := []struct {
+		name  string
+		given error
+		exp   bool
+	}{
+		{
+			name:  "something_else",
+			given: model.Error("something else"),
+		},
+
+		{
+			name: "429_rate_limit",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusTooManyRequests,
+				Code:           stripe.ErrorCodeRateLimit,
+			},
+		},
+
+		{
+			name: "429_resource_missing",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusTooManyRequests,
+				Code:           stripe.ErrorCodeResourceMissing,
+			},
+		},
+
+		{
+			name: "404_rate_limit",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusNotFound,
+				Code:           stripe.ErrorCodeRateLimit,
+			},
+		},
+
+		{
+			name: "404_resource_missing",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusNotFound,
+				Code:           stripe.ErrorCodeResourceMissing,
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := isErrStripeNotFound(tc.given)
 
 			should.Equal(t, tc.exp, actual)
 		})
