@@ -698,6 +698,71 @@ func TestOrder_HasItem(t *testing.T) {
 	}
 }
 
+func TestOrder_StripeSubID(t *testing.T) {
+	type tcExpected struct {
+		val string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeSubscriptionId": 42,
+				},
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeSubscriptionId": "",
+				},
+			},
+			exp: tcExpected{ok: true},
+		},
+
+		{
+			name: "sub_id",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeSubscriptionId": "sub_id",
+				},
+			},
+			exp: tcExpected{val: "sub_id", ok: true},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.StripeSubID()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
 func mustDecimalFromString(v string) decimal.Decimal {
 	result, err := decimal.NewFromString(v)
 	if err != nil {
