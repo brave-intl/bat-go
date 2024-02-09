@@ -637,43 +637,55 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
 // CancelOrder cancels an order, propagates to stripe if needed.
 //
-// TODO(pavelb): Refactor and make it precise.
-// Currently, this method does something weird for the case when the order was not found in the DB.
-// If we have an order id, but ended up without the order, that means either the id is wrong,
-// or we somehow lost data. The latter is less likely.
-// Yet we allow non-existing order ids to be searched for in Stripe, which is strange.
+// TODO(pavelb): Refactor this.
 func (s *Service) CancelOrder(orderID uuid.UUID) error {
-	// Check the order, do we have a stripe subscription?
-	ok, subID, err := s.Datastore.IsStripeSub(orderID)
-	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-		return fmt.Errorf("failed to check stripe subscription: %w", err)
+	// TODO: Refactor this later. Now here's a quick fix.
+	ord, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return err
 	}
 
+	if ord == nil {
+		return model.ErrOrderNotFound
+	}
+
+	subID, ok := ord.StripeSubID()
 	if ok && subID != "" {
 		// Cancel the stripe subscription.
 		if _, err := sub.Cancel(subID, nil); err != nil {
-			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+			// Error out if it's not 404.
+			if !isErrStripeNotFound(err) {
+				return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+			}
 		}
 
+		// Cancel even for 404.
 		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 	}
 
-	// Try to find order in Stripe.
+	if ord.IsIOS() || ord.IsAndroid() {
+		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+	}
+
+	// Try to find by order_id in Stripe.
 	params := &stripe.SubscriptionSearchParams{}
-	params.Query = *stripe.String(fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String()))
+	params.Query = fmt.Sprintf("metadata['orderID']:'%s'", orderID.String())
 
 	ctx := context.TODO()
 
 	iter := sub.Search(params)
 	for iter.Next() {
-		// we have a result, fix the stripe sub on the db record, and then cancel sub
-		subscription := iter.Subscription()
-		// cancel the stripe subscription
-		if _, err := sub.Cancel(subscription.ID, nil); err != nil {
+		sb := iter.Subscription()
+		if _, err := sub.Cancel(sb.ID, nil); err != nil {
+			// It seems that already canceled subscriptions might return 404.
+			if isErrStripeNotFound(err) {
+				continue
+			}
+
 			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
 		}
 
-		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sb.ID); err != nil {
 			return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
 		}
 	}
@@ -1595,12 +1607,12 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 	}
 
 	// lookup the order based on the token as externalID
-	o, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
+	ord, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
 	if err != nil {
 		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, err)
 	}
 
-	if o == nil {
+	if ord == nil {
 		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, errNotFound)
 	}
 
@@ -1608,14 +1620,14 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 	now := time.Now()
 
 	if shouldCancelOrderIOS(txInfo, now) {
-		if err := s.Datastore.UpdateOrder(o.ID, model.OrderStatusCanceled); err != nil {
+		if err := s.CancelOrder(ord.ID); err != nil {
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
 		}
 
 		return nil
 	}
 
-	if err := s.RenewOrder(ctx, o.ID); err != nil {
+	if err := s.RenewOrder(ctx, ord.ID); err != nil {
 		return fmt.Errorf("failed to renew subscription in skus: %w", err)
 	}
 
@@ -2155,4 +2167,13 @@ func (x *appStoreTransaction) isRevoked(now time.Time) bool {
 	}
 
 	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
+}
+
+func isErrStripeNotFound(err error) bool {
+	var serr *stripe.Error
+	if !errors.As(err, &serr) {
+		return false
+	}
+
+	return serr.HTTPStatusCode == http.StatusNotFound && serr.Code == stripe.ErrorCodeResourceMissing
 }

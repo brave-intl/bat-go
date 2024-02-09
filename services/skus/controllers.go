@@ -362,7 +362,7 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	})
 }
 
@@ -1014,18 +1014,18 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 
 		l.Info().Msg("verify_developer_notification")
 
-		err = service.verifyDeveloperNotification(ctx, dn)
-		if err != nil {
+		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
 			l.Error().Err(err).Msg("failed to verify subscription notification")
+
 			switch {
-			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusNotFound)
+			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			default:
 				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
 			}
 		}
 
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
@@ -1132,8 +1132,8 @@ func handleIOSWebhook(service *Service) handlers.AppHandler {
 			l.Error().Err(err).Msg("failed to verify ios subscription notification")
 
 			switch {
-			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusNotFound)
+			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			default:
 				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusInternalServerError)
 			}
