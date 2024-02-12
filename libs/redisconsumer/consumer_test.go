@@ -9,7 +9,7 @@ import (
 func TestChunkMessagesEmpty(t *testing.T) {
 	var testMessages []interface{}
 
-	testChunks := chunkMessages(testMessages)
+	testChunks := chunkMessages(500, testMessages)
 	must.Equal(t, 0, len(testChunks))
 }
 
@@ -19,7 +19,7 @@ func TestChunkMessagesSingleChunk(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		testMessages = append(testMessages, i)
 	}
-	testChunks := chunkMessages(testMessages)
+	testChunks := chunkMessages(500, testMessages)
 	must.Equal(t, 1, len(testChunks))
 	must.Equal(t, 500, len(testChunks[0]))
 
@@ -38,7 +38,7 @@ func TestChunkMessagesMultipleChunks(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		testMessages = append(testMessages, i)
 	}
-	testChunks := chunkMessages(testMessages)
+	testChunks := chunkMessages(500, testMessages)
 	must.Equal(t, 2, len(testChunks))
 	must.Equal(t, 500, len(testChunks[0]))
 	must.Equal(t, 500, len(testChunks[1]))
@@ -63,7 +63,7 @@ func TestChunkMessagesOverflow(t *testing.T) {
 	for i := 0; i < 1100; i++ {
 		testMessages = append(testMessages, i)
 	}
-	testChunks := chunkMessages(testMessages)
+	testChunks := chunkMessages(500, testMessages)
 	must.Equal(t, 3, len(testChunks))
 	must.Equal(t, 500, len(testChunks[0]))
 	must.Equal(t, 500, len(testChunks[1]))

@@ -118,7 +118,7 @@ func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, 
 	pipe := ((*redis.Client)(redisClient)).Pipeline()
 
 	// to avoid errors enqueuing large message sets, enqueue them in chunks
-	for _, messages := range chunkMessages(messages) {
+	for _, messages := range chunkMessages(500, messages) {
 		// loop again so that each message gets its own record
 		for _, message := range messages {
 			pipe.XAdd(
@@ -136,17 +136,22 @@ func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, 
 	return nil
 }
 
-func chunkMessages(messages []interface{}) [][]interface{} {
-	var chunks [][]interface{}
-	chunkSize := 500
-	for i := 0; i < len(messages); i += chunkSize {
-		end := i + chunkSize
-		if len(messages) < end {
-			end = len(messages)
-		}
-		chunks = append(chunks, messages[i:end])
+func chunkMessages(chunkSize int, messages []interface{}) [][]interface{} {
+	total := len(messages)
+	if total == 0 {
+		return nil
 	}
-	return chunks
+
+	result := make([][]interface{}, 0, 1)
+	for start, stop := 0, 0; start < total; start = stop {
+		stop += chunkSize
+		if stop > total {
+			stop = total
+		}
+
+		result = append(result, messages[start:stop])
+	}
+	return result
 }
 
 // ReadAndHandle any messages for the specified consumer, including any retries
