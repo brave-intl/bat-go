@@ -116,7 +116,6 @@ func (redisClient *RedisClient) CreateStream(ctx context.Context, stream, consum
 // AddMessage to the specified redis stream
 func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, messages ...interface{}) error {
 	pipe := ((*redis.Client)(redisClient)).Pipeline()
-	var err error
 
 	// to avoid errors enqueuing large message sets, enqueue them in chunks
 	for _, messages := range chunkMessages(messages) {
@@ -129,12 +128,12 @@ func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, 
 						"data": message}},
 			)
 		}
-		_, err = pipe.Exec(ctx)
+		_, err := pipe.Exec(ctx)
 		if err != nil {
 			return err
 		}
 	}
-	return err
+	return nil
 }
 
 func chunkMessages(messages []interface{}) [][]interface{} {
