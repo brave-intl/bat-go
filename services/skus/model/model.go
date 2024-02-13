@@ -146,6 +146,7 @@ func CreateStripeCheckoutSession(
 	}
 
 	params := &stripe.CheckoutSessionParams{
+		// TODO: Get rid of this stripe.* nonsense, and use ptrTo instead.
 		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
 		Mode:               stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		SuccessURL:         stripe.String(successURI),
