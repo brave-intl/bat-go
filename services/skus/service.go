@@ -620,7 +620,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 					return nil, fmt.Errorf("failed to update order to add the subscription id")
 				}
 
-				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, paymentProcessor, StripePaymentMethod); err != nil {
+				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "paymentProcessor", StripePaymentMethod); err != nil {
 					return nil, fmt.Errorf("failed to update order to add the payment processor")
 				}
 			}
@@ -2108,9 +2108,9 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 
 func newMobileOrderMdata(req model.ReceiptRequest, extID string) datastore.Metadata {
 	result := datastore.Metadata{
-		"externalID":     extID,
-		paymentProcessor: req.Type.String(),
-		"vendor":         req.Type.String(),
+		"externalID":       extID,
+		"paymentProcessor": req.Type.String(),
+		"vendor":           req.Type.String(),
 	}
 
 	return result
