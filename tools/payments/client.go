@@ -149,7 +149,7 @@ func (rc *redisClient) PrepareTransactions(ctx context.Context, signer httpsigna
 		stream := payments.PreparePrefix + payoutID
 		err := rc.redis.AddMessages(ctx, stream, messages...)
 		if err != nil {
-			return fmt.Errorf("failed to exec prepare transaction commands: %w", err)
+			return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
 		}
 	}
 
@@ -208,7 +208,7 @@ func (rc *redisClient) SubmitTransactions(ctx context.Context, signer httpsignat
 		stream := payments.SubmitPrefix + payoutID
 		err := rc.redis.AddMessages(ctx, stream, messages...)
 		if err != nil {
-			return fmt.Errorf("failed to exec submit transaction commands: %w", err)
+			return fmt.Errorf("failed to enqueue transactions to redis: %w", err)
 		}
 	}
 
