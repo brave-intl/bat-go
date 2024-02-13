@@ -1253,7 +1253,7 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 		}
 
 		switch event.Type {
-		case StripeInvoiceUpdated, StripeInvoicePaid:
+		case whStripeInvoiceUpdated, whStripeInvoicePaid:
 			invoice := &stripe.Invoice{}
 			if err := json.Unmarshal(event.Data.Raw, invoice); err != nil {
 				lg.Error().Err(err).Msg("failed to parse invoice")
@@ -1296,16 +1296,16 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 			}
 
 			switch event.Type {
-			case StripeInvoiceUpdated:
+			case whStripeInvoiceUpdated:
 				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-			case StripeInvoicePaid:
+			case whStripeInvoicePaid:
 				if err := svc.RenewOrder(ctx, orderID); err != nil {
 					lg.Error().Err(err).Msg("failed to renew order")
 					return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
 				}
 
-				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", StripePaymentMethod); err != nil {
+				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.StripePaymentMethod); err != nil {
 					lg.Error().Err(err).Msg("failed to update order metadata paymentProcessor")
 					return handlers.WrapError(err, "failed to update order metadata paymentProcessor", http.StatusInternalServerError)
 				}
@@ -1316,7 +1316,7 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 				handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			}
 
-		case StripeCustomerSubscriptionDeleted:
+		case whStripeCustSubscriptionDeleted:
 			// TODO: Enable it and handle properly.
 
 			sub := &stripe.Subscription{}
