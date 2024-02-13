@@ -637,43 +637,55 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
 // CancelOrder cancels an order, propagates to stripe if needed.
 //
-// TODO(pavelb): Refactor and make it precise.
-// Currently, this method does something weird for the case when the order was not found in the DB.
-// If we have an order id, but ended up without the order, that means either the id is wrong,
-// or we somehow lost data. The latter is less likely.
-// Yet we allow non-existing order ids to be searched for in Stripe, which is strange.
+// TODO(pavelb): Refactor this.
 func (s *Service) CancelOrder(orderID uuid.UUID) error {
-	// Check the order, do we have a stripe subscription?
-	ok, subID, err := s.Datastore.IsStripeSub(orderID)
-	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-		return fmt.Errorf("failed to check stripe subscription: %w", err)
+	// TODO: Refactor this later. Now here's a quick fix.
+	ord, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return err
 	}
 
+	if ord == nil {
+		return model.ErrOrderNotFound
+	}
+
+	subID, ok := ord.StripeSubID()
 	if ok && subID != "" {
 		// Cancel the stripe subscription.
 		if _, err := sub.Cancel(subID, nil); err != nil {
-			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+			// Error out if it's not 404.
+			if !isErrStripeNotFound(err) {
+				return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+			}
 		}
 
+		// Cancel even for 404.
 		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 	}
 
-	// Try to find order in Stripe.
+	if ord.IsIOS() || ord.IsAndroid() {
+		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+	}
+
+	// Try to find by order_id in Stripe.
 	params := &stripe.SubscriptionSearchParams{}
-	params.Query = *stripe.String(fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String()))
+	params.Query = fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String())
 
 	ctx := context.TODO()
 
 	iter := sub.Search(params)
 	for iter.Next() {
-		// we have a result, fix the stripe sub on the db record, and then cancel sub
-		subscription := iter.Subscription()
-		// cancel the stripe subscription
-		if _, err := sub.Cancel(subscription.ID, nil); err != nil {
+		sb := iter.Subscription()
+		if _, err := sub.Cancel(sb.ID, nil); err != nil {
+			// It seems that already canceled subscriptions might return 404.
+			if isErrStripeNotFound(err) {
+				continue
+			}
+
 			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
 		}
 
-		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sb.ID); err != nil {
 			return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
 		}
 	}
@@ -1588,33 +1600,37 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 		return errors.New("notification has no tx or renewal")
 	}
 
+	// TODO: The documentation says nothing about these conditions.
+	// Shall this be gone?
 	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
 		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
 	}
 
 	// lookup the order based on the token as externalID
-	o, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
+	ord, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
 	if err != nil {
 		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, err)
 	}
 
-	if o == nil {
+	if ord == nil {
 		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, errNotFound)
 	}
 
-	// check if we are past the expiration date on transaction or the order was revoked
+	// Check if we are past the expiration date on transaction or the order was revoked.
+	now := time.Now()
 
-	if time.Now().After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
-		(txInfo.RevocationDate > 0 && time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)))) {
-		// past our tx expires/renewal time
-		if err = s.CancelOrder(o.ID); err != nil {
+	if shouldCancelOrderIOS(txInfo, now) {
+		if err := s.CancelOrder(ord.ID); err != nil {
 			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
 		}
-	} else {
-		if err = s.RenewOrder(ctx, o.ID); err != nil {
-			return fmt.Errorf("failed to renew subscription in skus: %w", err)
-		}
+
+		return nil
 	}
+
+	if err := s.RenewOrder(ctx, ord.ID); err != nil {
+		return fmt.Errorf("failed to renew subscription in skus: %w", err)
+	}
+
 	return nil
 }
 
@@ -2127,4 +2143,37 @@ type tlv1CredPresentation struct {
 
 func ptrTo[T any](v T) *T {
 	return &v
+}
+
+func shouldCancelOrderIOS(info *appstore.JWSTransactionDecodedPayload, now time.Time) bool {
+	tx := (*appStoreTransaction)(info)
+
+	return tx.hasExpired(now) || tx.isRevoked(now)
+}
+
+type appStoreTransaction appstore.JWSTransactionDecodedPayload
+
+func (x *appStoreTransaction) hasExpired(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.ExpiresDate > 0 && now.After(time.UnixMilli(x.ExpiresDate))
+}
+
+func (x *appStoreTransaction) isRevoked(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
+}
+
+func isErrStripeNotFound(err error) bool {
+	var serr *stripe.Error
+	if !errors.As(err, &serr) {
+		return false
+	}
+
+	return serr.HTTPStatusCode == http.StatusNotFound && serr.Code == stripe.ErrorCodeResourceMissing
 }

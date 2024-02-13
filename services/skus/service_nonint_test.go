@@ -3,15 +3,18 @@ package skus
 import (
 	"context"
 	"database/sql"
+	"net/http"
 	"testing"
 	"time"
 
+	"github.com/awa/go-iap/appstore"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+	"github.com/stripe/stripe-go/v72"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 
@@ -937,6 +940,177 @@ func TestService_checkOrderReceipt(t *testing.T) {
 			ctx := context.Background()
 
 			actual := checkOrderReceipt(ctx, nil, tc.given.repo, tc.given.orderID, tc.given.extID)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestShouldCancelOrderIOS(t *testing.T) {
+	type tcGiven struct {
+		now  time.Time
+		info *appstore.JWSTransactionDecodedPayload
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "nil",
+			given: tcGiven{
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+
+		{
+			name: "empty_dates_not_expired",
+			given: tcGiven{
+				now:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				info: &appstore.JWSTransactionDecodedPayload{},
+			},
+		},
+
+		{
+			name: "expires_date_before_no_revocation_date",
+			given: tcGiven{
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				info: &appstore.JWSTransactionDecodedPayload{
+					// 2023-12-31 23:59:59.
+					ExpiresDate: 1704067199000,
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "expires_date_after_no_revocation_date",
+			given: tcGiven{
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				info: &appstore.JWSTransactionDecodedPayload{
+					// 2024-01-01 01:00:01.
+					ExpiresDate: 1704070801000,
+				},
+			},
+		},
+
+		{
+			name: "expires_date_after_revocation_date_after",
+			given: tcGiven{
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				info: &appstore.JWSTransactionDecodedPayload{
+					// 2024-01-01 01:00:01.
+					ExpiresDate: 1704070801000,
+
+					// 2024-01-01 00:30:01.
+					RevocationDate: 1704069001000,
+				},
+			},
+		},
+
+		{
+			name: "expires_date_after_revocation_date_before",
+			given: tcGiven{
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				info: &appstore.JWSTransactionDecodedPayload{
+					// 2024-01-01 01:00:01.
+					ExpiresDate: 1704070801000,
+
+					// 2023-12-31 23:30:01.
+					RevocationDate: 1704065401000,
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "no_expires_date_revocation_date_before",
+			given: tcGiven{
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				info: &appstore.JWSTransactionDecodedPayload{
+					// 2023-12-31 23:59:59.
+					RevocationDate: 1704067199000,
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "no_expires_date_revocation_date_after",
+			given: tcGiven{
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				info: &appstore.JWSTransactionDecodedPayload{
+					// 2024-01-01 01:00:01.
+					RevocationDate: 1704070801000,
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := shouldCancelOrderIOS(tc.given.info, tc.given.now)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestIsErrStripeNotFound(t *testing.T) {
+	tests := []struct {
+		name  string
+		given error
+		exp   bool
+	}{
+		{
+			name:  "something_else",
+			given: model.Error("something else"),
+		},
+
+		{
+			name: "429_rate_limit",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusTooManyRequests,
+				Code:           stripe.ErrorCodeRateLimit,
+			},
+		},
+
+		{
+			name: "429_resource_missing",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusTooManyRequests,
+				Code:           stripe.ErrorCodeResourceMissing,
+			},
+		},
+
+		{
+			name: "404_rate_limit",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusNotFound,
+				Code:           stripe.ErrorCodeRateLimit,
+			},
+		},
+
+		{
+			name: "404_resource_missing",
+			given: &stripe.Error{
+				HTTPStatusCode: http.StatusNotFound,
+				Code:           stripe.ErrorCodeResourceMissing,
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := isErrStripeNotFound(tc.given)
+
 			should.Equal(t, tc.exp, actual)
 		})
 	}
