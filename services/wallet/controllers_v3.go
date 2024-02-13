@@ -505,6 +505,8 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 				return handlers.WrapError(model.ErrChallengeExpired, "linking challenge expired", http.StatusUnauthorized)
 			case errors.Is(err, model.ErrWalletNotFound):
 				return handlers.WrapError(model.ErrWalletNotFound, "rewards wallet not found", http.StatusNotFound)
+			case errors.Is(err, ErrTooManyCardsLinked):
+				return handlers.WrapError(ErrTooManyCardsLinked, "too many wallets linked", http.StatusConflict)
 			case errors.As(err, &solErr):
 				return handlers.WrapError(solErr, "invalid solana linking message", http.StatusUnauthorized)
 			default:
@@ -517,7 +519,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 }
 
 type challengeRequest struct {
-	PaymentID uuid.UUID `json:"paymentId" valid:"required"`
+	PaymentID uuid.UUID `json:"paymentId"`
 }
 
 type challengeResponse struct {
@@ -536,8 +538,10 @@ func CreateChallenge(s *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error decoding body", http.StatusBadRequest)
 		}
 
-		if _, err := govalidator.ValidateStruct(chlReq); err != nil {
-			return handlers.WrapValidationError(err)
+		if uuid.Equal(chlReq.PaymentID, uuid.Nil) {
+			return handlers.ValidationError("request", map[string]interface{}{
+				"paymentID": "cannot be nil or empty",
+			})
 		}
 
 		ctx := r.Context()

@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	ErrSomethingWentWrong                     Error = "something went wrong"
 	ErrOrderNotFound                          Error = "model: order not found"
 	ErrOrderItemNotFound                      Error = "model: order item not found"
 	ErrIssuerNotFound                         Error = "model: issuer not found"
@@ -37,6 +38,8 @@ const (
 	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"
 	ErrInvalidNumPerInterval Error = "model: invalid order: invalid numPerInterval"
 	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
+	ErrInvalidMobileProduct  Error = "model: invalid mobile product"
+	ErrNoMatchOrderReceipt   Error = "model: order_id does not match receipt order"
 
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
@@ -47,6 +50,7 @@ const (
 )
 
 const (
+	MerchID             = "brave.com"
 	StripePaymentMethod = "stripe"
 	RadomPaymentMethod  = "radom"
 
@@ -59,10 +63,23 @@ const (
 	issuerOverlapDefault = 5
 )
 
+const (
+	VendorUnknown Vendor = "unknown"
+	VendorApple   Vendor = "ios"
+	VendorGoogle  Vendor = "android"
+)
+
 var (
 	emptyCreateCheckoutSessionResp CreateCheckoutSessionResponse
 	emptyOrderTimeBounds           OrderTimeBounds
 )
+
+// Vendor represents an app store vendor.
+type Vendor string
+
+func (v Vendor) String() string {
+	return string(v)
+}
 
 type radomClient interface {
 	CreateCheckoutSession(ctx context.Context, req *radom.CheckoutSessionRequest) (*radom.CheckoutSessionResponse, error)
@@ -300,6 +317,55 @@ func (o *Order) HasItem(id uuid.UUID) (*OrderItem, bool) {
 	}
 
 	return nil, false
+}
+
+func (o *Order) StripeSubID() (string, bool) {
+	sid, ok := o.Metadata["stripeSubscriptionId"].(string)
+
+	return sid, ok
+}
+
+func (o *Order) IsIOS() bool {
+	pp, ok := o.PaymentProc()
+	if !ok {
+		return false
+	}
+
+	vn, ok := o.Vendor()
+	if !ok {
+		return false
+	}
+
+	return pp == "ios" && vn == VendorApple
+}
+
+func (o *Order) IsAndroid() bool {
+	pp, ok := o.PaymentProc()
+	if !ok {
+		return false
+	}
+
+	vn, ok := o.Vendor()
+	if !ok {
+		return false
+	}
+
+	return pp == "android" && vn == VendorGoogle
+}
+
+func (o *Order) PaymentProc() (string, bool) {
+	pp, ok := o.Metadata["paymentProcessor"].(string)
+
+	return pp, ok
+}
+
+func (o *Order) Vendor() (Vendor, bool) {
+	vn, ok := o.Metadata["vendor"].(string)
+	if !ok {
+		return VendorUnknown, false
+	}
+
+	return Vendor(vn), true
 }
 
 // OrderItem represents a particular order item.
@@ -609,6 +675,18 @@ type IssuerConfig struct {
 
 func (c *IssuerConfig) NumIntervals() int {
 	return c.Buffer + c.Overlap
+}
+
+// ReceiptRequest represents a receipt submitted by a mobile or web client.
+type ReceiptRequest struct {
+	Type           Vendor `json:"type" validate:"required,oneof=ios android"`
+	Blob           string `json:"raw_receipt" validate:"required"`
+	Package        string `json:"package" validate:"-"`
+	SubscriptionID string `json:"subscription_id" validate:"-"`
+}
+
+type CreateOrderWithReceiptResponse struct {
+	ID string `json:"orderId"`
 }
 
 func addURLParam(src, name, val string) (string, error) {

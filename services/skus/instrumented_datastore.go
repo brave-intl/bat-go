@@ -87,7 +87,7 @@ func (_d DatastoreWithPrometheus) AppendOrderMetadataInt64(ctx context.Context, 
 }
 
 // AreTimeLimitedV2CredsSubmitted implements Datastore
-func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (b1 bool, err error) {
+func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (a1 AreTimeLimitedV2CredsSubmittedResult, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -97,7 +97,7 @@ func (_d DatastoreWithPrometheus) AreTimeLimitedV2CredsSubmitted(ctx context.Con
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AreTimeLimitedV2CredsSubmitted", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.AreTimeLimitedV2CredsSubmitted(ctx, blindedCreds...)
+	return _d.base.AreTimeLimitedV2CredsSubmitted(ctx, requestID, blindedCreds...)
 }
 
 // BeginTx implements Datastore

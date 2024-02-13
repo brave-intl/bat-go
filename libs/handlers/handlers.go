@@ -100,18 +100,6 @@ func WrapValidationError(err error) *AppError {
 	return ValidationError("request body", govalidator.ErrorsByField(err))
 }
 
-// CodedValidationError creates an error to communicate a bad request was formed
-func CodedValidationError(message string, errorCode string, validationErrors interface{}) *AppError {
-	return &AppError{
-		Message:   "Error validating " + message,
-		ErrorCode: errorCode,
-		Code:      http.StatusBadRequest,
-		Data: map[string]interface{}{
-			"validationErrors": validationErrors,
-		},
-	}
-}
-
 // ValidationError creates an error to communicate a bad request was formed
 func ValidationError(message string, validationErrors interface{}) *AppError {
 	return &AppError{

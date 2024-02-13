@@ -20,6 +20,8 @@ import (
 
 const (
 	paymentProcessor = "paymentProcessor"
+
+	// TODO: Delete these as not in use.
 	// IOSPaymentMethod - indicating this used an ios payment method
 	IOSPaymentMethod = "ios"
 	// AndroidPaymentMethod - indicating this used an android payment method

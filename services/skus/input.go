@@ -4,21 +4,19 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/square/go-jose"
 )
 
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob
 type VerifyCredentialRequestV1 struct {
-	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
 	Version      float64 `json:"version" valid:"-"`
+	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
 	SKU          string  `json:"sku" valid:"-"`
 	MerchantID   string  `json:"merchantId" valid:"-"`
 	Presentation string  `json:"presentation" valid:"base64"`
@@ -126,74 +124,6 @@ func credentialOpaqueFromString(s string) (*VerifyCredentialOpaque, error) {
 		return nil, fmt.Errorf("failed to json decode credential payload: %w", err)
 	}
 	return vcp, nil
-}
-
-const (
-	appleVendor  Vendor = "ios"
-	googleVendor Vendor = "android"
-)
-
-var errInvalidVendor = errors.New("invalid vendor")
-
-// Vendor vendor url input param
-type Vendor string
-
-// String - stringer implementation
-func (v *Vendor) String() string {
-	return string(*v)
-}
-
-// Validate - take raw []byte input and populate id with the ID
-func (v *Vendor) Validate(ctx context.Context) error {
-	if *v != appleVendor && *v != googleVendor {
-		return fmt.Errorf("%s is not a valid vendor: %w", v, errInvalidVendor)
-	}
-	return nil
-}
-
-// Decode - take raw []byte input and populate id with the ID
-func (v *Vendor) Decode(ctx context.Context, input []byte) error {
-	if len(input) == 0 {
-		return inputs.ErrIDDecodeEmpty
-	}
-	*v = Vendor(string(input))
-	return nil
-}
-
-// SubmitReceiptRequestV1 - receipt submission request
-type SubmitReceiptRequestV1 struct {
-	Type           Vendor `json:"type" valid:"in(ios|android)"`
-	Blob           string `json:"raw_receipt" valid:"required"`
-	Package        string `json:"package" valid:"-"`
-	SubscriptionID string `json:"subscription_id" valid:"-"`
-}
-
-// Decode - take raw input and populate the struct
-func (srrv1 *SubmitReceiptRequestV1) Decode(ctx context.Context, input []byte) error {
-	buf := make([]byte, base64.StdEncoding.DecodedLen(len(input)))
-
-	// base64 decode the bytes
-	n, err := base64.StdEncoding.Decode(buf, input)
-	if err != nil {
-		return fmt.Errorf("failed to decode input base64: %w", err)
-	}
-	// read the json values
-	if err := json.Unmarshal(buf[:n], srrv1); err != nil {
-		return fmt.Errorf("failed to decode input json: %w", err)
-	}
-	return nil
-}
-
-// Validate - validate the struct
-func (srrv1 *SubmitReceiptRequestV1) Validate(ctx context.Context) error {
-	// validate struct
-	if _, err := govalidator.ValidateStruct(srrv1); err != nil {
-		return fmt.Errorf("failed to validate structure: %w", err)
-	}
-	if err := srrv1.Type.Validate(ctx); err != nil {
-		return fmt.Errorf("failed to validate vendor: %w", err)
-	}
-	return nil
 }
 
 const (
@@ -314,12 +244,8 @@ type IOSNotification struct {
 
 // Decode - implement Decodable interface
 func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
-	logger := logging.Logger(ctx, "IOSNotification.Decode")
-	logger.Debug().Msg("starting IOSNotification.Decode")
-
 	// json unmarshal the notification
 	if err := json.Unmarshal(data, iosn); err != nil {
-		logger.Error().Msg("failed to json unmarshal body")
 		return errorutils.Wrap(err, "error unmarshalling body")
 	}
 
@@ -336,8 +262,6 @@ func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
 
 // Validate - implement Validable interface
 func (iosn *IOSNotification) Validate(ctx context.Context) error {
-	logger := logging.Logger(ctx, "IOSNotification.Validate")
-
 	// extract the public key from the jws
 	pk, err := extractPublicKey(iosn.SignedPayload)
 	if err != nil {
@@ -348,7 +272,6 @@ func (iosn *IOSNotification) Validate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to verify jws payload in request: %w", err)
 	}
-	logger.Debug().Msg("validated ios notification")
 
 	iosn.payload = payload
 

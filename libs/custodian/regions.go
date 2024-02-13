@@ -103,6 +103,7 @@ type PayoutStatus struct {
 	Gemini     string `json:"gemini" valid:"in(off|processing|complete)"`
 	Bitflyer   string `json:"bitflyer" valid:"in(off|processing|complete)"`
 	Zebpay     string `json:"zebpay" valid:"in(off|processing|complete)"`
+	Solana     string `json:"solana" valid:"in(off|processing|complete)"`
 	Date       string `json:"payoutDate" valid:"-"`
 }
 
