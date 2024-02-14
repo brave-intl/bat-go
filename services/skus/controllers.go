@@ -362,7 +362,7 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	})
 }
 
@@ -959,10 +959,10 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 // WebhookRouter - handles calls from various payment method webhooks informing payments of completion
 func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(service)))
 	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
-	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
+	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(service)))
 	return r
 }
 
@@ -978,7 +978,7 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
 		}
 
-		payload, err := requestutils.Read(r.Context(), r.Body)
+		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			l.Error().Err(err).Msg("failed to read payload")
 			return handlers.WrapValidationError(err)
@@ -1014,18 +1014,18 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 
 		l.Info().Msg("verify_developer_notification")
 
-		err = service.verifyDeveloperNotification(ctx, dn)
-		if err != nil {
+		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
 			l.Error().Err(err).Msg("failed to verify subscription notification")
+
 			switch {
-			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusNotFound)
+			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			default:
 				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
 			}
 		}
 
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
@@ -1095,68 +1095,51 @@ func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Req
 	return nil
 }
 
-// HandleIOSWebhook is the handler for ios iap webhooks
-func HandleIOSWebhook(service *Service) handlers.AppHandler {
+func handleIOSWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		var (
-			ctx              = r.Context()
-			req              = new(IOSNotification)
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
+		l := logging.Logger(ctx, "skus").With().Str("func", "handleIOSWebhook").Logger()
 
-		// get logger
-		logger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleIOSWebhook").
-			Logger()
-
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to read the payload")
-			// no need to go further
-			return handlers.WrapValidationError(err)
+			l.Error().Err(err).Msg("error reading request body")
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("failed to decode and validate the payload")
-			validationErrMap["request-body-decode"] = err.Error()
+		req := &IOSNotification{}
+		if err := inputs.DecodeAndValidate(ctx, req, data); err != nil {
+			l.Warn().Err(err).Msg("failed to decode and validate the payload")
+
+			return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
 		}
 
-		// transaction info
 		txInfo, err := req.GetTransactionInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get transaction info from message")
-			validationErrMap["invalid-transaction-info"] = err.Error()
+			l.Warn().Err(err).Msg("failed to get transaction info from message")
+
+			return handlers.ValidationError("request", map[string]interface{}{"invalid-transaction-info": err.Error()})
 		}
 
-		// renewal info
 		renewalInfo, err := req.GetRenewalInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get renewal info from message")
-			validationErrMap["invalid-renewal-info"] = err.Error()
+			l.Warn().Err(err).Msg("failed to get renewal info from message")
+
+			return handlers.ValidationError("request", map[string]interface{}{"invalid-renewal-info": err.Error()})
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
-		}
+		if err := service.verifyIOSNotification(ctx, txInfo, renewalInfo); err != nil {
+			l.Error().Err(err).Msg("failed to verify ios subscription notification")
 
-		err = service.verifyIOSNotification(ctx, txInfo, renewalInfo)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to verify ios subscription notification")
 			switch {
-			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify ios subscription notification",
-					http.StatusNotFound)
+			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			default:
-				return handlers.WrapError(err, "failed to verify ios subscription notification",
-					http.StatusInternalServerError)
+				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusInternalServerError)
 			}
 		}
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
@@ -1235,7 +1218,7 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 		}
 
 		// Set paymentProcessor to Radom.
-		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, model.RadomPaymentMethod); err != nil {
+		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.RadomPaymentMethod); err != nil {
 			lg.Error().Err(err).Msg("failed to update order to add the payment processor")
 			return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
 		}
@@ -1245,124 +1228,115 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-// HandleStripeWebhook handles webhook events from Stripe.
-func HandleStripeWebhook(service *Service) handlers.AppHandler {
+func handleStripeWebhook(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		lg := logging.Logger(ctx, "payments").With().Str("func", "HandleStripeWebhook").Logger()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "HandleStripeWebhook").Logger()
 
-		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
+		secret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
 		if err != nil {
 			lg.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
 			return handlers.WrapError(err, "error getting stripe_webhook_secret from context", http.StatusInternalServerError)
 		}
 
-		b, err := requestutils.Read(ctx, r.Body)
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			lg.Error().Err(err).Msg("failed to read request body")
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
 
-		event, err := webhook.ConstructEvent(b, r.Header.Get("Stripe-Signature"), endpointSecret)
+		event, err := webhook.ConstructEvent(data, r.Header.Get("Stripe-Signature"), secret)
 		if err != nil {
-			lg.Error().Err(err).Msg("failed to verify stripe signature")
+			lg.Error().Err(err).Msg("failed to verify Stripe signature")
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
 		switch event.Type {
-		case StripeInvoiceUpdated, StripeInvoicePaid:
-			// Handle invoice events.
-
-			var invoice stripe.Invoice
-			if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
-				lg.Error().Err(err).Msg("error parsing webhook json")
-				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+		case whStripeInvoiceUpdated, whStripeInvoicePaid:
+			invoice := &stripe.Invoice{}
+			if err := json.Unmarshal(event.Data.Raw, invoice); err != nil {
+				lg.Error().Err(err).Msg("failed to parse invoice")
+				return handlers.WrapError(err, "error parsing webhook invoice", http.StatusBadRequest)
 			}
 
-			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
+			sub, err := svc.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
-				lg.Error().Err(err).Msg("error getting subscription")
+				lg.Error().Err(err).Msg("failed to get subscription")
+
+				if isErrStripeNotFound(err) {
+					return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+				}
+
 				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
 
-			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			orderID, err := uuid.FromString(sub.Metadata["orderID"])
 			if err != nil {
-				lg.Error().Err(err).Msg("error getting order id from subscription metadata")
+				lg.Error().Err(err).Msg("failed to parse orderID from Stripe metadata")
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
 
-			// If the invoice is paid set order status to paid, otherwise
-			if invoice.Paid {
-				ok, subID, err := service.Datastore.IsStripeSub(orderID)
-				if err != nil {
-					lg.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
-					return handlers.WrapError(err, "error looking up payment provider", http.StatusInternalServerError)
-				}
-
-				// Handle renewal.
-				if ok && subID != "" {
-					if err := service.RenewOrder(ctx, orderID); err != nil {
-						lg.Error().Err(err).Msg("failed to renew the order")
-						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
-					}
-
-					return handlers.RenderContent(ctx, "subscription renewed", w, http.StatusOK)
-				}
-
-				// New subscription.
-				// Update the order's expires at as it was just paid.
-				if err := service.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
-					lg.Error().Err(err).Msg("failed to update order status")
-					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
-				}
-
-				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
-					lg.Error().Err(err).Msg("failed to update order metadata")
-					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-				}
-
-				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod); err != nil {
-					lg.Error().Err(err).Msg("failed to update order to add the payment processor")
-					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
-				}
-
-				return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
-			}
-
-			if err := service.Datastore.UpdateOrder(orderID, "pending"); err != nil {
-				lg.Error().Err(err).Msg("failed to update order status")
-				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
-			}
-
-			if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
-				lg.Error().Err(err).Msg("failed to update order metadata")
-				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-			}
-
-			return handlers.RenderContent(ctx, "payment failed", w, http.StatusOK)
-
-		case StripeCustomerSubscriptionDeleted:
-			// Handle subscription cancellations
-
-			var subscription stripe.Subscription
-			if err := json.Unmarshal(event.Data.Raw, &subscription); err != nil {
-				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
-			}
-
-			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			ord, err := svc.orderRepo.Get(ctx, svc.Datastore.RawDB(), orderID)
 			if err != nil {
-				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
+				lg.Error().Err(err).Msg("failed to get order")
+
+				if errors.Is(err, model.ErrOrderNotFound) {
+					return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+				}
+
+				return handlers.WrapError(err, "failed to get order", http.StatusInternalServerError)
 			}
 
-			if err := service.Datastore.UpdateOrder(orderID, OrderStatusCanceled); err != nil {
-				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			if subID, ok := ord.StripeSubID(); !ok || subID != sub.ID {
+				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sub.ID); err != nil {
+					lg.Error().Err(err).Msg("failed to update order metadata stripeSubscriptionId")
+					return handlers.WrapError(err, "failed to update order metadata stripeSubscriptionId", http.StatusInternalServerError)
+				}
 			}
 
-			return handlers.RenderContent(ctx, "subscription canceled", w, http.StatusOK)
+			switch event.Type {
+			case whStripeInvoiceUpdated:
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+			case whStripeInvoicePaid:
+				if err := svc.RenewOrder(ctx, orderID); err != nil {
+					lg.Error().Err(err).Msg("failed to renew order")
+					return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
+				}
+
+				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.StripePaymentMethod); err != nil {
+					lg.Error().Err(err).Msg("failed to update order metadata paymentProcessor")
+					return handlers.WrapError(err, "failed to update order metadata paymentProcessor", http.StatusInternalServerError)
+				}
+
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+			default:
+				handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+			}
+
+		case whStripeCustSubscriptionDeleted:
+			// TODO: Enable it and handle properly.
+
+			sub := &stripe.Subscription{}
+			if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+				return handlers.WrapError(err, "failed to parse subscription", http.StatusBadRequest)
+			}
+
+			orderID, err := uuid.FromString(sub.Metadata["orderID"])
+			if err != nil {
+				return handlers.WrapError(err, "failed to parse orderID from Stripe metadata", http.StatusInternalServerError)
+			}
+
+			if err := svc.Datastore.UpdateOrder(orderID, OrderStatusCanceled); err != nil {
+				return handlers.WrapError(err, "failed to update order status canceled", http.StatusInternalServerError)
+			}
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
@@ -1380,7 +1354,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			return handlers.ValidationError("request", map[string]interface{}{"orderID": inputs.ErrIDDecodeNotUUID})
 		}
 
-		payload, err := requestutils.Read(ctx, r.Body)
+		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			l.Warn().Err(err).Msg("failed to read body")
 

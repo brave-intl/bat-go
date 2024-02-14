@@ -19,28 +19,16 @@ import (
 )
 
 const (
-	paymentProcessor = "paymentProcessor"
-	// IOSPaymentMethod - indicating this used an ios payment method
-	IOSPaymentMethod = "ios"
-	// AndroidPaymentMethod - indicating this used an android payment method
-	AndroidPaymentMethod = "android"
-)
-
-const (
-	// TODO(pavelb): Gradually replace it everywhere.
-	StripePaymentMethod = model.StripePaymentMethod
-
-	StripeInvoiceUpdated              = "invoice.updated"
-	StripeInvoicePaid                 = "invoice.paid"
-	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
+	whStripeInvoiceUpdated          = "invoice.updated"
+	whStripeInvoicePaid             = "invoice.paid"
+	whStripeCustSubscriptionDeleted = "customer.subscription.deleted"
 )
 
 // TODO(pavelb): Gradually replace these everywhere.
 type (
-	Order                         = model.Order
-	OrderItem                     = model.OrderItem
-	CreateCheckoutSessionResponse = model.CreateCheckoutSessionResponse
-	Issuer                        = model.Issuer
+	Order     = model.Order
+	OrderItem = model.OrderItem
+	Issuer    = model.Issuer
 )
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
@@ -198,5 +186,5 @@ func (s *Service) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return fmt.Errorf("failed to set order status to paid: %w", err)
 	}
 
-	return s.DeleteOrderCreds(ctx, orderID, true)
+	return nil
 }
