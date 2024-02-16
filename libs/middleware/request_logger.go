@@ -61,8 +61,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 			t1 := time.Now().UTC()
 			// only need to get logger from context once per request
 			logger := hlog.FromRequest(r)
-			createSubLog(logger, r, 0).
-				Msg("request started")
+			createSubLog(logger, r, 0).Msg("request started")
 
 			defer func() {
 				t2 := time.Now().UTC()
@@ -70,34 +69,26 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
 					// report the reason for the panic
-					logger.Error().
-						Str("panic", fmt.Sprintf("%+v", rec)).
-						Str("stacktrace", string(debug.Stack())).
-						Msg("panic recovered")
+					logger.Error().Str("panic", fmt.Sprintf("%+v", rec)).Str("stacktrace", string(debug.Stack())).Msg("panic recovered")
 
 					// consolidate these: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
 					// any panic that has an ipaddress/port in it
-					m := string(ipPortRE.ReplaceAll(
-						[]byte(fmt.Sprint(rec)), []byte("x.x.x.x:xxxx")))
+					m := string(ipPortRE.ReplaceAll([]byte(fmt.Sprint(rec)), []byte("x.x.x.x:xxxx")))
 
 					// Send panic info to Sentry
 					event := sentry.NewEvent()
 					event.Message = m
 					sentry.CaptureEvent(event)
 
-					handlers.AppError{
+					(&handlers.AppError{
 						Message: http.StatusText(http.StatusInternalServerError),
 						Code:    http.StatusInternalServerError,
-					}.ServeHTTP(w, r)
+					}).ServeHTTP(w, r)
 				}
 
 				status := ww.Status()
 				// Log the entry, the request is complete.
-				createSubLog(logger, r, status).
-					Int("status", status).
-					Int("size", ww.BytesWritten()).
-					Dur("duration", t2.Sub(t1)).
-					Msg("request complete")
+				createSubLog(logger, r, status).Int("status", status).Int("size", ww.BytesWritten()).Dur("duration", t2.Sub(t1)).Msg("request complete")
 			}()
 
 			r = r.WithContext(logger.WithContext(r.Context()))
@@ -107,17 +98,17 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 	}
 }
 
-func createSubLog(logger *zerolog.Logger, r *http.Request, status int) (subLog *zerolog.Event) {
-	if status >= 400 && status <= 499 {
-		subLog = logger.Warn()
-	} else if status >= 500 {
-		subLog = logger.Error()
-	} else {
-		subLog = logger.Info()
+func createSubLog(logger *zerolog.Logger, r *http.Request, status int) *zerolog.Event {
+	var result *zerolog.Event
+
+	switch {
+	case status >= 400 && status <= 499:
+		result = logger.Warn()
+	case status >= 500:
+		result = logger.Error()
+	default:
+		result = logger.Info()
 	}
-	return subLog.
-		Str("host", r.Host).
-		Str("http_proto", r.Proto).
-		Str("http_method", r.Method).
-		Str("uri", r.URL.EscapedPath())
+
+	return result.Str("host", r.Host).Str("http_proto", r.Proto).Str("http_method", r.Method).Str("uri", r.URL.EscapedPath())
 }
