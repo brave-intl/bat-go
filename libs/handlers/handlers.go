@@ -26,10 +26,11 @@ type AppError struct {
 
 // Error makes app error an error
 func (e *AppError) Error() string {
-	msg := fmt.Sprintf("error: %s", e.Message)
+	msg := "error: " + e.Message
 	if e.Cause != nil {
-		msg = fmt.Sprintf("%s: %s", msg, e.Cause)
+		msg = msg + ": " + e.Cause.Error()
 	}
+
 	return msg
 }
 
