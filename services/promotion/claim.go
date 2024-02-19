@@ -11,8 +11,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
@@ -206,22 +204,6 @@ func (service *Service) ClaimPromotionForWallet(
 	}
 	countGrantsClaimedTotal.With(labels).Inc()
 	countGrantsClaimedBatTotal.With(labels).Add(value)
-
-	go func() {
-		defer middleware.ConcurrentGoRoutines.With(
-			prometheus.Labels{
-				"method": "ClaimJob",
-			}).Dec()
-
-		middleware.ConcurrentGoRoutines.With(
-			prometheus.Labels{
-				"method": "ClaimJob",
-			}).Inc()
-		_, err := service.RunNextClaimJob(ctx)
-		if err != nil {
-			sentry.CaptureException(err)
-		}
-	}()
 
 	return &claim.ID, nil
 }
