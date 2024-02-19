@@ -517,6 +517,7 @@ type CreateOrderRequestNew struct {
 	Email          string                `json:"email" validate:"required,email"`
 	Currency       string                `json:"currency" validate:"required,iso4217"`
 	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
+	RadomMetadata  *OrderRadomMetadata   `json:"radom_metadata"`
 	PaymentMethods []string              `json:"payment_methods" validate:"required,gt=0"`
 	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
 }
@@ -535,6 +536,7 @@ type OrderItemRequestNew struct {
 	CredentialValidDurationEach *string             `json:"each_credential_valid_duration"`
 	IssuanceInterval            *string             `json:"issuance_interval"`
 	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
+	RadomMetadata               *ItemRadomMetadata  `json:"radom_metadata"`
 }
 
 func (r *OrderItemRequestNew) TokenBufferOrDefault() int {
@@ -559,6 +561,27 @@ func (r *OrderItemRequestNew) TokenOverlapOrDefault() int {
 	}
 
 	return r.IssuerTokenOverlap
+}
+
+func (r *OrderItemRequestNew) Metadata() map[string]interface{} {
+	smeta := r.StripeMetadata.Metadata()
+	rmeta := r.RadomMetadata.Metadata()
+
+	nsmeta, nrmeta := len(smeta), len(rmeta)
+	if nsmeta == 0 && nrmeta == 0 {
+		return nil
+	}
+
+	result := make(datastore.Metadata, nsmeta+nrmeta)
+	for k, v := range smeta {
+		result[k] = v
+	}
+
+	for k, v := range rmeta {
+		result[k] = v
+	}
+
+	return result
 }
 
 // OrderStripeMetadata holds data relevant to the order in Stripe.
@@ -589,9 +612,6 @@ type ItemStripeMetadata struct {
 	ItemID    string `json:"item_id"`
 }
 
-// Metadata returns the contents of m as a map for datastore.Metadata.
-//
-// It can be called when m is nil.
 func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
 	if m == nil {
 		return nil
@@ -604,6 +624,30 @@ func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
 
 	if m.ItemID != "" {
 		result["stripe_item_id"] = m.ItemID
+	}
+
+	return result
+}
+
+// OrderRadomMetadata holds data relevant to the order in Radom.
+type OrderRadomMetadata struct {
+	SuccessURI string `json:"success_uri" validate:"http_url"`
+	CancelURI  string `json:"cancel_uri" validate:"http_url"`
+}
+
+// ItemRadomMetadata holds data about the product in Radom.
+type ItemRadomMetadata struct {
+	ProductID string `json:"product_id"`
+}
+
+func (m *ItemRadomMetadata) Metadata() map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+	if m.ProductID != "" {
+		result["radom_product_id"] = m.ProductID
 	}
 
 	return result
