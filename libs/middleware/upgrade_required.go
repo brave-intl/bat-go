@@ -20,7 +20,7 @@ func NewUpgradeRequiredByMiddleware(cutoff time.Time) func(http.Handler) http.Ha
 				next.ServeHTTP(w, r)
 				return
 			}
-			ae := handlers.AppError{
+			ae := &handlers.AppError{
 				Cause:   errUpgradeRequired,
 				Message: "upgrade required, cutoff exceeded",
 				Code:    http.StatusUpgradeRequired,
