@@ -517,7 +517,7 @@ type CreateOrderRequestNew struct {
 	Email          string                `json:"email" validate:"required,email"`
 	Currency       string                `json:"currency" validate:"required,iso4217"`
 	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
-	PaymentMethods []string              `json:"payment_methods" validate:"required,gt=0"`
+	PaymentMethods []string              `json:"payment_methods"`
 	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
 }
 
