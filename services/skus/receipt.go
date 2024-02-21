@@ -138,7 +138,7 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 }
 
 const (
-	errPurchasePending model.Error = "purchase is pending"
+	errPurchasePending model.Error = "purchase pending"
 	errPurchaseExpired model.Error = "purchase expired"
 )
 
