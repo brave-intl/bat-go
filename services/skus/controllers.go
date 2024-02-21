@@ -1313,7 +1313,7 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
 			default:
-				handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			}
 
 		case whStripeCustSubscriptionDeleted:
