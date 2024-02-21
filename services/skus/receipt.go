@@ -14,51 +14,22 @@ import (
 	"time"
 
 	"github.com/awa/go-iap/appstore"
-	"github.com/awa/go-iap/playstore"
-	"google.golang.org/api/androidpublisher/v3"
-
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"google.golang.org/api/androidpublisher/v3"
+	"google.golang.org/api/option"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
-	androidPaymentStatePending int64 = iota
-	androidPaymentStatePaid
-	androidPaymentStateTrial
-	androidPaymentStatePendingDeferred
-)
-
-const (
-	androidCancelReasonUser      int64 = 0
-	androidCancelReasonSystem    int64 = 1
-	androidCancelReasonReplaced  int64 = 2
-	androidCancelReasonDeveloper int64 = 3
-
-	purchasePendingErrCode       = "purchase_pending"
-	purchaseDeferredErrCode      = "purchase_deferred"
-	purchaseStatusUnknownErrCode = "purchase_status_unknown"
-	purchaseFailedErrCode        = "purchase_failed"
-	purchaseValidationErrCode    = "validation_failed"
+	purchasePendingErrCode    = "purchase_pending"
+	purchaseExpiredErrCode    = "purchase_expired"
+	purchaseValidationErrCode = "validation_failed"
 )
 
 const (
 	errNoInAppTx model.Error = "no in app info in response"
-)
-
-var (
-	errPurchaseUserCanceled      = errors.New("purchase is canceled by user")
-	errPurchaseSystemCanceled    = errors.New("purchase is canceled by google playstore")
-	errPurchaseReplacedCanceled  = errors.New("purchase is canceled and replaced")
-	errPurchaseDeveloperCanceled = errors.New("purchase is canceled by developer")
-
-	errPurchasePending       = errors.New("purchase is pending")
-	errPurchaseDeferred      = errors.New("purchase is deferred")
-	errPurchaseStatusUnknown = errors.New("purchase status is unknown")
-	errPurchaseFailed        = errors.New("purchase failed")
-
-	errPurchaseExpired = errors.New("purchase expired")
 )
 
 type dumpTransport struct{}
@@ -83,17 +54,36 @@ func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return resp, rtErr
 }
 
+type androidPublisher struct {
+	s *androidpublisher.PurchasesSubscriptionsService
+}
+
+func newAndroidPublisher(s *androidpublisher.PurchasesSubscriptionsService) *androidPublisher {
+	return &androidPublisher{s: s}
+}
+
+func (a *androidPublisher) GetSubscriptionPurchase(_ context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+	call := a.s.Get(pkgName, subID, token)
+
+	sp, err := call.Do()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving subscription: %w", err)
+	}
+
+	return sp, nil
+}
+
 type appStoreVerifier interface {
 	Verify(ctx context.Context, req appstore.IAPRequest, result interface{}) error
 }
 
-type playStoreVerifier interface {
-	VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+type subscriptionPurchaser interface {
+	GetSubscriptionPurchase(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
 }
 
 type receiptVerifier struct {
-	appStoreCl  appStoreVerifier
-	playStoreCl playStoreVerifier
+	appStoreCl          appStoreVerifier
+	androidSubPurchaser subscriptionPurchaser
 }
 
 func newReceiptVerifier(cl *http.Client, playKey []byte) (*receiptVerifier, error) {
@@ -102,12 +92,14 @@ func newReceiptVerifier(cl *http.Client, playKey []byte) (*receiptVerifier, erro
 	}
 
 	if playKey != nil && len(playKey) != 0 {
-		gpCl, err := playstore.NewWithClient(playKey, cl)
+
+		s, err := androidpublisher.NewService(context.TODO(), option.WithCredentialsJSON(playKey))
 		if err != nil {
 			return nil, err
 		}
 
-		result.playStoreCl = gpCl
+		aps := androidpublisher.NewPurchasesSubscriptionsService(s)
+		result.androidSubPurchaser = newAndroidPublisher(aps)
 	}
 
 	return result, nil
@@ -145,54 +137,45 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 	return resp.Receipt.InApp[0].OriginalTransactionID, nil
 }
 
+const (
+	errPurchasePending model.Error = "purchase is pending"
+	errPurchaseExpired model.Error = "purchase expired"
+)
+
 // validateGoogle validates Google Store receipt.
 func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	l := logging.Logger(ctx, "skus").With().Str("func", "validateReceiptGoogle").Logger()
-
-	l.Debug().Str("receipt", fmt.Sprintf("%+v", req)).Msg("about to verify subscription")
-
-	resp, err := v.playStoreCl.VerifySubscription(ctx, req.Package, req.SubscriptionID, req.Blob)
+	resp, err := v.androidSubPurchaser.GetSubscriptionPurchase(ctx, req.Package, req.SubscriptionID, req.Blob)
 	if err != nil {
-		l.Error().Err(err).Msg("failed to verify subscription")
-		return "", errPurchaseFailed
+		return "", fmt.Errorf("error retrieving subscription purchase: %w", err)
 	}
 
-	// Check order expiration.
-	if time.Unix(0, resp.ExpiryTimeMillis*int64(time.Millisecond)).Before(time.Now()) {
+	if isExpired(resp.ExpiryTimeMillis, time.Now()) {
 		return "", errPurchaseExpired
 	}
 
-	l.Debug().Msgf("resp: %+v", resp)
-
-	if resp.PaymentState == nil {
-		l.Error().Err(err).Msg("failed to verify subscription: no payment state")
-		return "", errPurchaseFailed
-	}
-
-	// Check that the order was paid.
-	switch *resp.PaymentState {
-	case androidPaymentStatePaid, androidPaymentStateTrial:
-		return req.Blob, nil
-
-	case androidPaymentStatePending:
-		// Check for cancel reason.
-		switch resp.CancelReason {
-		case androidCancelReasonUser:
-			return "", errPurchaseUserCanceled
-		case androidCancelReasonSystem:
-			return "", errPurchaseSystemCanceled
-		case androidCancelReasonReplaced:
-			return "", errPurchaseReplacedCanceled
-		case androidCancelReasonDeveloper:
-			return "", errPurchaseDeveloperCanceled
-		}
+	if isSubPurchasePending(resp) {
 		return "", errPurchasePending
-
-	case androidPaymentStatePendingDeferred:
-		return "", errPurchaseDeferred
-	default:
-		return "", errPurchaseStatusUnknown
 	}
+
+	return req.Blob, nil
+}
+
+func isExpired(expTimeMills int64, now time.Time) bool {
+	return now.UnixMilli() > expTimeMills
+}
+
+const (
+	androidPaymentStatePending         int64 = 0
+	androidPaymentStatePendingDeferred int64 = 3
+)
+
+func isSubPurchasePending(resp *androidpublisher.SubscriptionPurchase) bool {
+	// The payment state is not present for canceled or expired subscriptions.
+	if resp.PaymentState != nil {
+		return *resp.PaymentState == androidPaymentStatePending || *resp.PaymentState == androidPaymentStatePendingDeferred
+	}
+
+	return false
 }
 
 // get the public key from the jws header

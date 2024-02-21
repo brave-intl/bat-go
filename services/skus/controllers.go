@@ -1584,14 +1584,10 @@ func handleReceiptErr(err error) *handlers.AppError {
 	}
 
 	switch {
-	case errors.Is(err, errPurchaseFailed):
-		result.ErrorCode = purchaseFailedErrCode
+	case errors.Is(err, errPurchaseExpired):
+		result.ErrorCode = purchaseExpiredErrCode
 	case errors.Is(err, errPurchasePending):
 		result.ErrorCode = purchasePendingErrCode
-	case errors.Is(err, errPurchaseDeferred):
-		result.ErrorCode = purchaseDeferredErrCode
-	case errors.Is(err, errPurchaseStatusUnknown):
-		result.ErrorCode = purchaseStatusUnknownErrCode
 	default:
 		result.ErrorCode = purchaseValidationErrCode
 	}
