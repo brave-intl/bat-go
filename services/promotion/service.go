@@ -16,14 +16,12 @@ import (
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	"github.com/brave-intl/bat-go/libs/logging"
-	srv "github.com/brave-intl/bat-go/libs/service"
 	w "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -92,14 +90,8 @@ type Service struct {
 	kafkaDialer                 *kafka.Dialer
 	kafkaAdminAttestationReader kafkautils.Consumer
 	hotWallet                   *uphold.Wallet
-	jobs                        []srv.Job
 	pauseSuggestionsUntil       time.Time
 	pauseSuggestionsUntilMu     sync.RWMutex
-}
-
-// Jobs - Implement srv.JobService interface
-func (service *Service) Jobs() []srv.Job {
-	return service.jobs
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
@@ -215,25 +207,6 @@ func InitService(
 		pauseSuggestionsUntilMu: sync.RWMutex{},
 	}
 
-	// setup runnable jobs
-	service.jobs = []srv.Job{
-		{
-			Func:    service.RunNextPromotionMissingIssuer,
-			Cadence: 5 * time.Second,
-			Workers: 1,
-		},
-		{
-			Func:    service.RunNextClaimJob,
-			Cadence: 5 * time.Second,
-			Workers: 1,
-		},
-		{
-			Func:    service.RunNextSuggestionJob,
-			Cadence: 5 * time.Second,
-			Workers: 1,
-		},
-	}
-
 	err = service.InitKafka(ctx)
 	if err != nil {
 		return nil, err
@@ -252,34 +225,4 @@ func (service *Service) ReadableDatastore() ReadOnlyDatastore {
 		return service.RoDatastore
 	}
 	return service.Datastore
-}
-
-// RunNextClaimJob takes the next claim job and completes it
-func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
-	return service.Datastore.RunNextClaimJob(ctx, service)
-}
-
-// RunNextSuggestionJob takes the next suggestion job and completes it
-func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
-	return service.Datastore.RunNextSuggestionJob(ctx, service)
-}
-
-// RunNextPromotionMissingIssuer takes the next job and completes it
-func (service *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, error) {
-	// get logger from context
-	logger := logging.Logger(ctx, "wallet.RunNextPromotionMissingIssuer")
-
-	// create issuer for all of the promotions without an issuer
-	uuids, err := service.RoDatastore.GetPromotionsMissingIssuer(100)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to get promotions from datastore")
-		return false, fmt.Errorf("failed to get promotions from datastore: %w", err)
-	}
-
-	for _, uuid := range uuids {
-		if _, err := service.CreateIssuer(ctx, uuid, "control"); err != nil {
-			logger.Error().Err(err).Msg("failed to create issuer")
-		}
-	}
-	return true, nil
 }
