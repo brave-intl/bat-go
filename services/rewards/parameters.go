@@ -27,4 +27,5 @@ type ParametersV1 struct {
 	Tips             Tips                    `json:"tips,omitempty"`
 	Transition       bool                    `json:"vbatExpired"`
 	VBATDeadline     *time.Time              `json:"vbatDeadline,omitempty"`
+	TosVersion       int                     `json:"tosVersion,omitempty"`
 }

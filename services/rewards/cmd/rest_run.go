@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
-
 	// pprof imports
 	_ "net/http/pprof"
+	"os"
+	"strconv"
+	"time"
 
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/rewards"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -25,14 +26,14 @@ import (
 // rewards rest microservice.
 func RestRun(command *cobra.Command, args []string) {
 	ctx := command.Context()
-	logger, err := appctx.GetLogger(ctx)
+	lg, err := appctx.GetLogger(ctx)
 	cmdutils.Must(err)
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
 		// pprof attaches routes to default serve mux
 		// host:6061/debug/pprof/
 		go func() {
-			logger.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
+			lg.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
 		}()
 	}
 
@@ -49,32 +50,41 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.ParametersTransitionCTXKey, viper.GetBool("transition"))
 	// parse default-monthly-choices and default-tip-choices
 
-	var monthlyChoices = []float64{}
+	var monthlyChoices []float64
 	if err := viper.UnmarshalKey("default-monthly-choices", &monthlyChoices); err != nil {
-		logger.Fatal().Err(err).Msg("failed to parse default-monthly-choices")
+		lg.Fatal().Err(err).Msg("failed to parse default-monthly-choices")
 	}
 	ctx = context.WithValue(ctx, appctx.DefaultMonthlyChoicesCTXKey, monthlyChoices)
 
-	var tipChoices = []float64{}
+	var tipChoices []float64
 	if err := viper.UnmarshalKey("default-tip-choices", &tipChoices); err != nil {
-		logger.Fatal().Err(err).Msg("failed to parse default-tip-choices")
+		lg.Fatal().Err(err).Msg("failed to parse default-tip-choices")
 	}
 	ctx = context.WithValue(ctx, appctx.DefaultTipChoicesCTXKey, tipChoices)
 
-	var acChoices = []float64{}
+	var acChoices []float64
 	if err := viper.UnmarshalKey("default-ac-choices", &acChoices); err != nil {
-		logger.Fatal().Err(err).Msg("failed to parse default-ac-choices")
+		lg.Fatal().Err(err).Msg("failed to parse default-ac-choices")
 	}
 	if len(acChoices) > 0 {
 		ctx = context.WithValue(ctx, appctx.DefaultACChoicesCTXKey, acChoices)
 	}
 
-	// setup the service now
-	s, err := rewards.InitService(ctx)
+	tosVersion, err := strconv.Atoi(os.Getenv("REWARDS_TOS_VERSION"))
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initalize rewards service")
+		lg.Fatal().Err(err).Msg("error retrieving rewards terms of service version")
 	}
-	logger.Info().Str("service", fmt.Sprintf("%+v", s)).Msg("initialized service")
+
+	cfg := rewards.Config{
+		TosVersion: tosVersion,
+	}
+
+	s, err := rewards.InitService(ctx, cfg)
+	if err != nil {
+		lg.Fatal().Err(err).Msg("failed to initialize rewards service")
+	}
+
+	lg.Info().Str("service", fmt.Sprintf("%+v", s)).Msg("initialized service")
 
 	// do rest endpoints
 	r := cmd.SetupRouter(ctx)
@@ -88,7 +98,7 @@ func RestRun(command *cobra.Command, args []string) {
 		err := http.ListenAndServe(":9090", middleware.Metrics())
 		if err != nil {
 			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("metrics HTTP server start failed!")
+			lg.Panic().Err(err).Msg("metrics HTTP server start failed!")
 		}
 	}()
 
@@ -102,6 +112,6 @@ func RestRun(command *cobra.Command, args []string) {
 
 	if err = srv.ListenAndServe(); err != nil {
 		sentry.CaptureException(err)
-		logger.Fatal().Err(err).Msg("HTTP server start failed!")
+		lg.Fatal().Err(err).Msg("HTTP server start failed!")
 	}
 }

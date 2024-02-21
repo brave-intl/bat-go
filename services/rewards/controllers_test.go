@@ -8,16 +8,19 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/clients/ratios"
 	ratiosmock "github.com/brave-intl/bat-go/libs/clients/ratios/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/go-chi/chi"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 )
 
 type mockGetObjectAPI func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
@@ -29,12 +32,12 @@ func (m mockGetObjectAPI) GetObject(ctx context.Context, params *s3.GetObjectInp
 func TestGetParametersController(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
+
 	mockRatios := ratiosmock.NewMockClient(mockCtrl)
 	mockRatios.EXPECT().FetchRate(gomock.Any(), gomock.Eq("bat"), gomock.Eq("usd")).
 		Return(&ratios.RateResponse{
 			Payload: map[string]decimal.Decimal{
-				"usd": decimal.Zero,
-				"bat": decimal.Zero,
+				"usd": decimal.New(10, 0),
 			}}, nil)
 
 	var mockS3PayoutStatus = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
@@ -71,51 +74,51 @@ func TestGetParametersController(t *testing.T) {
 	var mockS3 = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 		if *params.Key == "payout-status.json" {
 			return mockS3PayoutStatus(ctx, params, optFns...)
-		} else if *params.Key == "custodian-regions.json" {
+		}
+
+		if *params.Key == "custodian-regions.json" {
 			return mockS3CustodianRegions(ctx, params, optFns...)
 		}
+
 		return nil, errors.New("invalid key")
 	})
 
-	var (
-		s, err = NewService(context.Background(), mockRatios, mockS3)
-		hGet   = GetParametersHandler(s)
-		params = new(ParametersV1)
-	)
-	if err != nil {
-		t.Error("failed to make new service: ", err)
+	s := &Service{
+		cfg:      Config{TosVersion: 1},
+		ratios:   mockRatios,
+		s3Client: mockS3,
+		cacheMu:  new(sync.RWMutex),
 	}
 
-	req, err := http.NewRequest("GET", "/parameters", nil)
-	if err != nil {
-		t.Error("failed to make new request: ", err)
+	req, err := http.NewRequest("GET", "/v1/parameters", nil)
+	require.NoError(t, err)
+
+	req = req.WithContext(context.WithValue(req.Context(), appctx.ParametersMergeBucketCTXKey, "something"))
+
+	rw := httptest.NewRecorder()
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+	svr.Handler.ServeHTTP(rw, req)
+
+	require.Equal(t, http.StatusOK, rw.Code)
+
+	params := &ParametersV1{}
+
+	{
+		err := json.Unmarshal(rw.Body.Bytes(), params)
+		require.NoError(t, err)
 	}
 
-	rctx := chi.NewRouteContext()
-	r := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	require.NotNil(t, params.PayoutStatus)
 
-	// add the parameters merge bucket to context
-	r = req.WithContext(context.WithValue(r.Context(), appctx.ParametersMergeBucketCTXKey, "something"))
+	assert.Equal(t, "processing", params.PayoutStatus.Uphold)
+	assert.ElementsMatch(t, []float64{3, 5, 7, 10, 20}, params.AutoContribute.Choices)
+	assert.Equal(t, float64(10), params.BATRate)
+	assert.Equal(t, 1, params.TosVersion)
+}
 
-	rrGet := httptest.NewRecorder()
-	hGet.ServeHTTP(rrGet, r)
-	if rrGet.Code != http.StatusOK {
-		t.Log("result: ", rrGet.Body.String())
-		t.Error("was expecting an ok response: ", rrGet.Code)
-	}
-
-	if err = json.Unmarshal(rrGet.Body.Bytes(), &params); err != nil {
-		t.Error("should be no error with unmarshalling response: ", err)
-	}
-
-	if params.BATRate != 0 {
-		t.Error("was expecting 0 for the bat rate")
-	}
-
-	if params.PayoutStatus == nil || params.PayoutStatus.Uphold != "processing" {
-		t.Error("was expecting uphold to be set to processing")
-	}
-	if len(params.AutoContribute.Choices) == 0 {
-		t.Error("was expecting more than one ac choices")
-	}
+func setupRouter(s *Service) *chi.Mux {
+	r := chi.NewRouter()
+	r.Get("/v1/parameters", GetParametersHandler(s).ServeHTTP)
+	return r
 }
