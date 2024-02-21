@@ -90,7 +90,7 @@ func TestGetParametersController(t *testing.T) {
 		cacheMu:  new(sync.RWMutex),
 	}
 
-	req, err := http.NewRequest("GET", "/v1/parameters", nil)
+	req, err := http.NewRequest(http.MethodGet, "/v1/parameters", nil)
 	require.NoError(t, err)
 
 	req = req.WithContext(context.WithValue(req.Context(), appctx.ParametersMergeBucketCTXKey, "something"))
