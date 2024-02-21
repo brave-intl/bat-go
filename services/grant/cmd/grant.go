@@ -397,9 +397,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, grantService.Jobs()...)
 
-	// add runnable jobs:
-	jobs = append(jobs, promotionService.Jobs()...)
-
 	// vbat expired var from env
 	vbatExpires, err := time.Parse(time.RFC3339, "2023-11-02T00:00:00Z") // default 11/2/23
 	if err != nil {
