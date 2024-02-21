@@ -34,7 +34,7 @@ func TestVerifyDateIsRecent(t *testing.T) {
 	req.Header.Set("Date", time.Now().Add(time.Minute*60).Format(time.RFC1123))
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusTooEarly, rr.Code, "request with early date should fail")
+	assert.Equal(t, http.StatusTooEarly, rr.Code, "request with timed out date should fail")
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
