@@ -16,6 +16,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/datastore"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
@@ -1076,6 +1077,68 @@ func TestOrder_Vendor(t *testing.T) {
 			actual, ok := tc.given.Vendor()
 			should.Equal(t, tc.exp.ok, ok)
 			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestOrder_ShouldSetTrialDays(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name:  "not_paid",
+			given: model.Order{Status: model.OrderStatusPending},
+		},
+
+		{
+			name: "not_paid_not_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPending,
+				AllowedPaymentMethods: pq.StringArray{"something"},
+			},
+		},
+
+		{
+			name:  "paid",
+			given: model.Order{Status: model.OrderStatusPaid},
+		},
+
+		{
+			name: "paid_not_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPaid,
+				AllowedPaymentMethods: pq.StringArray{"something"},
+			},
+		},
+
+		{
+			name: "paid_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPaid,
+				AllowedPaymentMethods: pq.StringArray{"stripe"},
+			},
+		},
+
+		{
+			name: "not_paid_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPending,
+				AllowedPaymentMethods: pq.StringArray{"stripe"},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.ShouldSetTrialDays()
+			should.Equal(t, tc.exp, actual)
 		})
 	}
 }

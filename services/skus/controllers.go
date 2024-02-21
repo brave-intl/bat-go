@@ -302,7 +302,7 @@ type setTrialDaysRequest struct {
 }
 
 // TODO: refactor this to avoid multiple fetches of an order.
-func handleSetOrderTrialDays(service *Service) handlers.AppHandler {
+func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
@@ -311,7 +311,7 @@ func handleSetOrderTrialDays(service *Service) handlers.AppHandler {
 			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		if err := service.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
+		if err := svc.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
 			return handlers.ValidationError("merchant and caveats", map[string]interface{}{"orderMerchantAndCaveats": err.Error()})
 		}
 
@@ -325,7 +325,7 @@ func handleSetOrderTrialDays(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to parse request", http.StatusBadRequest)
 		}
 
-		if err := service.SetOrderTrialDays(ctx, &orderID, req.TrialDays); err != nil {
+		if err := svc.SetOrderTrialDays(ctx, &orderID, req.TrialDays); err != nil {
 			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
 		}
 

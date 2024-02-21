@@ -15,9 +15,10 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/test"
+	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
-	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 )
 
 type OrderTestSuite struct {
