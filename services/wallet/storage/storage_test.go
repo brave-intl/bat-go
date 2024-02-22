@@ -20,7 +20,7 @@ func TestChallenge_Get(t *testing.T) {
 	must.NoError(t, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE challenge;")
+		_, _ = dbi.Exec("TRUNCATE TABLE challenge;")
 	}()
 
 	type tcGiven struct {
@@ -100,7 +100,7 @@ func TestChallenge_Upsert(t *testing.T) {
 	must.NoError(t, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE challenge;")
+		_, _ = dbi.Exec("TRUNCATE TABLE challenge;")
 	}()
 
 	const q = `select * from challenge where payment_id = $1`
@@ -153,7 +153,7 @@ func TestChallenge_Delete(t *testing.T) {
 	must.NoError(t, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE challenge;")
+		_, _ = dbi.Exec("TRUNCATE TABLE challenge;")
 	}()
 
 	type tcGiven struct {
@@ -222,7 +222,7 @@ func TestChallenge_DeleteAfter(t *testing.T) {
 	must.NoError(t, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE challenge;")
+		_, _ = dbi.Exec("TRUNCATE TABLE challenge;")
 	}()
 
 	type tcGiven struct {
@@ -334,7 +334,7 @@ func TestAllowList_GetAllowListEntry(t *testing.T) {
 	must.NoError(t, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE allow_list;")
+		_, _ = dbi.Exec("TRUNCATE TABLE allow_list;")
 	}()
 
 	type tcGiven struct {

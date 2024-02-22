@@ -21,7 +21,7 @@ func TestIssuer_GetByMerchID(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	t.Cleanup(func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE order_cred_issuers;")
+		_, _ = dbi.Exec("TRUNCATE TABLE order_cred_issuers;")
 	})
 
 	type tcGiven struct {
@@ -104,7 +104,7 @@ func TestIssuer_GetByPubKey(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	t.Cleanup(func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE order_cred_issuers;")
+		_, _ = dbi.Exec("TRUNCATE TABLE order_cred_issuers;")
 	})
 
 	type tcGiven struct {
@@ -187,7 +187,7 @@ func TestIssuer_Create(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	t.Cleanup(func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE order_cred_issuers;")
+		_, _ = dbi.Exec("TRUNCATE TABLE order_cred_issuers;")
 	})
 
 	type tcGiven struct {
