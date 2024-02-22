@@ -76,7 +76,7 @@ func RestRun(command *cobra.Command, args []string) {
 	}
 
 	cfg := rewards.Config{
-		TosVersion: tosVersion,
+		TOSVersion: tosVersion,
 	}
 
 	s, err := rewards.InitService(ctx, cfg)

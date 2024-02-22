@@ -19,7 +19,7 @@ import (
 
 // Config contains the rewards.Service configuration.
 type Config struct {
-	TosVersion int
+	TOSVersion int
 }
 
 // Service contains datastore
@@ -153,7 +153,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
-		TosVersion: s.cfg.TosVersion,
+		TOSVersion: s.cfg.TOSVersion,
 	}
 
 	vbatDeadline, ok := ctx.Value(appctx.ParametersVBATDeadlineCTXKey).(time.Time)
