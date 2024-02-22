@@ -87,7 +87,7 @@ func Router(
 	r.Method(
 		http.MethodPatch,
 		"/{orderID}/set-trial",
-		metricsMwr("SetOrderTrialDays", NewCORSMwr(copts, http.MethodPatch)(authMwr(SetOrderTrialDays(svc)))),
+		metricsMwr("SetOrderTrialDays", NewCORSMwr(copts, http.MethodPatch)(authMwr(handleSetOrderTrialDays(svc)))),
 	)
 
 	r.Method(http.MethodGet, "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(svc)))
@@ -298,44 +298,38 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 }
 
 type setTrialDaysRequest struct {
-	TrialDays int64 `json:"trialDays" valid:"int"`
+	TrialDays int64 `json:"trialDays"`
 }
 
-// SetOrderTrialDays handles requests for setting trial days on orders.
-func SetOrderTrialDays(service *Service) handlers.AppHandler {
+// TODO: refactor this to avoid multiple fetches of an order.
+func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		orderID := &inputs.ID{}
 
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{"orderID": err.Error()},
-			)
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		// validate order merchant and caveats (to make sure this is the right merch)
-		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
-			return handlers.ValidationError(
-				"Error validating request merchant and caveats",
-				map[string]interface{}{"orderMerchantAndCaveats": err.Error()},
-			)
+		if err := svc.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
+			return handlers.ValidationError("merchant and caveats", map[string]interface{}{"orderMerchantAndCaveats": err.Error()})
+		}
+
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		if err != nil {
+			return handlers.WrapError(err, "failed to read request body", http.StatusBadRequest)
 		}
 
 		req := &setTrialDaysRequest{}
-		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		if err := json.Unmarshal(data, req); err != nil {
+			return handlers.WrapError(err, "failed to parse request", http.StatusBadRequest)
 		}
 
-		if _, err := govalidator.ValidateStruct(req); err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		if err := service.SetOrderTrialDays(ctx, orderID.UUID(), req.TrialDays); err != nil {
+		if err := svc.SetOrderTrialDays(ctx, &orderID, req.TrialDays); err != nil {
 			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	})
 }
 

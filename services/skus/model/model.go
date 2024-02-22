@@ -33,6 +33,7 @@ const (
 	ErrInvalidOrderNoSuccessURL               Error = "model: invalid order: no success url"
 	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
 	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
+	ErrNoStripeCheckoutSessID                 Error = "model: order: no stripe checkout session id"
 
 	ErrNumPerIntervalNotSet  Error = "model: invalid order: numPerInterval must be set"
 	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"
@@ -115,6 +116,10 @@ func (o *Order) IsStripePayable() bool {
 // IsRadomPayable indicates whether the order is payable by Radom.
 func (o *Order) IsRadomPayable() bool {
 	return Slice[string](o.AllowedPaymentMethods).Contains(RadomPaymentMethod)
+}
+
+func (o *Order) ShouldSetTrialDays() bool {
+	return !o.IsPaid() && o.IsStripePayable()
 }
 
 // CreateStripeCheckoutSession creates a Stripe checkout session for the order.
@@ -517,7 +522,7 @@ type CreateOrderRequestNew struct {
 	Email          string                `json:"email" validate:"required,email"`
 	Currency       string                `json:"currency" validate:"required,iso4217"`
 	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
-	PaymentMethods []string              `json:"payment_methods" validate:"required,gt=0"`
+	PaymentMethods []string              `json:"payment_methods"`
 	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
 }
 
