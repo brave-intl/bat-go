@@ -25,7 +25,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE order_items, orders;")
+		_, _ = dbi.Exec("TRUNCATE TABLE order_items, orders;")
 	}()
 
 	type testCase struct {

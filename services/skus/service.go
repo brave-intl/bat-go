@@ -585,7 +585,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 		}
 
 		checkoutSession, err := order.CreateStripeCheckoutSession(
-			getEmailFromCheckoutSession(stripeSession),
+			getCustEmailFromStripeCheckout(stripeSession),
 			stripeSession.SuccessURL, stripeSession.CancelURL,
 			order.GetTrialDays(),
 		)
@@ -693,40 +693,35 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
-// SetOrderTrialDays set the order's free trial days
 func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
-	// get the order
-	order, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
+	ord, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
 	if err != nil {
 		return fmt.Errorf("failed to set the order's trial days: %w", err)
 	}
 
-	// recreate the stripe checkout session now that we have set the trial days on this order
-	if !order.IsPaid() && order.IsStripePayable() {
-		// get old checkout session from stripe by id
-		csID, ok := order.Metadata["stripeCheckoutSessionId"].(string)
-		if !ok {
-			return fmt.Errorf("failed to get checkout session id from metadata: %w", err)
-		}
-		stripeSession, err := session.Get(csID, nil)
-		if err != nil {
-			return fmt.Errorf("failed to get stripe checkout session: %w", err)
-		}
+	if !ord.ShouldSetTrialDays() {
+		return nil
+	}
 
-		checkoutSession, err := order.CreateStripeCheckoutSession(
-			getEmailFromCheckoutSession(stripeSession),
-			stripeSession.SuccessURL, stripeSession.CancelURL,
-			order.GetTrialDays(),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create checkout session: %w", err)
-		}
+	// Recreate the stripe checkout session.
+	oldSessID, ok := ord.Metadata["stripeCheckoutSessionId"].(string)
+	if !ok {
+		return model.ErrNoStripeCheckoutSessID
+	}
 
-		// overwrite the old checkout session
-		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
-		if err != nil {
-			return fmt.Errorf("failed to update order metadata: %w", err)
-		}
+	sess, err := session.Get(oldSessID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get stripe checkout session: %w", err)
+	}
+
+	cs, err := ord.CreateStripeCheckoutSession(getCustEmailFromStripeCheckout(sess), sess.SuccessURL, sess.CancelURL, ord.GetTrialDays())
+	if err != nil {
+		return fmt.Errorf("failed to create checkout session: %w", err)
+	}
+
+	// Overwrite the old checkout session.
+	if err := s.Datastore.AppendOrderMetadata(ctx, &ord.ID, "stripeCheckoutSessionId", cs.SessionID); err != nil {
+		return fmt.Errorf("failed to update order metadata: %w", err)
 	}
 
 	return nil
