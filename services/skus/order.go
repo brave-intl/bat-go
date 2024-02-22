@@ -183,5 +183,5 @@ func (s *Service) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return fmt.Errorf("failed to set order status to paid: %w", err)
 	}
 
-	return nil
+	return s.DeleteOrderCreds(ctx, orderID, uuid.Nil, true)
 }
