@@ -49,7 +49,7 @@ func TestIsExpired(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := isExpired(tc.given.expTimeMills, tc.given.now)
+			actual := isSubPurchaseExpired(tc.given.expTimeMills, tc.given.now)
 			assert.Equal(t, tc.exp, actual)
 		})
 	}

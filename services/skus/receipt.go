@@ -144,23 +144,23 @@ const (
 
 // validateGoogle validates Google Store receipt.
 func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	resp, err := v.androidSubPurchaser.GetSubscriptionPurchase(ctx, req.Package, req.SubscriptionID, req.Blob)
+	sp, err := v.androidSubPurchaser.GetSubscriptionPurchase(ctx, req.Package, req.SubscriptionID, req.Blob)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving subscription purchase: %w", err)
 	}
 
-	if isExpired(resp.ExpiryTimeMillis, time.Now()) {
+	if isSubPurchaseExpired(sp.ExpiryTimeMillis, time.Now()) {
 		return "", errPurchaseExpired
 	}
 
-	if isSubPurchasePending(resp) {
+	if isSubPurchasePending(sp) {
 		return "", errPurchasePending
 	}
 
 	return req.Blob, nil
 }
 
-func isExpired(expTimeMills int64, now time.Time) bool {
+func isSubPurchaseExpired(expTimeMills int64, now time.Time) bool {
 	return now.UnixMilli() > expTimeMills
 }
 
@@ -169,13 +169,13 @@ const (
 	androidPaymentStatePendingDeferred int64 = 3
 )
 
-func isSubPurchasePending(resp *androidpublisher.SubscriptionPurchase) bool {
+func isSubPurchasePending(sp *androidpublisher.SubscriptionPurchase) bool {
 	// The payment state is not present for canceled or expired subscriptions.
-	if resp.PaymentState != nil {
-		return *resp.PaymentState == androidPaymentStatePending || *resp.PaymentState == androidPaymentStatePendingDeferred
+	if sp.PaymentState == nil {
+		return false
 	}
-
-	return false
+	p := *sp.PaymentState
+	return p == androidPaymentStatePending || p == androidPaymentStatePendingDeferred
 }
 
 // get the public key from the jws header
