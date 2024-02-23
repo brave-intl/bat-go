@@ -46,6 +46,7 @@ const (
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
 	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
 	ErrInvalidOrderRequest     Error = "model: no items to be created"
+	ErrReceiptAlreadyLinked    Error = "model: receipt already linked"
 
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
