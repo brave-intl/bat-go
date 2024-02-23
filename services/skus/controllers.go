@@ -1386,15 +1386,15 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 		}
 
 		{
-			exists, err := svc.ExternalIDExists(ctx, extID)
-			if err != nil {
+			_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
+			if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
 				l.Warn().Err(err).Msg("failed to lookup external id")
 
 				return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
 			}
 
-			if exists {
-				return handlers.WrapError(err, "receipt has already been submitted", http.StatusBadRequest)
+			if err == nil {
+				return handlers.WrapError(err, "receipt has already been submitted", http.StatusConflict)
 			}
 		}
 
