@@ -9,7 +9,7 @@ import (
 	"google.golang.org/api/androidpublisher/v3"
 )
 
-func TestIsExpired(t *testing.T) {
+func TestIsSubPurchaseExpired(t *testing.T) {
 	type tcGiven struct {
 		expTimeMills int64
 		now          time.Time
@@ -55,7 +55,7 @@ func TestIsExpired(t *testing.T) {
 	}
 }
 
-func TestIsPending(t *testing.T) {
+func TestIsSubPurchasePending(t *testing.T) {
 	type tcGiven struct {
 		resp *androidpublisher.SubscriptionPurchase
 	}
