@@ -97,7 +97,6 @@ type Datastore interface {
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
 	AppendOrderMetadataInt64(context.Context, *uuid.UUID, string, int64) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
-	ExternalIDExists(context.Context, string) (bool, error)
 }
 
 type orderStore interface {
@@ -528,10 +527,6 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 	}
 
 	return true, sessID, nil
-}
-
-func (pg *Postgres) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
-	return pg.orderRepo.HasExternalID(ctx, pg.RawDB(), externalID)
 }
 
 // IsStripeSub reports whether the order is associated with a stripe subscription, if true, subscription id is returned.
