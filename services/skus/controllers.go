@@ -1394,7 +1394,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			}
 
 			if err == nil {
-				return handlers.WrapError(err, "receipt has already been submitted", http.StatusConflict)
+				return handlers.WrapError(model.ErrReceiptAlreadyLinked, "receipt has already been submitted", http.StatusConflict)
 			}
 		}
 
