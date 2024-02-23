@@ -240,20 +240,6 @@ func (_d DatastoreWithPrometheus) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx con
 	return _d.base.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID)
 }
 
-// ExternalIDExists implements Datastore
-func (_d DatastoreWithPrometheus) ExternalIDExists(ctx context.Context, s1 string) (b1 bool, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ExternalIDExists", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.ExternalIDExists(ctx, s1)
-}
-
 // GetIssuerByPublicKey implements Datastore
 func (_d DatastoreWithPrometheus) GetIssuerByPublicKey(publicKey string) (ip1 *Issuer, err error) {
 	_since := time.Now()
