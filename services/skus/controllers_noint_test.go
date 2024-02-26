@@ -158,20 +158,6 @@ func TestHandleReceiptErr(t *testing.T) {
 				Data:    map[string]interface{}{},
 			},
 		},
-
-		{
-			name:  "errPurchaseFailed",
-			given: errPurchaseFailed,
-			exp: &handlers.AppError{
-				Message:   "Error " + errPurchaseFailed.Error(),
-				Code:      http.StatusBadRequest,
-				ErrorCode: purchaseFailedErrCode,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseFailed.Error()},
-				},
-			},
-		},
-
 		{
 			name:  "errPurchasePending",
 			given: errPurchasePending,
@@ -184,33 +170,18 @@ func TestHandleReceiptErr(t *testing.T) {
 				},
 			},
 		},
-
 		{
-			name:  "errPurchaseDeferred",
-			given: errPurchaseDeferred,
+			name:  "errPurchaseExpired",
+			given: errPurchaseExpired,
 			exp: &handlers.AppError{
-				Message:   "Error " + errPurchaseDeferred.Error(),
+				Message:   "Error " + errPurchaseExpired.Error(),
 				Code:      http.StatusBadRequest,
-				ErrorCode: purchaseDeferredErrCode,
+				ErrorCode: purchaseExpiredErrCode,
 				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseDeferred.Error()},
+					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseExpired.Error()},
 				},
 			},
 		},
-
-		{
-			name:  "errPurchaseStatusUnknown",
-			given: errPurchaseStatusUnknown,
-			exp: &handlers.AppError{
-				Message:   "Error " + errPurchaseStatusUnknown.Error(),
-				Code:      http.StatusBadRequest,
-				ErrorCode: purchaseStatusUnknownErrCode,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseStatusUnknown.Error()},
-				},
-			},
-		},
-
 		{
 			name:  "errSomethingElse",
 			given: model.Error("something else"),
