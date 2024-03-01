@@ -276,7 +276,8 @@ func TestTransactions(t *testing.T) {
 	<-time.After(2 * time.Second)
 	txInfo, err := destWallet.Transfer(ctx, altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
 	if err != nil {
-		t.Error(err)
+		t.Log(err)
+		t.Log(errors.Unwrap(err))
 		t.FailNow()
 	}
 
