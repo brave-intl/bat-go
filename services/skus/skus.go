@@ -217,7 +217,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		Description:                 "Premium access to Leo",
 		CredentialType:              "time-limited-v2",
 		CredentialValidDuration:     "P1M",
-		Price:                       decimal.RequireFromString("15.00"),
+		Price:                       decimal.RequireFromString("14.99"),
 		CredentialValidDurationEach: ptrTo("P1D"),
 		IssuanceInterval:            ptrTo("P1D"),
 		// StripeMetadata depends on env.
@@ -237,6 +237,20 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		// StripeMetadata depends on env.
 	}
 
+	vpnm := model.OrderItemRequestNew{
+		Quantity:           1,
+		IssuerTokenBuffer:  31,
+		IssuerTokenOverlap: 2,
+		SKU:                "brave-vpn-premium",
+		// Location depends on env.
+		Description:                 "brave-vpn-premium",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("9.99"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		// StripeMetadata depends on env.
+	}
+
 	switch env {
 	case "prod", "production":
 		leom.Location = "leo.brave.com"
@@ -250,6 +264,13 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ProductID: "prod_O9uKDYsRPXNgfB",
 			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
 		}
+
+		vpnm.Location = "vpn.brave.com"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_Lhv8qsPsn6WHrx",
+			ItemID:    "price_1L0VHmBSm1mtrN9nT5DPmUZb",
+		}
+
 	case "sandbox", "staging":
 		leom.Location = "leo.bravesoftware.com"
 		leom.StripeMetadata = &model.ItemStripeMetadata{
@@ -262,6 +283,13 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ProductID: "prod_OKRYJ77wYOk771",
 			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
 		}
+
+		vpnm.Location = "vpn.bravesoftware.com"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_Lhv4OM1aAPxflY",
+			ItemID:    "price_1L0VEhBSm1mtrN9nGB4kZkfh",
+		}
+
 	case "dev", "development":
 		leom.Location = "leo.brave.software"
 		leom.StripeMetadata = &model.ItemStripeMetadata{
@@ -274,6 +302,13 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ProductID: "prod_OtZCXOCIO3AJE6",
 			ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
 		}
+
+		vpnm.Location = "vpn.brave.software"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_K1c8W3oM4mUsGw",
+			ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+		}
+
 	default:
 		// "local", "test", etc use the same settings as development.
 		leom.Location = "leo.brave.software"
@@ -287,11 +322,18 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ProductID: "prod_OtZCXOCIO3AJE6",
 			ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
 		}
+
+		vpnm.Location = "vpn.brave.software"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_K1c8W3oM4mUsGw",
+			ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+		}
 	}
 
 	result := map[string]model.OrderItemRequestNew{
 		leom.SKU: leom,
 		leoa.SKU: leoa,
+		vpnm.SKU: vpnm,
 	}
 
 	return result
