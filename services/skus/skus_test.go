@@ -439,7 +439,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 						Description:                 "Premium access to Leo",
 						CredentialType:              "time-limited-v2",
 						CredentialValidDuration:     "P1M",
-						Price:                       decimal.RequireFromString("15.00"),
+						Price:                       decimal.RequireFromString("14.99"),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						IssuanceInterval:            ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
@@ -509,12 +509,118 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 						Description:                 "Premium access to Leo",
 						CredentialType:              "time-limited-v2",
 						CredentialValidDuration:     "P1M",
-						Price:                       decimal.RequireFromString("15.00"),
+						Price:                       decimal.RequireFromString("14.99"),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						IssuanceInterval:            ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_O9uKDYsRPXNgfB",
 							ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "development_vpn_monthly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("development"),
+				item:  newOrderItemReqNewMobileSet("development")["brave-vpn-premium"],
+			},
+
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.brave.software/account/?intent=provision",
+					CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           31,
+						IssuerTokenOverlap:          2,
+						SKU:                         "brave-vpn-premium",
+						Location:                    "vpn.brave.software",
+						Description:                 "brave-vpn-premium",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("9.99"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_K1c8W3oM4mUsGw",
+							ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "staging_vpn_yearly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("staging"),
+				item:  newOrderItemReqNewMobileSet("staging")["brave-vpn-premium"],
+			},
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
+					CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
+				},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           31,
+						IssuerTokenOverlap:          2,
+						SKU:                         "brave-vpn-premium",
+						Location:                    "vpn.bravesoftware.com",
+						Description:                 "brave-vpn-premium",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("9.99"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_Lhv4OM1aAPxflY",
+							ItemID:    "price_1L0VEhBSm1mtrN9nGB4kZkfh",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "production_vpn_monthly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("production"),
+				item:  newOrderItemReqNewMobileSet("production")["brave-vpn-premium"],
+			},
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.brave.com/account/?intent=provision",
+					CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+				},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           31,
+						IssuerTokenOverlap:          2,
+						SKU:                         "brave-vpn-premium",
+						Location:                    "vpn.brave.com",
+						Description:                 "brave-vpn-premium",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("9.99"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_Lhv8qsPsn6WHrx",
+							ItemID:    "price_1L0VHmBSm1mtrN9nT5DPmUZb",
 						},
 					},
 				},
