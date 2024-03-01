@@ -748,7 +748,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "error_in_newOrderItemReqForSubID",
 			given: tcGiven{
 				svc:   &mockPaidOrderCreator{},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
@@ -768,7 +768,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 						return nil, model.Error("something went wrong")
 					},
 				},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
@@ -792,7 +792,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 						return model.Error("something went wrong")
 					},
 				},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
@@ -819,7 +819,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 						return result, nil
 					},
 				},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,

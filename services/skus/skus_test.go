@@ -185,7 +185,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "android_release_monthly_leo",
 			given: tcGiven{
 				subID: "brave.leo.monthly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -211,7 +211,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "ios_monthly_leo",
 			given: tcGiven{
 				subID: "braveleo.monthly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -237,7 +237,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "android_release_yearly_leo",
 			given: tcGiven{
 				subID: "brave.leo.yearly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -263,7 +263,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "ios_yearly_leo",
 			given: tcGiven{
 				subID: "braveleo.yearly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -315,7 +315,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 			name: "development_leo_monthly",
 			given: tcGiven{
 				ppcfg: newPaymentProcessorConfig("development"),
-				item:  newOrderItemReqNewLeoSet("development")["brave-leo-premium"],
+				item:  newOrderItemReqNewMobileSet("development")["brave-leo-premium"],
 			},
 
 			exp: model.CreateOrderRequestNew{
@@ -351,7 +351,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 			name: "staging_leo_yearly",
 			given: tcGiven{
 				ppcfg: newPaymentProcessorConfig("staging"),
-				item:  newOrderItemReqNewLeoSet("staging")["brave-leo-premium-year"],
+				item:  newOrderItemReqNewMobileSet("staging")["brave-leo-premium-year"],
 			},
 			exp: model.CreateOrderRequestNew{
 				Currency: "USD",
@@ -386,7 +386,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 			name: "production_leo_monthly",
 			given: tcGiven{
 				ppcfg: newPaymentProcessorConfig("production"),
-				item:  newOrderItemReqNewLeoSet("production")["brave-leo-premium"],
+				item:  newOrderItemReqNewMobileSet("production")["brave-leo-premium"],
 			},
 			exp: model.CreateOrderRequestNew{
 				Currency: "USD",
@@ -601,7 +601,7 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newOrderItemReqNewLeoSet(tc.given)
+			actual := newOrderItemReqNewMobileSet(tc.given)
 			should.Equal(t, tc.exp, actual)
 		})
 	}

@@ -318,7 +318,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		gcpValidator:       gcpValidator,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
-		newItemReqSet: newOrderItemReqNewLeoSet(env),
+		newItemReqSet: newOrderItemReqNewMobileSet(env),
 	}
 
 	// setup runnable jobs

@@ -208,7 +208,7 @@ func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
 	return result
 }
 
-func newOrderItemReqNewLeoSet(env string) map[string]model.OrderItemRequestNew {
+func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNew {
 	leom := model.OrderItemRequestNew{
 		Quantity:          1,
 		IssuerTokenBuffer: 3,
