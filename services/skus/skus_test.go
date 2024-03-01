@@ -402,7 +402,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 	}
 }
 
-func TestNewCreateOrderReqNewLeo(t *testing.T) {
+func TestNewCreateOrderReqNewMobile(t *testing.T) {
 	type tcGiven struct {
 		ppcfg *premiumPaymentProcConfig
 		item  model.OrderItemRequestNew
@@ -638,7 +638,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 	}
 }
 
-func TestNewOrderItemReqNewLeoSet(t *testing.T) {
+func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 	type testCase struct {
 		name  string
 		given string
