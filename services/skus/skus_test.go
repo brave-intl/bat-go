@@ -72,6 +72,54 @@ func TestSKUNameByMobileName(t *testing.T) {
 		},
 
 		{
+			name:  "android_release_monthly_vpn",
+			given: "brave.vpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_beta_monthly_vpn",
+			given: "beta.bravevpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_nightly_monthly_vpn",
+			given: "nightly.bravevpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "ios_monthly_vpn",
+			given: "bravevpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_release_yearly_vpn",
+			given: "brave.vpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_beta_yearly_vpn",
+			given: "beta.bravevpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_nightly_yearly_vpn",
+			given: "nightly.bravevpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "ios_yearly_vpn",
+			given: "bravevpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
 			name:  "invalid",
 			given: "something_else",
 			exp:   tcExpected{err: model.ErrInvalidMobileProduct},

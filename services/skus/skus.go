@@ -146,8 +146,17 @@ func skuNameByMobileName(subID string) (string, error) {
 	switch subID {
 	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly", "braveleo.monthly":
 		return "brave-leo-premium", nil
+
 	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly", "braveleo.yearly":
 		return "brave-leo-premium-year", nil
+
+	case "brave.vpn.monthly", "beta.bravevpn.monthly", "nightly.bravevpn.monthly", "bravevpn.monthly":
+		return "brave-vpn-premium", nil
+
+	case "brave.vpn.yearly", "beta.bravevpn.yearly", "nightly.bravevpn.yearly", "bravevpn.yearly":
+		// Temporary: use the same sku as for monthly.
+		return "brave-vpn-premium", nil
+
 	default:
 		return "", model.ErrInvalidMobileProduct
 	}
