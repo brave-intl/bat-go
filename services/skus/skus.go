@@ -162,7 +162,7 @@ func skuNameByMobileName(subID string) (string, error) {
 	}
 }
 
-func newCreateOrderReqNewLeo(ppcfg *premiumPaymentProcConfig, item model.OrderItemRequestNew) model.CreateOrderRequestNew {
+func newCreateOrderReqNewMobile(ppcfg *premiumPaymentProcConfig, item model.OrderItemRequestNew) model.CreateOrderRequestNew {
 	result := model.CreateOrderRequestNew{
 		// No email.
 		Currency: "USD",

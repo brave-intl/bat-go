@@ -422,7 +422,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newCreateOrderReqNewLeo(tc.given.ppcfg, tc.given.item)
+			actual := newCreateOrderReqNewMobile(tc.given.ppcfg, tc.given.item)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
