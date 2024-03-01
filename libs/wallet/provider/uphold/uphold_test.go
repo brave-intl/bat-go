@@ -273,13 +273,15 @@ func TestTransactions(t *testing.T) {
 	}
 
 	// wait for funds to be available
-	<-time.After(1 * time.Second)
+	<-time.After(2 * time.Second)
 	txInfo, err := destWallet.Transfer(ctx, altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
 	if err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
+
 	if txInfo == nil {
-		t.Error("no tx information from transfer!")
+		t.Fatalf("no tx information from transfer!")
 	}
 
 	balance, err = destWallet.GetBalance(ctx, true)
