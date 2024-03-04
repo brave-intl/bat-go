@@ -126,23 +126,6 @@ func credentialOpaqueFromString(s string) (*VerifyCredentialOpaque, error) {
 	return vcp, nil
 }
 
-const (
-	androidSubscriptionUnknown = iota
-	androidSubscriptionRecovered
-	androidSubscriptionRenewed
-	androidSubscriptionCanceled
-	androidSubscriptionPurchased
-	androidSubscriptionOnHold
-	androidSubscriptionInGracePeriod
-	androidSubscriptionRestarted
-	androidSubscriptionPriceChangeConfirmed
-	androidSubscriptionDeferred
-	androidSubscriptionPaused
-	androidSubscriptionPausedScheduleChanged
-	androidSubscriptionRevoked
-	androidSubscriptionExpired
-)
-
 // IOSNotification - wrapping structure of an android notification
 type IOSNotification struct {
 	payload       []byte                 `json:"-" valid:"-"`

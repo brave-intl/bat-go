@@ -391,7 +391,7 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 	dn := developerNotification{
 		PackageName: "package name",
 		SubscriptionNotification: subscriptionNotification{
-			NotificationType: androidSubscriptionCanceled,
+			NotificationType: 3, // androidNotificationCanceled
 			PurchaseToken:    "my external id",
 			SubscriptionID:   "subscriptionId",
 		},
