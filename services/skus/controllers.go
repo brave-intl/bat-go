@@ -955,72 +955,116 @@ func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(service)))
 	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
-	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
+	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", handleAndroidWebhook(service)))
 	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(service)))
 	return r
 }
 
-// HandleAndroidWebhook is the handler for the Google Playstore webhooks
-func HandleAndroidWebhook(service *Service) handlers.AppHandler {
+const errInternalServer model.Error = "internal server error"
+
+func handleAndroidWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		l := logging.Logger(ctx, "payments").With().Str("func", "HandleAndroidWebhook").Logger()
+		l := logging.Logger(ctx, "skus").With().Str("func", "handleAndroidWebhook").Logger()
 
-		if err := service.gcpValidator.validate(ctx, r); err != nil {
-			l.Error().Err(err).Msg("invalid request")
-			return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
-		}
-
-		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			l.Error().Err(err).Msg("failed to read payload")
-			return handlers.WrapValidationError(err)
+			l.Error().Err(err).Msg("error reading request body")
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		l.Info().Str("payload", string(payload)).Msg("")
-
-		var validationErrMap = map[string]interface{}{}
-
-		var req AndroidNotification
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			validationErrMap["request-body-decode"] = err.Error()
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Interface("req", req).Msg("")
-
-		dn, err := req.Message.GetDeveloperNotification()
+		req, err := parseDeveloperNotification(b)
 		if err != nil {
-			validationErrMap["invalid-developer-notification"] = err.Error()
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
+			l.Error().Err(err).Msg("error parsing notification")
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		l.Info().Interface("developer_notification", dn).Msg("")
-
-		if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-			validationErrMap["invalid-developer-notification-token"] = "notification has no purchase token"
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Msg("verify_developer_notification")
-
-		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
-			l.Error().Err(err).Msg("failed to verify subscription notification")
-
+		if err := service.updateOrderAndroid(ctx, req); err != nil {
 			switch {
-			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+			case errors.Is(err, model.ErrOrderNotFound):
+				// This error can legitimately be returned when a user has not linked their mobile purchase.
+				// Currently, there is no way to distinguish between a missing order and a user that
+				// has not linked. We have no choice but to ack the message.
 				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
 			default:
-				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+				l.Error().Err(err).Msg("error verifying notification")
+				return handlers.WrapError(errInternalServer, "error verifying notification", http.StatusInternalServerError)
 			}
 		}
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
+}
+
+type gcpMsgWrapper struct {
+	Message gcpMsg `json:"message"`
+}
+
+type gcpMsg struct {
+	Data      string `json:"data"`
+	MessageID string `json:"messageId"`
+}
+
+type developerNotification struct {
+	PackageName              string                   `json:"packageName"`
+	SubscriptionNotification subscriptionNotification `json:"subscriptionNotification"`
+}
+
+type subscriptionNotification struct {
+	NotificationType int    `json:"notificationType"`
+	PurchaseToken    string `json:"purchaseToken"`
+	SubscriptionID   string `json:"subscriptionId"`
+}
+
+const (
+	errPackageNameEmpty        model.Error = "package name is empty"
+	errSubscriptionIDEmpty     model.Error = "subscription id is empty"
+	errPurchaseTokenEmpty      model.Error = "purchase token is empty"
+	errNotificationTypeInvalid model.Error = "invalid notification type"
+)
+
+func parseDeveloperNotification(raw []byte) (model.ReceiptRequest, error) {
+	var m gcpMsgWrapper
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return model.ReceiptRequest{}, fmt.Errorf("error unmarshaling msg wrapper: %w", err)
+	}
+
+	b, err := base64.StdEncoding.DecodeString(m.Message.Data)
+	if err != nil {
+		return model.ReceiptRequest{}, fmt.Errorf("error decoding msg data: %w", err)
+	}
+
+	var dn developerNotification
+	if err := json.Unmarshal(b, &dn); err != nil {
+		return model.ReceiptRequest{}, fmt.Errorf("error unmarshaling developer notification: %w", err)
+	}
+
+	if dn.PackageName == "" {
+		return model.ReceiptRequest{}, errPackageNameEmpty
+	}
+
+	if dn.SubscriptionNotification.SubscriptionID == "" {
+		return model.ReceiptRequest{}, errSubscriptionIDEmpty
+	}
+
+	if dn.SubscriptionNotification.PurchaseToken == "" {
+		return model.ReceiptRequest{}, errPurchaseTokenEmpty
+	}
+
+	if dn.SubscriptionNotification.NotificationType == 0 {
+		return model.ReceiptRequest{}, errNotificationTypeInvalid
+	}
+
+	req := model.ReceiptRequest{
+		Type:           model.VendorGoogle,
+		Blob:           dn.SubscriptionNotification.PurchaseToken,
+		Package:        dn.PackageName,
+		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
+	}
+
+	return req, nil
 }
 
 const (

@@ -364,12 +364,8 @@ func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
 
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
 	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
-	suite.Assert().NotNil(order)
+	suite.Require().NotNil(order)
 
-	// Check the order
-	suite.Assert().Equal("10", order.TotalPrice.String())
-
-	// add the external id to metadata as if an initial receipt was submitted
 	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
@@ -381,43 +377,39 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 
 	suite.service.gcpValidator = &mockGcpRequestValidator{}
 
-	handler := HandleAndroidWebhook(suite.service)
-
-	// notification message
-	devNotify := DeveloperNotification{
+	dn := developerNotification{
 		PackageName: "package name",
-		SubscriptionNotification: SubscriptionNotification{
+		SubscriptionNotification: subscriptionNotification{
 			NotificationType: androidSubscriptionCanceled,
 			PurchaseToken:    "my external id",
 			SubscriptionID:   "subscription id",
 		},
 	}
 
-	buf, err := json.Marshal(&devNotify)
+	buf, err := json.Marshal(&dn)
 	suite.Require().NoError(err)
 
-	// wrapper notification message
-	notification := &AndroidNotification{
-		Message: AndroidNotificationMessage{
-			Data: base64.StdEncoding.EncodeToString(buf), // dev notification is b64 encoded
+	msg := gcpMsgWrapper{
+		Message: gcpMsg{
+			Data: base64.StdEncoding.EncodeToString(buf),
 		},
-		Subscription: "subscription",
 	}
 
-	body, err := json.Marshal(&notification)
+	body, err := json.Marshal(&msg)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/v1/android", bytes.NewBuffer(body))
+	r, err := http.NewRequest(http.MethodPost, "/android", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
+	router := WebhookRouter(suite.service)
 
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	rw := httptest.NewRecorder()
 
-	suite.Require().Equal(http.StatusOK, rr.Code)
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
 
-	// get order and check the state changed to canceled
+	suite.Require().Equal(http.StatusOK, rw.Code)
+
 	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
 	suite.Assert().Equal("canceled", updatedOrder.Status)
 }

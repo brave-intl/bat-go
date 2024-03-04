@@ -28,7 +28,9 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
+	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/idtoken"
+	"google.golang.org/api/option"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -92,6 +94,8 @@ const (
 type orderStoreSvc interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
 type vendorReceiptValidator interface {
@@ -101,6 +105,10 @@ type vendorReceiptValidator interface {
 
 type gcpRequestValidator interface {
 	validate(ctx context.Context, r *http.Request) error
+}
+
+type subscriptionPurchaserV2 interface {
+	GetSubscriptionPurchase(ctx context.Context, pkgName, token string) (*androidpublisher.SubscriptionPurchaseV2, error)
 }
 
 // Service contains datastore
@@ -126,8 +134,9 @@ type Service struct {
 	radomClient        *radom.InstrumentedClient
 	radomSellerAddress string
 
-	vendorReceiptValid vendorReceiptValidator
-	gcpValidator       gcpRequestValidator
+	vendorReceiptValid    vendorReceiptValidator
+	gcpValidator          gcpRequestValidator
+	androidSubPurchaserV2 subscriptionPurchaserV2
 
 	payProcCfg    *premiumPaymentProcConfig
 	newItemReqSet map[string]model.OrderItemRequestNew
@@ -260,6 +269,14 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		return nil, err
 	}
 
+	s, err := androidpublisher.NewService(context.TODO(), option.WithCredentialsJSON(playKey))
+	if err != nil {
+		return nil, err
+	}
+
+	aps := androidpublisher.NewPurchasesSubscriptionsv2Service(s)
+	apV2 := newAndroidPublisherV2(aps)
+
 	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {
 		return nil, err
@@ -314,8 +331,9 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		radomClient:        radomClient,
 		radomSellerAddress: radomSellerAddress,
 
-		vendorReceiptValid: rcptValidator,
-		gcpValidator:       gcpValidator,
+		vendorReceiptValid:    rcptValidator,
+		gcpValidator:          gcpValidator,
+		androidSubPurchaserV2: apV2,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
 		newItemReqSet: newOrderItemReqNewLeoSet(env),
@@ -1624,54 +1642,80 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 	return nil
 }
 
-// verifyDeveloperNotification - verify the developer notification from playstore
-func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
-	// lookup the order based on the token as externalID
-	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
+const (
+	stateActive        string = "SUBSCRIPTION_STATE_ACTIVE"
+	stateInGracePeriod string = "SUBSCRIPTION_STATE_IN_GRACE_PERIOD"
+	stateCanceled      string = "SUBSCRIPTION_STATE_CANCELED"
+)
+
+const errLineItemNotFound model.Error = "subscription line item not found"
+
+func (s *Service) updateOrderAndroid(ctx context.Context, req model.ReceiptRequest) error {
+	tx, err := s.Datastore.BeginTx()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	o, err := s.orderRepo.GetByExternalID(ctx, tx, req.Blob)
 	if err != nil {
 		return fmt.Errorf("failed to get order from db: %w", err)
 	}
 
 	if o == nil {
-		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+		return model.ErrOrderNotFound
 	}
 
-	// have order, now validate the receipt from the notification
-	if _, err := s.vendorReceiptValid.validateGoogle(ctx, model.ReceiptRequest{
-		Type:           model.VendorGoogle,
-		Blob:           dn.SubscriptionNotification.PurchaseToken,
-		Package:        dn.PackageName,
-		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
-	}); err != nil {
-		return fmt.Errorf("failed to validate purchase token: %w", err)
+	sp, err := s.androidSubPurchaserV2.GetSubscriptionPurchase(ctx, req.Package, req.Blob)
+	if err != nil {
+		return err
 	}
 
-	switch dn.SubscriptionNotification.NotificationType {
-	case androidSubscriptionRenewed,
-		androidSubscriptionRecovered,
-		androidSubscriptionPurchased,
-		androidSubscriptionRestarted,
-		androidSubscriptionInGracePeriod,
-		androidSubscriptionPriceChangeConfirmed:
-		if err = s.RenewOrder(ctx, o.ID); err != nil {
-			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+	item := findLineItem(sp.LineItems, req.SubscriptionID)
+	if item == nil {
+		return errLineItemNotFound
+	}
+
+	expTime, err := time.Parse(time.RFC3339Nano, item.ExpiryTime)
+	if err != nil {
+		return fmt.Errorf("error parsing item time: %w", err)
+	}
+
+	if err := s.orderRepo.SetExpiresAt(ctx, tx, o.ID, expTime); err != nil {
+		return err
+	}
+
+	if state := shouldUpdateOrderState(sp.SubscriptionState); state != "" {
+
+		if err := s.orderRepo.SetStatus(ctx, tx, o.ID, state); err != nil {
+			return err
 		}
-	case androidSubscriptionExpired,
-		androidSubscriptionRevoked,
-		androidSubscriptionPausedScheduleChanged,
-		androidSubscriptionPaused,
-		androidSubscriptionDeferred,
-		androidSubscriptionOnHold,
-		androidSubscriptionCanceled,
-		androidSubscriptionUnknown:
-		if err = s.CancelOrder(o.ID); err != nil {
-			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
-		}
-	default:
-		return errors.New("failed to act on subscription notification")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func findLineItem(lineItems []*androidpublisher.SubscriptionPurchaseLineItem, productId string) *androidpublisher.SubscriptionPurchaseLineItem {
+	for _, item := range lineItems {
+		if item.ProductId == productId {
+			return item
+		}
+	}
+	return nil
+}
+
+func shouldUpdateOrderState(state string) string {
+	switch state {
+	case stateActive, stateInGracePeriod:
+		return OrderStatusPaid
+	case stateCanceled:
+		return OrderStatusCanceled
+	}
+	return ""
 }
 
 // validateReceipt validates receipt.

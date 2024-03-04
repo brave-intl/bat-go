@@ -54,6 +54,7 @@ func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return resp, rtErr
 }
 
+// Deprecated: this type is deprecated in favour of androidPublisherV2.
 type androidPublisher struct {
 	s *androidpublisher.PurchasesSubscriptionsService
 }
@@ -64,6 +65,25 @@ func newAndroidPublisher(s *androidpublisher.PurchasesSubscriptionsService) *and
 
 func (a *androidPublisher) GetSubscriptionPurchase(_ context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
 	call := a.s.Get(pkgName, subID, token)
+
+	sp, err := call.Do()
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving subscription: %w", err)
+	}
+
+	return sp, nil
+}
+
+type androidPublisherV2 struct {
+	s *androidpublisher.PurchasesSubscriptionsv2Service
+}
+
+func newAndroidPublisherV2(s *androidpublisher.PurchasesSubscriptionsv2Service) *androidPublisherV2 {
+	return &androidPublisherV2{s: s}
+}
+
+func (a *androidPublisherV2) GetSubscriptionPurchase(_ context.Context, pkgName, token string) (*androidpublisher.SubscriptionPurchaseV2, error) {
+	call := a.s.Get(pkgName, token)
 
 	sp, err := call.Do()
 	if err != nil {

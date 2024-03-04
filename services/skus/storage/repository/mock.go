@@ -13,6 +13,8 @@ import (
 type MockOrder struct {
 	FnGet             func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	FnGetByExternalID func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnSetStatus       func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	FnSetExpiresAt    func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
 func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -37,6 +39,22 @@ func (r *MockOrder) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return r.FnGetByExternalID(ctx, dbi, extID)
+}
+
+func (r *MockOrder) SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+	if r.FnSetStatus == nil {
+		return nil
+	}
+
+	return r.FnSetStatus(ctx, dbi, id, status)
+}
+
+func (r *MockOrder) SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+	if r.FnSetExpiresAt == nil {
+		return nil
+	}
+
+	return r.FnSetExpiresAt(ctx, dbi, id, when)
 }
 
 type MockIssuer struct {
