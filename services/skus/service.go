@@ -1699,9 +1699,9 @@ func (s *Service) updateOrderAndroid(ctx context.Context, req model.ReceiptReque
 	return nil
 }
 
-func findLineItem(lineItems []*androidpublisher.SubscriptionPurchaseLineItem, productId string) *androidpublisher.SubscriptionPurchaseLineItem {
+func findLineItem(lineItems []*androidpublisher.SubscriptionPurchaseLineItem, productID string) *androidpublisher.SubscriptionPurchaseLineItem {
 	for _, item := range lineItems {
-		if item.ProductId == productId {
+		if item.ProductId == productID {
 			return item
 		}
 	}
