@@ -968,6 +968,11 @@ func handleAndroidWebhook(service *Service) handlers.AppHandler {
 
 		l := logging.Logger(ctx, "skus").With().Str("func", "handleAndroidWebhook").Logger()
 
+		if err := service.gcpValidator.validate(ctx, r); err != nil {
+			l.Error().Err(err).Msg("invalid request")
+			return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+		}
+
 		b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			l.Error().Err(err).Msg("error reading request body")

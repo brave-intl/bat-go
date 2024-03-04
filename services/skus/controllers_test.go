@@ -26,6 +26,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/api/androidpublisher/v3"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
@@ -369,20 +370,30 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
-	suite.service.vendorReceiptValid = &mockVendorReceiptValidator{
-		fnValidateGoogle: func(ctx context.Context, req model.ReceiptRequest) (string, error) {
-			return "my external id", nil
+	suite.service.gcpValidator = &mockGcpRequestValidator{}
+
+	suite.service.orderRepo = repository.NewOrder()
+
+	suite.service.androidSubPurchaserV2 = &mockAndroidPublisherV2{
+		fnGetSubscriptionPurchase: func(_ context.Context, pkgName, token string) (*androidpublisher.SubscriptionPurchaseV2, error) {
+			return &androidpublisher.SubscriptionPurchaseV2{
+				SubscriptionState: stateCanceled,
+				LineItems: []*androidpublisher.SubscriptionPurchaseLineItem{
+					{
+						ProductId:  "subscriptionId",
+						ExpiryTime: time.Now().Add(1 * time.Second).Format(time.RFC3339Nano),
+					},
+				},
+			}, nil
 		},
 	}
-
-	suite.service.gcpValidator = &mockGcpRequestValidator{}
 
 	dn := developerNotification{
 		PackageName: "package name",
 		SubscriptionNotification: subscriptionNotification{
 			NotificationType: androidSubscriptionCanceled,
 			PurchaseToken:    "my external id",
-			SubscriptionID:   "subscription id",
+			SubscriptionID:   "subscriptionId",
 		},
 	}
 
