@@ -748,7 +748,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "error_in_newOrderItemReqForSubID",
 			given: tcGiven{
 				svc:   &mockPaidOrderCreator{},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
@@ -768,7 +768,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 						return nil, model.Error("something went wrong")
 					},
 				},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
@@ -792,7 +792,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 						return model.Error("something went wrong")
 					},
 				},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
@@ -805,7 +805,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "successful_case",
+			name: "successful_case_android_leo_monnthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
 					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
@@ -819,13 +819,47 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 						return result, nil
 					},
 				},
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
 					Blob:           "blob",
 					Package:        "package",
 					SubscriptionID: "brave.leo.monthly",
+				},
+			},
+			exp: tcExpected{
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
+					Items: []model.OrderItem{
+						{ID: uuid.Must(uuid.FromString("22482ad4-e43b-44bd-860e-99e617ad9f6d"))},
+					},
+				},
+			},
+		},
+
+		{
+			name: "successful_case_android_vpn_monnthly",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
+							Items: []model.OrderItem{
+								{ID: uuid.Must(uuid.FromString("22482ad4-e43b-44bd-860e-99e617ad9f6d"))},
+							},
+						}
+
+						return result, nil
+					},
+				},
+				set:   newOrderItemReqNewMobileSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.vpn.monthly",
 				},
 			},
 			exp: tcExpected{

@@ -72,6 +72,54 @@ func TestSKUNameByMobileName(t *testing.T) {
 		},
 
 		{
+			name:  "android_release_monthly_vpn",
+			given: "brave.vpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_beta_monthly_vpn",
+			given: "beta.bravevpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_nightly_monthly_vpn",
+			given: "nightly.bravevpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "ios_monthly_vpn",
+			given: "bravevpn.monthly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_release_yearly_vpn",
+			given: "brave.vpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_beta_yearly_vpn",
+			given: "beta.bravevpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "android_nightly_yearly_vpn",
+			given: "nightly.bravevpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "ios_yearly_vpn",
+			given: "bravevpn.yearly",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
 			name:  "invalid",
 			given: "something_else",
 			exp:   tcExpected{err: model.ErrInvalidMobileProduct},
@@ -137,7 +185,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "android_release_monthly_leo",
 			given: tcGiven{
 				subID: "brave.leo.monthly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -148,7 +196,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("15.00"),
+					Price:                       decimal.RequireFromString("14.99"),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -163,7 +211,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "ios_monthly_leo",
 			given: tcGiven{
 				subID: "braveleo.monthly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -174,7 +222,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("15.00"),
+					Price:                       decimal.RequireFromString("14.99"),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -189,7 +237,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "android_release_yearly_leo",
 			given: tcGiven{
 				subID: "brave.leo.yearly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -215,7 +263,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			name: "ios_yearly_leo",
 			given: tcGiven{
 				subID: "braveleo.yearly",
-				set:   newOrderItemReqNewLeoSet("development"),
+				set:   newOrderItemReqNewMobileSet("development"),
 			},
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
@@ -236,6 +284,110 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "android_release_monthly_vpn",
+			given: tcGiven{
+				subID: "brave.vpn.monthly",
+				set:   newOrderItemReqNewMobileSet("development"),
+			},
+			exp: tcExpected{
+				req: model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.brave.software",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_K1c8W3oM4mUsGw",
+						ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+					},
+				},
+			},
+		},
+
+		{
+			name: "ios_monthly_vpn",
+			given: tcGiven{
+				subID: "bravevpn.monthly",
+				set:   newOrderItemReqNewMobileSet("development"),
+			},
+			exp: tcExpected{
+				req: model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.brave.software",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_K1c8W3oM4mUsGw",
+						ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+					},
+				},
+			},
+		},
+
+		{
+			name: "android_release_yearly_vpn",
+			given: tcGiven{
+				subID: "brave.vpn.yearly",
+				set:   newOrderItemReqNewMobileSet("development"),
+			},
+			exp: tcExpected{
+				req: model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.brave.software",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_K1c8W3oM4mUsGw",
+						ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+					},
+				},
+			},
+		},
+
+		{
+			name: "ios_yearly_vpn",
+			given: tcGiven{
+				subID: "bravevpn.yearly",
+				set:   newOrderItemReqNewMobileSet("development"),
+			},
+			exp: tcExpected{
+				req: model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.brave.software",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_K1c8W3oM4mUsGw",
+						ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+					},
+				},
+			},
+		},
 	}
 
 	for i := range tests {
@@ -250,7 +402,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 	}
 }
 
-func TestNewCreateOrderReqNewLeo(t *testing.T) {
+func TestNewCreateOrderReqNewMobile(t *testing.T) {
 	type tcGiven struct {
 		ppcfg *premiumPaymentProcConfig
 		item  model.OrderItemRequestNew
@@ -267,7 +419,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 			name: "development_leo_monthly",
 			given: tcGiven{
 				ppcfg: newPaymentProcessorConfig("development"),
-				item:  newOrderItemReqNewLeoSet("development")["brave-leo-premium"],
+				item:  newOrderItemReqNewMobileSet("development")["brave-leo-premium"],
 			},
 
 			exp: model.CreateOrderRequestNew{
@@ -287,7 +439,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 						Description:                 "Premium access to Leo",
 						CredentialType:              "time-limited-v2",
 						CredentialValidDuration:     "P1M",
-						Price:                       decimal.RequireFromString("15.00"),
+						Price:                       decimal.RequireFromString("14.99"),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						IssuanceInterval:            ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
@@ -303,7 +455,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 			name: "staging_leo_yearly",
 			given: tcGiven{
 				ppcfg: newPaymentProcessorConfig("staging"),
-				item:  newOrderItemReqNewLeoSet("staging")["brave-leo-premium-year"],
+				item:  newOrderItemReqNewMobileSet("staging")["brave-leo-premium-year"],
 			},
 			exp: model.CreateOrderRequestNew{
 				Currency: "USD",
@@ -338,7 +490,7 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 			name: "production_leo_monthly",
 			given: tcGiven{
 				ppcfg: newPaymentProcessorConfig("production"),
-				item:  newOrderItemReqNewLeoSet("production")["brave-leo-premium"],
+				item:  newOrderItemReqNewMobileSet("production")["brave-leo-premium"],
 			},
 			exp: model.CreateOrderRequestNew{
 				Currency: "USD",
@@ -357,12 +509,118 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 						Description:                 "Premium access to Leo",
 						CredentialType:              "time-limited-v2",
 						CredentialValidDuration:     "P1M",
-						Price:                       decimal.RequireFromString("15.00"),
+						Price:                       decimal.RequireFromString("14.99"),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						IssuanceInterval:            ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_O9uKDYsRPXNgfB",
 							ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "development_vpn_monthly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("development"),
+				item:  newOrderItemReqNewMobileSet("development")["brave-vpn-premium"],
+			},
+
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.brave.software/account/?intent=provision",
+					CancelURI:  "https://account.brave.software/plans/?intent=checkout",
+				},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           31,
+						IssuerTokenOverlap:          2,
+						SKU:                         "brave-vpn-premium",
+						Location:                    "vpn.brave.software",
+						Description:                 "brave-vpn-premium",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("9.99"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_K1c8W3oM4mUsGw",
+							ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "staging_vpn_yearly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("staging"),
+				item:  newOrderItemReqNewMobileSet("staging")["brave-vpn-premium"],
+			},
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.bravesoftware.com/account/?intent=provision",
+					CancelURI:  "https://account.bravesoftware.com/plans/?intent=checkout",
+				},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           31,
+						IssuerTokenOverlap:          2,
+						SKU:                         "brave-vpn-premium",
+						Location:                    "vpn.bravesoftware.com",
+						Description:                 "brave-vpn-premium",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("9.99"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_Lhv4OM1aAPxflY",
+							ItemID:    "price_1L0VEhBSm1mtrN9nGB4kZkfh",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "production_vpn_monthly",
+			given: tcGiven{
+				ppcfg: newPaymentProcessorConfig("production"),
+				item:  newOrderItemReqNewMobileSet("production")["brave-vpn-premium"],
+			},
+			exp: model.CreateOrderRequestNew{
+				Currency: "USD",
+
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://account.brave.com/account/?intent=provision",
+					CancelURI:  "https://account.brave.com/plans/?intent=checkout",
+				},
+
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                    1,
+						IssuerTokenBuffer:           31,
+						IssuerTokenOverlap:          2,
+						SKU:                         "brave-vpn-premium",
+						Location:                    "vpn.brave.com",
+						Description:                 "brave-vpn-premium",
+						CredentialType:              "time-limited-v2",
+						CredentialValidDuration:     "P1M",
+						Price:                       decimal.RequireFromString("9.99"),
+						CredentialValidDurationEach: ptrTo("P1D"),
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "prod_Lhv8qsPsn6WHrx",
+							ItemID:    "price_1L0VHmBSm1mtrN9nT5DPmUZb",
 						},
 					},
 				},
@@ -374,13 +632,13 @@ func TestNewCreateOrderReqNewLeo(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newCreateOrderReqNewLeo(tc.given.ppcfg, tc.given.item)
+			actual := newCreateOrderReqNewMobile(tc.given.ppcfg, tc.given.item)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
 }
 
-func TestNewOrderItemReqNewLeoSet(t *testing.T) {
+func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 	type testCase struct {
 		name  string
 		given string
@@ -400,7 +658,7 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("15.00"),
+					Price:                       decimal.RequireFromString("14.99"),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -425,6 +683,23 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 						ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
 					},
 				},
+
+				"brave-vpn-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.brave.com",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_Lhv8qsPsn6WHrx",
+						ItemID:    "price_1L0VHmBSm1mtrN9nT5DPmUZb",
+					},
+				},
 			},
 		},
 
@@ -440,7 +715,7 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("15.00"),
+					Price:                       decimal.RequireFromString("14.99"),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -465,6 +740,23 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 						ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
 					},
 				},
+
+				"brave-vpn-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.bravesoftware.com",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_Lhv4OM1aAPxflY",
+						ItemID:    "price_1L0VEhBSm1mtrN9nGB4kZkfh",
+					},
+				},
 			},
 		},
 
@@ -480,7 +772,7 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("15.00"),
+					Price:                       decimal.RequireFromString("14.99"),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -503,6 +795,23 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
 						ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
+					},
+				},
+
+				"brave-vpn-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.brave.software",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_K1c8W3oM4mUsGw",
+						ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
 					},
 				},
 			},
@@ -520,7 +829,7 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("15.00"),
+					Price:                       decimal.RequireFromString("14.99"),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -545,6 +854,23 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 						ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
 					},
 				},
+
+				"brave-vpn-premium": model.OrderItemRequestNew{
+					Quantity:                    1,
+					IssuerTokenBuffer:           31,
+					IssuerTokenOverlap:          2,
+					SKU:                         "brave-vpn-premium",
+					Location:                    "vpn.brave.software",
+					Description:                 "brave-vpn-premium",
+					CredentialType:              "time-limited-v2",
+					CredentialValidDuration:     "P1M",
+					Price:                       decimal.RequireFromString("9.99"),
+					CredentialValidDurationEach: ptrTo("P1D"),
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "prod_K1c8W3oM4mUsGw",
+						ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+					},
+				},
 			},
 		},
 	}
@@ -553,7 +879,7 @@ func TestNewOrderItemReqNewLeoSet(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newOrderItemReqNewLeoSet(tc.given)
+			actual := newOrderItemReqNewMobileSet(tc.given)
 			should.Equal(t, tc.exp, actual)
 		})
 	}

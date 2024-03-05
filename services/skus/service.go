@@ -318,7 +318,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		gcpValidator:       gcpValidator,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
-		newItemReqSet: newOrderItemReqNewLeoSet(env),
+		newItemReqSet: newOrderItemReqNewMobileSet(env),
 	}
 
 	// setup runnable jobs
@@ -1951,7 +1951,7 @@ func createOrderWithReceipt(
 		return nil, err
 	}
 
-	oreq := newCreateOrderReqNewLeo(ppcfg, itemNew)
+	oreq := newCreateOrderReqNewMobile(ppcfg, itemNew)
 
 	// 2. Craft a request for creating an order.
 	items, err := createOrderItems(&oreq)
