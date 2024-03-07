@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"os"
 	"context"
 	"encoding/json"
 	"errors"
@@ -31,14 +32,7 @@ func NewWorker(rc redisconsumer.StreamClient) *Worker {
 
 // HandlePrepareMessage by sending it to the payments service
 func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, data []byte) error {
-	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
-	if err != nil {
-		return err
-	}
-	baseURI, ok := payments.APIBase[env]
-	if !ok {
-		return fmt.Errorf("no api base uri for env: %s", env)
-	}
+	baseURI := os.Getenv("NITRO_API_BASE")
 
 	client, err := client.NewWithHTTPClient(baseURI, "", &http.Client{
 		Timeout: time.Second * 60,
@@ -51,14 +45,7 @@ func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, da
 
 // HandleSubmitMessage by sending it to the payments service
 func (w *Worker) HandleSubmitMessage(ctx context.Context, stream, id string, data []byte) error {
-	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
-	if err != nil {
-		return err
-	}
-	baseURI, ok := payments.APIBase[env]
-	if !ok {
-		return fmt.Errorf("no api base uri for env: %s", env)
-	}
+	baseURI := os.Getenv("NITRO_API_BASE")
 
 	client, err := client.NewWithHTTPClient(baseURI, "", &http.Client{
 		Timeout: time.Second * 60,
