@@ -118,7 +118,7 @@ func (redisClient *RedisClient) AddMessages(ctx context.Context, stream string, 
 	pipe := ((*redis.Client)(redisClient)).Pipeline()
 
 	// to avoid errors enqueuing large message sets, enqueue them in chunks
-	for _, messages := range chunkMessages(500, messages) {
+	for _, messages := range chunkMessages(100, messages) {
 		// loop again so that each message gets its own record
 		for _, message := range messages {
 			pipe.XAdd(
