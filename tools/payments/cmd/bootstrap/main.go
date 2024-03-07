@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"filippo.io/age/agessh"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -75,19 +76,14 @@ func main() {
 		log.Fatalln("Invalid share file parameter:", shareFile)
 	}
 
-	// load up the operator's private key as an identity
-	f, err := os.Open(*p)
+	priv, err := payments.GetOperatorPrivateKey(*p)
 	if err != nil {
-		log.Fatalf("failed to open operator receipient share file", err.Error())
+		log.Fatalf("failed to open operator key file: %v\n", err.Error())
 	}
 
-	identities, err := age.ParseIdentities(f)
+	identity, err := agessh.NewEd25519Identity(priv)
 	if err != nil {
-		log.Fatalf("Failed to parse private key: %v", err)
-	}
-
-	if len(identities) != 1 {
-		log.Fatalf("private key should have 1 identity")
+		log.Fatalf("Failed to parse private key as identity: %v", err)
 	}
 
 	sf, err := os.Open(shareFile)
@@ -95,7 +91,7 @@ func main() {
 		log.Fatalf("Failed to open file: %v", err)
 	}
 
-	r, err := age.Decrypt(sf, identities[0])
+	r, err := age.Decrypt(sf, identity)
 	if err != nil {
 		log.Fatalf("Failed to open encrypted file: %v", err)
 	}
