@@ -122,6 +122,11 @@ func (s *Service) StateMachineFromTransaction(
 			signingKey: signingKey,
 			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
 		}
+	case "solana":
+		machine = &SolanaMachine{
+			signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
+			solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
+		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
 	case "dryrun-prepare-fails":
