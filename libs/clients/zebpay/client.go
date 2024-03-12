@@ -266,7 +266,7 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	var resp = new(CheckTransferResponse)
 	_, err = c.client.Do(ctx, req, resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to do status check request: %w", err)
+		return nil, fmt.Errorf("error %v encountered when checking status. response: %v", err, resp)
 	}
 
 	return resp, err
