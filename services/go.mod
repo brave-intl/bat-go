@@ -26,6 +26,9 @@ require (
 	github.com/awslabs/amazon-qldb-driver-go/v3 v3.0.1
 	github.com/blocto/solana-go-sdk v1.27.0
 	github.com/brave-intl/bat-go v0.1.2
+	github.com/brave-intl/bat-go v1.0.2
+	github.com/brave-intl/bat-go/libs v1.0.2
+	github.com/brave-intl/bat-go/tools v1.0.2
 	github.com/getsentry/sentry-go v0.14.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.1
@@ -107,6 +110,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/mssola/user_agent v0.5.3 // indirect
+	github.com/near/borsh-go v0.3.2-0.20220516180422-1ff87d108454 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
