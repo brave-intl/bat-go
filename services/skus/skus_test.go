@@ -201,7 +201,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
-						ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+						ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
 					},
 				},
 			},
@@ -227,7 +227,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
-						ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+						ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
 					},
 				},
 			},
@@ -444,7 +444,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						IssuanceInterval:            ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_OtZCXOCIO3AJE6",
-							ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+							ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
 						},
 					},
 				},
@@ -514,7 +514,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						IssuanceInterval:            ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_O9uKDYsRPXNgfB",
-							ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+							ItemID:    "price_1OoS8YBSm1mtrN9nB5gKoYwh",
 						},
 					},
 				},
@@ -663,7 +663,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_O9uKDYsRPXNgfB",
-						ItemID:    "price_1NXmj0BSm1mtrN9nF0elIhiq",
+						ItemID:    "price_1OoS8YBSm1mtrN9nB5gKoYwh",
 					},
 				},
 
@@ -720,7 +720,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OKRYJ77wYOk771",
-						ItemID:    "price_1NXmfTBSm1mtrN9nYjSNMs4X",
+						ItemID:    "price_1OuRuUBSm1mtrN9nWFtJYSML",
 					},
 				},
 
@@ -777,7 +777,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
-						ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+						ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
 					},
 				},
 
@@ -834,7 +834,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					IssuanceInterval:            ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
-						ItemID:    "price_1O5m3lHof20bphG6DloANAcc",
+						ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
 					},
 				},
 
