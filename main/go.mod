@@ -182,6 +182,7 @@ require (
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/mssola/user_agent v0.5.3 // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect
+	github.com/near/borsh-go v0.3.2-0.20220516180422-1ff87d108454 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/oracle/oci-go-sdk/v60 v60.0.0 // indirect
