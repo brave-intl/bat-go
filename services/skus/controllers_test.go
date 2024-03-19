@@ -26,6 +26,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/api/androidpublisher/v3"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
@@ -364,60 +365,62 @@ func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
 
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
 	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
-	suite.Assert().NotNil(order)
+	suite.Require().NotNil(order)
 
-	// Check the order
-	suite.Assert().Equal("10", order.TotalPrice.String())
-
-	// add the external id to metadata as if an initial receipt was submitted
 	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
-	suite.service.vendorReceiptValid = &mockVendorReceiptValidator{
-		fnValidateGoogle: func(ctx context.Context, req model.ReceiptRequest) (string, error) {
-			return "my external id", nil
-		},
-	}
-
 	suite.service.gcpValidator = &mockGcpRequestValidator{}
 
-	handler := HandleAndroidWebhook(suite.service)
+	suite.service.orderRepo = repository.NewOrder()
 
-	// notification message
-	devNotify := DeveloperNotification{
+	suite.service.androidSubPurchaserV2 = &mockAndroidPublisherV2{
+		fnGetSubscriptionPurchase: func(_ context.Context, pkgName, token string) (*androidpublisher.SubscriptionPurchaseV2, error) {
+			return &androidpublisher.SubscriptionPurchaseV2{
+				SubscriptionState: stateCanceled,
+				LineItems: []*androidpublisher.SubscriptionPurchaseLineItem{
+					{
+						ProductId:  "subscriptionId",
+						ExpiryTime: time.Now().Add(1 * time.Second).Format(time.RFC3339Nano),
+					},
+				},
+			}, nil
+		},
+	}
+
+	dn := developerNotification{
 		PackageName: "package name",
-		SubscriptionNotification: SubscriptionNotification{
-			NotificationType: androidSubscriptionCanceled,
+		SubscriptionNotification: subscriptionNotification{
+			NotificationType: 3, // androidNotificationCanceled
 			PurchaseToken:    "my external id",
-			SubscriptionID:   "subscription id",
+			SubscriptionID:   "subscriptionId",
 		},
 	}
 
-	buf, err := json.Marshal(&devNotify)
+	buf, err := json.Marshal(&dn)
 	suite.Require().NoError(err)
 
-	// wrapper notification message
-	notification := &AndroidNotification{
-		Message: AndroidNotificationMessage{
-			Data: base64.StdEncoding.EncodeToString(buf), // dev notification is b64 encoded
+	msg := gcpMsgWrapper{
+		Message: gcpMsg{
+			Data: base64.StdEncoding.EncodeToString(buf),
 		},
-		Subscription: "subscription",
 	}
 
-	body, err := json.Marshal(&notification)
+	body, err := json.Marshal(&msg)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/v1/android", bytes.NewBuffer(body))
+	r, err := http.NewRequest(http.MethodPost, "/android", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
+	router := WebhookRouter(suite.service)
 
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	rw := httptest.NewRecorder()
 
-	suite.Require().Equal(http.StatusOK, rr.Code)
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
 
-	// get order and check the state changed to canceled
+	suite.Require().Equal(http.StatusOK, rw.Code)
+
 	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
 	suite.Assert().Equal("canceled", updatedOrder.Status)
 }
@@ -1889,27 +1892,6 @@ func newCORSOptsEnv() cors.Options {
 	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
 
 	return NewCORSOpts(origins, dbg)
-}
-
-type mockVendorReceiptValidator struct {
-	fnValidateApple  func(ctx context.Context, req model.ReceiptRequest) (string, error)
-	fnValidateGoogle func(ctx context.Context, req model.ReceiptRequest) (string, error)
-}
-
-func (v *mockVendorReceiptValidator) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	if v.fnValidateApple == nil {
-		return "apple_defaul", nil
-	}
-
-	return v.fnValidateApple(ctx, req)
-}
-
-func (v *mockVendorReceiptValidator) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	if v.fnValidateGoogle == nil {
-		return "google_default", nil
-	}
-
-	return v.fnValidateGoogle(ctx, req)
 }
 
 type mockGcpRequestValidator struct {

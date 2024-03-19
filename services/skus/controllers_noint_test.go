@@ -206,3 +206,111 @@ func TestHandleReceiptErr(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDeveloperNotification(t *testing.T) {
+	type tcGiven struct {
+		raw []byte
+	}
+
+	type exp struct {
+		req     model.ReceiptRequest
+		mustErr must.ErrorAssertionFunc
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   exp
+	}
+
+	tests := []testCase{
+		{
+			name: "error_msg_wrapper",
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorContains(t, err, "error unmarshaling msg wrapper: ")
+				},
+			},
+		},
+		{
+			name:  "error_msg_data",
+			given: tcGiven{raw: []byte(`{"message":{"data":"not-base64"}}`)},
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorContains(t, err, "error decoding msg data: ")
+				},
+			},
+		},
+		{
+			name:  "error_developer_notification",
+			given: tcGiven{raw: []byte(`{"message":{"data":"dGVzdA=="}}`)},
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorContains(t, err, "error unmarshaling developer notification: ")
+				},
+			},
+		},
+		{
+			name:  "error_package_name_empty",
+			given: tcGiven{raw: []byte(`{"message":{"data":"eyJwYWNrYWdlTmFtZSI6IiIsInN1YnNjcmlwdGlvbk5vdGlmaWNhdGlvbiI6eyJzdWJzY3JpcHRpb25JZCI6IiIsInB1cmNoYXNlVG9rZW4iOiIiLCJub3RpZmljYXRpb25UeXBlIjogMH19"}}`)},
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, errPackageNameEmpty)
+				},
+			},
+		},
+		{
+			name:  "error_subscription_id_empty",
+			given: tcGiven{raw: []byte(`{"message":{"data":"eyJwYWNrYWdlTmFtZSI6InBhY2thZ2UubmFtZS5jb20iLCJzdWJzY3JpcHRpb25Ob3RpZmljYXRpb24iOnsic3Vic2NyaXB0aW9uSWQiOiIiLCJwdXJjaGFzZVRva2VuIjoicGFja2FnZS10b2tlbiIsIm5vdGlmaWNhdGlvblR5cGUiOiAxfX0="}}`)},
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, errSubscriptionIDEmpty)
+				},
+			},
+		},
+		{
+			name:  "error_purchase_token_empty",
+			given: tcGiven{raw: []byte(`{"message":{"data":"eyJwYWNrYWdlTmFtZSI6InBhY2thZ2UubmFtZS5jb20iLCJzdWJzY3JpcHRpb25Ob3RpZmljYXRpb24iOnsic3Vic2NyaXB0aW9uSWQiOiJzdWItaWQiLCJwdXJjaGFzZVRva2VuIjoiIiwibm90aWZpY2F0aW9uVHlwZSI6IDF9fQ=="}}`)},
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, errPurchaseTokenEmpty)
+				},
+			},
+		},
+		{
+			name:  "error_invalid_notification_type",
+			given: tcGiven{raw: []byte(`{"message":{"data":"eyJwYWNrYWdlTmFtZSI6InBhY2thZ2UubmFtZS5jb20iLCJzdWJzY3JpcHRpb25Ob3RpZmljYXRpb24iOnsic3Vic2NyaXB0aW9uSWQiOiJzdWItaWQiLCJwdXJjaGFzZVRva2VuIjoicHVyY2hhc2UtdG9rZW4iLCJub3RpZmljYXRpb25UeXBlIjogMH19"}}`)},
+			exp: exp{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, errNotificationTypeInvalid)
+				},
+			},
+		},
+		{
+			name:  "success",
+			given: tcGiven{raw: []byte(`{"message":{"data":"eyJ2ZXJzaW9uIjoidmVyc2lvbiIsInBhY2thZ2VOYW1lIjoicGFja2FnZS1uYW1lIiwic3Vic2NyaXB0aW9uTm90aWZpY2F0aW9uIjp7InZlcnNpb24iOiJ2ZXJzaW9uIiwibm90aWZpY2F0aW9uVHlwZSI6MSwicHVyY2hhc2VUb2tlbiI6InB1cmNoYXNlLXRva2VuIiwic3Vic2NyaXB0aW9uSWQiOiJzdWJzY3JpcHRpb24taWQifX0="}}`)},
+			exp: exp{
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "purchase-token",
+					Package:        "package-name",
+					SubscriptionID: "subscription-id",
+				},
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := parseDeveloperNotification(tc.given.raw)
+			tc.exp.mustErr(t, err)
+
+			should.Equal(t, tc.exp.req, actual)
+		})
+	}
+}

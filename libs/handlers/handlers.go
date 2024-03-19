@@ -76,7 +76,7 @@ func WrapError(err error, msg string, passedCode int) *AppError {
 }
 
 // RenderContent based on the header
-func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, status int) *AppError {
+func RenderContent(_ context.Context, v interface{}, w http.ResponseWriter, status int) *AppError {
 	switch w.Header().Get("content-type") {
 	case "application/json":
 		var b bytes.Buffer
