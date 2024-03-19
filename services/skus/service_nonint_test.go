@@ -805,7 +805,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "successful_case_android_leo_monnthly",
+			name: "successful_case_android_leo_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
 					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
@@ -839,7 +839,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "successful_case_android_vpn_monnthly",
+			name: "successful_case_android_vpn_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
 					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
