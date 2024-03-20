@@ -69,7 +69,7 @@ func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
 	testState := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
-			Amount:    decimal.NewFromFloat(1.0),
+			Amount:    decimal.NewFromFloat(1.3),
 			To:        "13460",
 			From:      "c6911095-ba83-4aa1-b0fb-15934568a65a",
 			Custodian: "zebpay",

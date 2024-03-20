@@ -66,12 +66,11 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			// Set backoff without changing status
 			zm.backoffFactor = zm.backoffFactor * 2
 		case zebpay.TransferNotFoundCode:
-			// The transaction was never received by zebpay. We should not have gotten into this
-			// condition unless zebpay accepted this transaction, but failed to persist the record.
-			// We'll need to retry the submission and come back around to check status, so do not
-			// SetNextState except those that get set as part of the submit function
-			err = zm.submit(ctx, entry, to)
-			return zm.transaction, err
+			// Zebpay does not have a status for this transaction. We should not have gotten into
+			// this condition unless zebpay accepted this transaction, but either failed to persist
+			// the record or have not yet finished doing so and eventually will. We just back off
+			// and try again.
+			zm.backoffFactor = zm.backoffFactor * 2
 		default:
 			if cterr != nil {
 				return zm.transaction, fmt.Errorf("failed to check transaction status: %w", err)

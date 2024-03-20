@@ -15,7 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	jose "github.com/go-jose/go-jose/v3"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -271,15 +270,10 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	// populate the access token
 	affixAccessToken(req, opts)
 
-	_, err = c.client.Do(ctx, req, resp)
+	httpResponse, err := c.client.Do(ctx, req, resp)
 	if err != nil {
 		resp.Error = err.Error()
-		var eerb *errorutils.ErrorBundle
-		if errors.As(err, &errb) {
-			if state, ok := errb.Data().(clients.HTTPState); ok {
-				resp.Code = int64(state.Status)
-			}
-		}
+		resp.Code = int64(httpResponse.StatusCode)
 	}
 
 	return resp, err
