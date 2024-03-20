@@ -274,9 +274,10 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	_, err = c.client.Do(ctx, req, resp)
 	if err != nil {
 		resp.Error = err.Error()
-		if errorBundle, ok := err.(*errorutils.ErrorBundle); ok {
-			if errorState, ok := errorBundle.Data().(clients.HTTPState); ok {
-				resp.Code = int64(errorState.Status)
+		var eerb *errorutils.ErrorBundle
+		if errors.As(err, &errb) {
+			if state, ok := errb.Data().(clients.HTTPState); ok {
+				resp.Code = int64(state.Status)
 			}
 		}
 	}
