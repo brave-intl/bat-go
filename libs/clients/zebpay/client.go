@@ -273,7 +273,9 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	httpResponse, err := c.client.Do(ctx, req, resp)
 	if err != nil {
 		resp.Error = err.Error()
-		resp.Code = int64(httpResponse.StatusCode)
+		if httpResponse != nil {
+			resp.Code = int64(httpResponse.StatusCode)
+		}
 	}
 
 	return resp, err
