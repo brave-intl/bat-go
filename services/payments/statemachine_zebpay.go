@@ -70,7 +70,8 @@ func (zm *ZebpayMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			// condition unless zebpay accepted this transaction, but failed to persist the record.
 			// We'll need to retry the submission and come back around to check status, so do not
 			// SetNextState except those that get set as part of the submit function
-			return zm.transaction, zm.submit(ctx, entry, to)
+			err = zm.submit(ctx, entry, to)
+			return zm.transaction, err
 		default:
 			if cterr != nil {
 				return zm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
