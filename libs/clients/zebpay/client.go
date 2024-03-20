@@ -118,6 +118,8 @@ const (
 	TransferSuccessCode = 2
 	// TransferFailedCode is the status code for failed transfer
 	TransferFailedCode = 3
+	// TransferNotFoundCode is the status code for transfer not found
+	TransferNotFoundCode = 404
 
 	// TransferPendingStatus is the status code for pending status
 	TransferPendingStatus = "Pending"
@@ -125,6 +127,8 @@ const (
 	TransferSuccessStatus = "Success"
 	// TransferFailedStatus is the status code for failed transfer
 	TransferFailedStatus = "Failed"
+	// TransferNotFoundStatus is the status code for transfer not found
+	TransferNotFoundStatus = "NotFound"
 )
 
 // ClientOpts are the common configuration options for the Zebpay Client
@@ -248,8 +252,10 @@ func affixAccessToken(req *http.Request, opts *ClientOpts) error {
 
 // CheckTransfer uploads the bulk payout for gemini
 func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uuid.UUID) (*CheckTransferResponse, error) {
+	resp := &CheckTransferResponse{ID: id}
 	if opts == nil {
-		return nil, errBadClientOpts
+		resp.Error = errBadClientOpts.Error()
+		return resp, errBadClientOpts
 	}
 
 	// /api/checktransferstatus/<UUID>/status
@@ -257,16 +263,19 @@ func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uui
 	urlPath := fmt.Sprintf("/api/checktransferstatus/%s/status", id.String())
 	req, err := c.client.NewRequest(ctx, "GET", urlPath, nil, nil)
 	if err != nil {
-		return nil, err
+		resp.Error = err.Error()
+		return resp, err
 	}
 
 	// populate the access token
 	affixAccessToken(req, opts)
 
-	var resp = new(CheckTransferResponse)
-	_, err = c.client.Do(ctx, req, resp)
+	httpResponse, err := c.client.Do(ctx, req, resp)
 	if err != nil {
-		return nil, fmt.Errorf("error %v encountered when checking status. response: %v", err, resp)
+		resp.Error = err.Error()
+		if httpResponse != nil {
+			resp.Code = int64(httpResponse.StatusCode)
+		}
 	}
 
 	return resp, err
