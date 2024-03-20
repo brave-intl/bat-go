@@ -172,7 +172,7 @@ func (zm *ZebpayMachine) submit(
 	}
 	if strings.ToUpper(btr.Data) != "ALL_SENT_TRANSACTIONS_ACKNOWLEDGED" {
 		// Status unknown. Fail
-		entry, err = zm.SetNextState(ctx, paymentLib.Failed)
+		entry, err := zm.SetNextState(ctx, paymentLib.Failed)
 		if err != nil {
 			return fmt.Errorf("failed to write next state: %w", err)
 		}
@@ -181,5 +181,6 @@ func (zm *ZebpayMachine) submit(
 			entry,
 		)
 	}
-	return err
+
+	return nil
 }
