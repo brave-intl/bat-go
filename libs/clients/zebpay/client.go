@@ -253,8 +253,7 @@ func affixAccessToken(req *http.Request, opts *ClientOpts) error {
 
 // CheckTransfer uploads the bulk payout for gemini
 func (c *HTTPClient) CheckTransfer(ctx context.Context, opts *ClientOpts, id uuid.UUID) (*CheckTransferResponse, error) {
-	var resp = new(CheckTransferResponse)
-	resp.ID = id
+	resp := &CheckTransferResponse{ID: id}
 	if opts == nil {
 		resp.Error = errBadClientOpts.Error()
 		return resp, errBadClientOpts
