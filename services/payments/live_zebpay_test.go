@@ -31,6 +31,9 @@ import (
 TestLiveZebpayStateMachineHappyPathTransitions tests for correct state progression from
 Initialized to Paid. Additionally, Paid status should be final and Failed status should
 be permanent.
+NOTICE: Because this test runs against the Zebpay staging environment, transaction details need to
+be changed for each run. Prior transactions will exist in some state or other in Zebpay and that
+breaks some tests.
 */
 func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
@@ -66,7 +69,7 @@ func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
 	testState := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
-			Amount:    decimal.NewFromFloat(1.1),
+			Amount:    decimal.NewFromFloat(1.4),
 			To:        "13460",
 			From:      "c6911095-ba83-4aa1-b0fb-15934568a65a",
 			Custodian: "zebpay",
@@ -125,11 +128,12 @@ func TestLiveZebpayStateMachineHappyPathTransitions(t *testing.T) {
 	zebpayStateMachine.setTransaction(&testState)
 	timeout, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
 	defer cancel()
-	// For this test, we will return Pending status forever, so we need it to time out
+	// For this test, we could return Pending status forever, so we need it to time out
 	// in order to capture and verify that pending status.
 	newTransaction, err = Drive(timeout, &zebpayStateMachine)
-	// The only tolerable error is a timeout, and that's what we expect here
-	must.ErrorIs(t, err, context.DeadlineExceeded)
+	// The only tolerable error is a timeout, but if we get one here it's probably indicative of a
+	// problem and we should look into it.
+	must.Equal(t, nil, err)
 	should.Equal(t, paymentLib.Pending, newTransaction.Status)
 
 	// Should transition transaction into the Paid state
