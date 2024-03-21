@@ -25,16 +25,17 @@ type AppError struct {
 }
 
 // Error makes app error an error
-func (e AppError) Error() string {
-	msg := fmt.Sprintf("error: %s", e.Message)
+func (e *AppError) Error() string {
+	msg := "error: " + e.Message
 	if e.Cause != nil {
-		msg = fmt.Sprintf("%s: %s", msg, e.Cause)
+		msg = msg + ": " + e.Cause.Error()
 	}
+
 	return msg
 }
 
 // ServeHTTP responds according to the passed AppError
-func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (e *AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(e.Code)
 	if err := json.NewEncoder(w).Encode(e); err != nil {
@@ -98,18 +99,6 @@ func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, st
 // WrapValidationError from govalidator
 func WrapValidationError(err error) *AppError {
 	return ValidationError("request body", govalidator.ErrorsByField(err))
-}
-
-// CodedValidationError creates an error to communicate a bad request was formed
-func CodedValidationError(message string, errorCode string, validationErrors interface{}) *AppError {
-	return &AppError{
-		Message:   "Error validating " + message,
-		ErrorCode: errorCode,
-		Code:      http.StatusBadRequest,
-		Data: map[string]interface{}{
-			"validationErrors": validationErrors,
-		},
-	}
 }
 
 // ValidationError creates an error to communicate a bad request was formed

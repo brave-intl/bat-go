@@ -11,8 +11,10 @@ import (
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/go-chi/chi"
 )
 
@@ -167,12 +169,47 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 	}
 }
 
-// GetWalletV4 is the same as get wallet v3, but we are now requiring http signatures for get wallet requests
-func GetWalletV4(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return GetWalletV3(w, r)
-}
-
 // GetUpholdWalletBalanceV4 produces an http handler for the service s which handles balance inquiries of uphold wallets
 func GetUpholdWalletBalanceV4(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return GetUpholdWalletBalanceV3(w, r)
+}
+
+func GetWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var ctx = r.Context()
+
+		l := logging.Logger(ctx, "wallet")
+
+		var id inputs.ID
+		if err := inputs.DecodeAndValidateString(ctx, &id, chi.URLParam(r, "paymentID")); err != nil {
+			l.Warn().Err(err).Str("paymentID", id.String()).Msg("failed to decode and validate paymentID from url")
+			return handlers.ValidationError("Error validating paymentID url parameter", map[string]interface{}{
+				"paymentId": err.Error(),
+			})
+		}
+
+		paymentID := *id.UUID()
+
+		info, err := s.Datastore.GetWallet(ctx, paymentID)
+		if err != nil {
+			l.Error().Err(err).Str("paymentID", id.String()).Msg("error getting wallet")
+			return handlers.WrapError(err, "error getting wallet from storage", http.StatusInternalServerError)
+		}
+
+		if info == nil {
+			l.Info().Interface("paymentID", paymentID).Msg("wallet not found")
+			return handlers.WrapError(err, "no such wallet", http.StatusNotFound)
+		}
+
+		allow, err := s.allowListRepo.GetAllowListEntry(ctx, s.Datastore.RawDB(), paymentID)
+		if err != nil && !errors.Is(err, model.ErrNotFound) {
+			return handlers.WrapError(err, "error getting allow list entry from storage", http.StatusInternalServerError)
+		}
+
+		isSelfCustAvail := allow.IsAllowed(paymentID)
+
+		resp := infoToResponseV4(info, isSelfCustAvail)
+
+		return handlers.RenderContent(ctx, resp, w, http.StatusOK)
+	}
 }

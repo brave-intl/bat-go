@@ -88,6 +88,11 @@ func init() {
 		Bind("disable-zebpay-linking").
 		Env("DISABLE_ZEBPAY_LINKING")
 
+	flagBuilder.Flag().Bool("disable-solana-linking", false,
+		"disable address linking for solana").
+		Bind("disable-solana-linking").
+		Env("DISABLE_SOLANA_LINKING")
+
 	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
 		"brave vg deposit destination promotion id").
 		Bind("brave-transfer-promotion-ids").
@@ -350,7 +355,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
 	ctx, walletService = wallet.SetupService(ctx)
-	r = wallet.RegisterRoutes(ctx, walletService, r)
+	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
+	if len(dappAO) == 0 {
+		logger.Panic().Msg("dapp origin env missing")
+	}
+	r = wallet.RegisterRoutes(ctx, walletService, r, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO))
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
@@ -387,9 +396,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	// add runnable jobs:
 	jobs = append(jobs, grantService.Jobs()...)
-
-	// add runnable jobs:
-	jobs = append(jobs, promotionService.Jobs()...)
 
 	// vbat expired var from env
 	vbatExpires, err := time.Parse(time.RFC3339, "2023-11-02T00:00:00Z") // default 11/2/23
@@ -488,7 +494,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 				"/",
 				middleware.InstrumentHandler(
 					"CreateOrderNew",
-					corsMwrPost(handlers.AppHandler(orderh.Create)),
+					corsMwrPost(handlers.AppHandler(orderh.CreateNew)),
 				),
 			)
 		} else {
@@ -615,6 +621,7 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.DisableUpholdLinkingCTXKey, viper.GetBool("disable-uphold-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, viper.GetBool("disable-gemini-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, viper.GetBool("disable-bitflyer-linking"))
+	ctx = context.WithValue(ctx, appctx.DisableSolanaLinkingCTXKey, viper.GetBool("disable-solana-linking"))
 
 	// stripe variables
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
@@ -710,6 +717,7 @@ func newSrvStatusFromCtx(ctx context.Context) map[string]any {
 	g, _ := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)
 	bf, _ := ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)
 	zp, _ := ctx.Value(appctx.DisableZebPayLinkingCTXKey).(bool)
+	s, _ := ctx.Value(appctx.DisableSolanaLinkingCTXKey).(bool)
 
 	result := map[string]interface{}{
 		"wallet": map[string]bool{
@@ -717,6 +725,7 @@ func newSrvStatusFromCtx(ctx context.Context) map[string]any {
 			"gemini":   !g,
 			"bitflyer": !bf,
 			"zebpay":   !zp,
+			"solana":   !s,
 		},
 	}
 

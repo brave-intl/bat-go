@@ -60,6 +60,33 @@ func TestCollectValidationErrors_CreateOrderRequestNew(t *testing.T) {
 		},
 
 		{
+			name: "no_errors_02_no_payment_methods",
+			given: &model.CreateOrderRequestNew{
+				Email:    "you@example.com",
+				Currency: "USD",
+				StripeMetadata: &model.OrderStripeMetadata{
+					SuccessURI: "https://example.com/success",
+					CancelURI:  "https://example.com/cancel",
+				},
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                1,
+						SKU:                     "sku",
+						Location:                "location",
+						Description:             "description",
+						CredentialType:          "credential_type",
+						CredentialValidDuration: "P1M",
+						StripeMetadata: &model.ItemStripeMetadata{
+							ProductID: "product_id",
+							ItemID:    "item_id",
+						},
+					},
+				},
+			},
+			exp: tcExpected{noErr: true},
+		},
+
+		{
 			name: "one_field",
 			given: &model.CreateOrderRequestNew{
 				Email:    "you_example.com",
@@ -134,7 +161,7 @@ func TestCollectValidationErrors_CreateOrderRequestNew(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			verr := valid.StructCtx(context.TODO(), tc.given)
+			verr := valid.StructCtx(context.Background(), tc.given)
 			must.Equal(t, tc.exp.noErr, verr == nil)
 
 			act, ok := collectValidationErrors(verr)

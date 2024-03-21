@@ -65,7 +65,7 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 
 			if len(r.Header.Get("Signature")) == 0 {
 				logger.Warn().Msg("signature must be present for signed middleware")
-				ae := handlers.AppError{
+				ae := &handlers.AppError{
 					Cause:   errMissingSignature,
 					Message: "signature must be present for signed middleware",
 					Code:    http.StatusUnauthorized,
@@ -78,13 +78,50 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to verify request")
-				ae := handlers.AppError{
+				ae := &handlers.AppError{
 					Cause:   errInvalidSignature,
 					Message: "request signature verification failure",
 					Code:    http.StatusForbidden,
 				}
 				ae.ServeHTTP(w, r)
 				return
+			}
+
+			if contains.Str(verifier.SignatureParams.Headers, "date") {
+				// Date: Wed, 21 Oct 2015 07:28:00 GMT
+				dateStr := r.Header.Get("date")
+				date, err := time.Parse(time.RFC1123, dateStr)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to parse the date header")
+					ae := &handlers.AppError{
+						Cause:   errInvalidHeader,
+						Message: "Invalid date header",
+						Code:    http.StatusBadRequest,
+					}
+					ae.ServeHTTP(w, r)
+					return
+				}
+
+				if time.Now().Add(10 * time.Minute).Before(date) {
+					logger.Error().Err(err).Msg("date is invalid")
+					ae := &handlers.AppError{
+						Cause:   errInvalidHeader,
+						Message: "date is invalid",
+						Code:    http.StatusTooEarly,
+					}
+					ae.ServeHTTP(w, r)
+					return
+				}
+				if time.Now().Add(-10 * time.Minute).After(date) {
+					logger.Error().Err(err).Msg("date is invalid")
+					ae := &handlers.AppError{
+						Cause:   errInvalidHeader,
+						Message: "date is invalid",
+						Code:    http.StatusRequestTimeout,
+					}
+					ae.ServeHTTP(w, r)
+					return
+				}
 			}
 
 			ctx = context.WithValue(ctx, httpSignedKeyID{}, keyID)

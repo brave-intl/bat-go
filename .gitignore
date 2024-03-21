@@ -37,6 +37,7 @@ share-0.gpg
 
 fetch-quote.json
 main/main
-zebpay_test.env
-zebpay_stage.pem
 prepare-*response.log
+
+go.work
+go.work.sum

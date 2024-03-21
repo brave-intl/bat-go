@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
@@ -63,7 +64,7 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	datastore.Datastore
-	LinkWallet(ctx context.Context, id string, providerID string, providerLinkingID uuid.UUID, depositProvider, country string) error
+	LinkWallet(ctx context.Context, id string, providerID string, providerLinkingID uuid.UUID, depositProvider string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	HasPriorLinking(ctx context.Context, walletID uuid.UUID, providerLinkingID uuid.UUID) (bool, error)
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
@@ -194,7 +195,9 @@ func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *walletutils.Info) 
 	return nil
 }
 
-// GetWallet by ID
+// TODO(clD11): address GetWallet in wallet refactor.
+
+// GetWallet retrieves a wallet by its walletID, if no wallet is found then nil is returned.
 func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error) {
 	statement := `
 	select
@@ -421,6 +424,10 @@ func getEnvMaxCards(custodian string) int {
 		if v, err := strconv.Atoi(os.Getenv("ZEBPAY_WALLET_LINKING_LIMIT")); err == nil {
 			return v
 		}
+	case "solana":
+		if v, err := strconv.Atoi(os.Getenv("SOLANA_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
 	}
 	return 4
 }
@@ -553,21 +560,10 @@ var (
 )
 
 // LinkWallet links a rewards wallet to the given deposit provider.
-func (pg *Postgres) LinkWallet(ctx context.Context, id string, userDepositDestination string, providerLinkingID uuid.UUID, depositProvider, country string) error {
+func (pg *Postgres) LinkWallet(ctx context.Context, id string, userDepositDestination string, providerLinkingID uuid.UUID, depositProvider string) error {
 	walletID, err := uuid.FromString(id)
 	if err != nil {
 		return fmt.Errorf("invalid wallet id, not uuid: %w", err)
-	}
-
-	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
-	if !ok {
-		return ErrNoReputationClient
-	}
-
-	// TODO(clD11): We no longer need to act on the response and only require a successful call to reputation to
-	//  continue linking. As part of the wallet refactor we should clean this up.
-	if _, _, err := repClient.IsLinkingReputable(ctx, walletID, country); err != nil {
-		return fmt.Errorf("failed to check wallet rep: %w", err)
 	}
 
 	ctx, tx, rollback, commit, err := getTx(ctx, pg)
@@ -600,9 +596,15 @@ func (pg *Postgres) LinkWallet(ctx context.Context, id string, userDepositDestin
 	}
 
 	if directVerifiedWalletEnable {
+		repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+		if !ok {
+			return ErrNoReputationClient
+		}
+
 		op := func() (interface{}, error) {
 			return nil, repClient.UpdateReputationSummary(ctx, walletID.String(), true)
 		}
+
 		if _, err := backoff.Retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors)); err != nil {
 			return fmt.Errorf("failed to update verified wallet: %w", err)
 		}
@@ -616,17 +618,29 @@ func (pg *Postgres) LinkWallet(ctx context.Context, id string, userDepositDestin
 	return nil
 }
 
-// CustodianLink - representation of wallet_custodian record
+// TODO(clD11): CustodianLink represent a wallet_custodian. Review during wallet refactor
+
+// CustodianLink representation a wallet_custodian record.
 type CustodianLink struct {
-	WalletID           *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
-	Custodian          string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
-	CreatedAt          time.Time  `json:"created_at" db:"created_at" valid:"-"`
-	UpdatedAt          *time.Time `json:"updated_at" db:"updated_at" valid:"-"`
-	LinkedAt           time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
-	DisconnectedAt     *time.Time `json:"disconnected_at" db:"disconnected_at" valid:"-"`
-	DepositDestination string     `json:"deposit_destination" db:"deposit_destination" valid:"-"`
-	LinkingID          *uuid.UUID `json:"linking_id" db:"linking_id" valid:"uuid"`
-	UnlinkedAt         *time.Time `json:"unlinked_at" db:"unlinked_at" valid:"-"`
+	WalletID       *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
+	Custodian      string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at" valid:"-"`
+	UpdatedAt      *time.Time `json:"updated_at" db:"updated_at" valid:"-"`
+	LinkedAt       time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
+	DisconnectedAt *time.Time `json:"disconnected_at" db:"disconnected_at" valid:"-"`
+	LinkingID      *uuid.UUID `json:"linking_id" db:"linking_id" valid:"uuid"`
+	UnlinkedAt     *time.Time `json:"unlinked_at" db:"unlinked_at" valid:"-"`
+}
+
+// TODO(clD11): Wallet Refactor. These should not be nullable, fix pointers and raname fields for consistency.
+
+func NewSolanaCustodialLink(walletID uuid.UUID, depositDestination string) *CustodianLink {
+	const depositProviderSolana = "solana"
+	return &CustodianLink{
+		WalletID:  &walletID,
+		LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, depositDestination)),
+		Custodian: depositProviderSolana,
+	}
 }
 
 // GetWalletIDString - get string version of the WalletID
@@ -716,16 +730,10 @@ func commitFn(ctx context.Context, tx *sqlx.Tx) func() error {
 
 // getTx will get or create a tx on the context, if created hands back rollback and commit functions
 func getTx(ctx context.Context, datastore Datastore) (context.Context, *sqlx.Tx, func(), func() error, error) {
-	// create a sublogger
-	sublogger := logger(ctx)
-	sublogger.Debug().Msg("getting tx from context")
-	// get tx
 	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
 	if !noContextTx {
-		sublogger.Debug().Msg("no tx in context")
 		tx, err := createTx(ctx, datastore)
 		if err != nil || tx == nil {
-			sublogger.Error().Err(err).Msg("error creating tx")
 			return ctx, nil, func() {}, func() error { return nil }, fmt.Errorf("failed to create tx: %w", err)
 		}
 		ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
@@ -861,8 +869,19 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		return fmt.Errorf("failed to get linking id from custodian record: %w", err)
 	}
 
-	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {
-		// check if the member matches the associated member
+	// TODO(clD11): WR. The relinking check below only considers the currently linked wallet and not
+	//  the custodian. We can combine/refactor these checks for both linkings, custodians and limits.
+
+	if err := validateCustodianLinking(ctx, pg, *cl.WalletID, cl.Custodian); err != nil {
+		if errors.Is(err, errCustodianLinkMismatch) {
+			return errCustodianLinkMismatch
+		}
+		return handlers.WrapError(err, "failed to check linking mismatch", http.StatusInternalServerError)
+	}
+
+	// Relinking.
+	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) { // if not a new wallet
+		// check if the currently linked wallet matches the proposed linking.
 		if !uuid.Equal(*cl.LinkingID, existingLinkingID) {
 			return handlers.WrapError(errors.New("wallets do not match"), "mismatched provider accounts", http.StatusForbidden)
 		}
@@ -1015,20 +1034,33 @@ func (pg *Postgres) SendVerifiedWalletOutbox(ctx context.Context, client reputat
 	return true, nil
 }
 
-// helper to make logger easier
+func validateCustodianLinking(ctx context.Context, storage Datastore, walletID uuid.UUID, depositProvider string) error {
+	c, err := storage.GetCustodianLinkByWalletID(ctx, walletID)
+	if err != nil && !errors.Is(err, model.ErrNoWalletCustodian) {
+		return err
+	}
+
+	// if there are no instances of wallet custodian then it is
+	// considered a new linking and therefore valid.
+	if c == nil {
+		return nil
+	}
+
+	if !strings.EqualFold(c.Custodian, depositProvider) {
+		return errCustodianLinkMismatch
+	}
+
+	return nil
+}
+
 func logger(ctx context.Context) *zerolog.Logger {
-	// get logger
 	return logging.Logger(ctx, "wallet")
 }
 
 // helper to create a tx
-func createTx(ctx context.Context, datastore Datastore) (tx *sqlx.Tx, err error) {
-	logger(ctx).Debug().
-		Msg("creating transaction")
+func createTx(_ context.Context, datastore Datastore) (tx *sqlx.Tx, err error) {
 	tx, err = datastore.RawDB().Beginx()
 	if err != nil {
-		logger(ctx).Error().Err(err).
-			Msg("error creating transaction")
 		return tx, fmt.Errorf("failed to create transaction: %w", err)
 	}
 	return tx, nil
@@ -1042,4 +1074,8 @@ func waitAndLockTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
 		return fmt.Errorf("failed to acquire tx lock id %s: %w", id.String(), err)
 	}
 	return nil
+}
+
+func ptrFromUUID(u uuid.UUID) *uuid.UUID {
+	return &u
 }

@@ -19,8 +19,6 @@ import (
 
 const (
 	reqBodyLimit10MB = 10 << 20
-
-	errSomethingWentWrong model.Error = "something went wrong"
 )
 
 type orderService interface {
@@ -116,7 +114,7 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 			return handlers.WrapError(err, "Invalid order data supplied", http.StatusUnprocessableEntity)
 		}
 
-		return handlers.WrapError(errSomethingWentWrong, "Couldn't finish creating order", http.StatusInternalServerError)
+		return handlers.WrapError(model.ErrSomethingWentWrong, "Couldn't finish creating order", http.StatusInternalServerError)
 	}
 
 	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
