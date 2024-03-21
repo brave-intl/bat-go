@@ -47,11 +47,11 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/skus/handler"
-	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
@@ -345,7 +345,7 @@ func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
 	err := suite.service.Datastore.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
-	handler := HandleIOSWebhook(suite.service)
+	handler := handleIOSWebhook(suite.service)
 
 	// create a jws message to send
 	body := []byte{}
@@ -373,13 +373,13 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
-	// overwrite the receipt validation function for this test
-	receiptValidationFns = map[Vendor]func(context.Context, interface{}) (string, error){
-		appleVendor: validateIOSReceipt,
-		googleVendor: func(ctx context.Context, v interface{}) (string, error) {
+	suite.service.vendorReceiptValid = &mockVendorReceiptValidator{
+		fnValidateGoogle: func(ctx context.Context, req model.ReceiptRequest) (string, error) {
 			return "my external id", nil
 		},
 	}
+
+	suite.service.gcpValidator = &mockGcpRequestValidator{}
 
 	handler := HandleAndroidWebhook(suite.service)
 
@@ -1889,4 +1889,36 @@ func newCORSOptsEnv() cors.Options {
 	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
 
 	return NewCORSOpts(origins, dbg)
+}
+
+type mockVendorReceiptValidator struct {
+	fnValidateApple  func(ctx context.Context, req model.ReceiptRequest) (string, error)
+	fnValidateGoogle func(ctx context.Context, req model.ReceiptRequest) (string, error)
+}
+
+func (v *mockVendorReceiptValidator) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	if v.fnValidateApple == nil {
+		return "apple_defaul", nil
+	}
+
+	return v.fnValidateApple(ctx, req)
+}
+
+func (v *mockVendorReceiptValidator) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	if v.fnValidateGoogle == nil {
+		return "google_default", nil
+	}
+
+	return v.fnValidateGoogle(ctx, req)
+}
+
+type mockGcpRequestValidator struct {
+	fnValidate func(ctx context.Context, r *http.Request) error
+}
+
+func (m *mockGcpRequestValidator) validate(ctx context.Context, r *http.Request) error {
+	if m.fnValidate == nil {
+		return nil
+	}
+	return m.fnValidate(ctx, r)
 }

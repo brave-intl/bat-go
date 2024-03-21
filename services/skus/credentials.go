@@ -37,12 +37,13 @@ var (
 	ErrOrderHasNoItems   model.Error = "order has no items"
 	ErrCredsAlreadyExist model.Error = "credentials already exist"
 
-	errInvalidIssuerResp      model.Error = "invalid issuer response"
-	errInvalidNCredsSingleUse model.Error = "submitted more blinded creds than quantity of order item"
-	errInvalidNCredsTlv2      model.Error = "submitted more blinded creds than allowed for order"
-	errUnsupportedCredType    model.Error = "unsupported credential type"
-	errItemDoesNotExist       model.Error = "order item does not exist for order"
-	errCredsAlreadySubmitted  model.Error = "credentials already submitted"
+	errInvalidIssuerResp             model.Error = "invalid issuer response"
+	errInvalidNCredsSingleUse        model.Error = "submitted more blinded creds than quantity of order item"
+	errInvalidNCredsTlv2             model.Error = "submitted more blinded creds than allowed for order"
+	errUnsupportedCredType           model.Error = "unsupported credential type"
+	errItemDoesNotExist              model.Error = "order item does not exist for order"
+	errCredsAlreadySubmitted         model.Error = "credentials already submitted"
+	errCredsAlreadySubmittedMismatch model.Error = "credentials already submitted with a different request"
 
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
 	retryPolicy      = retrypolicy.DefaultRetry
@@ -254,7 +255,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return errItemDoesNotExist
 	}
 
-	if err := s.doCredentialsExist(ctx, orderItem, blindedCreds); err != nil {
+	if err := s.doCredentialsExist(ctx, requestID, orderItem, blindedCreds); err != nil {
 		if errors.Is(err, errCredsAlreadySubmitted) {
 			return nil
 		}
@@ -307,7 +308,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 	return nil
 }
 
-func (s *Service) doCredentialsExist(ctx context.Context, item *model.OrderItem, blindedCreds []string) error {
+func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, blindedCreds []string) error {
 	switch item.CredentialType {
 	case timeLimitedV2:
 		// NOTE: This creates a possible race to submit between clients.
@@ -318,26 +319,30 @@ func (s *Service) doCredentialsExist(ctx context.Context, item *model.OrderItem,
 		// As a result, one client will successfully unblind the credentials and
 		// the others will fail.
 
-		return s.doTLV2Exist(ctx, item, blindedCreds)
+		return s.doTLV2Exist(ctx, requestID, item, blindedCreds)
 	default:
 		return s.doCredsExist(ctx, item)
 	}
 }
 
-func (s *Service) doTLV2Exist(ctx context.Context, item *model.OrderItem, blindedCreds []string) error {
+func (s *Service) doTLV2Exist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, blindedCreds []string) error {
 	if item.CredentialType != timeLimitedV2 {
 		return errUnsupportedCredType
 	}
 
 	// Check TLV2 to see if we have credentials signed that match incoming blinded tokens.
-	alreadySubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, blindedCreds...)
+	credsSubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, requestID, blindedCreds...)
 	if err != nil {
 		return fmt.Errorf("error validating credentials exist for order item: %w", err)
 	}
 
-	if alreadySubmitted {
+	if credsSubmitted.AlreadySubmitted {
 		// No need to create order credentials, since these are already submitted.
 		return errCredsAlreadySubmitted
+	}
+	if credsSubmitted.Mismatch {
+		// conflict because those credentials were submitted with a different request id
+		return errCredsAlreadySubmittedMismatch
 	}
 
 	// Check if we have signed credentials for this order item.

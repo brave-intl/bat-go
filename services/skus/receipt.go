@@ -15,8 +15,12 @@ import (
 
 	"github.com/awa/go-iap/appstore"
 	"github.com/awa/go-iap/playstore"
+	"google.golang.org/api/androidpublisher/v3"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
@@ -24,22 +28,26 @@ const (
 	androidPaymentStatePaid
 	androidPaymentStateTrial
 	androidPaymentStatePendingDeferred
+)
 
+const (
 	androidCancelReasonUser      int64 = 0
 	androidCancelReasonSystem    int64 = 1
 	androidCancelReasonReplaced  int64 = 2
 	androidCancelReasonDeveloper int64 = 3
+
+	purchasePendingErrCode       = "purchase_pending"
+	purchaseDeferredErrCode      = "purchase_deferred"
+	purchaseStatusUnknownErrCode = "purchase_status_unknown"
+	purchaseFailedErrCode        = "purchase_failed"
+	purchaseValidationErrCode    = "validation_failed"
+)
+
+const (
+	errNoInAppTx model.Error = "no in app info in response"
 )
 
 var (
-	receiptValidationFns = map[Vendor]func(context.Context, interface{}) (string, error){
-		appleVendor:  validateIOSReceipt,
-		googleVendor: validateAndroidReceipt,
-	}
-	iosClient              *appstore.Client
-	androidClient          *playstore.Client
-	errClientMisconfigured = errors.New("misconfigured client")
-
 	errPurchaseUserCanceled      = errors.New("purchase is canceled by user")
 	errPurchaseSystemCanceled    = errors.New("purchase is canceled by google playstore")
 	errPurchaseReplacedCanceled  = errors.New("purchase is canceled and replaced")
@@ -51,12 +59,6 @@ var (
 	errPurchaseFailed        = errors.New("purchase failed")
 
 	errPurchaseExpired = errors.New("purchase expired")
-
-	purchasePendingErrCode       = "purchase_pending"
-	purchaseDeferredErrCode      = "purchase_deferred"
-	purchaseStatusUnknownErrCode = "purchase_status_unknown"
-	purchaseFailedErrCode        = "purchase_failed"
-	purchaseValidationErrCode    = "validation_failed"
 )
 
 type dumpTransport struct{}
@@ -81,109 +83,116 @@ func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return resp, rtErr
 }
 
-func initClients(ctx context.Context) {
-
-	var logClient = &http.Client{
-		Transport: &dumpTransport{},
-	}
-
-	logger := logging.Logger(ctx, "skus").With().Str("func", "initClients").Logger()
-	iosClient = appstore.New()
-
-	if jsonKey, ok := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte); ok {
-		var err error
-		androidClient, err = playstore.NewWithClient(jsonKey, logClient)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to initialize android client")
-		}
-	}
+type appStoreVerifier interface {
+	Verify(ctx context.Context, req appstore.IAPRequest, result interface{}) error
 }
 
-// validateIOSReceipt - validate apple receipt with their apis
-func validateIOSReceipt(ctx context.Context, receipt interface{}) (string, error) {
-	logger := logging.Logger(ctx, "skus").With().Str("func", "validateIOSReceipt").Logger()
+type playStoreVerifier interface {
+	VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+}
 
-	// get the shared key from the context
+type receiptVerifier struct {
+	appStoreCl  appStoreVerifier
+	playStoreCl playStoreVerifier
+}
+
+func newReceiptVerifier(cl *http.Client, playKey []byte) (*receiptVerifier, error) {
+	result := &receiptVerifier{
+		appStoreCl: appstore.NewWithClient(cl),
+	}
+
+	if playKey != nil && len(playKey) != 0 {
+		gpCl, err := playstore.NewWithClient(playKey, cl)
+		if err != nil {
+			return nil, err
+		}
+
+		result.playStoreCl = gpCl
+	}
+
+	return result, nil
+}
+
+// validateApple validates Apple App Store receipt.
+func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	l := logging.Logger(ctx, "skus").With().Str("func", "validateReceiptApple").Logger()
+
 	sharedKey, sharedKeyOK := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
 
-	if iosClient != nil {
-		// handle v1 receipt type
-		if v, ok := receipt.(SubmitReceiptRequestV1); ok {
-			req := appstore.IAPRequest{
-				ReceiptData:            v.Blob,
-				ExcludeOldTransactions: true,
-			}
-			if sharedKeyOK && len(sharedKey) > 0 {
-				req.Password = sharedKey
-			}
-			resp := &appstore.IAPResponse{}
-			if err := iosClient.Verify(ctx, req, resp); err != nil {
-				logger.Error().Err(err).Msg("failed to verify receipt")
-				return "", fmt.Errorf("failed to verify receipt: %w", err)
-			}
-			logger.Debug().Msg(fmt.Sprintf("%+v", resp))
-			// get the transaction id back
-			if len(resp.Receipt.InApp) < 1 {
-				logger.Error().Msg("failed to verify receipt, no in app info")
-				return "", fmt.Errorf("failed to verify receipt, no in app info in response")
-			}
-			return resp.Receipt.InApp[0].OriginalTransactionID, nil
-		}
+	asreq := appstore.IAPRequest{
+		ReceiptData:            req.Blob,
+		ExcludeOldTransactions: true,
 	}
-	logger.Error().Msg("client is not configured")
-	return "", errClientMisconfigured
+
+	if sharedKeyOK && len(sharedKey) > 0 {
+		asreq.Password = sharedKey
+	}
+
+	resp := &appstore.IAPResponse{}
+	if err := v.appStoreCl.Verify(ctx, asreq, resp); err != nil {
+		l.Error().Err(err).Msg("failed to verify receipt")
+
+		return "", fmt.Errorf("failed to verify receipt: %w", err)
+	}
+
+	l.Debug().Msg(fmt.Sprintf("%+v", resp))
+
+	if len(resp.Receipt.InApp) < 1 {
+		l.Error().Msg("failed to verify receipt: no in app info")
+		return "", errNoInAppTx
+	}
+
+	return resp.Receipt.InApp[0].OriginalTransactionID, nil
 }
 
-// validateAndroidReceipt - validate android receipt with their apis
-func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, error) {
-	logger := logging.Logger(ctx, "skus").With().Str("func", "validateAndroidReceipt").Logger()
-	if androidClient != nil {
-		if v, ok := receipt.(SubmitReceiptRequestV1); ok {
-			logger.Debug().Str("receipt", fmt.Sprintf("%+v", v)).Msg("about to verify subscription")
-			// handle v1 receipt type
-			resp, err := androidClient.VerifySubscription(ctx, v.Package, v.SubscriptionID, v.Blob)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to verify subscription")
-				return "", errPurchaseFailed
-			}
+// validateGoogle validates Google Store receipt.
+func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	l := logging.Logger(ctx, "skus").With().Str("func", "validateReceiptGoogle").Logger()
 
-			// is order expired?
-			if time.Unix(0, resp.ExpiryTimeMillis*int64(time.Millisecond)).Before(time.Now()) {
-				return "", errPurchaseExpired
-			}
+	l.Debug().Str("receipt", fmt.Sprintf("%+v", req)).Msg("about to verify subscription")
 
-			logger.Debug().Msgf("resp: %+v", resp)
-			if resp.PaymentState != nil {
-				// check that the order was paid
-				switch *resp.PaymentState {
-				case androidPaymentStatePaid, androidPaymentStateTrial:
-					break
-				case androidPaymentStatePending:
-					// is there a cancel reason?
-					switch resp.CancelReason {
-					case androidCancelReasonUser:
-						return "", errPurchaseUserCanceled
-					case androidCancelReasonSystem:
-						return "", errPurchaseSystemCanceled
-					case androidCancelReasonReplaced:
-						return "", errPurchaseReplacedCanceled
-					case androidCancelReasonDeveloper:
-						return "", errPurchaseDeveloperCanceled
-					}
-					return "", errPurchasePending
-				case androidPaymentStatePendingDeferred:
-					return "", errPurchaseDeferred
-				default:
-					return "", errPurchaseStatusUnknown
-				}
-				return v.Blob, nil
-			}
-			logger.Error().Err(err).Msg("failed to verify subscription: no payment state")
-			return "", errPurchaseFailed
-		}
+	resp, err := v.playStoreCl.VerifySubscription(ctx, req.Package, req.SubscriptionID, req.Blob)
+	if err != nil {
+		l.Error().Err(err).Msg("failed to verify subscription")
+		return "", errPurchaseFailed
 	}
-	logger.Error().Msg("client is not configured")
-	return "", errClientMisconfigured
+
+	// Check order expiration.
+	if time.Unix(0, resp.ExpiryTimeMillis*int64(time.Millisecond)).Before(time.Now()) {
+		return "", errPurchaseExpired
+	}
+
+	l.Debug().Msgf("resp: %+v", resp)
+
+	if resp.PaymentState == nil {
+		l.Error().Err(err).Msg("failed to verify subscription: no payment state")
+		return "", errPurchaseFailed
+	}
+
+	// Check that the order was paid.
+	switch *resp.PaymentState {
+	case androidPaymentStatePaid, androidPaymentStateTrial:
+		return req.Blob, nil
+
+	case androidPaymentStatePending:
+		// Check for cancel reason.
+		switch resp.CancelReason {
+		case androidCancelReasonUser:
+			return "", errPurchaseUserCanceled
+		case androidCancelReasonSystem:
+			return "", errPurchaseSystemCanceled
+		case androidCancelReasonReplaced:
+			return "", errPurchaseReplacedCanceled
+		case androidCancelReasonDeveloper:
+			return "", errPurchaseDeveloperCanceled
+		}
+		return "", errPurchasePending
+
+	case androidPaymentStatePendingDeferred:
+		return "", errPurchaseDeferred
+	default:
+		return "", errPurchaseStatusUnknown
+	}
 }
 
 // get the public key from the jws header

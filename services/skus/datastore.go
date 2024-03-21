@@ -80,7 +80,7 @@ type Datastore interface {
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
-	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
+	AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
 	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -97,7 +97,6 @@ type Datastore interface {
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
 	AppendOrderMetadataInt64(context.Context, *uuid.UUID, string, int64) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
-	ExternalIDExists(context.Context, string) (bool, error)
 }
 
 type orderStore interface {
@@ -530,10 +529,6 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 	return true, sessID, nil
 }
 
-func (pg *Postgres) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
-	return pg.orderRepo.HasExternalID(ctx, pg.RawDB(), externalID)
-}
-
 // IsStripeSub reports whether the order is associated with a stripe subscription, if true, subscription id is returned.
 //
 // TODO(pavelb): This is a piece of business logic that leaked to the storage layer.
@@ -950,24 +945,40 @@ type TimeAwareSubIssuedCreds struct {
 	RequestID    string                    `json:"-" db:"request_id"`
 }
 
-func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error) {
+type AreTimeLimitedV2CredsSubmittedResult struct {
+	AlreadySubmitted bool `db:"already_submitted"`
+	Mismatch         bool `db:"mismatch"`
+}
+
+func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
+	return areTimeLimitedV2CredsSubmitted(ctx, pg.RawDB(), requestID, blindedCreds...)
+}
+
+type getContext interface {
+	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+}
+
+func areTimeLimitedV2CredsSubmitted(ctx context.Context, dbi getContext, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
+	var result = AreTimeLimitedV2CredsSubmittedResult{}
+
 	if len(blindedCreds) < 1 {
-		return false, errors.New("invalid parameter to tlv2 creds signed")
+		return result, errors.New("invalid parameter to tlv2 creds signed")
 	}
 
-	query := `
+	const query = `
 		select exists(
 			select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1
-		)
+		) as already_submitted,
+		exists(
+			select 1 from time_limited_v2_order_creds where blinded_creds->>0 != $1 and request_id = $2
+		) as mismatch
 	`
-
-	var alreadySubmitted bool
-	err := pg.RawDB().Get(&alreadySubmitted, query, blindedCreds[0])
+	err := dbi.GetContext(ctx, &result, query, blindedCreds[0], requestID)
 	if err != nil {
-		return false, err
+		return result, err
 	}
 
-	return alreadySubmitted, nil
+	return result, nil
 }
 
 // GetTimeLimitedV2OrderCredsByOrder returns all the non expired time limited v2 order credentials for a given order.

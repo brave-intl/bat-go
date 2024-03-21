@@ -3,31 +3,40 @@ package skus
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
+	"github.com/go-playground/validator/v10"
 	uuid "github.com/satori/go.uuid"
-	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
+	"google.golang.org/api/idtoken"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/responses"
+
 	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
+)
+
+const (
+	reqBodyLimit10MB = 10 << 20
 )
 
 type middlewareFn func(next http.Handler) http.Handler
@@ -78,7 +87,7 @@ func Router(
 	r.Method(
 		http.MethodPatch,
 		"/{orderID}/set-trial",
-		metricsMwr("SetOrderTrialDays", NewCORSMwr(copts, http.MethodPatch)(authMwr(SetOrderTrialDays(svc)))),
+		metricsMwr("SetOrderTrialDays", NewCORSMwr(copts, http.MethodPatch)(authMwr(handleSetOrderTrialDays(svc)))),
 	)
 
 	r.Method(http.MethodGet, "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(svc)))
@@ -92,7 +101,13 @@ func Router(
 	)
 
 	// Receipt validation.
-	r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(SubmitReceipt(svc))))
+	{
+		valid := validator.New()
+
+		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(handleSubmitReceipt(svc, valid))))
+		r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(handleCreateOrderFromReceipt(svc, valid))))
+		r.Method(http.MethodPost, "/{orderID}/receipt", metricsMwr("checkOrderReceipt", authMwr(handleCheckOrderReceipt(svc, valid))))
+	}
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
@@ -283,44 +298,38 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 }
 
 type setTrialDaysRequest struct {
-	TrialDays int64 `json:"trialDays" valid:"int"`
+	TrialDays int64 `json:"trialDays"`
 }
 
-// SetOrderTrialDays handles requests for setting trial days on orders.
-func SetOrderTrialDays(service *Service) handlers.AppHandler {
+// TODO: refactor this to avoid multiple fetches of an order.
+func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		orderID := &inputs.ID{}
 
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{"orderID": err.Error()},
-			)
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		// validate order merchant and caveats (to make sure this is the right merch)
-		if err := service.validateOrderMerchantAndCaveats(ctx, *orderID.UUID()); err != nil {
-			return handlers.ValidationError(
-				"Error validating request merchant and caveats",
-				map[string]interface{}{"orderMerchantAndCaveats": err.Error()},
-			)
+		if err := svc.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
+			return handlers.ValidationError("merchant and caveats", map[string]interface{}{"orderMerchantAndCaveats": err.Error()})
+		}
+
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		if err != nil {
+			return handlers.WrapError(err, "failed to read request body", http.StatusBadRequest)
 		}
 
 		req := &setTrialDaysRequest{}
-		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		if err := json.Unmarshal(data, req); err != nil {
+			return handlers.WrapError(err, "failed to parse request", http.StatusBadRequest)
 		}
 
-		if _, err := govalidator.ValidateStruct(req); err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		if err := service.SetOrderTrialDays(ctx, orderID.UUID(), req.TrialDays); err != nil {
+		if err := svc.SetOrderTrialDays(ctx, &orderID, req.TrialDays); err != nil {
 			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	})
 }
 
@@ -347,7 +356,7 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	})
 }
 
@@ -581,6 +590,9 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 
 		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, reqID, req.BlindedCreds); err != nil {
 			lg.Error().Err(err).Msg("failed to create the order credentials")
+			if errors.Is(err, errCredsAlreadySubmittedMismatch) {
+				return handlers.WrapError(err, "Order credentials already exist", http.StatusConflict)
+			}
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
@@ -636,6 +648,9 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 
 		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID(), req.BlindedCreds); err != nil {
 			lg.Error().Err(err).Msg("failed to create the order credentials")
+			if errors.Is(err, errCredsAlreadySubmittedMismatch) {
+				return handlers.WrapError(err, "Order credentials already exist", http.StatusConflict)
+			}
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
@@ -742,7 +757,8 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			reqID = *reqIDRaw.UUID()
 		}
 
-		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), reqID)
+		itemIDv := *itemID.UUID()
+		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), itemIDv, reqID)
 		if err != nil {
 			if !errors.Is(err, errSetRetryAfter) {
 				return handlers.WrapError(err, "Error getting credentials", status)
@@ -755,6 +771,21 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			}
 
 			w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
+		}
+
+		if legacyMode {
+			suCreds, ok := creds.([]OrderCreds)
+			if !ok {
+				return handlers.WrapError(err, "Error getting credentials", http.StatusInternalServerError)
+			}
+
+			for i := range suCreds {
+				if uuid.Equal(suCreds[i].ID, itemIDv) {
+					return handlers.RenderContent(ctx, suCreds[i], w, status)
+				}
+			}
+
+			return handlers.WrapError(err, "Error getting credentials", http.StatusNotFound)
 		}
 
 		if creds == nil {
@@ -922,138 +953,187 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 // WebhookRouter - handles calls from various payment method webhooks informing payments of completion
 func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(service)))
 	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
 	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
-	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", HandleIOSWebhook(service)))
+	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(service)))
 	return r
 }
 
 // HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		var (
-			ctx              = r.Context()
-			req              = new(AndroidNotification)
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
+		l := logging.Logger(ctx, "payments").With().Str("func", "HandleAndroidWebhook").Logger()
 
-		// get logger
-		logger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleAndroidWebhook").
-			Logger()
+		if err := service.gcpValidator.validate(ctx, r); err != nil {
+			l.Error().Err(err).Msg("invalid request")
+			return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+		}
 
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
+		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to read the payload")
+			l.Error().Err(err).Msg("failed to read payload")
 			return handlers.WrapValidationError(err)
 		}
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).
-				Msg("failed to decode and validate the payload")
+		l.Info().Str("payload", string(payload)).Msg("")
+
+		var validationErrMap = map[string]interface{}{}
+
+		var req AndroidNotification
+		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
 			validationErrMap["request-body-decode"] = err.Error()
+			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
 
-		// extract out the Developer notification
+		l.Info().Interface("req", req).Msg("")
+
 		dn, err := req.Message.GetDeveloperNotification()
 		if err != nil {
 			validationErrMap["invalid-developer-notification"] = err.Error()
+			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
+
+		l.Info().Interface("developer_notification", dn).Msg("")
 
 		if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-			logger.Error().Interface("validation-errors", validationErrMap).
-				Msg("failed to get developer notification from message")
 			validationErrMap["invalid-developer-notification-token"] = "notification has no purchase token"
+			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
+			return handlers.ValidationError("Error validating request", validationErrMap)
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
-		}
+		l.Info().Msg("verify_developer_notification")
 
-		err = service.verifyDeveloperNotification(ctx, dn)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to verify subscription notification")
+		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
+			l.Error().Err(err).Msg("failed to verify subscription notification")
+
 			switch {
-			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify subscription notification",
-					http.StatusNotFound)
+			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			default:
-				return handlers.WrapError(err, "failed to verify subscription notification",
-					http.StatusInternalServerError)
+				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
 			}
 		}
 
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
-// HandleIOSWebhook is the handler for ios iap webhooks
-func HandleIOSWebhook(service *Service) handlers.AppHandler {
+const (
+	errAuthHeaderEmpty  model.Error = "skus: gcp authorization header is empty"
+	errAuthHeaderFormat model.Error = "skus: gcp authorization header invalid format"
+	errInvalidIssuer    model.Error = "skus: gcp invalid issuer"
+	errInvalidEmail     model.Error = "skus: gcp invalid email"
+	errEmailNotVerified model.Error = "skus: gcp email not verified"
+)
+
+type gcpTokenValidator interface {
+	Validate(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error)
+}
+
+type gcpValidatorConfig struct {
+	audience       string
+	issuer         string
+	serviceAccount string
+	disabled       bool
+}
+
+type gcpPushNotificationValidator struct {
+	validator gcpTokenValidator
+	cfg       gcpValidatorConfig
+}
+
+func newGcpPushNotificationValidator(gcpTokenValidator gcpTokenValidator, cfg gcpValidatorConfig) *gcpPushNotificationValidator {
+	return &gcpPushNotificationValidator{
+		validator: gcpTokenValidator,
+		cfg:       cfg,
+	}
+}
+
+func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Request) error {
+	if g.cfg.disabled {
+		return nil
+	}
+
+	ah := r.Header.Get("Authorization")
+	if ah == "" {
+		return errAuthHeaderEmpty
+	}
+
+	token := strings.Split(ah, " ")
+	if len(token) != 2 {
+		return errAuthHeaderFormat
+	}
+
+	p, err := g.validator.Validate(ctx, token[1], g.cfg.audience)
+	if err != nil {
+		return fmt.Errorf("invalid authentication token: %w", err)
+	}
+
+	if p.Issuer == "" || p.Issuer != g.cfg.issuer {
+		return errInvalidIssuer
+	}
+
+	if p.Claims["email"] != g.cfg.serviceAccount {
+		return errInvalidEmail
+	}
+
+	if p.Claims["email_verified"] != true {
+		return errEmailNotVerified
+	}
+
+	return nil
+}
+
+func handleIOSWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		var (
-			ctx              = r.Context()
-			req              = new(IOSNotification)
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
+		l := logging.Logger(ctx, "skus").With().Str("func", "handleIOSWebhook").Logger()
 
-		// get logger
-		logger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleIOSWebhook").
-			Logger()
-
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to read the payload")
-			// no need to go further
-			return handlers.WrapValidationError(err)
+			l.Error().Err(err).Msg("error reading request body")
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("failed to decode and validate the payload")
-			validationErrMap["request-body-decode"] = err.Error()
+		req := &IOSNotification{}
+		if err := inputs.DecodeAndValidate(ctx, req, data); err != nil {
+			l.Warn().Err(err).Msg("failed to decode and validate the payload")
+
+			return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
 		}
 
-		// transaction info
 		txInfo, err := req.GetTransactionInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get transaction info from message")
-			validationErrMap["invalid-transaction-info"] = err.Error()
+			l.Warn().Err(err).Msg("failed to get transaction info from message")
+
+			return handlers.ValidationError("request", map[string]interface{}{"invalid-transaction-info": err.Error()})
 		}
 
-		// renewal info
 		renewalInfo, err := req.GetRenewalInfo(ctx)
 		if err != nil {
-			logger.Warn().Err(err).Msg("failed to get renewal info from message")
-			validationErrMap["invalid-renewal-info"] = err.Error()
+			l.Warn().Err(err).Msg("failed to get renewal info from message")
+
+			return handlers.ValidationError("request", map[string]interface{}{"invalid-renewal-info": err.Error()})
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
-		}
+		if err := service.verifyIOSNotification(ctx, txInfo, renewalInfo); err != nil {
+			l.Error().Err(err).Msg("failed to verify ios subscription notification")
 
-		err = service.verifyIOSNotification(ctx, txInfo, renewalInfo)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to verify ios subscription notification")
 			switch {
-			case errors.Is(err, errNotFound):
-				return handlers.WrapError(err, "failed to verify ios subscription notification",
-					http.StatusNotFound)
+			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			default:
-				return handlers.WrapError(err, "failed to verify ios subscription notification",
-					http.StatusInternalServerError)
+				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusInternalServerError)
 			}
 		}
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
@@ -1132,7 +1212,7 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 		}
 
 		// Set paymentProcessor to Radom.
-		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, model.RadomPaymentMethod); err != nil {
+		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.RadomPaymentMethod); err != nil {
 			lg.Error().Err(err).Msg("failed to update order to add the payment processor")
 			return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
 		}
@@ -1142,213 +1222,328 @@ func HandleRadomWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
-// HandleStripeWebhook handles webhook events from Stripe.
-func HandleStripeWebhook(service *Service) handlers.AppHandler {
+func handleStripeWebhook(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		lg := logging.Logger(ctx, "payments").With().Str("func", "HandleStripeWebhook").Logger()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "HandleStripeWebhook").Logger()
 
-		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
+		secret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
 		if err != nil {
 			lg.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
 			return handlers.WrapError(err, "error getting stripe_webhook_secret from context", http.StatusInternalServerError)
 		}
 
-		b, err := requestutils.Read(ctx, r.Body)
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			lg.Error().Err(err).Msg("failed to read request body")
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
 
-		event, err := webhook.ConstructEvent(b, r.Header.Get("Stripe-Signature"), endpointSecret)
+		event, err := webhook.ConstructEvent(data, r.Header.Get("Stripe-Signature"), secret)
 		if err != nil {
-			lg.Error().Err(err).Msg("failed to verify stripe signature")
+			lg.Error().Err(err).Msg("failed to verify Stripe signature")
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
 		switch event.Type {
-		case StripeInvoiceUpdated, StripeInvoicePaid:
-			// Handle invoice events.
-
-			var invoice stripe.Invoice
-			if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
-				lg.Error().Err(err).Msg("error parsing webhook json")
-				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+		case whStripeInvoiceUpdated, whStripeInvoicePaid:
+			invoice := &stripe.Invoice{}
+			if err := json.Unmarshal(event.Data.Raw, invoice); err != nil {
+				lg.Error().Err(err).Msg("failed to parse invoice")
+				return handlers.WrapError(err, "error parsing webhook invoice", http.StatusBadRequest)
 			}
 
-			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
+			sub, err := svc.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
-				lg.Error().Err(err).Msg("error getting subscription")
+				lg.Error().Err(err).Msg("failed to get subscription")
+
+				if isErrStripeNotFound(err) {
+					return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+				}
+
 				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
 
-			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			orderID, err := uuid.FromString(sub.Metadata["orderID"])
 			if err != nil {
-				lg.Error().Err(err).Msg("error getting order id from subscription metadata")
+				lg.Error().Err(err).Msg("failed to parse orderID from Stripe metadata")
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
 
-			// If the invoice is paid set order status to paid, otherwise
-			if invoice.Paid {
-				ok, subID, err := service.Datastore.IsStripeSub(orderID)
-				if err != nil {
-					lg.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
-					return handlers.WrapError(err, "error looking up payment provider", http.StatusInternalServerError)
-				}
-
-				// Handle renewal.
-				if ok && subID != "" {
-					if err := service.RenewOrder(ctx, orderID); err != nil {
-						lg.Error().Err(err).Msg("failed to renew the order")
-						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
-					}
-
-					return handlers.RenderContent(ctx, "subscription renewed", w, http.StatusOK)
-				}
-
-				// New subscription.
-				// Update the order's expires at as it was just paid.
-				if err := service.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
-					lg.Error().Err(err).Msg("failed to update order status")
-					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
-				}
-
-				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
-					lg.Error().Err(err).Msg("failed to update order metadata")
-					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-				}
-
-				if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, paymentProcessor, StripePaymentMethod); err != nil {
-					lg.Error().Err(err).Msg("failed to update order to add the payment processor")
-					return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
-				}
-
-				return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
-			}
-
-			if err := service.Datastore.UpdateOrder(orderID, "pending"); err != nil {
-				lg.Error().Err(err).Msg("failed to update order status")
-				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
-			}
-
-			if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
-				lg.Error().Err(err).Msg("failed to update order metadata")
-				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-			}
-
-			return handlers.RenderContent(ctx, "payment failed", w, http.StatusOK)
-
-		case StripeCustomerSubscriptionDeleted:
-			// Handle subscription cancellations
-
-			var subscription stripe.Subscription
-			if err := json.Unmarshal(event.Data.Raw, &subscription); err != nil {
-				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
-			}
-
-			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			ord, err := svc.orderRepo.Get(ctx, svc.Datastore.RawDB(), orderID)
 			if err != nil {
-				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
+				lg.Error().Err(err).Msg("failed to get order")
+
+				if errors.Is(err, model.ErrOrderNotFound) {
+					return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+				}
+
+				return handlers.WrapError(err, "failed to get order", http.StatusInternalServerError)
 			}
 
-			if err := service.Datastore.UpdateOrder(orderID, OrderStatusCanceled); err != nil {
-				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			if subID, ok := ord.StripeSubID(); !ok || subID != sub.ID {
+				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sub.ID); err != nil {
+					lg.Error().Err(err).Msg("failed to update order metadata stripeSubscriptionId")
+					return handlers.WrapError(err, "failed to update order metadata stripeSubscriptionId", http.StatusInternalServerError)
+				}
 			}
 
-			return handlers.RenderContent(ctx, "subscription canceled", w, http.StatusOK)
+			switch event.Type {
+			case whStripeInvoiceUpdated:
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+			case whStripeInvoicePaid:
+				if err := svc.RenewOrder(ctx, orderID); err != nil {
+					lg.Error().Err(err).Msg("failed to renew order")
+					return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
+				}
+
+				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.StripePaymentMethod); err != nil {
+					lg.Error().Err(err).Msg("failed to update order metadata paymentProcessor")
+					return handlers.WrapError(err, "failed to update order metadata paymentProcessor", http.StatusInternalServerError)
+				}
+
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+			default:
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+			}
+
+		case whStripeCustSubscriptionDeleted:
+			// TODO: Enable it and handle properly.
+
+			sub := &stripe.Subscription{}
+			if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+				return handlers.WrapError(err, "failed to parse subscription", http.StatusBadRequest)
+			}
+
+			orderID, err := uuid.FromString(sub.Metadata["orderID"])
+			if err != nil {
+				return handlers.WrapError(err, "failed to parse orderID from Stripe metadata", http.StatusInternalServerError)
+			}
+
+			if err := svc.Datastore.UpdateOrder(orderID, OrderStatusCanceled); err != nil {
+				return handlers.WrapError(err, "failed to update order status canceled", http.StatusInternalServerError)
+			}
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
-// SubmitReceipt submit a vendor verifiable receipt that proves order is paid
-func SubmitReceipt(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 
-		var (
-			ctx              = r.Context()
-			req              SubmitReceiptRequestV1     // the body of the request
-			orderID          = new(inputs.ID)           // the order id
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
+		l := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
 
-		logger := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
-
-		// validate the order id
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			logger.Warn().Err(err).Msg("Failed to decode/validate order id from url")
-			validationErrMap["orderID"] = err.Error()
-		}
-
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
-			validationErrMap["request-body"] = err.Error()
+			l.Warn().Err(err).Msg("failed to decode orderID")
+
+			// Preserve the legacy error in case anything depends on it.
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": inputs.ErrIDDecodeNotUUID})
 		}
 
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
-			validationErrMap["request-body"] = err.Error()
-		}
-
-		// validate the receipt
-		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req)
+		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			if errors.Is(err, errNotFound) {
-				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+			l.Warn().Err(err).Msg("failed to read body")
+
+			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		}
+
+		// TODO(clD11): remove when no longer needed.
+		payloadS := string(payload)
+		l.Info().Interface("payload_byte", payload).Str("payload_str", payloadS).Msg("payload")
+
+		req, err := parseSubmitReceiptRequest(payload)
+		if err != nil {
+			l.Warn().Err(err).Msg("failed to deserialize request")
+
+			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		}
+
+		if err := valid.StructCtx(ctx, &req); err != nil {
+			verrs, ok := collectValidationErrors(err)
+			if !ok {
+				return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 			}
-			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
-			validationErrMap["receiptErrors"] = err.Error()
-			// return codified errors for application
-			if errors.Is(err, errPurchaseFailed) {
-				return handlers.CodedValidationError(err.Error(), purchaseFailedErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchasePending) {
-				return handlers.CodedValidationError(err.Error(), purchasePendingErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseDeferred) {
-				return handlers.CodedValidationError(err.Error(), purchaseDeferredErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseStatusUnknown) {
-				return handlers.CodedValidationError(err.Error(), purchaseStatusUnknownErrCode, validationErrMap)
-			} else {
-				// unknown error
-				return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, validationErrMap)
+
+			return handlers.ValidationError("request", verrs)
+		}
+
+		// TODO(clD11): remove when no longer needed.
+		l.Info().Interface("req_decoded", req).Msg("req decoded")
+
+		extID, err := svc.validateReceipt(ctx, req)
+		if err != nil {
+			l.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+			return handleReceiptErr(err)
+		}
+
+		{
+			_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
+			if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+				l.Warn().Err(err).Msg("failed to lookup external id")
+
+				return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+			}
+
+			if err == nil {
+				return handlers.WrapError(model.ErrReceiptAlreadyLinked, "receipt has already been submitted", http.StatusConflict)
 			}
 		}
 
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("error validating request", validationErrMap)
-		}
-		// does this external id exist already
-		exists, err := service.ExternalIDExists(ctx, externalID)
-		if err != nil {
-			logger.Warn().Err(err).Msg("failed to lookup external id existance")
-			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
-		}
+		mdata := newMobileOrderMdata(req, extID)
 
-		if exists {
-			return handlers.WrapError(err, "receipt has already been submitted", http.StatusBadRequest)
-		}
-
-		// set order paid and include the vendor and external id to metadata
-		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
-			"vendor":         req.Type.String(),
-			"externalID":     externalID,
-			paymentProcessor: req.Type.String(),
-		}); err != nil {
-			logger.Warn().Err(err).Msg("Failed to update the order with appropriate metadata")
+		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
+			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), SubmitReceiptResponseV1{
-			ExternalID: externalID,
-			Vendor:     req.Type.String(),
-		}, w, http.StatusOK)
-	})
+		result := struct {
+			ExternalID string `json:"externalId"`
+			Vendor     string `json:"vendor"`
+		}{ExternalID: extID, Vendor: req.Type.String()}
+
+		return handlers.RenderContent(ctx, result, w, http.StatusOK)
+	}
+}
+
+func handleCreateOrderFromReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		return handleCreateOrderFromReceiptH(w, r, svc, valid)
+	}
+}
+
+func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
+	ctx := r.Context()
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "handleCreateOrderFromReceipt").Logger()
+
+	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to read request")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	req, err := parseSubmitReceiptRequest(raw)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to deserialize request")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	if err := valid.StructCtx(ctx, &req); err != nil {
+		verrs, ok := collectValidationErrors(err)
+		if !ok {
+			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		}
+
+		return handlers.ValidationError("request", verrs)
+	}
+
+	extID, err := svc.validateReceipt(ctx, req)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+		return handleReceiptErr(err)
+	}
+
+	{
+		ord, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
+		if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+			lg.Warn().Err(err).Msg("failed to lookup external id")
+
+			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+		}
+
+		if err == nil {
+			result := model.CreateOrderWithReceiptResponse{ID: ord.ID.String()}
+
+			return handlers.RenderContent(ctx, result, w, http.StatusConflict)
+		}
+	}
+
+	ord, err := svc.createOrderWithReceipt(ctx, req, extID)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to create order")
+
+		return handlers.WrapError(err, "failed to create order", http.StatusInternalServerError)
+	}
+
+	result := model.CreateOrderWithReceiptResponse{ID: ord.ID.String()}
+
+	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
+}
+
+func handleCheckOrderReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		return handleCheckOrderReceiptH(w, r, svc, valid)
+	}
+}
+
+func handleCheckOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
+	ctx := r.Context()
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "handleCheckOrderReceipt").Logger()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to parse orderID")
+
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to read request")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	req, err := parseSubmitReceiptRequest(raw)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to deserialize request")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	if err := valid.StructCtx(ctx, &req); err != nil {
+		verrs, ok := collectValidationErrors(err)
+		if !ok {
+			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		}
+
+		return handlers.ValidationError("request", verrs)
+	}
+
+	extID, err := svc.validateReceipt(ctx, req)
+	if err != nil {
+		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+		return handleReceiptErr(err)
+	}
+
+	if err := svc.checkOrderReceipt(ctx, orderID, extID); err != nil {
+		lg.Warn().Err(err).Msg("failed to check order receipt")
+
+		switch {
+		case errors.Is(err, model.ErrOrderNotFound):
+			return handlers.WrapError(err, "order not found by receipt", http.StatusNotFound)
+		case errors.Is(err, model.ErrNoMatchOrderReceipt):
+			return handlers.WrapError(err, "order_id does not match receipt order", http.StatusFailedDependency)
+		default:
+			return handlers.WrapError(model.ErrSomethingWentWrong, "failed to check order receipt", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func NewCORSMwr(opts cors.Options, methods ...string) func(next http.Handler) http.Handler {
@@ -1368,4 +1563,68 @@ func NewCORSOpts(origins []string, dbg bool) cors.Options {
 	}
 
 	return result
+}
+
+func handleReceiptErr(err error) *handlers.AppError {
+	if err == nil {
+		return &handlers.AppError{
+			Message: "Unexpected error",
+			Code:    http.StatusInternalServerError,
+			Data:    map[string]interface{}{},
+		}
+	}
+
+	errStr := err.Error()
+	result := &handlers.AppError{
+		Message: "Error " + errStr,
+		Code:    http.StatusBadRequest,
+		Data: map[string]interface{}{
+			"validationErrors": map[string]interface{}{"receiptErrors": errStr},
+		},
+	}
+
+	switch {
+	case errors.Is(err, errPurchaseFailed):
+		result.ErrorCode = purchaseFailedErrCode
+	case errors.Is(err, errPurchasePending):
+		result.ErrorCode = purchasePendingErrCode
+	case errors.Is(err, errPurchaseDeferred):
+		result.ErrorCode = purchaseDeferredErrCode
+	case errors.Is(err, errPurchaseStatusUnknown):
+		result.ErrorCode = purchaseStatusUnknownErrCode
+	default:
+		result.ErrorCode = purchaseValidationErrCode
+	}
+
+	return result
+}
+
+func parseSubmitReceiptRequest(raw []byte) (model.ReceiptRequest, error) {
+	buf := make([]byte, base64.StdEncoding.DecodedLen(len(raw)))
+
+	n, err := base64.StdEncoding.Decode(buf, raw)
+	if err != nil {
+		return model.ReceiptRequest{}, fmt.Errorf("failed to decode input base64: %w", err)
+	}
+
+	result := model.ReceiptRequest{}
+	if err := json.Unmarshal(buf[:n], &result); err != nil {
+		return model.ReceiptRequest{}, fmt.Errorf("failed to decode input json: %w", err)
+	}
+
+	return result, nil
+}
+
+func collectValidationErrors(err error) (map[string]string, bool) {
+	var verr validator.ValidationErrors
+	if !errors.As(err, &verr) {
+		return nil, false
+	}
+
+	result := make(map[string]string, len(verr))
+	for i := range verr {
+		result[verr[i].Field()] = verr[i].Error()
+	}
+
+	return result, true
 }

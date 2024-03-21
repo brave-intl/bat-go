@@ -11,7 +11,8 @@ import (
 )
 
 type MockOrder struct {
-	FnGet func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	FnGet             func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	FnGetByExternalID func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 }
 
 func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -24,6 +25,18 @@ func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UU
 	}
 
 	return r.FnGet(ctx, dbi, id)
+}
+
+func (r *MockOrder) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+	if r.FnGetByExternalID == nil {
+		result := &model.Order{
+			ID: uuid.NewV4(),
+		}
+
+		return result, nil
+	}
+
+	return r.FnGetByExternalID(ctx, dbi, extID)
 }
 
 type MockIssuer struct {

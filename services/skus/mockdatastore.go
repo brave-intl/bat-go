@@ -85,22 +85,22 @@ func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt64(arg0, arg1, arg2, 
 }
 
 // AreTimeLimitedV2CredsSubmitted mocks base method.
-func (m *MockDatastore) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error) {
+func (m *MockDatastore) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID go_uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx}
+	varargs := []interface{}{ctx, requestID}
 	for _, a := range blindedCreds {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AreTimeLimitedV2CredsSubmitted", varargs...)
-	ret0, _ := ret[0].(bool)
+	ret0, _ := ret[0].(AreTimeLimitedV2CredsSubmittedResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AreTimeLimitedV2CredsSubmitted indicates an expected call of AreTimeLimitedV2CredsSubmitted.
-func (mr *MockDatastoreMockRecorder) AreTimeLimitedV2CredsSubmitted(ctx interface{}, blindedCreds ...interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) AreTimeLimitedV2CredsSubmitted(ctx, requestID interface{}, blindedCreds ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx}, blindedCreds...)
+	varargs := append([]interface{}{ctx, requestID}, blindedCreds...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AreTimeLimitedV2CredsSubmitted", reflect.TypeOf((*MockDatastore)(nil).AreTimeLimitedV2CredsSubmitted), varargs...)
 }
 
@@ -165,18 +165,18 @@ func (mr *MockDatastoreMockRecorder) CreateKey(merchant, name, encryptedSecretKe
 }
 
 // CreateOrder mocks base method.
-func (m *MockDatastore) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, req *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+func (m *MockDatastore) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrder", ctx, dbi, req, items)
+	ret := m.ctrl.Call(m, "CreateOrder", ctx, dbi, oreq, items)
 	ret0, _ := ret[0].(*model.Order)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateOrder indicates an expected call of CreateOrder.
-func (mr *MockDatastoreMockRecorder) CreateOrder(ctx, dbi, req, items interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreateOrder(ctx, dbi, oreq, items interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrder", reflect.TypeOf((*MockDatastore)(nil).CreateOrder), ctx, dbi, req, items)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrder", reflect.TypeOf((*MockDatastore)(nil).CreateOrder), ctx, dbi, oreq, items)
 }
 
 // CreateTransaction mocks base method.
@@ -249,21 +249,6 @@ func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Conte
 func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrderTx), ctx, tx, orderID)
-}
-
-// ExternalIDExists mocks base method.
-func (m *MockDatastore) ExternalIDExists(arg0 context.Context, arg1 string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExternalIDExists", arg0, arg1)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExternalIDExists indicates an expected call of ExternalIDExists.
-func (mr *MockDatastoreMockRecorder) ExternalIDExists(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExternalIDExists", reflect.TypeOf((*MockDatastore)(nil).ExternalIDExists), arg0, arg1)
 }
 
 // GetIssuerByPublicKey mocks base method.
@@ -477,6 +462,21 @@ func (mr *MockDatastoreMockRecorder) GetSumForTransactions(orderID interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSumForTransactions", reflect.TypeOf((*MockDatastore)(nil).GetSumForTransactions), orderID)
 }
 
+// GetTLV2Creds mocks base method.
+func (m *MockDatastore) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID go_uuid.UUID) (*TimeLimitedV2Creds, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTLV2Creds", ctx, dbi, ordID, itemID, reqID)
+	ret0, _ := ret[0].(*TimeLimitedV2Creds)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTLV2Creds indicates an expected call of GetTLV2Creds.
+func (mr *MockDatastoreMockRecorder) GetTLV2Creds(ctx, dbi, ordID, itemID, reqID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTLV2Creds", reflect.TypeOf((*MockDatastore)(nil).GetTLV2Creds), ctx, dbi, ordID, itemID, reqID)
+}
+
 // GetTimeLimitedV2OrderCredsByOrder mocks base method.
 func (m *MockDatastore) GetTimeLimitedV2OrderCredsByOrder(orderID go_uuid.UUID) (*TimeLimitedV2Creds, error) {
 	m.ctrl.T.Helper()
@@ -505,21 +505,6 @@ func (m *MockDatastore) GetTimeLimitedV2OrderCredsByOrderItem(itemID go_uuid.UUI
 func (mr *MockDatastoreMockRecorder) GetTimeLimitedV2OrderCredsByOrderItem(itemID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeLimitedV2OrderCredsByOrderItem", reflect.TypeOf((*MockDatastore)(nil).GetTimeLimitedV2OrderCredsByOrderItem), itemID)
-}
-
-// GetTLV2Creds mocks base method.
-func (m *MockDatastore) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID go_uuid.UUID) (*TimeLimitedV2Creds, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTLV2Creds", ctx, dbi, ordID, itemID, reqID)
-	ret0, _ := ret[0].(*TimeLimitedV2Creds)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTLV2Creds indicates an expected call of GetTLV2Creds.
-func (mr *MockDatastoreMockRecorder) GetTLV2Creds(ctx, dbi, ordID, itemID, reqID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTLV2Creds", reflect.TypeOf((*MockDatastore)(nil).GetTLV2Creds), ctx, dbi, ordID, itemID, reqID)
 }
 
 // GetTransaction mocks base method.
@@ -892,19 +877,33 @@ func (mr *MockorderStoreMockRecorder) AppendMetadataInt(ctx, dbi, id, key, val i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendMetadataInt", reflect.TypeOf((*MockorderStore)(nil).AppendMetadataInt), ctx, dbi, id, key, val)
 }
 
-// Create mocks base method.
-func (m *MockorderStore) Create(ctx context.Context, dbi sqlx.QueryerContext, totalPrice decimal.Decimal, merchantID, status, currency, location string, paymentMethods []string, validFor *time.Duration) (*model.Order, error) {
+// AppendMetadataInt64 mocks base method.
+func (m *MockorderStore) AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id go_uuid.UUID, key string, val int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, dbi, totalPrice, merchantID, status, currency, location, paymentMethods, validFor)
+	ret := m.ctrl.Call(m, "AppendMetadataInt64", ctx, dbi, id, key, val)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendMetadataInt64 indicates an expected call of AppendMetadataInt64.
+func (mr *MockorderStoreMockRecorder) AppendMetadataInt64(ctx, dbi, id, key, val interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendMetadataInt64", reflect.TypeOf((*MockorderStore)(nil).AppendMetadataInt64), ctx, dbi, id, key, val)
+}
+
+// Create mocks base method.
+func (m *MockorderStore) Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, dbi, oreq)
 	ret0, _ := ret[0].(*model.Order)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockorderStoreMockRecorder) Create(ctx, dbi, totalPrice, merchantID, status, currency, location, paymentMethods, validFor interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) Create(ctx, dbi, oreq interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockorderStore)(nil).Create), ctx, dbi, totalPrice, merchantID, status, currency, location, paymentMethods, validFor)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockorderStore)(nil).Create), ctx, dbi, oreq)
 }
 
 // Get mocks base method.
@@ -1176,4 +1175,114 @@ func (m *MockorderPayHistoryStore) Insert(ctx context.Context, dbi sqlx.ExecerCo
 func (mr *MockorderPayHistoryStoreMockRecorder) Insert(ctx, dbi, id, when interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Insert", reflect.TypeOf((*MockorderPayHistoryStore)(nil).Insert), ctx, dbi, id, when)
+}
+
+// MockissuerStore is a mock of issuerStore interface.
+type MockissuerStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockissuerStoreMockRecorder
+}
+
+// MockissuerStoreMockRecorder is the mock recorder for MockissuerStore.
+type MockissuerStoreMockRecorder struct {
+	mock *MockissuerStore
+}
+
+// NewMockissuerStore creates a new mock instance.
+func NewMockissuerStore(ctrl *gomock.Controller) *MockissuerStore {
+	mock := &MockissuerStore{ctrl: ctrl}
+	mock.recorder = &MockissuerStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockissuerStore) EXPECT() *MockissuerStoreMockRecorder {
+	return m.recorder
+}
+
+// Create mocks base method.
+func (m *MockissuerStore) Create(ctx context.Context, dbi sqlx.QueryerContext, req model.IssuerNew) (*model.Issuer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, dbi, req)
+	ret0, _ := ret[0].(*model.Issuer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockissuerStoreMockRecorder) Create(ctx, dbi, req interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockissuerStore)(nil).Create), ctx, dbi, req)
+}
+
+// GetByMerchID mocks base method.
+func (m *MockissuerStore) GetByMerchID(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByMerchID", ctx, dbi, merchID)
+	ret0, _ := ret[0].(*model.Issuer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByMerchID indicates an expected call of GetByMerchID.
+func (mr *MockissuerStoreMockRecorder) GetByMerchID(ctx, dbi, merchID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByMerchID", reflect.TypeOf((*MockissuerStore)(nil).GetByMerchID), ctx, dbi, merchID)
+}
+
+// GetByPubKey mocks base method.
+func (m *MockissuerStore) GetByPubKey(ctx context.Context, dbi sqlx.QueryerContext, pubKey string) (*model.Issuer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByPubKey", ctx, dbi, pubKey)
+	ret0, _ := ret[0].(*model.Issuer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByPubKey indicates an expected call of GetByPubKey.
+func (mr *MockissuerStoreMockRecorder) GetByPubKey(ctx, dbi, pubKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByPubKey", reflect.TypeOf((*MockissuerStore)(nil).GetByPubKey), ctx, dbi, pubKey)
+}
+
+// MockgetContext is a mock of getContext interface.
+type MockgetContext struct {
+	ctrl     *gomock.Controller
+	recorder *MockgetContextMockRecorder
+}
+
+// MockgetContextMockRecorder is the mock recorder for MockgetContext.
+type MockgetContextMockRecorder struct {
+	mock *MockgetContext
+}
+
+// NewMockgetContext creates a new mock instance.
+func NewMockgetContext(ctrl *gomock.Controller) *MockgetContext {
+	mock := &MockgetContext{ctrl: ctrl}
+	mock.recorder = &MockgetContextMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockgetContext) EXPECT() *MockgetContextMockRecorder {
+	return m.recorder
+}
+
+// GetContext mocks base method.
+func (m *MockgetContext) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, dest, query}
+	for _, a := range args {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetContext", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GetContext indicates an expected call of GetContext.
+func (mr *MockgetContextMockRecorder) GetContext(ctx, dest, query interface{}, args ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, dest, query}, args...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContext", reflect.TypeOf((*MockgetContext)(nil).GetContext), varargs...)
 }
