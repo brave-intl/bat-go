@@ -140,34 +140,25 @@ func (sm *SolanaMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPay
 	return sm.SetNextState(ctx, paymentLib.Failed)
 }
 
-func getAssociatedTokenAccount(wallet common.PublicKey) (common.PublicKey, error) {
-	ataPubKey, _, err := common.FindAssociatedTokenAddress(wallet, batMintPublicKey)
+func hasAssociatedTokenAccount(ctx context.Context, wallet common.PublicKey, client *client.Client) (common.PublicKey, bool, error) {
+	ata, _, err := common.FindAssociatedTokenAddress(wallet, batMintPublicKey)
 	if err != nil {
-		return common.PublicKey{}, err
-	}
-
-	return ataPubKey, nil
-}
-
-func hasAssociatedTokenAccount(ctx context.Context, wallet common.PublicKey, client *client.Client) (common.PublicKey, error) {
-	ataPubKey, err := getAssociatedTokenAccount(wallet)
-	if err != nil {
-		return common.PublicKey{}, err
+		return common.PublicKey{}, false, err
 	}
 
 	result, err := client.GetAccountInfo(
 		ctx,
-		ataPubKey.ToBase58(),
+		ata.ToBase58(),
 	)
 	if err != nil {
-		return common.PublicKey{}, err
+		return common.PublicKey{}, false, err
 	}
 
 	if result.Owner.ToBase58() == tokenProgramAddress {
-		return ataPubKey, nil
+		return ata, true, nil
 	}
 
-	return common.PublicKey{}, nil
+	return ata, false, nil
 }
 
 func getCreateAssociatedTokenAccountInstruction(
@@ -175,10 +166,14 @@ func getCreateAssociatedTokenAccountInstruction(
 	owner common.PublicKey,
 	feePayer common.PublicKey,
 	client *client.Client,
-) (types.Instruction, error) {
-	ata, err := hasAssociatedTokenAccount(ctx, owner, client)
+) (types.Instruction, bool, error) {
+	ata, hasAta, err := hasAssociatedTokenAccount(ctx, owner, client)
 	if err != nil {
-		return types.Instruction{}, nil
+		return types.Instruction{}, false, err
+	}
+
+	if hasAta {
+		return types.Instruction{}, true, nil
 	}
 
 	return associated_token_account.Create(associated_token_account.CreateParam{
@@ -186,7 +181,7 @@ func getCreateAssociatedTokenAccountInstruction(
 		Owner:                  owner,
 		Mint:                   batMintPublicKey,
 		AssociatedTokenAccount: ata,
-	}), nil
+	}), false, nil
 }
 
 func getTransferInstruction(
@@ -208,17 +203,21 @@ func makeInstructions(ctx context.Context, feePayer common.PublicKey, payeeWalle
 	instructions := make([]types.Instruction, 0)
 
 	// Create an associated token account if it doesn't exist
-	ataInstruction, err := getCreateAssociatedTokenAccountInstruction(ctx, payeeWallet, feePayer, client)
-	if err == nil {
-		instructions = append(instructions, ataInstruction)
-	}
-
-	to, err := getAssociatedTokenAccount(payeeWallet)
+	ataInstruction, hasAta, err := getCreateAssociatedTokenAccountInstruction(ctx, payeeWallet, feePayer, client)
 	if err != nil {
 		return []types.Instruction{}, err
 	}
 
-	from, err := getAssociatedTokenAccount(feePayer)
+	if !hasAta {
+		instructions = append(instructions, ataInstruction)
+	}
+
+	to, _, err := common.FindAssociatedTokenAddress(payeeWallet, batMintPublicKey)
+	if err != nil {
+		return []types.Instruction{}, err
+	}
+
+	from, _, err := common.FindAssociatedTokenAddress(feePayer, batMintPublicKey)
 	if err != nil {
 		return []types.Instruction{}, err
 	}
@@ -276,9 +275,11 @@ func isBlockHeightExpired(ctx context.Context, lastValidBlockHeight uint64, rpcC
 // sendAndConfirmTransaction signs and submits a transaction, then waits for confirmation.
 //
 // Once the transaction is sent, this method continuously polls on status of the signature
-// until the transaction blockhash has expired or the transaction is finalized. The submission
-// is repeated on each iteration to handle cases where the transaction is randomly dropped from
-// the mempool.
+// until the transaction blockhash has expired or the transaction is comfirmed/finalized.
+// The submission is repeated on each iteration to handle cases where the transaction is
+// randomly dropped from the mempool.
+//
+// Ref: https://solana.com/docs/core/transactions/retry#customizing-rebroadcast-logic
 //
 // The method returns a TransferCode indicating the status of the transaction:
 //   - TransferSuccessCode: "comfirmed" commitment level achieved in the cluster.
@@ -301,6 +302,15 @@ func sendAndConfirmTransaction(
 	}
 
 	for {
+		blockHashExpired, err := isBlockHeightExpired(ctx, lastValidBlockHeight, client)
+		if err != nil {
+			return TransferFailedCode, fmt.Errorf("blockhash expired error, err: %v", err)
+		}
+
+		if blockHashExpired {
+			return TransferDroppedCode, nil
+		}
+
 		signature, err := sendTransaction(ctx, signer, instructions, latestBlockhashResult.Value.Blockhash, client)
 		if err != nil {
 			return TransferFailedCode, idempotencyData, fmt.Errorf("send transaction error, err: %v", err)
@@ -318,8 +328,8 @@ func sendAndConfirmTransaction(
 			continue
 		}
 
-		if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed {
-			return TransferSuccessCode, idempotencyData, nil
+		if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {
+			return TransferSuccessCode, nil
 		}
 
 		blockHashExpired, err := isBlockHeightExpired(ctx, lastValidBlockHeight, client)
