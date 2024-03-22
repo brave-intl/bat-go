@@ -118,12 +118,9 @@ func newReceiptVerifier(cl *http.Client, asKey string, playKey []byte) (*receipt
 // validateApple validates Apple App Store receipt.
 func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
 	asreq := appstore.IAPRequest{
+		Password:               v.asKey,
 		ReceiptData:            req.Blob,
 		ExcludeOldTransactions: true,
-	}
-
-	if v.asKey != "" {
-		asreq.Password = v.asKey
 	}
 
 	resp := &appstore.IAPResponse{}
