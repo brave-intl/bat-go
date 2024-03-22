@@ -17,7 +17,6 @@ import (
 	"github.com/awa/go-iap/playstore"
 	"google.golang.org/api/androidpublisher/v3"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
@@ -93,12 +92,14 @@ type playStoreVerifier interface {
 }
 
 type receiptVerifier struct {
+	asKey       string
 	appStoreCl  appStoreVerifier
 	playStoreCl playStoreVerifier
 }
 
-func newReceiptVerifier(cl *http.Client, playKey []byte) (*receiptVerifier, error) {
+func newReceiptVerifier(cl *http.Client, asKey string, playKey []byte) (*receiptVerifier, error) {
 	result := &receiptVerifier{
+		asKey:      asKey,
 		appStoreCl: appstore.NewWithClient(cl),
 	}
 
@@ -116,30 +117,21 @@ func newReceiptVerifier(cl *http.Client, playKey []byte) (*receiptVerifier, erro
 
 // validateApple validates Apple App Store receipt.
 func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	l := logging.Logger(ctx, "skus").With().Str("func", "validateReceiptApple").Logger()
-
-	sharedKey, sharedKeyOK := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
-
 	asreq := appstore.IAPRequest{
 		ReceiptData:            req.Blob,
 		ExcludeOldTransactions: true,
 	}
 
-	if sharedKeyOK && len(sharedKey) > 0 {
-		asreq.Password = sharedKey
+	if v.asKey != "" {
+		asreq.Password = v.asKey
 	}
 
 	resp := &appstore.IAPResponse{}
 	if err := v.appStoreCl.Verify(ctx, asreq, resp); err != nil {
-		l.Error().Err(err).Msg("failed to verify receipt")
-
 		return "", fmt.Errorf("failed to verify receipt: %w", err)
 	}
 
-	l.Debug().Msg(fmt.Sprintf("%+v", resp))
-
 	if len(resp.Receipt.InApp) == 0 {
-		l.Error().Msg("failed to verify receipt: no in app info")
 		return "", errNoInAppTx
 	}
 
@@ -150,7 +142,6 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
 	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID)
 	if !ok {
-		l.Error().Msg("failed to verify receipt: purchase not found")
 		return "", errIOSPurchaseNotFound
 	}
 
