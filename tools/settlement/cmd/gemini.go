@@ -17,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/tools/settlement"
 	geminisettlement "github.com/brave-intl/bat-go/tools/settlement/gemini"
+	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 )
 
@@ -60,6 +61,14 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	maxPayoutAmountString, err := cmd.Flags().GetString("max")
+	if err != nil {
+		return err
+	}
+	maxPayoutAmount, err := decimal.NewFromString(maxPayoutAmountString)
+	if err != nil {
+		return err
+	}
 
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
@@ -67,6 +76,7 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 
 	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
 	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, os.Getenv("GEMINI_API_KEY"))
+	ctx = context.WithValue(ctx, appctx.PayoutTxnMaxAmountCTXKey, maxPayoutAmount)
 
 	return GeminiUploadSettlement(
 		ctx,
@@ -124,6 +134,11 @@ func init() {
 	// setup the flags
 	uploadCheckStatusBuilder := cmdutils.NewFlagBuilder(UploadGeminiSettlementCmd).
 		AddCommand(CheckStatusGeminiSettlementCmd)
+
+	uploadCheckStatusBuilder.Flag().String("max", "",
+		"the maximum BAT value permitted to be sent in a single transaction").
+		Require().
+		Bind("max")
 
 	uploadCheckStatusBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized").
