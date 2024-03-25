@@ -2,6 +2,7 @@ package payments
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -25,6 +26,11 @@ const (
 	TransferDroppedCode
 	TransferFailedCode
 )
+
+type chainIdempotencyData struct {
+	BlockHash string `json:"blockHash"`
+	Signature string `json:"signature"`
+}
 
 const (
 	batMintDecimals     int    = 8
@@ -92,7 +98,17 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, fmt.Errorf("failed to create instructions: %w entry: %v", err, entry)
 	}
 
-	status, err := sendAndConfirmTransaction(ctx, signer, instructions, client)
+	status, idempotencyData, err := sendAndConfirmTransaction(ctx, signer, instructions, client)
+
+	// Add idempotency data to the transaction before handling potential transaction errors to ensure
+	// it gets persisted all possible return cases without repetition.
+	marshaledIdempotencyData, marshalErr := json.Marshal(idempotencyData)
+	if marshalErr != nil {
+		return nil, fmt.Errorf("failed to marshal idempotency data: %w", marshalErr)
+	}
+	sm.transaction.ExternalIdempotency = marshaledIdempotencyData
+
+	// Handle transaction submission errors
 	if err != nil {
 		entry, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
 		if setStateErr != nil {
@@ -274,13 +290,16 @@ func sendAndConfirmTransaction(
 	signer types.Account,
 	instructions []types.Instruction,
 	client *client.Client,
-) (TransferCode, error) {
+) (TransferCode, chainIdempotencyData, error) {
 	latestBlockhashResult, err := client.GetLatestBlockhashAndContext(ctx)
 	if err != nil {
-		return TransferFailedCode, fmt.Errorf("get recent block hash error, err: %v", err)
+		return TransferFailedCode, chainIdempotencyData{}, fmt.Errorf("get recent block hash error, err: %v", err)
 	}
 
 	lastValidBlockHeight := latestBlockhashResult.Context.Slot + 150
+	idempotencyData := chainIdempotencyData{
+		BlockHash: latestBlockhashResult.Value.Blockhash,
+	}
 
 	for {
 		blockHashExpired, err := isBlockHeightExpired(ctx, lastValidBlockHeight, client)
@@ -294,8 +313,9 @@ func sendAndConfirmTransaction(
 
 		signature, err := sendTransaction(ctx, signer, instructions, latestBlockhashResult.Value.Blockhash, client)
 		if err != nil {
-			return TransferFailedCode, fmt.Errorf("send transaction error, err: %v", err)
+			return TransferFailedCode, idempotencyData, fmt.Errorf("send transaction error, err: %v", err)
 		}
+		idempotencyData.Signature = signature
 
 		sigStatus, err := client.GetSignatureStatus(ctx, signature)
 		if err != nil {
@@ -310,6 +330,15 @@ func sendAndConfirmTransaction(
 
 		if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {
 			return TransferSuccessCode, nil
+		}
+
+		blockHashExpired, err := isBlockHeightExpired(ctx, lastValidBlockHeight, client)
+		if err != nil {
+			return TransferFailedCode, idempotencyData, fmt.Errorf("blockhash expired error, err: %v", err)
+		}
+
+		if blockHashExpired {
+			return TransferDroppedCode, idempotencyData, nil
 		}
 
 		time.Sleep(500 * time.Millisecond)
