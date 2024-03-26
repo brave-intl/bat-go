@@ -20,8 +20,8 @@ var validAuthorizerKeys = map[string][]string{
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
 		// @sneagan
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
-		// @husobee
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiLTWtWvC63Rkoip9yNUf7249w+RxR2PzG8O89KJsIs husobee+settlements@brave.com",
+		// @jtieman
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK1fxpURIUAJNRqosAnPPXnKjpUBGGOKgkUOXmviJfFx jtieman+nitro@brave.com",
 	},
 	"development": {
 		// @kdenhartog for dev environment only
