@@ -44,7 +44,8 @@ const (
 )
 
 const (
-	errNoInAppTx model.Error = "no in app info in response"
+	errNoInAppTx           model.Error = "no in app info in response"
+	errIOSPurchaseNotFound model.Error = "ios: purchase not found"
 )
 
 var (
@@ -137,12 +138,23 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 
 	l.Debug().Msg(fmt.Sprintf("%+v", resp))
 
-	if len(resp.Receipt.InApp) < 1 {
+	if len(resp.Receipt.InApp) == 0 {
 		l.Error().Msg("failed to verify receipt: no in app info")
 		return "", errNoInAppTx
 	}
 
-	return resp.Receipt.InApp[0].OriginalTransactionID, nil
+	// ProductID on an InApp object must match the SubscriptionID.
+	//
+	// By doing so we:
+	// - find the purchase that is being verified (i.e. to disambiguate VPN from Leo);
+	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
+	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID)
+	if !ok {
+		l.Error().Msg("failed to verify receipt: purchase not found")
+		return "", errIOSPurchaseNotFound
+	}
+
+	return item.OriginalTransactionID, nil
 }
 
 // validateGoogle validates Google Store receipt.
@@ -274,6 +286,16 @@ func verifyCert(certByte, intermediaCertStr []byte) error {
 	}
 
 	return nil
+}
+
+func findInAppBySubID(iap []appstore.InApp, subID string) (*appstore.InApp, bool) {
+	for i := range iap {
+		if iap[i].ProductID == subID {
+			return &iap[i], true
+		}
+	}
+
+	return nil, false
 }
 
 // rootPEM is from `openssl x509 -inform der -in AppleRootCA-G3.cer -out apple_root.pem`
