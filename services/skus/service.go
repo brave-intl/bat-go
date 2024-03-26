@@ -254,8 +254,9 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		Timeout:   30 * time.Second,
 	}
 
+	asKey, _ := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
 	playKey, _ := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte)
-	rcptValidator, err := newReceiptVerifier(cl, playKey)
+	rcptValidator, err := newReceiptVerifier(cl, asKey, playKey)
 	if err != nil {
 		return nil, err
 	}
