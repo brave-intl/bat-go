@@ -1,4 +1,4 @@
-package nitro
+package cmd
 
 import (
 	"context"
@@ -47,6 +47,9 @@ func init() {
 	// enclave-operator-shares-bucket-name is the operator-shares bucket name in s3 (from bootstrap command)
 	NitroServeCmd.PersistentFlags().String("enclave-operator-shares-bucket-name", "", "the operator shares bucket name in s3")
 
+	NitroServeCmd.PersistentFlags().String("zebpay-server-url", "", "zebpay server url arg")
+	NitroServeCmd.PersistentFlags().String("zebpay-proxy-url", "", "zebpay proxy url arg")
+
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
 	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
 	rootcmd.Must(viper.BindEnv("upstream-url", "UPSTREAM_URL"))
@@ -70,6 +73,12 @@ func init() {
 	rootcmd.Must(viper.BindEnv("enclave-config-object-name", "ENCLAVE_CONFIG_OBJECT_NAME"))
 	rootcmd.Must(viper.BindPFlag("enclave-config-bucket-name", NitroServeCmd.PersistentFlags().Lookup("enclave-config-bucket-name")))
 	rootcmd.Must(viper.BindEnv("enclave-config-bucket-name", "ENCLAVE_CONFIG_BUCKET_NAME"))
+
+	rootcmd.Must(viper.BindPFlag("zebpay-server-url", NitroServeCmd.PersistentFlags().Lookup("zebpay-server-url")))
+	rootcmd.Must(viper.BindEnv("zebpay-server-url", "ZEBPAY_SERVER"))
+	rootcmd.Must(viper.BindPFlag("zebpay-proxy-url", NitroServeCmd.PersistentFlags().Lookup("proxy-url")))
+	rootcmd.Must(viper.BindEnv("zebpay-proxy-url", "ZEBPAY_PROXY"))
+
 	rootcmd.Must(viper.BindPFlag("enclave-operator-shares-bucket-name", NitroServeCmd.PersistentFlags().Lookup("enclave-operator-shares-bucket-name")))
 	rootcmd.Must(viper.BindEnv("enclave-operator-shares-bucket-name", "ENCLAVE_OPERATOR_SHARES_BUCKET_NAME"))
 
@@ -120,6 +129,10 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.EnclaveSecretsObjectNameCTXKey, viper.GetString("enclave-config-object-name"))
 	ctx = context.WithValue(ctx, appctx.EnclaveSecretsBucketNameCTXKey, viper.GetString("enclave-config-bucket-name"))
 	ctx = context.WithValue(ctx, appctx.EnclaveOperatorSharesBucketNameCTXKey, viper.GetString("enclave-operator-shares-bucket-name"))
+
+	ctx = context.WithValue(ctx, appctx.ZebpayServerURLCTXKey, viper.GetString("zebpay-server-url"))
+	ctx = context.WithValue(ctx, appctx.ZebpayProxyURLCTXKey, viper.GetString("zebpay-proxy-url"))
+
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
 

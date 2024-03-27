@@ -104,7 +104,7 @@ func (s *Service) StateMachineFromTransaction(
 	//case "gemini":
 	//	machine = &GeminiMachine{}
 	case "zebpay":
-		client, err := zebpay.NewWithHTTPClient(client)
+		client, err := zebpay.NewWithContext(ctx, client)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create zebpay client: %w", err)
 		}
