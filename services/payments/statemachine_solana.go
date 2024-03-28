@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"time"
 
 	"github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
@@ -19,12 +18,31 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// TransferCode is an enum representing the status of an onchain Solana transfer.
 type TransferCode int
 
 const (
+	// TransferSuccessCode is the status of a successful transfer as verified onchain.
 	TransferSuccessCode TransferCode = iota
+
+	// TransferDroppedCode is the status of a dropped transfer.
+	//
+	// This can happen if the transaction could not be committed to a block within 150 slots.
+	// The transaction can be safely retried with a new blockhash.
 	TransferDroppedCode
+
+	// TransferFailedCode is the status of a failed transfer.
+	//
+	// This typically indicates an RPC error during transaction submission. The transaction can be
+	// safely retried with a new blockhash.
 	TransferFailedCode
+
+	// TransferPendingCode is the status of a pending transfer.
+	//
+	// This indicates that the transaction has been submitted but has not yet been confirmed
+	// onchain. The transaction can be retried with the same blockhash until it either succeeds
+	// or expires.
+	TransferPendingCode
 )
 
 func (tc TransferCode) String() string {
@@ -32,17 +50,19 @@ func (tc TransferCode) String() string {
 		"TransferSuccessCode",
 		"TransferDroppedCode",
 		"TransferFailedCode",
+		"TransferPendingCode",
 	}[tc]
 }
 
 type chainIdempotencyData struct {
-	BlockHash string `json:"blockHash"`
-	Signature string `json:"signature"`
+	BlockHash  string `json:"blockHash"`
+	SlotTarget uint64 `json:"slotTarget"`
+	Signature  string `json:"signature"`
 }
 
 const (
 	batMintDecimals     int    = 8
-	batMintAddress      string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz"
+	batMintAddress      string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Wormhole wrapped BAT mint address
 	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 )
 
@@ -77,8 +97,13 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	}
 
 	// Do nothing if the state is already final
-	if sm.transaction.Status == paymentLib.Paid || sm.transaction.Status == paymentLib.Failed {
+	if sm.transaction.Status == paymentLib.Paid {
 		return sm.transaction, nil
+	}
+
+	// Reset idempotency data if the transaction is not pending
+	if sm.transaction.Status != paymentLib.Pending {
+		sm.transaction.ExternalIdempotency = []byte{}
 	}
 
 	client := client.NewClient(sm.solanaRpcEndpoint)
@@ -106,17 +131,27 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, fmt.Errorf("failed to create instructions: %w entry: %v", err, entry)
 	}
 
-	status, idempotencyData, err := sendAndConfirmTransaction(ctx, signer, instructions, client)
+	// Deserialise idempotency data from the transaction if it exists, otherwise create a new one
+	// from the RPC.
+	idempotencyData, err := getOrCreateChainIdempotencyData(ctx, sm.transaction.ExternalIdempotency, client)
+	if err != nil {
+		entry, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
+		if setStateErr != nil {
+			return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", setStateErr, entry)
+		}
+
+		return sm.transaction, fmt.Errorf("failed to get idempotency data: %w", err)
+	}
 
 	// Add idempotency data to the transaction before handling potential transaction errors to ensure
-	// it gets persisted all possible return cases without repetition.
+	// it gets persisted for all possible return cases without repetition.
 	marshaledIdempotencyData, marshalErr := json.Marshal(idempotencyData)
 	if marshalErr != nil {
 		return nil, fmt.Errorf("failed to marshal idempotency data: %w", marshalErr)
 	}
 	sm.transaction.ExternalIdempotency = marshaledIdempotencyData
 
-	// Handle transaction submission errors
+	status, err := sendAndConfirmTransaction(ctx, signer, instructions, idempotencyData, client)
 	if err != nil {
 		entry, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
 		if setStateErr != nil {
@@ -124,6 +159,15 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		}
 
 		return sm.transaction, fmt.Errorf("failed to submit transaction: %w entry: %v", err, entry)
+	}
+
+	if status == TransferPendingCode {
+		entry, err := sm.SetNextState(ctx, paymentLib.Pending)
+		if err != nil {
+			return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
+		}
+
+		return sm.transaction, nil
 	}
 
 	if status == TransferSuccessCode {
@@ -135,6 +179,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, nil
 	}
 
+	// If the transaction is dropped or failed, set the state to Failed
 	entry, err := sm.SetNextState(ctx, paymentLib.Failed)
 	if err != nil {
 		return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
@@ -192,21 +237,6 @@ func getCreateAssociatedTokenAccountInstruction(
 	}), false, nil
 }
 
-func getTransferInstruction(
-	from common.PublicKey,
-	to common.PublicKey,
-	amount uint64,
-	feePayer common.PublicKey,
-) types.Instruction {
-	return token.Transfer(token.TransferParam{
-		From:    from,
-		To:      to,
-		Auth:    feePayer,
-		Signers: []common.PublicKey{},
-		Amount:  amount,
-	})
-}
-
 func makeInstructions(ctx context.Context, feePayer common.PublicKey, payeeWallet common.PublicKey, amount uint64, client *client.Client) ([]types.Instruction, error) {
 	instructions := make([]types.Instruction, 0)
 
@@ -231,12 +261,13 @@ func makeInstructions(ctx context.Context, feePayer common.PublicKey, payeeWalle
 	}
 
 	// Transfer BAT to the recipient
-	transferInstruction := getTransferInstruction(
-		from,
-		to,
-		amount,
-		feePayer,
-	)
+	transferInstruction := token.Transfer(token.TransferParam{
+		From:    from,
+		To:      to,
+		Auth:    feePayer,
+		Signers: []common.PublicKey{},
+		Amount:  amount,
+	})
 	instructions = append(instructions, transferInstruction)
 
 	return instructions, nil
@@ -280,6 +311,28 @@ func isBlockHeightExpired(ctx context.Context, lastValidBlockHeight uint64, rpcC
 	return blockHeightResponse.Result > lastValidBlockHeight, nil
 }
 
+func getOrCreateChainIdempotencyData(ctx context.Context, idempotencyBytes []byte, client *client.Client) (chainIdempotencyData, error) {
+	if len(idempotencyBytes) == 0 {
+		latestBlockhashResult, err := client.GetLatestBlockhashAndContext(ctx)
+		if err != nil {
+			return chainIdempotencyData{}, fmt.Errorf("get recent block hash error, err: %v", err)
+		}
+
+		return chainIdempotencyData{
+			BlockHash:  latestBlockhashResult.Value.Blockhash,
+			SlotTarget: latestBlockhashResult.Context.Slot + 150,
+		}, nil
+	}
+
+	idempotencyData := chainIdempotencyData{}
+	err := json.Unmarshal(idempotencyBytes, &idempotencyData)
+	if err != nil {
+		return chainIdempotencyData{}, fmt.Errorf("failed to unmarshal idempotency data, err: %v", err)
+	}
+
+	return idempotencyData, nil
+}
+
 // sendAndConfirmTransaction signs and submits a transaction, then waits for confirmation.
 //
 // Once the transaction is sent, this method continuously polls on status of the signature
@@ -297,58 +350,38 @@ func sendAndConfirmTransaction(
 	ctx context.Context,
 	signer types.Account,
 	instructions []types.Instruction,
+	idempotencyData chainIdempotencyData,
 	client *client.Client,
-) (TransferCode, chainIdempotencyData, error) {
-	latestBlockhashResult, err := client.GetLatestBlockhashAndContext(ctx)
+) (TransferCode, error) {
+	blockHashExpired, err := isBlockHeightExpired(ctx, idempotencyData.SlotTarget, client)
 	if err != nil {
-		return TransferFailedCode, chainIdempotencyData{}, fmt.Errorf("get recent block hash error, err: %v", err)
+		log.Printf("blockhash expired error, err: %v\n", err)
+		return TransferPendingCode, nil
 	}
 
-	lastValidBlockHeight := latestBlockhashResult.Context.Slot + 150
-	idempotencyData := chainIdempotencyData{
-		BlockHash: latestBlockhashResult.Value.Blockhash,
+	if blockHashExpired {
+		return TransferDroppedCode, nil
 	}
 
-	for {
-		blockHashExpired, err := isBlockHeightExpired(ctx, lastValidBlockHeight, client)
-		if err != nil {
-			return TransferFailedCode, fmt.Errorf("blockhash expired error, err: %v", err)
-		}
-
-		if blockHashExpired {
-			return TransferDroppedCode, nil
-		}
-
-		signature, err := sendTransaction(ctx, signer, instructions, latestBlockhashResult.Value.Blockhash, client)
-		if err != nil {
-			return TransferFailedCode, idempotencyData, fmt.Errorf("send transaction error, err: %v", err)
-		}
-		idempotencyData.Signature = signature
-
-		sigStatus, err := client.GetSignatureStatus(ctx, signature)
-		if err != nil {
-			log.Printf("get signature status error, err: %v\n", err)
-			continue
-		}
-
-		if sigStatus == nil || sigStatus.ConfirmationStatus == nil {
-			log.Printf("confirmation status is nil\n")
-			continue
-		}
-
-		if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {
-			return TransferSuccessCode, nil
-		}
-
-		blockHashExpired, err := isBlockHeightExpired(ctx, lastValidBlockHeight, client)
-		if err != nil {
-			return TransferFailedCode, idempotencyData, fmt.Errorf("blockhash expired error, err: %v", err)
-		}
-
-		if blockHashExpired {
-			return TransferDroppedCode, idempotencyData, nil
-		}
-
-		time.Sleep(500 * time.Millisecond)
+	signature, err := sendTransaction(ctx, signer, instructions, idempotencyData.BlockHash, client)
+	if err != nil {
+		return TransferFailedCode, fmt.Errorf("send transaction error, err: %v", err)
 	}
+
+	sigStatus, err := client.GetSignatureStatus(ctx, signature)
+	if err != nil {
+		log.Printf("get signature status error, err: %v\n", err)
+		return TransferPendingCode, nil
+	}
+
+	if sigStatus == nil || sigStatus.ConfirmationStatus == nil {
+		log.Printf("confirmation status is nil\n")
+		return TransferPendingCode, nil
+	}
+
+	if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {
+		return TransferSuccessCode, nil
+	}
+
+	return TransferPendingCode, nil
 }
