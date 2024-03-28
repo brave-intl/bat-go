@@ -116,11 +116,9 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	).BigInt().Uint64()
 
 	instructions, err := makeInstructions(
-		ctx,
 		signer.PublicKey,
 		payeeWallet,
 		amount,
-		client,
 	)
 	if err != nil {
 		entry, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
@@ -193,84 +191,35 @@ func (sm *SolanaMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPay
 	return sm.SetNextState(ctx, paymentLib.Failed)
 }
 
-func hasAssociatedTokenAccount(ctx context.Context, wallet common.PublicKey, client *client.Client) (common.PublicKey, bool, error) {
-	ata, _, err := common.FindAssociatedTokenAddress(wallet, batMintPublicKey)
-	if err != nil {
-		return common.PublicKey{}, false, err
-	}
-
-	result, err := client.GetAccountInfo(
-		ctx,
-		ata.ToBase58(),
-	)
-	if err != nil {
-		return common.PublicKey{}, false, err
-	}
-
-	if result.Owner.ToBase58() == tokenProgramAddress {
-		return ata, true, nil
-	}
-
-	return ata, false, nil
-}
-
-func getCreateAssociatedTokenAccountInstruction(
-	ctx context.Context,
-	owner common.PublicKey,
-	feePayer common.PublicKey,
-	client *client.Client,
-) (types.Instruction, bool, error) {
-	ata, hasAta, err := hasAssociatedTokenAccount(ctx, owner, client)
-	if err != nil {
-		return types.Instruction{}, false, err
-	}
-
-	if hasAta {
-		return types.Instruction{}, true, nil
-	}
-
-	return associated_token_account.Create(associated_token_account.CreateParam{
-		Funder:                 feePayer,
-		Owner:                  owner,
-		Mint:                   batMintPublicKey,
-		AssociatedTokenAccount: ata,
-	}), false, nil
-}
-
-func makeInstructions(ctx context.Context, feePayer common.PublicKey, payeeWallet common.PublicKey, amount uint64, client *client.Client) ([]types.Instruction, error) {
-	instructions := make([]types.Instruction, 0)
-
-	// Create an associated token account if it doesn't exist
-	ataInstruction, hasAta, err := getCreateAssociatedTokenAccountInstruction(ctx, payeeWallet, feePayer, client)
+func makeInstructions(feePayer common.PublicKey, payeeWallet common.PublicKey, amount uint64) ([]types.Instruction, error) {
+	toAta, _, err := common.FindAssociatedTokenAddress(payeeWallet, batMintPublicKey)
 	if err != nil {
 		return []types.Instruction{}, err
 	}
 
-	if !hasAta {
-		instructions = append(instructions, ataInstruction)
-	}
-
-	to, _, err := common.FindAssociatedTokenAddress(payeeWallet, batMintPublicKey)
+	fromAta, _, err := common.FindAssociatedTokenAddress(feePayer, batMintPublicKey)
 	if err != nil {
 		return []types.Instruction{}, err
 	}
 
-	from, _, err := common.FindAssociatedTokenAddress(feePayer, batMintPublicKey)
-	if err != nil {
-		return []types.Instruction{}, err
-	}
+	return []types.Instruction{
+		// Create an associated token account if it doesn't exist
+		associated_token_account.CreateIdempotent(associated_token_account.CreateIdempotentParam{
+			Funder:                 feePayer,
+			Owner:                  payeeWallet,
+			Mint:                   batMintPublicKey,
+			AssociatedTokenAccount: toAta,
+		}),
 
-	// Transfer BAT to the recipient
-	transferInstruction := token.Transfer(token.TransferParam{
-		From:    from,
-		To:      to,
-		Auth:    feePayer,
-		Signers: []common.PublicKey{},
-		Amount:  amount,
-	})
-	instructions = append(instructions, transferInstruction)
-
-	return instructions, nil
+		// Transfer BAT to the recipient
+		token.Transfer(token.TransferParam{
+			From:    fromAta,
+			To:      toAta,
+			Auth:    feePayer,
+			Signers: []common.PublicKey{},
+			Amount:  amount,
+		}),
+	}, nil
 }
 
 func sendTransaction(
@@ -288,6 +237,7 @@ func sendTransaction(
 		}),
 		Signers: []types.Account{signer},
 	})
+	// fixme - irrecoverable err
 	if err != nil {
 		return "", fmt.Errorf("failed to create tx, err: %v", err)
 	}
@@ -295,6 +245,7 @@ func sendTransaction(
 	signature, err := rpcClient.SendTransactionWithConfig(ctx, txn, client.SendTransactionConfig{
 		SkipPreflight: true,
 	})
+	// fixme - recoverable err
 	if err != nil {
 		return "", fmt.Errorf("failed to send tx, err: %v", err)
 	}
@@ -367,6 +318,8 @@ func sendAndConfirmTransaction(
 	if err != nil {
 		return TransferFailedCode, fmt.Errorf("send transaction error, err: %v", err)
 	}
+
+	// fixme - check status before sendAndConfirmTransaction
 
 	sigStatus, err := client.GetSignatureStatus(ctx, signature)
 	if err != nil {
