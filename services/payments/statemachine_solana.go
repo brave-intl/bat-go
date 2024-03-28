@@ -27,6 +27,14 @@ const (
 	TransferFailedCode
 )
 
+func (tc TransferCode) String() string {
+	return [...]string{
+		"TransferSuccessCode",
+		"TransferDroppedCode",
+		"TransferFailedCode",
+	}[tc]
+}
+
 type chainIdempotencyData struct {
 	BlockHash string `json:"blockHash"`
 	Signature string `json:"signature"`
