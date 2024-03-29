@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 
 	"github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
@@ -25,12 +26,8 @@ type chainIdempotencyData struct {
 
 const (
 	batMintDecimals     int    = 8
-	batMintAddress      string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Wormhole wrapped BAT mint address
-	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-)
-
-var (
-	batMintPublicKey = common.PublicKeyFromString(batMintAddress)
+	//batMintAddress      string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Wormhole wrapped BAT mint address
+	//tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 )
 
 // SolanaMachine is an implementation of TxStateMachine for Solana on-chain payouts
@@ -80,7 +77,10 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, nil
 	}
 
-	signer, _ := types.AccountFromBase58(sm.signingKey)
+	signer, err := types.AccountFromBase58(sm.signingKey)
+	if err != nil {
+		return sm.transaction, fmt.Errorf("failed to derive account from base58: %w", err)
+	}
 	payeeWallet := common.PublicKeyFromString(sm.transaction.To)
 
 	// Convert the amount to base units
@@ -158,6 +158,8 @@ func (sm *SolanaMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPay
 }
 
 func makeInstructions(feePayer common.PublicKey, payeeWallet common.PublicKey, amount uint64) ([]types.Instruction, error) {
+	batMintPublicKey := common.PublicKeyFromString(os.Getenv("BAT_MINT_ADDRESS"))
+
 	toAta, _, err := common.FindAssociatedTokenAddress(payeeWallet, batMintPublicKey)
 	if err != nil {
 		return []types.Instruction{}, err
@@ -167,24 +169,27 @@ func makeInstructions(feePayer common.PublicKey, payeeWallet common.PublicKey, a
 	if err != nil {
 		return []types.Instruction{}, err
 	}
+	ataCreationParam := associated_token_account.CreateIdempotentParam{
+		Funder:                 feePayer,
+		Owner:                  payeeWallet,
+		Mint:                   batMintPublicKey,
+		AssociatedTokenAccount: toAta,
+	}
+
+	batTransferParam := token.TransferParam{
+		From:    fromAta,
+		To:      toAta,
+		Auth:    feePayer,
+		Signers: []common.PublicKey{},
+		Amount:  amount,
+	}
 
 	return []types.Instruction{
 		// Create an associated token account if it doesn't exist
-		associated_token_account.CreateIdempotent(associated_token_account.CreateIdempotentParam{
-			Funder:                 feePayer,
-			Owner:                  payeeWallet,
-			Mint:                   batMintPublicKey,
-			AssociatedTokenAccount: toAta,
-		}),
+		associated_token_account.CreateIdempotent(ataCreationParam),
 
 		// Transfer BAT to the recipient
-		token.Transfer(token.TransferParam{
-			From:    fromAta,
-			To:      toAta,
-			Auth:    feePayer,
-			Signers: []common.PublicKey{},
-			Amount:  amount,
-		}),
+		token.Transfer(batTransferParam),
 	}, nil
 }
 
@@ -280,6 +285,16 @@ func hasSignatureConfirmed(ctx context.Context, signature string, client *client
 
 	if sigStatus == nil || sigStatus.ConfirmationStatus == nil {
 		return false
+	}
+
+	if sigStatus.Err != nil {
+		parsedErr, ok := sigStatus.Err.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		if errVal, ok := parsedErr["InstructionError"]; ok {
+			return false
+		}
 	}
 
 	if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {

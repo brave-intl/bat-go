@@ -1,3 +1,4 @@
+//go:build integrationsolana
 // +build integrationsolana
 
 package payments
@@ -9,6 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -43,7 +45,7 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
 			Amount:    decimal.NewFromFloat(1.4),
-			To:        os.Getenv("SOLANA_PAYEE_ADDRESS_WITH_ATA"),
+			To:        os.Getenv("SOLANA_PAYEE_ADDRESS_WITHOUT_ATA"),
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
 			Custodian: "solana",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
@@ -116,10 +118,15 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	solanaStateMachine.setTransaction(&testState)
 	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
 	// is 5 minutes and we don't want the test to run that long even if it's broken.
-	timeout, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+	timeout, cancel = context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
 	newTransaction, err = Drive(timeout, &solanaStateMachine)
+	fmt.Printf("STATUS: %s\n", newTransaction.Status)
 	must.Equal(t, nil, err)
+	for i := 1; i < 10; i++ {
+		time.Sleep(5 * time.Second)
+		newTransaction, err = Drive(timeout, &solanaStateMachine)
+		fmt.Printf("STATUS: %s\n", newTransaction.Status)
+	}
 	should.Equal(t, paymentLib.Paid, newTransaction.Status)
-
 }
