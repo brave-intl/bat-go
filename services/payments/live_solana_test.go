@@ -1,3 +1,4 @@
+//go:build integrationsolana
 // +build integrationsolana
 
 package payments
@@ -9,6 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -50,7 +52,7 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
 			Amount:    decimal.NewFromFloat(1.4),
-			To:        os.Getenv("SOLANA_PAYEE_ADDRESS_WITH_ATA"),
+			To:        os.Getenv("SOLANA_PAYEE_ADDRESS_WITHOUT_ATA"),
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
 			Custodian: "solana",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
@@ -113,20 +115,18 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 	// State transition: Pending -> Paid
 	marshaledData, _ = json.Marshal(pendingTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solMachine.setTransaction(pendingTransaction)
-	// Set a timeout equivalent to 150 slots, long enough to allow for the transaction to be confirmed
+	solanaStateMachine.setTransaction(&testState)
+	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
+	// is 5 minutes and we don't want the test to run that long even if it's broken.
 	timeout, cancel = context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
-	var (
-		paidTransaction *paymentLib.AuthenticatedPaymentState
-	)
-	for {
-		paidTransaction, err = Drive(timeout, &solMachine)
-		must.Equal(t, nil, err)
-		if paidTransaction.Status == paymentLib.Paid {
-			break
-		}
+	newTransaction, err = Drive(timeout, &solanaStateMachine)
+	fmt.Printf("STATUS: %s\n", newTransaction.Status)
+	must.Equal(t, nil, err)
+	for i := 1; i < 10; i++ {
+		time.Sleep(5 * time.Second)
+		newTransaction, err = Drive(timeout, &solanaStateMachine)
+		fmt.Printf("STATUS: %s\n", newTransaction.Status)
 	}
-
-	should.Equal(t, paymentLib.Paid, paidTransaction.Status)
+	should.Equal(t, paymentLib.Paid, newTransaction.Status)
 }

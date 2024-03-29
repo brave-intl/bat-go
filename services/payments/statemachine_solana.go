@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 
 	"github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
@@ -80,7 +81,10 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, nil
 	}
 
-	signer, _ := types.AccountFromBase58(sm.signingKey)
+	signer, err := types.AccountFromBase58(sm.signingKey)
+	if err != nil {
+		return sm.transaction, fmt.Errorf("failed to derive account from base58: %w", err)
+	}
 	payeeWallet := common.PublicKeyFromString(sm.transaction.To)
 
 	// Convert the amount to base units
@@ -168,24 +172,27 @@ func makeInstructions(feePayer common.PublicKey, payeeWallet common.PublicKey, a
 	if err != nil {
 		return []types.Instruction{}, err
 	}
+	ataCreationParam := associated_token_account.CreateIdempotentParam{
+		Funder:                 feePayer,
+		Owner:                  payeeWallet,
+		Mint:                   mint,
+		AssociatedTokenAccount: toAta,
+	}
+
+	batTransferParam := token.TransferParam{
+		From:    fromAta,
+		To:      toAta,
+		Auth:    feePayer,
+		Signers: []common.PublicKey{},
+		Amount:  amount,
+	}
 
 	return []types.Instruction{
 		// Create an associated token account if it doesn't exist
-		associated_token_account.CreateIdempotent(associated_token_account.CreateIdempotentParam{
-			Funder:                 feePayer,
-			Owner:                  payeeWallet,
-			Mint:                   mint,
-			AssociatedTokenAccount: toAta,
-		}),
+		associated_token_account.CreateIdempotent(ataCreationParam),
 
 		// Transfer BAT to the recipient
-		token.Transfer(token.TransferParam{
-			From:    fromAta,
-			To:      toAta,
-			Auth:    feePayer,
-			Signers: []common.PublicKey{},
-			Amount:  amount,
-		}),
+		token.Transfer(batTransferParam),
 	}, nil
 }
 
@@ -281,6 +288,16 @@ func hasSignatureConfirmed(ctx context.Context, signature string, client *client
 
 	if sigStatus == nil || sigStatus.ConfirmationStatus == nil {
 		return false
+	}
+
+	if sigStatus.Err != nil {
+		parsedErr, ok := sigStatus.Err.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		if errVal, ok := parsedErr["InstructionError"]; ok {
+			return false
+		}
 	}
 
 	if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {
