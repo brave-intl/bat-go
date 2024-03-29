@@ -72,13 +72,22 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, fmt.Errorf("failed to decode or fetch idempotency data: %w", err)
 	}
 
-	if hasSignatureConfirmed(ctx, idempotencyData.Signature, client) {
-		entry, err := sm.SetNextState(ctx, paymentLib.Paid)
+	// If the signature is present in the idempotency data we should check its status before
+	// proceeding.
+	if idempotencyData.Signature != "" {
+		// TODO Handle the missing from chain case where the transaction was sent but can't
+		// yet be found. Retries will make this work, but we should have a better error.
+		status, err := checkStatus(ctx, idempotencyData.Signature, client)
 		if err != nil {
-			return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
+			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 		}
-
-		return sm.transaction, nil
+		if *status == rpc.CommitmentConfirmed || *status == rpc.CommitmentFinalized {
+			entry, err := sm.SetNextState(ctx, paymentLib.Paid)
+			if err != nil {
+				return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
+			}
+			return sm.transaction, nil
+		}
 	}
 
 	signer, err := types.AccountFromBase58(sm.signingKey)
@@ -258,53 +267,52 @@ func fetchChainIdempotencyData(ctx context.Context, client *client.Client) (chai
 	}, nil
 }
 
-func decodeOrFetchChainIdempotencyData(ctx context.Context, data []byte, client *client.Client) (chainIdempotencyData, error) {
+func decodeOrFetchChainIdempotencyData(
+	ctx context.Context,
+	data []byte,
+	client *client.Client,
+) (chainIdempotencyData, error) {
+	var (
+		idempotencyData chainIdempotencyData
+		err             error
+	)
+
 	if len(data) > 0 {
-		idempotencyData, err := decodeChainIdempotencyData(data)
+		idempotencyData, err = decodeChainIdempotencyData(data)
 		if err != nil {
-			return chainIdempotencyData{}, fmt.Errorf("failed to decode idempotency data: %w", err)
+			return idempotencyData, fmt.Errorf("failed to decode idempotency data: %w", err)
 		}
-
-		return idempotencyData, nil
+	} else {
+		idempotencyData, err = fetchChainIdempotencyData(ctx, client)
+		if err != nil {
+			return idempotencyData, fmt.Errorf("failed to fetch idempotency data: %w", err)
+		}
 	}
 
-	idempotencyData, err := fetchChainIdempotencyData(ctx, client)
-	if err != nil {
-		return chainIdempotencyData{}, fmt.Errorf("failed to fetch idempotency data: %w", err)
-	}
 
 	return idempotencyData, nil
 }
 
-func hasSignatureConfirmed(ctx context.Context, signature string, client *client.Client) bool {
-	if signature == "" {
-		return false
-	}
-
+func checkStatus(ctx context.Context, signature string, client *client.Client) (*rpc.Commitment, error) {
 	sigStatus, err := client.GetSignatureStatus(ctx, signature)
 	if err != nil {
-		return false
+		return nil, fmt.Errorf("status check error: %w", err)
 	}
 
 	if sigStatus == nil || sigStatus.ConfirmationStatus == nil {
-		return false
+		return nil, errors.New("status missing")
 	}
 
 	if sigStatus.Err != nil {
 		parsedErr, ok := sigStatus.Err.(map[string]interface{})
 		if !ok {
-			return false
+			return nil, fmt.Errorf("status error: %w", err)
 		}
 		if errVal, ok := parsedErr["InstructionError"]; ok {
-			return false
+			return nil, fmt.Errorf("instruction error: %v", errVal)
 		}
 	}
-
-	if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {
-		return true
-	}
-
-	return false
+	return sigStatus.ConfirmationStatus, nil
 }
 
 func hasBlockHeightExpired(ctx context.Context, blockHeight uint64, rpcClient *client.Client) bool {

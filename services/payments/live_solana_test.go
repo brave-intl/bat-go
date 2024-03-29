@@ -120,11 +120,14 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 	// is 5 minutes and we don't want the test to run that long even if it's broken.
 	timeout, cancel = context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
+	// TODO Handle the missing from chain case where the transaction was sent but can't
+	// yet be found. Until that's done, wait here a moment.
+	time.Sleep(5*time.Second)
 	newTransaction, err = Drive(timeout, &solanaStateMachine)
 	fmt.Printf("STATUS: %s\n", newTransaction.Status)
 	must.Equal(t, nil, err)
-	for i := 1; i < 10; i++ {
-		time.Sleep(5 * time.Second)
+	for i := 1; i < 3; i++ {
+		time.Sleep(10 * time.Second)
 		newTransaction, err = Drive(timeout, &solanaStateMachine)
 		fmt.Printf("STATUS: %s\n", newTransaction.Status)
 	}
