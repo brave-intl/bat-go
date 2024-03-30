@@ -28,6 +28,8 @@ const (
 	SPLBATMintAddress   string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Mint address for Wormhole wrapped BAT on mainnet
 	SPLBATMintDecimals  uint8  = 8                                              // Mint decimals for Wormhole wrapped BAT on mainnet
 	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	CommitmentNotFound rpc.Commitment = "notfound"
+	CommitmentUnknown rpc.Commitment = "unknown"
 )
 
 // SolanaMachine is an implementation of TxStateMachine for Solana on-chain payouts
@@ -81,7 +83,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		if err != nil {
 			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 		}
-		if *status == rpc.CommitmentConfirmed || *status == rpc.CommitmentFinalized {
+		if status == rpc.CommitmentConfirmed || status == rpc.CommitmentFinalized {
 			entry, err := sm.SetNextState(ctx, paymentLib.Paid)
 			if err != nil {
 				return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
@@ -293,26 +295,29 @@ func decodeOrFetchChainIdempotencyData(
 	return idempotencyData, nil
 }
 
-func checkStatus(ctx context.Context, signature string, client *client.Client) (*rpc.Commitment, error) {
+func checkStatus(ctx context.Context, signature string, client *client.Client) (rpc.Commitment, error) {
 	sigStatus, err := client.GetSignatureStatus(ctx, signature)
 	if err != nil {
-		return nil, fmt.Errorf("status check error: %w", err)
+		return CommitmentUnknown, fmt.Errorf("status check error: %w", err)
 	}
 
-	if sigStatus == nil || sigStatus.ConfirmationStatus == nil {
-		return nil, errors.New("status missing")
+	if sigStatus == nil {
+		return CommitmentNotFound, nil
+	}
+	if sigStatus.ConfirmationStatus == nil {
+		return CommitmentUnknown, fmt.Errorf("failed to establish commitment status: %v", sigStatus)
 	}
 
 	if sigStatus.Err != nil {
 		parsedErr, ok := sigStatus.Err.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("status error: %w", err)
+			return CommitmentUnknown, fmt.Errorf("status error: %w", err)
 		}
 		if errVal, ok := parsedErr["InstructionError"]; ok {
-			return nil, fmt.Errorf("instruction error: %v", errVal)
+			return CommitmentUnknown, fmt.Errorf("instruction error: %v", errVal)
 		}
 	}
-	return sigStatus.ConfirmationStatus, nil
+	return *sigStatus.ConfirmationStatus, nil
 }
 
 func hasBlockHeightExpired(ctx context.Context, blockHeight uint64, rpcClient *client.Client) bool {
