@@ -24,28 +24,25 @@ import (
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+	"github.com/blocto/solana-go-sdk/types"
 )
 
 /*
-TestLiveSolanaStateMachineHappyPathTransitions tests for correct state progression from
+TestLiveSolanaStateMachineATAMissing tests for correct state progression from
 Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
 */
 func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
-	solanaStateMachine := SolanaMachine{
-		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
-		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
-	}
+	// New account for every test execution to ensure that the account does
+	// not already have its ATA configured.
+	payee_account := types.NewAccount()
 
-	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
-	must.Nil(t, err)
-
-	testState := paymentLib.AuthenticatedPaymentState{
+	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
 			Amount:    decimal.NewFromFloat(1.4),
-			To:        os.Getenv("SOLANA_PAYEE_ADDRESS_WITHOUT_ATA"),
+			To:        string(payee_account.PublicKey[:]),
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
 			Custodian: "solana",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
@@ -54,7 +51,67 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	marshaledData, _ := json.Marshal(testState)
+	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+
+	driveTransitions(
+		ctx,
+		state,
+		mockTransitionHistory,
+		solanaStateMachine,
+		marshaledState,
+		t,
+	)
+}
+
+/*
+TestLiveSolanaStateMachineATAPresent tests for correct state progression from
+Initialized to Paid with a payee account that has the SPL-BAT ATA configured.
+*/
+func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
+	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
+
+	state := paymentLib.AuthenticatedPaymentState{
+		Status: paymentLib.Prepared,
+		PaymentDetails: paymentLib.PaymentDetails{
+			Amount:    decimal.NewFromFloat(1.4),
+			// Fixed To address that has the ATA configured already
+			To:        "5g7xMFn9bk8vyZdfsr4mAfUWKWDaWxzZBH5Cb1XHftBL",
+			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
+			Custodian: "solana",
+			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
+			Currency:  "BAT",
+		},
+		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
+	}
+
+	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+
+	driveTransitions(
+		ctx,
+		state,
+		mockTransitionHistory,
+		solanaStateMachine,
+		marshaledState,
+		t,
+	)
+}
+
+func setupState(
+	state paymentLib.AuthenticatedPaymentState,
+	t *testing.T,
+) (
+	SolanaMachine,
+	QLDBPaymentTransitionHistoryEntry,
+	[]byte,
+) {
+	sm := SolanaMachine{
+		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
+		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
+	}
+	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
+	must.Nil(t, err)
+
+	marshaledData, _ := json.Marshal(state)
 	must.Nil(t, err)
 	privkey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	must.Nil(t, err)
@@ -79,12 +136,20 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-	solanaStateMachine.setTransaction(
-		&testState,
+	sm.setTransaction(
+		&state,
 	)
+	return sm, mockTransitionHistory, marshaledData
+}
 
-	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
-
+func driveTransitions(
+	ctx context.Context,
+	testState paymentLib.AuthenticatedPaymentState,
+	mockTransitionHistory QLDBPaymentTransitionHistoryEntry,
+	solanaStateMachine SolanaMachine,
+	marshaledData []byte,
+	t *testing.T,
+) {
 	// Should transition transaction into the Authorized state
 	testState.Status = paymentLib.Prepared
 	marshaledData, _ = json.Marshal(testState)
@@ -118,9 +183,6 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	// is 5 minutes and we don't want the test to run that long even if it's broken.
 	timeout, cancel = context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
-	// TODO Handle the missing from chain case where the transaction was sent but can't
-	// yet be found. Until that's done, wait here a moment.
-	//time.Sleep(5*time.Second)
 	newTransaction, err = Drive(timeout, &solanaStateMachine)
 	fmt.Printf("STATUS: %s\n", newTransaction.Status)
 	must.Equal(t, nil, err)
