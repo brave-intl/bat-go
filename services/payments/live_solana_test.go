@@ -120,14 +120,17 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	defer cancel()
 	// TODO Handle the missing from chain case where the transaction was sent but can't
 	// yet be found. Until that's done, wait here a moment.
-	time.Sleep(5*time.Second)
+	//time.Sleep(5*time.Second)
 	newTransaction, err = Drive(timeout, &solanaStateMachine)
 	fmt.Printf("STATUS: %s\n", newTransaction.Status)
 	must.Equal(t, nil, err)
 	for i := 1; i < 3; i++ {
-		time.Sleep(10 * time.Second)
+		time.Sleep(1 * time.Second)
 		newTransaction, err = Drive(timeout, &solanaStateMachine)
 		fmt.Printf("STATUS: %s\n", newTransaction.Status)
+		if newTransaction.Status == paymentLib.Paid {
+			break
+		}
 	}
 	should.Equal(t, paymentLib.Paid, newTransaction.Status)
 }
