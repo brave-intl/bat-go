@@ -24,16 +24,23 @@ import (
 	must "github.com/stretchr/testify/require"
 )
 
+const (
+	splMintAddress  string = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq" // SPL mint address on devnet
+	splMintDecimals uint8  = 8                                              // SPL mint decimals on devnet
+)
+
 /*
 TestLiveSolanaStateMachineHappyPathTransitions tests for correct state progression from
-Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
+Initialized to Paid with a payee account with or without an ATA.
 */
-func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
+func TestLiveSolanaStateMachine(t *testing.T) {
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	solanaStateMachine := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
+		splMintAddress:    splMintAddress,
+		splMintDecimals:   splMintDecimals,
 	}
 
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")

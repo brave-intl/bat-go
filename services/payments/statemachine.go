@@ -126,6 +126,8 @@ func (s *Service) StateMachineFromTransaction(
 		machine = &SolanaMachine{
 			signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 			solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
+			splMintAddress:    SPLBATMintAddress,
+			splMintDecimals:   SPLBATMintDecimals,
 		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
