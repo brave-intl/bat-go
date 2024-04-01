@@ -83,43 +83,43 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 
-	// Should transition transaction into the Authorized state
+	// State transition: Prepared -> Authorized
 	testState.Status = paymentLib.Prepared
 	marshaledData, _ = json.Marshal(testState)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
 	solanaStateMachine.setTransaction(&testState)
-	newTransaction, err := Drive(ctx, &solanaStateMachine)
+	authorizedTransaction, err := Drive(ctx, &solanaStateMachine)
 	must.Nil(t, err)
-	// Ensure that our Bitflyer calls are going through the mock and not anything else.
-	//must.Equal(t, info[tokenInfoKey], 1)
-	should.Equal(t, paymentLib.Authorized, newTransaction.Status)
+	should.Equal(t, paymentLib.Authorized, authorizedTransaction.Status)
 
-	// Should transition transaction into the Pending state
-	testState.Status = paymentLib.Authorized
-	marshaledData, _ = json.Marshal(testState)
+	// State transition: Authorized -> Pending
+	marshaledData, _ = json.Marshal(authorizedTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solanaStateMachine.setTransaction(&testState)
-	timeout, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	solanaStateMachine.setTransaction(authorizedTransaction)
+	// Set a timeout long enough to allow for the transaction to be submitted
+	timeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	// For this test, we could return Pending status forever, so we need it to time out
-	// in order to capture and verify that pending status.
-	newTransaction, err = Drive(timeout, &solanaStateMachine)
-	// The only tolerable error is a timeout, but if we get one here it's probably indicative of a
-	// problem and we should look into it.
+	pendingTransaction, err := Drive(timeout, &solanaStateMachine)
 	must.Equal(t, nil, err)
-	should.Equal(t, paymentLib.Pending, newTransaction.Status)
+	should.Equal(t, paymentLib.Pending, pendingTransaction.Status)
 
-	// Should transition transaction into the Paid state
-	testState.Status = paymentLib.Pending
-	marshaledData, _ = json.Marshal(testState)
+	// State transition: Pending -> Paid
+	marshaledData, _ = json.Marshal(pendingTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solanaStateMachine.setTransaction(&testState)
-	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
-	// is 5 minutes and we don't want the test to run that long even if it's broken.
-	timeout, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+	solanaStateMachine.setTransaction(pendingTransaction)
+	// Set a timeout equivalent to 150 slots, long enough to allow for the transaction to be confirmed
+	timeout, cancel = context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
-	newTransaction, err = Drive(timeout, &solanaStateMachine)
-	must.Equal(t, nil, err)
-	should.Equal(t, paymentLib.Paid, newTransaction.Status)
+	var (
+		paidTransaction *paymentLib.AuthenticatedPaymentState
+	)
+	for {
+		paidTransaction, err = Drive(timeout, &solanaStateMachine)
+		must.Equal(t, nil, err)
+		if paidTransaction.Status == paymentLib.Paid {
+			break
+		}
+	}
 
+	should.Equal(t, paymentLib.Paid, paidTransaction.Status)
 }
