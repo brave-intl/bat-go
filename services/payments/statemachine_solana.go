@@ -25,11 +25,11 @@ type chainIdempotencyData struct {
 }
 
 const (
-	SPLBATMintAddress   string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Mint address for Wormhole wrapped BAT on mainnet
-	SPLBATMintDecimals  uint8  = 8                                              // Mint decimals for Wormhole wrapped BAT on mainnet
-	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 	CommitmentNotFound rpc.Commitment = "notfound"
 	CommitmentUnknown rpc.Commitment = "unknown"
+	SPLBATMintDecimals  uint8  = 8                                              // Mint decimals for Wormhole wrapped BAT on mainnet
+	SPLBATMintAddress   string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Mint address for Wormhole wrapped BAT on mainnet
+	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 )
 
 // SolanaMachine is an implementation of TxStateMachine for Solana on-chain payouts
@@ -173,7 +173,12 @@ func (sm *SolanaMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPay
 	return sm.SetNextState(ctx, paymentLib.Failed)
 }
 
-func makeInstructions(feePayer common.PublicKey, payeeWallet common.PublicKey, amount uint64, mint common.PublicKey) ([]types.Instruction, error) {
+func makeInstructions(
+	feePayer common.PublicKey,
+	payeeWallet common.PublicKey,
+	amount uint64,
+	mint common.PublicKey,
+) ([]types.Instruction, error) {
 	toAta, _, err := common.FindAssociatedTokenAddress(payeeWallet, mint)
 	if err != nil {
 		return []types.Instruction{}, err
