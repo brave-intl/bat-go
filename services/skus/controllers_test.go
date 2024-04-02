@@ -1003,6 +1003,9 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 }
 
 func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
+	// Until Kafka certs have been fixed.
+	suite.T().SkipNow()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1466,6 +1469,9 @@ func (suite *ControllersTestSuite) ReadKafkaVoteEvent(ctx context.Context) VoteE
 // This test performs a full e2e test using challenge bypass server to sign use order credentials.
 // It uses three tokens and expects three tokens and three signed creds to be returned.
 func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_SingleUse() {
+	// Until Kafka certs have been fixed.
+	suite.T().SkipNow()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1606,6 +1612,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 // which translates to three time limited v2 order credentials being stored for the single order containing
 // a single order item.
 func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_TimeLimitedV2() {
+	// Until Kafka certs have been fixed.
+	suite.T().SkipNow()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
