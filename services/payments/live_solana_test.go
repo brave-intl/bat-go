@@ -10,19 +10,18 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/shopspring/decimal"
-
-	"github.com/google/uuid"
-
+	"github.com/blocto/solana-go-sdk/client"
+	"github.com/blocto/solana-go-sdk/common"
 	"github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 )
@@ -32,17 +31,21 @@ TestLiveSolanaStateMachineATAMissing tests for correct state progression from
 Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
 */
 func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
+	const (
+		mint              = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
+		tokenAccountOwner = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	)
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	// New account for every test execution to ensure that the account does
 	// not already have its ATA configured.
-	payee_account := types.NewAccount()
+	payeeAccount := types.NewAccount()
 
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
 			Amount:    decimal.NewFromFloat(1.4),
-			To:        string(payee_account.PublicKey[:]),
+			To:        payeeAccount.PublicKey.ToBase58(),
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
 			Custodian: "solana",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
@@ -61,6 +64,31 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 		marshaledState,
 		t,
 	)
+
+	createdAta, _, err := common.FindAssociatedTokenAddress(
+		payeeAccount.PublicKey,
+		common.PublicKeyFromString(mint),
+	)
+	must.Nil(t, err)
+	solClient := client.NewClient(solMachine.solanaRpcEndpoint)
+	must.Nil(t, err)
+	// The RPC server caches the result of GetAccountInfo and the new value is not returned
+	// for over 10 seconds in our testing. Therefore, ugly as it is, loop until we get a result
+	// that matches our expectations or we give up and consider it a failure.
+	var result client.AccountInfo
+	for i := 1; i < 30; i++ {
+		t.Log("Checking that ATA was created")
+		time.Sleep(1 * time.Second)
+		result, err = solClient.GetAccountInfo(ctx, createdAta.ToBase58())
+		must.Nil(t, err)
+		if tokenAccountOwner == result.Owner.ToBase58() {
+			break
+		}
+	}
+	// Check if the ATA was created by checking it's "Owner", which is shared by all SPL tokens
+	// regardless of who created them. This just determines whether the ATA exists by checking that
+	// it has an Owner field that is valid.
+	should.Equal(t, tokenAccountOwner, result.Owner.ToBase58())
 }
 
 /*
@@ -115,7 +143,7 @@ func driveHappyPathTransitions(
 	// Should transition transaction into the Authorized state
 	transaction = transitioner(ctx, testState, paymentLib.Prepared, paymentLib.Authorized)
 	should.Equal(t, paymentLib.Authorized, transaction.Status)
-	fmt.Printf("STATUS 1: %s\n", transaction.ExternalIdempotency)
+	t.Log("State is Authorized")
 
 	// Should transition transaction into the Pending state
 	// For this test, we could return Pending status forever, so we need it to time out
@@ -124,27 +152,32 @@ func driveHappyPathTransitions(
 	defer cancel()
 	transaction = transitioner(timeout, *transaction, paymentLib.Authorized, paymentLib.Pending)
 	should.Equal(t, paymentLib.Pending, transaction.Status)
-	fmt.Printf("STATUS 2: %s\n", transaction.ExternalIdempotency)
+	t.Log("State is Pending")
+	idempotencyData := transaction.ExternalIdempotency
 
 	// Should transition transaction into the Paid state
 	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
 	// is 5 minutes and we don't want the test to run that long even if it's broken.
 	transaction = transitioner(timeout, *transaction, paymentLib.Pending, paymentLib.Paid)
 	should.Equal(t, paymentLib.Pending, transaction.Status)
-	fmt.Printf("STATUS 3: %s\n", transaction.ExternalIdempotency)
+	should.Equal(t, idempotencyData, transaction.ExternalIdempotency)
+	t.Log("State is Pending")
 
 	for i := 1; i < 30; i++ {
+		t.Log("Checking for Paid status")
 		time.Sleep(100 * time.Millisecond)
 		md, _ := json.Marshal(transaction)
 		mockTransitionHistory.Data.UnsafePaymentState = md
 		solMachine.setTransaction(transaction)
 		transaction, _ = Drive(ctx, &solMachine)
-		fmt.Printf("STATUS 4: %s\n", transaction.ExternalIdempotency)
+		should.Equal(t, idempotencyData, transaction.ExternalIdempotency)
 		if transaction.Status == paymentLib.Paid {
 			break
 		}
 	}
 	should.Equal(t, paymentLib.Paid, transaction.Status)
+	should.Equal(t, idempotencyData, transaction.ExternalIdempotency)
+	t.Log("State is Paid")
 }
 
 func setupState(
