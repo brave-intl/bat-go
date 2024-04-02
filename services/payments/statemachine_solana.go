@@ -25,11 +25,11 @@ type chainIdempotencyData struct {
 }
 
 const (
-	CommitmentNotFound rpc.Commitment = "notfound"
-	CommitmentUnknown rpc.Commitment = "unknown"
-	SPLBATMintDecimals  uint8  = 8                                              // Mint decimals for Wormhole wrapped BAT on mainnet
-	SPLBATMintAddress   string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Mint address for Wormhole wrapped BAT on mainnet
-	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	CommitmentNotFound  rpc.Commitment = "notfound"
+	CommitmentUnknown   rpc.Commitment = "unknown"
+	SPLBATMintDecimals  uint8          = 8                                              // Mint decimals for Wormhole wrapped BAT on mainnet
+	SPLBATMintAddress   string         = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Mint address for Wormhole wrapped BAT on mainnet
+	tokenProgramAddress string         = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 )
 
 // SolanaMachine is an implementation of TxStateMachine for Solana on-chain payouts
@@ -295,7 +295,6 @@ func decodeOrFetchChainIdempotencyData(
 			return idempotencyData, fmt.Errorf("failed to fetch idempotency data: %w", err)
 		}
 	}
-
 
 	return idempotencyData, nil
 }
