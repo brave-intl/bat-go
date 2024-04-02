@@ -24,13 +24,11 @@ type chainIdempotencyData struct {
 }
 
 const (
-	batMintDecimals     int    = 8
-	batMintAddress      string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Wormhole wrapped BAT mint address
-	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-)
-
-var (
-	batMintPublicKey = common.PublicKeyFromString(batMintAddress)
+	CommitmentNotFound  rpc.Commitment = "notfound"
+	CommitmentUnknown   rpc.Commitment = "unknown"
+	SPLBATMintDecimals  uint8          = 8                                              // Mint decimals for Wormhole wrapped BAT on mainnet
+	SPLBATMintAddress   string         = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Mint address for Wormhole wrapped BAT on mainnet
+	tokenProgramAddress string         = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 )
 
 // SolanaMachine is an implementation of TxStateMachine for Solana on-chain payouts
@@ -50,6 +48,8 @@ type SolanaMachine struct {
 	// 	derivedKey.PrivateKey
 	signingKey        string
 	solanaRpcEndpoint string
+	splMintAddress    string
+	splMintDecimals   uint8
 }
 
 // Pay implements TxStateMachine for the Solana machine.
@@ -58,6 +58,8 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	if errors.Is(err, context.DeadlineExceeded) {
 		return sm.transaction, err
 	}
+
+	splMintPublicKey := common.PublicKeyFromString(sm.splMintAddress)
 
 	// Skip if the state is already final
 	if sm.transaction.Status == paymentLib.Paid || sm.transaction.Status == paymentLib.Failed {
@@ -71,27 +73,40 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, fmt.Errorf("failed to decode or fetch idempotency data: %w", err)
 	}
 
-	if hasSignatureConfirmed(ctx, idempotencyData.Signature, client) {
-		entry, err := sm.SetNextState(ctx, paymentLib.Paid)
+	// If the signature is present in the idempotency data we should check its status before
+	// proceeding.
+	if idempotencyData.Signature != "" {
+		// TODO Handle the missing from chain case where the transaction was sent but can't
+		// yet be found. Retries will make this work, but we should have a better error.
+		status, err := checkStatus(ctx, idempotencyData.Signature, client)
 		if err != nil {
-			return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
+			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 		}
-
-		return sm.transaction, nil
+		if status == rpc.CommitmentConfirmed || status == rpc.CommitmentFinalized {
+			entry, err := sm.SetNextState(ctx, paymentLib.Paid)
+			if err != nil {
+				return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
+			}
+			return sm.transaction, nil
+		}
 	}
 
-	signer, _ := types.AccountFromBase58(sm.signingKey)
+	signer, err := types.AccountFromBase58(sm.signingKey)
+	if err != nil {
+		return sm.transaction, fmt.Errorf("failed to derive account from base58: %w", err)
+	}
 	payeeWallet := common.PublicKeyFromString(sm.transaction.To)
 
 	// Convert the amount to base units
 	amount := sm.transaction.Amount.Mul(
-		decimal.NewFromFloat(math.Pow10(batMintDecimals)),
+		decimal.NewFromFloat(math.Pow10(int(sm.splMintDecimals))),
 	).BigInt().Uint64()
 
 	instructions, err := makeInstructions(
 		signer.PublicKey,
 		payeeWallet,
 		amount,
+		splMintPublicKey,
 	)
 	if err != nil {
 		entry, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
@@ -157,34 +172,42 @@ func (sm *SolanaMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPay
 	return sm.SetNextState(ctx, paymentLib.Failed)
 }
 
-func makeInstructions(feePayer common.PublicKey, payeeWallet common.PublicKey, amount uint64) ([]types.Instruction, error) {
-	toAta, _, err := common.FindAssociatedTokenAddress(payeeWallet, batMintPublicKey)
+func makeInstructions(
+	feePayer common.PublicKey,
+	payeeWallet common.PublicKey,
+	amount uint64,
+	mint common.PublicKey,
+) ([]types.Instruction, error) {
+	toAta, _, err := common.FindAssociatedTokenAddress(payeeWallet, mint)
 	if err != nil {
 		return []types.Instruction{}, err
 	}
 
-	fromAta, _, err := common.FindAssociatedTokenAddress(feePayer, batMintPublicKey)
+	fromAta, _, err := common.FindAssociatedTokenAddress(feePayer, mint)
 	if err != nil {
 		return []types.Instruction{}, err
+	}
+	ataCreationParam := associated_token_account.CreateIdempotentParam{
+		Funder:                 feePayer,
+		Owner:                  payeeWallet,
+		Mint:                   mint,
+		AssociatedTokenAccount: toAta,
+	}
+
+	batTransferParam := token.TransferParam{
+		From:    fromAta,
+		To:      toAta,
+		Auth:    feePayer,
+		Signers: []common.PublicKey{},
+		Amount:  amount,
 	}
 
 	return []types.Instruction{
 		// Create an associated token account if it doesn't exist
-		associated_token_account.CreateIdempotent(associated_token_account.CreateIdempotentParam{
-			Funder:                 feePayer,
-			Owner:                  payeeWallet,
-			Mint:                   batMintPublicKey,
-			AssociatedTokenAccount: toAta,
-		}),
+		associated_token_account.CreateIdempotent(ataCreationParam),
 
 		// Transfer BAT to the recipient
-		token.Transfer(token.TransferParam{
-			From:    fromAta,
-			To:      toAta,
-			Auth:    feePayer,
-			Signers: []common.PublicKey{},
-			Amount:  amount,
-		}),
+		token.Transfer(batTransferParam),
 	}, nil
 }
 
@@ -250,43 +273,54 @@ func fetchChainIdempotencyData(ctx context.Context, client *client.Client) (chai
 	}, nil
 }
 
-func decodeOrFetchChainIdempotencyData(ctx context.Context, data []byte, client *client.Client) (chainIdempotencyData, error) {
+func decodeOrFetchChainIdempotencyData(
+	ctx context.Context,
+	data []byte,
+	client *client.Client,
+) (chainIdempotencyData, error) {
+	var (
+		idempotencyData chainIdempotencyData
+		err             error
+	)
+
 	if len(data) > 0 {
-		idempotencyData, err := decodeChainIdempotencyData(data)
+		idempotencyData, err = decodeChainIdempotencyData(data)
 		if err != nil {
-			return chainIdempotencyData{}, fmt.Errorf("failed to decode idempotency data: %w", err)
+			return idempotencyData, fmt.Errorf("failed to decode idempotency data: %w", err)
 		}
-
-		return idempotencyData, nil
-	}
-
-	idempotencyData, err := fetchChainIdempotencyData(ctx, client)
-	if err != nil {
-		return chainIdempotencyData{}, fmt.Errorf("failed to fetch idempotency data: %w", err)
+	} else {
+		idempotencyData, err = fetchChainIdempotencyData(ctx, client)
+		if err != nil {
+			return idempotencyData, fmt.Errorf("failed to fetch idempotency data: %w", err)
+		}
 	}
 
 	return idempotencyData, nil
 }
 
-func hasSignatureConfirmed(ctx context.Context, signature string, client *client.Client) bool {
-	if signature == "" {
-		return false
-	}
-
+func checkStatus(ctx context.Context, signature string, client *client.Client) (rpc.Commitment, error) {
 	sigStatus, err := client.GetSignatureStatus(ctx, signature)
 	if err != nil {
-		return false
+		return CommitmentUnknown, fmt.Errorf("status check error: %w", err)
 	}
 
-	if sigStatus == nil || sigStatus.ConfirmationStatus == nil {
-		return false
+	if sigStatus == nil {
+		return CommitmentNotFound, nil
+	}
+	if sigStatus.ConfirmationStatus == nil {
+		return CommitmentUnknown, fmt.Errorf("failed to establish commitment status: %v", sigStatus)
 	}
 
-	if *sigStatus.ConfirmationStatus == rpc.CommitmentConfirmed || *sigStatus.ConfirmationStatus == rpc.CommitmentFinalized {
-		return true
+	if sigStatus.Err != nil {
+		parsedErr, ok := sigStatus.Err.(map[string]interface{})
+		if !ok {
+			return CommitmentUnknown, fmt.Errorf("status error: %w", err)
+		}
+		if errVal, ok := parsedErr["InstructionError"]; ok {
+			return CommitmentUnknown, fmt.Errorf("instruction error: %v", errVal)
+		}
 	}
-
-	return false
+	return *sigStatus.ConfirmationStatus, nil
 }
 
 func hasBlockHeightExpired(ctx context.Context, blockHeight uint64, rpcClient *client.Client) bool {
