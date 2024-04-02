@@ -134,8 +134,8 @@ func driveHappyPathTransitions(
 	fmt.Printf("STATUS 3: %s\n", transaction.ExternalIdempotency)
 
 	if transaction.Status != paymentLib.Paid {
-		for i := 1; i < 3; i++ {
-			time.Sleep(5 * time.Second)
+		for i := 1; i < 30; i++ {
+			time.Sleep(100 * time.Millisecond)
 			md, _ := json.Marshal(transaction)
 			mockTransitionHistory.Data.UnsafePaymentState = md
 			solMachine.setTransaction(transaction)
