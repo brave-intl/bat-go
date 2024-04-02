@@ -35,6 +35,7 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 		mint              = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
 		tokenAccountOwner = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 	)
+
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	// New account for every test execution to ensure that the account does
@@ -54,7 +55,7 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	solMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+	solMachine, mockTransitionHistory, marshaledState := setupState(state, mint, t)
 
 	driveHappyPathTransitions(
 		ctx,
@@ -96,6 +97,10 @@ TestLiveSolanaStateMachineATAPresent tests for correct state progression from
 Initialized to Paid with a payee account that has the SPL-BAT ATA configured.
 */
 func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
+	const (
+		mint = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
+	)
+
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	state := paymentLib.AuthenticatedPaymentState{
@@ -112,7 +117,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	solMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+	solMachine, mockTransitionHistory, marshaledState := setupState(state, mint, t)
 
 	driveHappyPathTransitions(
 		ctx,
@@ -182,6 +187,7 @@ func driveHappyPathTransitions(
 
 func setupState(
 	state paymentLib.AuthenticatedPaymentState,
+	mint string,
 	t *testing.T,
 ) (
 	SolanaMachine,
@@ -191,8 +197,8 @@ func setupState(
 	solMachine := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
-		splMintAddress:    "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq", // SPL mint address on devnet
-		splMintDecimals:   8,                                              // SPL mint decimals on devnet
+		splMintAddress:    mint, // SPL mint address on devnet
+		splMintDecimals:   8,    // SPL mint decimals on devnet
 	}
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Nil(t, err)
