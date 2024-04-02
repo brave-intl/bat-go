@@ -42,12 +42,6 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 	// New account for every test execution to ensure that the account does
 	// not already have its ATA configured.
 	payee_account := types.NewAccount()
-	solMachine := SolanaMachine{
-		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
-		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
-		splMintAddress:    splMintAddress,
-		splMintDecimals:   splMintDecimals,
-	}
 
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
@@ -62,13 +56,13 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	solMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
 
 	driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
-		solMachine,
+		solanaStateMachine,
 		marshaledState,
 		t,
 	)
@@ -101,7 +95,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 		ctx,
 		state,
 		mockTransitionHistory,
-		solMachine,
+		solanaStateMachine,
 		marshaledState,
 		t,
 	)
