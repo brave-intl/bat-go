@@ -19,12 +19,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
-	"github.com/blocto/solana-go-sdk/types"
 )
 
 const (
@@ -58,7 +58,7 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 
 	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
 
-	driveTransitions(
+	driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
@@ -78,7 +78,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
-			Amount:    decimal.NewFromFloat(1.4),
+			Amount: decimal.NewFromFloat(1.4),
 			// Fixed To address that has the ATA configured already
 			To:        "5g7xMFn9bk8vyZdfsr4mAfUWKWDaWxzZBH5Cb1XHftBL",
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
@@ -91,7 +91,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 
 	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
 
-	driveTransitions(
+	driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
@@ -99,6 +99,59 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 		marshaledState,
 		t,
 	)
+}
+
+func driveHappyPathTransitions(
+	ctx context.Context,
+	testState paymentLib.AuthenticatedPaymentState,
+	mockTransitionHistory QLDBPaymentTransitionHistoryEntry,
+	solanaStateMachine SolanaMachine,
+	marshaledData []byte,
+	t *testing.T,
+) {
+	var transaction *paymentLib.AuthenticatedPaymentState
+	transitioner := getTransitioner(
+		ctx,
+		mockTransitionHistory,
+		solanaStateMachine,
+		t,
+	)
+
+	// Should transition transaction into the Authorized state
+	transaction = transitioner(ctx, testState, paymentLib.Prepared, paymentLib.Authorized)
+	should.Equal(t, paymentLib.Authorized, transaction.Status)
+	fmt.Printf("STATUS 1: %s\n", transaction.ExternalIdempotency)
+
+	// Should transition transaction into the Pending state
+	// For this test, we could return Pending status forever, so we need it to time out
+	// in order to capture and verify that pending status.
+	timeout, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	defer cancel()
+	transaction = transitioner(timeout, *transaction, paymentLib.Authorized, paymentLib.Pending)
+	should.Equal(t, paymentLib.Pending, transaction.Status)
+	fmt.Printf("STATUS 2: %s\n", transaction.ExternalIdempotency)
+
+	// Should transition transaction into the Paid state
+	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
+	// is 5 minutes and we don't want the test to run that long even if it's broken.
+	transaction = transitioner(timeout, *transaction, paymentLib.Pending, paymentLib.Paid)
+	should.Equal(t, paymentLib.Pending, transaction.Status)
+	fmt.Printf("STATUS 3: %s\n", transaction.ExternalIdempotency)
+
+	if transaction.Status != paymentLib.Paid {
+		for i := 1; i < 3; i++ {
+			time.Sleep(5 * time.Second)
+			md, _ := json.Marshal(transaction)
+			mockTransitionHistory.Data.UnsafePaymentState = md
+			solanaStateMachine.setTransaction(transaction)
+			transaction, _ = Drive(ctx, &solanaStateMachine)
+			fmt.Printf("STATUS 4: %s\n", transaction.ExternalIdempotency)
+			if transaction.Status == paymentLib.Paid {
+				break
+			}
+		}
+	}
+	should.Equal(t, paymentLib.Paid, transaction.Status)
 }
 
 func setupState(
@@ -149,52 +202,35 @@ func setupState(
 	return sm, mockTransitionHistory, marshaledData
 }
 
-func driveTransitions(
+func getTransitioner(
 	ctx context.Context,
-	testState paymentLib.AuthenticatedPaymentState,
-	mockTransitionHistory QLDBPaymentTransitionHistoryEntry,
-	solanaStateMachine SolanaMachine,
-	marshaledData []byte,
+	mth QLDBPaymentTransitionHistoryEntry,
+	sm SolanaMachine,
 	t *testing.T,
-) {
-	// Should transition transaction into the Authorized state
-	testState.Status = paymentLib.Prepared
-	marshaledData, _ = json.Marshal(testState)
-	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solMachine.setTransaction(&state)
-	authTxn, err := Drive(ctx, &solMachine)
-	must.Nil(t, err)
-	should.Equal(t, paymentLib.Authorized, authTxn.Status)
-
-	// State transition: Authorized -> Pending
-	marshaledData, _ = json.Marshal(authTxn)
-	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solMachine.setTransaction(authTxn)
-	// Set a timeout long enough to allow for the transaction to be submitted
-	timeout, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	pendingTransaction, err := Drive(timeout, &solMachine)
-	must.Equal(t, nil, err)
-	should.Equal(t, paymentLib.Pending, pendingTransaction.Status)
-
-	// State transition: Pending -> Paid
-	marshaledData, _ = json.Marshal(pendingTransaction)
-	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solanaStateMachine.setTransaction(&testState)
-	// This test shouldn't time out, but if it gets stuck in pending the defaul Drive timeout
-	// is 5 minutes and we don't want the test to run that long even if it's broken.
-	timeout, cancel = context.WithTimeout(ctx, 1*time.Minute)
-	defer cancel()
-	newTransaction, err = Drive(timeout, &solanaStateMachine)
-	fmt.Printf("STATUS: %s\n", newTransaction.Status)
-	must.Equal(t, nil, err)
-	for i := 1; i < 3; i++ {
-		time.Sleep(1 * time.Second)
-		newTransaction, err = Drive(timeout, &solanaStateMachine)
-		fmt.Printf("STATUS: %s\n", newTransaction.Status)
-		if newTransaction.Status == paymentLib.Paid {
-			break
-		}
+) func(ctx context.Context, state paymentLib.AuthenticatedPaymentState, start, end paymentLib.PaymentStatus) *paymentLib.AuthenticatedPaymentState {
+	return func(
+		ctx context.Context,
+		state paymentLib.AuthenticatedPaymentState,
+		start, end paymentLib.PaymentStatus,
+	) *paymentLib.AuthenticatedPaymentState {
+		return transition(ctx, state, mth, sm, start, end, t)
 	}
-	should.Equal(t, paymentLib.Paid, newTransaction.Status)
+}
+
+func transition(
+	ctx context.Context,
+	ts paymentLib.AuthenticatedPaymentState,
+	mth QLDBPaymentTransitionHistoryEntry,
+	sm SolanaMachine,
+	start paymentLib.PaymentStatus,
+	end paymentLib.PaymentStatus,
+	t *testing.T,
+) *paymentLib.AuthenticatedPaymentState {
+	ts.Status = start
+	md, _ := json.Marshal(ts)
+	mth.Data.UnsafePaymentState = md
+	sm.setTransaction(&ts)
+	newTransaction, err := Drive(ctx, &sm)
+	must.Nil(t, err)
+	return newTransaction
 }
