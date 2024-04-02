@@ -27,11 +27,6 @@ import (
 	must "github.com/stretchr/testify/require"
 )
 
-const (
-	splMintAddress  string = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq" // SPL mint address on devnet
-	splMintDecimals uint8  = 8                                              // SPL mint decimals on devnet
-)
-
 /*
 TestLiveSolanaStateMachineATAMissing tests for correct state progression from
 Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
@@ -162,6 +157,11 @@ func setupState(
 	QLDBPaymentTransitionHistoryEntry,
 	[]byte,
 ) {
+	const (
+		splMintAddress  string = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq" // SPL mint address on devnet
+		splMintDecimals uint8  = 8                                              // SPL mint decimals on devnet
+	)
+
 	solMachine := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
