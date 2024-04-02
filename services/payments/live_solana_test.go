@@ -56,13 +56,13 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+	solMachine, mockTransitionHistory, marshaledState := setupState(state, t)
 
 	driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
-		solanaStateMachine,
+		solMachine,
 		marshaledState,
 		t,
 	)
@@ -95,7 +95,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 		ctx,
 		state,
 		mockTransitionHistory,
-		solanaStateMachine,
+		solMachine,
 		marshaledState,
 		t,
 	)
@@ -125,7 +125,7 @@ func driveHappyPathTransitions(
 	// Should transition transaction into the Pending state
 	// For this test, we could return Pending status forever, so we need it to time out
 	// in order to capture and verify that pending status.
-	timeout, cancel := context.WithTimeout(ctx, 1*time.Minute)
+	timeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	transaction = transitioner(timeout, *transaction, paymentLib.Authorized, paymentLib.Pending)
 	should.Equal(t, paymentLib.Pending, transaction.Status)
@@ -162,7 +162,7 @@ func setupState(
 	QLDBPaymentTransitionHistoryEntry,
 	[]byte,
 ) {
-	sm := SolanaMachine{
+	solMachine := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
 		splMintAddress:    splMintAddress,
@@ -199,7 +199,7 @@ func setupState(
 	solMachine.setTransaction(
 		&state,
 	)
-	return sm, mockTransitionHistory, marshaledData
+	return solMachine, mockTransitionHistory, marshaledData
 }
 
 func getTransitioner(
