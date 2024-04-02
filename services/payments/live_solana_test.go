@@ -27,11 +27,16 @@ import (
 	must "github.com/stretchr/testify/require"
 )
 
+const (
+	splMintAddress  string = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq" // SPL mint address on devnet
+	splMintDecimals uint8  = 8                                              // SPL mint decimals on devnet
+)
+
 /*
 TestLiveSolanaStateMachineATAMissing tests for correct state progression from
 Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
 */
-func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
+func TestLiveSolanaStateMachine(t *testing.T) {
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	// New account for every test execution to ensure that the account does
@@ -84,7 +89,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+	solMachine, mockTransitionHistory, marshaledState := setupState(state, t)
 
 	driveHappyPathTransitions(
 		ctx,
@@ -100,7 +105,7 @@ func driveHappyPathTransitions(
 	ctx context.Context,
 	testState paymentLib.AuthenticatedPaymentState,
 	mockTransitionHistory QLDBPaymentTransitionHistoryEntry,
-	solanaStateMachine SolanaMachine,
+	solMachine SolanaMachine,
 	marshaledData []byte,
 	t *testing.T,
 ) {
@@ -108,7 +113,7 @@ func driveHappyPathTransitions(
 	transitioner := getTransitioner(
 		ctx,
 		mockTransitionHistory,
-		solanaStateMachine,
+		solMachine,
 		t,
 	)
 
@@ -138,8 +143,8 @@ func driveHappyPathTransitions(
 			time.Sleep(5 * time.Second)
 			md, _ := json.Marshal(transaction)
 			mockTransitionHistory.Data.UnsafePaymentState = md
-			solanaStateMachine.setTransaction(transaction)
-			transaction, _ = Drive(ctx, &solanaStateMachine)
+			solMachine.setTransaction(transaction)
+			transaction, _ = Drive(ctx, &solMachine)
 			fmt.Printf("STATUS 4: %s\n", transaction.ExternalIdempotency)
 			if transaction.Status == paymentLib.Paid {
 				break
@@ -160,6 +165,8 @@ func setupState(
 	sm := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
+		splMintAddress:    splMintAddress,
+		splMintDecimals:   splMintDecimals,
 	}
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Nil(t, err)
@@ -189,7 +196,7 @@ func setupState(
 			TxID:    "test",
 		},
 	}
-	sm.setTransaction(
+	solMachine.setTransaction(
 		&state,
 	)
 	return sm, mockTransitionHistory, marshaledData

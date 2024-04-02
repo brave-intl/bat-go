@@ -25,9 +25,11 @@ type chainIdempotencyData struct {
 }
 
 const (
-	batMintDecimals int = 8
 	CommitmentNotFound rpc.Commitment = "notfound"
 	CommitmentUnknown rpc.Commitment = "unknown"
+	SPLBATMintDecimals  uint8  = 8                                              // Mint decimals for Wormhole wrapped BAT on mainnet
+	SPLBATMintAddress   string = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz" // Mint address for Wormhole wrapped BAT on mainnet
+	tokenProgramAddress string = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 )
 
 // SolanaMachine is an implementation of TxStateMachine for Solana on-chain payouts
@@ -47,6 +49,8 @@ type SolanaMachine struct {
 	// 	derivedKey.PrivateKey
 	signingKey        string
 	solanaRpcEndpoint string
+	splMintAddress    string
+	splMintDecimals   uint8
 }
 
 // Pay implements TxStateMachine for the Solana machine.
@@ -55,6 +59,8 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	if errors.Is(err, context.DeadlineExceeded) {
 		return sm.transaction, err
 	}
+
+	splMintPublicKey := common.PublicKeyFromString(sm.splMintAddress)
 
 	// Skip if the state is already final
 	if sm.transaction.Status == paymentLib.Paid || sm.transaction.Status == paymentLib.Failed {
@@ -94,13 +100,14 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 
 	// Convert the amount to base units
 	amount := sm.transaction.Amount.Mul(
-		decimal.NewFromFloat(math.Pow10(batMintDecimals)),
+		decimal.NewFromFloat(math.Pow10(int(sm.splMintDecimals))),
 	).BigInt().Uint64()
 
 	instructions, err := makeInstructions(
 		signer.PublicKey,
 		payeeWallet,
 		amount,
+		splMintPublicKey,
 	)
 	if err != nil {
 		entry, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
@@ -166,22 +173,25 @@ func (sm *SolanaMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPay
 	return sm.SetNextState(ctx, paymentLib.Failed)
 }
 
-func makeInstructions(feePayer common.PublicKey, payeeWallet common.PublicKey, amount uint64) ([]types.Instruction, error) {
-	batMintPublicKey := common.PublicKeyFromString(os.Getenv("BAT_MINT_ADDRESS"))
-
-	toAta, _, err := common.FindAssociatedTokenAddress(payeeWallet, batMintPublicKey)
+func makeInstructions(
+	feePayer common.PublicKey,
+	payeeWallet common.PublicKey,
+	amount uint64,
+	mint common.PublicKey,
+) ([]types.Instruction, error) {
+	toAta, _, err := common.FindAssociatedTokenAddress(payeeWallet, mint)
 	if err != nil {
 		return []types.Instruction{}, err
 	}
 
-	fromAta, _, err := common.FindAssociatedTokenAddress(feePayer, batMintPublicKey)
+	fromAta, _, err := common.FindAssociatedTokenAddress(feePayer, mint)
 	if err != nil {
 		return []types.Instruction{}, err
 	}
 	ataCreationParam := associated_token_account.CreateIdempotentParam{
 		Funder:                 feePayer,
 		Owner:                  payeeWallet,
-		Mint:                   batMintPublicKey,
+		Mint:                   mint,
 		AssociatedTokenAccount: toAta,
 	}
 
