@@ -31,7 +31,7 @@ import (
 TestLiveSolanaStateMachineATAMissing tests for correct state progression from
 Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
 */
-func TestLiveSolanaStateMachine(t *testing.T) {
+func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	// New account for every test execution to ensure that the account does
