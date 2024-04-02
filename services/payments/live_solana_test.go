@@ -188,16 +188,11 @@ func setupState(
 	QLDBPaymentTransitionHistoryEntry,
 	[]byte,
 ) {
-	const (
-		splMintAddress  string = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq" // SPL mint address on devnet
-		splMintDecimals uint8  = 8                                              // SPL mint decimals on devnet
-	)
-
 	solMachine := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
-		splMintAddress:    splMintAddress,
-		splMintDecimals:   splMintDecimals,
+		splMintAddress:    "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq", // SPL mint address on devnet
+		splMintDecimals:   8,                                              // SPL mint decimals on devnet
 	}
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Nil(t, err)
@@ -238,7 +233,11 @@ func getTransitioner(
 	mth QLDBPaymentTransitionHistoryEntry,
 	sm SolanaMachine,
 	t *testing.T,
-) func(ctx context.Context, state paymentLib.AuthenticatedPaymentState, start, end paymentLib.PaymentStatus) *paymentLib.AuthenticatedPaymentState {
+) func(
+	ctx context.Context,
+	state paymentLib.AuthenticatedPaymentState,
+	start, end paymentLib.PaymentStatus,
+) *paymentLib.AuthenticatedPaymentState {
 	return func(
 		ctx context.Context,
 		state paymentLib.AuthenticatedPaymentState,
