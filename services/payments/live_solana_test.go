@@ -36,7 +36,7 @@ Initialized to Paid with a payee account with or without an ATA.
 func TestLiveSolanaStateMachine(t *testing.T) {
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
-	solanaStateMachine := SolanaMachine{
+	solMachine := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
 		splMintAddress:    splMintAddress,
@@ -46,7 +46,7 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Nil(t, err)
 
-	testState := paymentLib.AuthenticatedPaymentState{
+	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
 			Amount:    decimal.NewFromFloat(1.4),
@@ -59,7 +59,7 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	marshaledData, _ := json.Marshal(testState)
+	marshaledData, _ := json.Marshal(state)
 	must.Nil(t, err)
 	privkey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	must.Nil(t, err)
@@ -84,36 +84,36 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 			TxID:    "test",
 		},
 	}
-	solanaStateMachine.setTransaction(
-		&testState,
+	solMachine.setTransaction(
+		&state,
 	)
 
 	ctx = context.WithValue(ctx, ctxAuthKey{}, "some authorization from CLI")
 
 	// State transition: Prepared -> Authorized
-	testState.Status = paymentLib.Prepared
-	marshaledData, _ = json.Marshal(testState)
+	state.Status = paymentLib.Prepared
+	marshaledData, _ = json.Marshal(state)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solanaStateMachine.setTransaction(&testState)
-	authorizedTransaction, err := Drive(ctx, &solanaStateMachine)
+	solMachine.setTransaction(&state)
+	authTxn, err := Drive(ctx, &solMachine)
 	must.Nil(t, err)
-	should.Equal(t, paymentLib.Authorized, authorizedTransaction.Status)
+	should.Equal(t, paymentLib.Authorized, authTxn.Status)
 
 	// State transition: Authorized -> Pending
-	marshaledData, _ = json.Marshal(authorizedTransaction)
+	marshaledData, _ = json.Marshal(authTxn)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solanaStateMachine.setTransaction(authorizedTransaction)
+	solMachine.setTransaction(authTxn)
 	// Set a timeout long enough to allow for the transaction to be submitted
 	timeout, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	pendingTransaction, err := Drive(timeout, &solanaStateMachine)
+	pendingTransaction, err := Drive(timeout, &solMachine)
 	must.Equal(t, nil, err)
 	should.Equal(t, paymentLib.Pending, pendingTransaction.Status)
 
 	// State transition: Pending -> Paid
 	marshaledData, _ = json.Marshal(pendingTransaction)
 	mockTransitionHistory.Data.UnsafePaymentState = marshaledData
-	solanaStateMachine.setTransaction(pendingTransaction)
+	solMachine.setTransaction(pendingTransaction)
 	// Set a timeout equivalent to 150 slots, long enough to allow for the transaction to be confirmed
 	timeout, cancel = context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
@@ -121,7 +121,7 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 		paidTransaction *paymentLib.AuthenticatedPaymentState
 	)
 	for {
-		paidTransaction, err = Drive(timeout, &solanaStateMachine)
+		paidTransaction, err = Drive(timeout, &solMachine)
 		must.Equal(t, nil, err)
 		if paidTransaction.Status == paymentLib.Paid {
 			break
