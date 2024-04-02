@@ -42,12 +42,15 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 	// New account for every test execution to ensure that the account does
 	// not already have its ATA configured.
 	payee_account := types.NewAccount()
-	solanaStateMachine := SolanaMachine{
+	solMachine := SolanaMachine{
 		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
 		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
 		splMintAddress:    splMintAddress,
 		splMintDecimals:   splMintDecimals,
 	}
+
+	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
+	must.Nil(t, err)
 
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
