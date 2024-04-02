@@ -128,9 +128,9 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 		return "", fmt.Errorf("failed to verify receipt: %w", err)
 	}
 
-	if len(resp.Receipt.InApp) == 0 {
-		return "", errNoInAppTx
-	}
+	// if len(resp.Receipt.InApp) == 0 {
+	// 	return "", errNoInAppTx
+	// }
 
 	// ProductID on an InApp object must match the SubscriptionID.
 	//
@@ -138,6 +138,12 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 	// - find the purchase that is being verified (i.e. to disambiguate VPN from Leo);
 	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
 	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID)
+	if ok {
+		return item.OriginalTransactionID, nil
+	}
+
+	// Try finding in latest_receipt_info.
+	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID)
 	if !ok {
 		return "", errIOSPurchaseNotFound
 	}
