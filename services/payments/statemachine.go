@@ -148,8 +148,8 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 ) (*paymentLib.AuthenticatedPaymentState, error) {
-	// Drive is called recursively, so we need to check whether a deadline has been set
-	// by a prior caller and only set the default deadline if not.
+	// Check whether a deadline has been set by a prior caller and only set the default deadline if
+	// not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)

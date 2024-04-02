@@ -133,17 +133,15 @@ func driveHappyPathTransitions(
 	should.Equal(t, paymentLib.Pending, transaction.Status)
 	fmt.Printf("STATUS 3: %s\n", transaction.ExternalIdempotency)
 
-	if transaction.Status != paymentLib.Paid {
-		for i := 1; i < 30; i++ {
-			time.Sleep(100 * time.Millisecond)
-			md, _ := json.Marshal(transaction)
-			mockTransitionHistory.Data.UnsafePaymentState = md
-			solMachine.setTransaction(transaction)
-			transaction, _ = Drive(ctx, &solMachine)
-			fmt.Printf("STATUS 4: %s\n", transaction.ExternalIdempotency)
-			if transaction.Status == paymentLib.Paid {
-				break
-			}
+	for i := 1; i < 30; i++ {
+		time.Sleep(100 * time.Millisecond)
+		md, _ := json.Marshal(transaction)
+		mockTransitionHistory.Data.UnsafePaymentState = md
+		solMachine.setTransaction(transaction)
+		transaction, _ = Drive(ctx, &solMachine)
+		fmt.Printf("STATUS 4: %s\n", transaction.ExternalIdempotency)
+		if transaction.Status == paymentLib.Paid {
+			break
 		}
 	}
 	should.Equal(t, paymentLib.Paid, transaction.Status)
