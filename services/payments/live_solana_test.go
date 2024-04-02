@@ -49,9 +49,6 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 		splMintDecimals:   splMintDecimals,
 	}
 
-	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
-	must.Nil(t, err)
-
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
@@ -65,13 +62,13 @@ func TestLiveSolanaStateMachine(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+	solMachine, mockTransitionHistory, marshaledState := setupState(state, t)
 
 	driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
-		solanaStateMachine,
+		solMachine,
 		marshaledState,
 		t,
 	)
@@ -98,13 +95,13 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
 	}
 
-	solanaStateMachine, mockTransitionHistory, marshaledState := setupState(state, t)
+	solMachine, mockTransitionHistory, marshaledState := setupState(state, t)
 
 	driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
-		solanaStateMachine,
+		solMachine,
 		marshaledState,
 		t,
 	)
@@ -114,7 +111,7 @@ func driveHappyPathTransitions(
 	ctx context.Context,
 	testState paymentLib.AuthenticatedPaymentState,
 	mockTransitionHistory QLDBPaymentTransitionHistoryEntry,
-	solanaStateMachine SolanaMachine,
+	solMachine SolanaMachine,
 	marshaledData []byte,
 	t *testing.T,
 ) {
@@ -122,7 +119,7 @@ func driveHappyPathTransitions(
 	transitioner := getTransitioner(
 		ctx,
 		mockTransitionHistory,
-		solanaStateMachine,
+		solMachine,
 		t,
 	)
 
@@ -152,8 +149,8 @@ func driveHappyPathTransitions(
 			time.Sleep(5 * time.Second)
 			md, _ := json.Marshal(transaction)
 			mockTransitionHistory.Data.UnsafePaymentState = md
-			solanaStateMachine.setTransaction(transaction)
-			transaction, _ = Drive(ctx, &solanaStateMachine)
+			solMachine.setTransaction(transaction)
+			transaction, _ = Drive(ctx, &solMachine)
 			fmt.Printf("STATUS 4: %s\n", transaction.ExternalIdempotency)
 			if transaction.Status == paymentLib.Paid {
 				break
