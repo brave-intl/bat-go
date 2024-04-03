@@ -10,12 +10,15 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
+	"math"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
+	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -57,7 +60,7 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 
 	solMachine, mockTransitionHistory, marshaledState := setupState(state, mint, t)
 
-	driveHappyPathTransitions(
+	finalState := driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
@@ -90,6 +93,8 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	// regardless of who created them. This just determines whether the ATA exists by checking that
 	// it has an Owner field that is valid.
 	should.Equal(t, tokenAccountOwner, result.Owner.ToBase58())
+
+	checkTransactionMatchesPaymentDetails(ctx, t, solMachine.solanaRpcEndpoint, createdAta, state, *finalState)
 }
 
 /*
@@ -119,7 +124,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 
 	solMachine, mockTransitionHistory, marshaledState := setupState(state, mint, t)
 
-	driveHappyPathTransitions(
+	finalState := driveHappyPathTransitions(
 		ctx,
 		state,
 		mockTransitionHistory,
@@ -127,6 +132,65 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 		marshaledState,
 		t,
 	)
+
+	staticAta, _, err := common.FindAssociatedTokenAddress(
+		common.PublicKeyFromString(state.PaymentDetails.To),
+		common.PublicKeyFromString(mint),
+	)
+	must.Nil(t, err)
+
+	checkTransactionMatchesPaymentDetails(ctx, t, solMachine.solanaRpcEndpoint, staticAta, state, *finalState)
+}
+
+func checkTransactionMatchesPaymentDetails(
+	ctx context.Context,
+	t *testing.T,
+	endpoint string,
+	ata common.PublicKey,
+	state, finalState paymentLib.AuthenticatedPaymentState,
+) {
+	solanaData, err := decodeChainIdempotencyData(finalState.ExternalIdempotency)
+	must.Nil(t, err)
+
+	solClient := client.NewClient(endpoint)
+	must.Nil(t, err)
+
+	var txn rpc.JsonRpcResponse[*rpc.GetTransaction]
+	t.Log("Fetching transaction data")
+	txn, err = solClient.RpcClient.GetTransactionWithConfig(ctx, solanaData.Signature, rpc.GetTransactionConfig{
+		Encoding:   rpc.TransactionEncodingJsonParsed,
+		Commitment: rpc.CommitmentConfirmed,
+	})
+	must.Nil(t, err)
+	if innerTxn, ok := txn.Result.Transaction.(map[string]interface{}); ok {
+		if message, ok := innerTxn["message"].(map[string]interface{}); ok {
+			if instructions, ok := message["instructions"].([]interface{}); ok {
+				if instructionOne, ok := instructions[0].(map[string]interface{}); ok {
+					if parsed, ok := instructionOne["parsed"].(map[string]interface{}); ok {
+						if info, ok := parsed["info"].(map[string]interface{}); ok {
+							t.Log("Verifying chain transaction mint, to, and from")
+							should.Equal(t, "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq", info["mint"])
+							should.Equal(t, state.PaymentDetails.To, info["wallet"])
+							should.Equal(t, state.PaymentDetails.From, info["source"])
+						}
+					}
+				}
+				if instructionTwo, ok := instructions[1].(map[string]interface{}); ok {
+					if parsed, ok := instructionTwo["parsed"].(map[string]interface{}); ok {
+						if info, ok := parsed["info"].(map[string]interface{}); ok {
+							t.Log("Verifying chain transaction amount, ATA, and from")
+							amount := state.PaymentDetails.Amount.Mul(
+								decimal.NewFromFloat(math.Pow10(int(8))),
+							).BigInt().Uint64()
+							should.Equal(t, fmt.Sprint(amount), info["amount"])
+							should.Equal(t, ata.ToBase58(), info["destination"])
+							should.Equal(t, state.PaymentDetails.From, info["authority"])
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func driveHappyPathTransitions(
@@ -136,7 +200,7 @@ func driveHappyPathTransitions(
 	solMachine SolanaMachine,
 	marshaledData []byte,
 	t *testing.T,
-) {
+) *paymentLib.AuthenticatedPaymentState {
 	var transaction *paymentLib.AuthenticatedPaymentState
 	transitioner := getTransitioner(
 		ctx,
@@ -183,6 +247,8 @@ func driveHappyPathTransitions(
 	should.Equal(t, paymentLib.Paid, transaction.Status)
 	should.Equal(t, idempotencyData, transaction.ExternalIdempotency)
 	t.Log("State is Paid")
+
+	return transaction
 }
 
 func setupState(
