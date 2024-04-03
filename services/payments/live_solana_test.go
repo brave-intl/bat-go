@@ -172,9 +172,9 @@ func checkTransactionMatchesPaymentDetails(
 							should.Equal(t, "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq", info["mint"])
 							should.Equal(t, state.PaymentDetails.To, info["wallet"])
 							should.Equal(t, state.PaymentDetails.From, info["source"])
-						}
-					}
-				}
+						} else { t.Fail() }
+					} else { t.Fail() }
+				} else { t.Fail() }
 				if instructionTwo, ok := instructions[1].(map[string]interface{}); ok {
 					if parsed, ok := instructionTwo["parsed"].(map[string]interface{}); ok {
 						if info, ok := parsed["info"].(map[string]interface{}); ok {
@@ -185,12 +185,12 @@ func checkTransactionMatchesPaymentDetails(
 							should.Equal(t, fmt.Sprint(amount), info["amount"])
 							should.Equal(t, ata.ToBase58(), info["destination"])
 							should.Equal(t, state.PaymentDetails.From, info["authority"])
-						}
-					}
-				}
-			}
-		}
-	}
+						} else { t.Fail() }
+					} else { t.Fail() }
+				} else { t.Fail() }
+			} else { t.Fail() }
+		} else { t.Fail() }
+	} else { t.Fail() }
 }
 
 func driveHappyPathTransitions(
