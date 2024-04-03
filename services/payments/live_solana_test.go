@@ -30,6 +30,13 @@ import (
 )
 
 /*
+ * The below tests rely on some environment variables in order to execute:
+ * SOLANA_SIGNING_KEY
+ * SOLANA_RPC_ENDPOINT
+ * SOLANA_PAYER_ADDRESS
+ */
+
+/*
 TestLiveSolanaStateMachineATAMissing tests for correct state progression from
 Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
 */
@@ -294,9 +301,7 @@ func setupState(
 			TxID:    "test",
 		},
 	}
-	solMachine.setTransaction(
-		&state,
-	)
+	solMachine.setTransaction(&state)
 	return solMachine, mockTransitionHistory, marshaledData
 }
 
