@@ -75,8 +75,6 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	// If the signature is present in the idempotency data we should check its status before
 	// proceeding.
 	if idempotencyData.Signature != "" {
-		// TODO Handle the missing from chain case where the transaction was sent but can't
-		// yet be found. Retries will make this work, but we should have a better error.
 		status, err := checkStatus(ctx, idempotencyData.Signature, client)
 		if err != nil {
 			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
