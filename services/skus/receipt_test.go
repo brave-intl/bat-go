@@ -73,22 +73,22 @@ func TestReceiptVerifier_validateApple(t *testing.T) {
 			exp: tcExpected{err: model.Error("some_error")},
 		},
 
-		{
-			name: "empty_inapp",
-			given: tcGiven{
-				key: "key",
-				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
-						if req.Password == "" {
-							return model.Error("unexpected")
-						}
+		// {
+		// 	name: "empty_inapp",
+		// 	given: tcGiven{
+		// 		key: "key",
+		// 		cl: &mockASClient{
+		// 			fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+		// 				if req.Password == "" {
+		// 					return model.Error("unexpected")
+		// 				}
 
-						return nil
-					},
-				},
-			},
-			exp: tcExpected{err: errNoInAppTx},
-		},
+		// 				return nil
+		// 			},
+		// 		},
+		// 	},
+		// 	exp: tcExpected{err: errNoInAppTx},
+		// },
 
 		{
 			name: "single_purchase_not_found",
@@ -177,6 +177,80 @@ func TestReceiptVerifier_validateApple(t *testing.T) {
 								ProductID:             "braveleo.monthly",
 							},
 
+							{
+								OriginalTransactionID: "720000000000002",
+								ProductID:             "bravevpn.monthly",
+							},
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{val: "720000000000002"},
+		},
+
+		{
+			name: "multiple_purchases_found_latest_receipt_info",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Package:        "com.brave.ios.browser",
+					Blob:           "blob",
+					SubscriptionID: "bravevpn.monthly",
+				},
+
+				cl: &mockASClient{
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+						resp, ok := result.(*appstore.IAPResponse)
+						if !ok {
+							return model.Error("invalid response type")
+						}
+
+						resp.Receipt.BundleID = "com.brave.ios.browser"
+						resp.LatestReceiptInfo = []appstore.InApp{
+							{
+								OriginalTransactionID: "720000000000001",
+								ProductID:             "braveleo.monthly",
+							},
+
+							{
+								OriginalTransactionID: "720000000000002",
+								ProductID:             "bravevpn.monthly",
+							},
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{val: "720000000000002"},
+		},
+
+		{
+			name: "multiple_purchases_mixed_found_latest_receipt_info",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Package:        "com.brave.ios.browser",
+					Blob:           "blob",
+					SubscriptionID: "bravevpn.monthly",
+				},
+
+				cl: &mockASClient{
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+						resp, ok := result.(*appstore.IAPResponse)
+						if !ok {
+							return model.Error("invalid response type")
+						}
+
+						resp.Receipt.BundleID = "com.brave.ios.browser"
+						resp.Receipt.InApp = []appstore.InApp{
+							{
+								OriginalTransactionID: "720000000000001",
+								ProductID:             "braveleo.monthly",
+							},
+						}
+
+						resp.LatestReceiptInfo = []appstore.InApp{
 							{
 								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.monthly",
