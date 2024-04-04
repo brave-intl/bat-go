@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/blocto/solana-go-sdk/client"
+	"github.com/mr-tron/base58"
 	"github.com/blocto/solana-go-sdk/common"
 	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/blocto/solana-go-sdk/types"
@@ -156,7 +157,8 @@ func checkTransactionMatchesPaymentDetails(
 	ata common.PublicKey,
 	state, finalState paymentLib.AuthenticatedPaymentState,
 ) {
-	solanaData, err := decodeChainIdempotencyData(finalState.ExternalIdempotency)
+	solanaData := chainIdempotencyData{}
+	err := json.Unmarshal(finalState.ExternalIdempotency, &solanaData)
 	must.Nil(t, err)
 
 	solClient := client.NewClient(endpoint)
@@ -164,7 +166,8 @@ func checkTransactionMatchesPaymentDetails(
 
 	var txn rpc.JsonRpcResponse[*rpc.GetTransaction]
 	t.Log("Fetching transaction data")
-	txn, err = solClient.RpcClient.GetTransactionWithConfig(ctx, solanaData.Signature, rpc.GetTransactionConfig{
+	b58Signature := base58.Encode(solanaData.Transaction.Signatures[0])
+	txn, err = solClient.RpcClient.GetTransactionWithConfig(ctx, b58Signature, rpc.GetTransactionConfig{
 		Encoding:   rpc.TransactionEncodingJsonParsed,
 		Commitment: rpc.CommitmentConfirmed,
 	})
