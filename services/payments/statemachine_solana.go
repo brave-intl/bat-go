@@ -223,13 +223,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		},
 	)
 	if err != nil {
-		// FIXME - do not fail the transaction for a recoverable error
-		entry, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
-		if setStateErr != nil {
-			return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
-		}
-
-		return sm.transaction, fmt.Errorf("failed to submit transaction: %w entry: %v", err, entry)
+		return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
 	if signature != b58Signature {
