@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/blocto/solana-go-sdk/client"
-	"github.com/mr-tron/base58"
 	"github.com/blocto/solana-go-sdk/common"
 	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/blocto/solana-go-sdk/types"
@@ -25,6 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/google/uuid"
+	"github.com/mr-tron/base58"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
@@ -182,9 +182,15 @@ func checkTransactionMatchesPaymentDetails(
 							should.Equal(t, "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq", info["mint"])
 							should.Equal(t, state.PaymentDetails.To, info["wallet"])
 							should.Equal(t, state.PaymentDetails.From, info["source"])
-						} else { t.Fail() }
-					} else { t.Fail() }
-				} else { t.Fail() }
+						} else {
+							t.Fail()
+						}
+					} else {
+						t.Fail()
+					}
+				} else {
+					t.Fail()
+				}
 				if instructionTwo, ok := instructions[1].(map[string]interface{}); ok {
 					if parsed, ok := instructionTwo["parsed"].(map[string]interface{}); ok {
 						if info, ok := parsed["info"].(map[string]interface{}); ok {
@@ -195,12 +201,24 @@ func checkTransactionMatchesPaymentDetails(
 							should.Equal(t, fmt.Sprint(amount), info["amount"])
 							should.Equal(t, ata.ToBase58(), info["destination"])
 							should.Equal(t, state.PaymentDetails.From, info["authority"])
-						} else { t.Fail() }
-					} else { t.Fail() }
-				} else { t.Fail() }
-			} else { t.Fail() }
-		} else { t.Fail() }
-	} else { t.Fail() }
+						} else {
+							t.Fail()
+						}
+					} else {
+						t.Fail()
+					}
+				} else {
+					t.Fail()
+				}
+			} else {
+				t.Fail()
+			}
+		} else {
+			t.Fail()
+		}
+	} else {
+		t.Fail()
+	}
 }
 
 func driveHappyPathTransitions(
@@ -222,6 +240,13 @@ func driveHappyPathTransitions(
 	// Should transition transaction into the Authorized state
 	transaction = transitioner(ctx, testState, paymentLib.Prepared, paymentLib.Authorized)
 	should.Equal(t, paymentLib.Authorized, transaction.Status)
+	must.NotNil(t, transaction.ExternalIdempotency)
+	persistedIdempotency := chainIdempotencyData{}
+	err := json.Unmarshal(transaction.ExternalIdempotency, &persistedIdempotency)
+	must.Nil(t, err)
+	must.NotNil(t, persistedIdempotency.Transaction)
+	must.NotNil(t, persistedIdempotency.BlockHash)
+	must.NotNil(t, persistedIdempotency.SlotTarget)
 	t.Log("State is Authorized")
 
 	// Should transition transaction into the Pending state
