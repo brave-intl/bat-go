@@ -247,6 +247,7 @@ func driveHappyPathTransitions(
 	must.NotNil(t, persistedIdempotency.Transaction)
 	must.NotNil(t, persistedIdempotency.BlockHash)
 	must.NotNil(t, persistedIdempotency.SlotTarget)
+	should.Equal(t, 1, len(persistedIdempotency.Transaction.Signatures))
 	t.Log("State is Authorized")
 
 	// Should transition transaction into the Pending state
