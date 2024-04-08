@@ -150,6 +150,62 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 	checkTransactionMatchesPaymentDetails(ctx, t, solMachine.solanaRpcEndpoint, staticAta, state, *finalState)
 }
 
+func TestLiveSolanaStateMachineDropped(t *testing.T) {
+	const (
+		mint = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
+	)
+
+	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
+
+	state := paymentLib.AuthenticatedPaymentState{
+		Status: paymentLib.Prepared,
+		PaymentDetails: paymentLib.PaymentDetails{
+			Amount:    decimal.NewFromFloat(1.4),
+			To:        "5g7xMFn9bk8vyZdfsr4mAfUWKWDaWxzZBH5Cb1XHftBL",
+			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
+			Custodian: "solana",
+			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
+			Currency:  "BAT",
+		},
+		Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
+	}
+
+	solMachine, mockTransitionHistory, _ := setupState(state, mint, t)
+
+	var transaction *paymentLib.AuthenticatedPaymentState
+	transitioner := getTransitioner(
+		ctx,
+		mockTransitionHistory,
+		solMachine,
+		t,
+	)
+
+	// Should transition transaction into the Authorized state
+	transaction = transitioner(ctx, state, paymentLib.Prepared, paymentLib.Authorized)
+	should.Equal(t, paymentLib.Authorized, transaction.Status)
+	must.NotNil(t, transaction.ExternalIdempotency)
+	persistedIdempotency := chainIdempotencyData{}
+	err := json.Unmarshal(transaction.ExternalIdempotency, &persistedIdempotency)
+	must.Nil(t, err)
+	must.NotNil(t, persistedIdempotency.Transaction)
+	must.NotNil(t, persistedIdempotency.BlockHash)
+	must.NotNil(t, persistedIdempotency.SlotTarget)
+	should.Equal(t, 1, len(persistedIdempotency.Transaction.Signatures))
+	t.Log("State is Authorized")
+
+	// Modify slot target to simulate a dropped transaction
+	persistedIdempotency.SlotTarget = 0
+	transaction.ExternalIdempotency, _ = json.Marshal(persistedIdempotency)
+	md, _ := json.Marshal(transaction)
+	mockTransitionHistory.Data.UnsafePaymentState = md
+	solMachine.setTransaction(transaction)
+
+	// Should transition transaction into the Dropped state
+	newTransaction, err := Drive(ctx, &solMachine)
+	must.ErrorContains(t, err, "slot target exceeded")
+	should.Equal(t, paymentLib.Failed, newTransaction.Status)
+}
+
 func checkTransactionMatchesPaymentDetails(
 	ctx context.Context,
 	t *testing.T,
