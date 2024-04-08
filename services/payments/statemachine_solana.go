@@ -87,6 +87,14 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 		return sm.transaction, fmt.Errorf("failed to derive account from base58: %w", err)
 	}
 
+	if signer.PublicKey.ToBase58() != sm.transaction.From {
+		return sm.transaction, fmt.Errorf(
+			"transaction 'From' address does not match the derived account: want=%s got=%s",
+			signer.PublicKey.ToBase58(),
+			sm.transaction.From,
+		)
+	}
+
 	instructions, err := makeInstructions(
 		signer.PublicKey,
 		common.PublicKeyFromString(sm.transaction.To),
