@@ -40,7 +40,7 @@ type Datastore interface {
 	InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error)
 	InsertChainAddress(ctx context.Context, address ChainAddress) (string, error)
 	GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error)
-	GetChainAddress(ctx context.Context, address string) (ChainAddress, error)
+	GetChainAddress(ctx context.Context, address string) (*ChainAddress, error)
 	UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error
 	UpdateChainAddress(ctx context.Context, address ChainAddress) error
 }

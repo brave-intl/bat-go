@@ -118,6 +118,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.EnclaveDecryptKeyTemplateSecretIDCTXKey, viper.GetString("enclave-decrypt-key-template-secret"))
 
 	ctx = context.WithValue(ctx, appctx.EnclaveSecretsObjectNameCTXKey, viper.GetString("enclave-config-object-name"))
+	ctx = context.WithValue(ctx, appctx.EnclaveSolanaAddressCTXKey, viper.GetString("enclave_solana_address_name"))
 	ctx = context.WithValue(ctx, appctx.EnclaveSecretsBucketNameCTXKey, viper.GetString("enclave-config-bucket-name"))
 	ctx = context.WithValue(ctx, appctx.EnclaveOperatorSharesBucketNameCTXKey, viper.GetString("enclave-operator-shares-bucket-name"))
 	// special logger with writer

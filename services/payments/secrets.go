@@ -21,7 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	solTypes "github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/nitro"
@@ -166,13 +165,13 @@ func (s *Service) approveSolanaAddress(ctx context.Context, address, approverKey
 	}
 	if keyHasNotYetApproved {
 		chainAddress.Approvals = append(chainAddress.Approvals, approverKey)
-		err = s.datastore.UpdateChainAddress(ctx, chainAddress)
+		err = s.datastore.UpdateChainAddress(ctx, *chainAddress)
 		if err != nil {
 			return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
 		}
 	}
 
-	return &chainAddress, nil
+	return chainAddress, nil
 }
 
 // fetchSecrets will take an s3 bucket/object and fetch the configuration and store the
