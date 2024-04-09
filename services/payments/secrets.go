@@ -199,17 +199,25 @@ func (s *Service) fetchSecrets(ctx context.Context, bucket, secretsObject string
 	}
 
 	if solanaPubAddr != "" {
-		// get the solana address from s3
-		solanaAddressResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String("solana-address-" + solanaPubAddr),
-		})
+		chainAddress, err := s.datastore.GetChainAddress(ctx, solanaPubAddr)
 		if err != nil {
-			return fmt.Errorf("failed to get solana address from s3: %w", err)
+			return fmt.Errorf("failed to get solana address from QLDB: %w", err)
 		}
-		s.solanaPrivCiphertext, err = io.ReadAll(solanaAddressResponse.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read solana address bytes: %w", err)
+		if len(chainAddress.Approvals) >= 2 {
+			// get the solana address from s3
+			solanaAddressResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
+				Bucket: aws.String(bucket),
+				Key:    aws.String("solana-address-" + solanaPubAddr),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get solana address from s3: %w", err)
+			}
+			s.solanaPrivCiphertext, err = io.ReadAll(solanaAddressResponse.Body)
+			if err != nil {
+				return fmt.Errorf("failed to read solana address bytes: %w", err)
+			}
+		} else {
+			return fmt.Errorf("provided solana address has insufficient approvals")
 		}
 	}
 
