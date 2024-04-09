@@ -24,6 +24,7 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -33,6 +34,7 @@ import (
 
 	client "github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/payments"
 	paymentscli "github.com/brave-intl/bat-go/tools/payments"
 )
 
@@ -189,8 +191,11 @@ func approveSolanaAddress(ctx context.Context, pubKey, key, env, pcr2 string, ve
 		Opts:     crypto.Hash(0),
 	}
 
+	chainAddress := payments.AddressApprovalRequest{
+		Address: pubKey,
+	}
 	buf := bytes.NewBuffer([]byte{})
-	buf.WriteString(key)
+	err = json.NewEncoder(buf).Encode(chainAddress)
 	body := buf.Bytes()
 	if err != nil {
 		log.Fatalf("failed to marshal attested transaction body: %w", err)
@@ -228,6 +233,6 @@ func approveSolanaAddress(ctx context.Context, pubKey, key, env, pcr2 string, ve
 	log.Printf("%+v", resp)
 
 	if verbose {
-		log.Println("generatesol command complete")
+		log.Println("approvesol command complete")
 	}
 }
