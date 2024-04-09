@@ -38,8 +38,11 @@ const (
 
 type Datastore interface {
 	InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error)
+	InsertChainAddress(ctx context.Context, address ChainAddress) (string, error)
 	GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error)
+	GetChainAddress(ctx context.Context, address string) (ChainAddress, error)
 	UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error
+	UpdateChainAddress(ctx context.Context, address ChainAddress) error
 }
 
 func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error) {
@@ -100,6 +103,68 @@ func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLi
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to insert transaction: %w", err)
+	}
+	return insertedDocumentID.(string), nil
+}
+
+func (q *QLDBDatastore) InsertChainAddress(ctx context.Context, address ChainAddress) (string, error) {
+	insertedDocumentID, err := q.Execute(
+		context.Background(),
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+			// For the transaction, check if this transaction has already existed. If not, perform
+			// the insertion.
+			existingkey, err := txn.Execute(
+				"SELECT d_id as documentID FROM chainaddresses BY d_id where publicKey = ?",
+				address.PublicKey,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to insert key: %s due to: %w",
+					address.PublicKey,
+					err,
+				)
+			}
+
+			// Check if there are any results. If there are, we should skip insert.
+			if existingkey.Next(txn) {
+				documentIDResult := new(qldbDocumentIDResult)
+				err = ion.Unmarshal(existingkey.GetCurrentData(), &documentIDResult)
+				if err != nil {
+					return nil, err
+				}
+				return documentIDResult.DocumentID, nil
+			}
+			documentIDResultBinary, err := txn.Execute(
+				"INSERT INTO chainaddresses ?",
+				address,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to insert key: %s due to: %w",
+					address.PublicKey,
+					err,
+				)
+			}
+
+			if documentIDResultBinary.Next(txn) {
+				documentIDResult := new(qldbDocumentIDResult)
+				err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
+				if err != nil {
+					return nil, err
+				}
+				return documentIDResult.DocumentID, nil
+			}
+
+			err = documentIDResultBinary.Err()
+			return nil, fmt.Errorf(
+				"failed to insert key: %s due to: %w",
+				address.PublicKey,
+				err,
+			)
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to insert key: %s due to: %w", address.PublicKey, err)
 	}
 	return insertedDocumentID.(string), nil
 }
@@ -169,6 +234,69 @@ func (q *QLDBDatastore) UpdatePaymentState(ctx context.Context, documentID strin
 				state.PublicKey,
 				documentID,
 				state.UnsafePaymentState,
+			)
+			return nil, err
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("QLDB write execution failed: %w", err)
+	}
+	return nil
+}
+
+func (q *QLDBDatastore) GetChainAddress(ctx context.Context, address string) (*ChainAddress, error) {
+	chainAddress, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		result, err := txn.Execute(
+			"SELECT * FROM chainaddresses WHERE publicKey = ?",
+			address,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("QLDB transaction failed: %w", err)
+		}
+		var chainAddress ChainAddress
+		for result.Next(txn) {
+			err := ion.Unmarshal(result.GetCurrentData(), &chainAddress)
+			if err != nil {
+				return nil, fmt.Errorf("ion unmarshal failed: %w", err)
+			}
+		}
+
+		return &chainAddress, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return chainAddress.(*ChainAddress), err
+}
+
+func (q *QLDBDatastore) UpdateChainAddress(ctx context.Context, address ChainAddress) error {
+	_, err := q.Execute(
+		ctx,
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+
+			documentID, err := txn.Execute(
+				"SELECT d_id as documentID FROM chainaddresses BY d_id where publicKey = ?",
+				address.PublicKey,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to insert key: %s due to: %w",
+					address.PublicKey,
+					err,
+				)
+			}
+
+			_, err = txn.Execute(
+				`UPDATE chainaddresses BY d_id
+						SET
+							publicKey = ?,
+							approvals = ?
+						WHERE
+							d_id = ?
+				`,
+				address.PublicKey,
+				address.Approvals,
+				documentID,
 			)
 			return nil, err
 		},

@@ -19,6 +19,11 @@ type SubmitRequest struct {
 	PayoutID   string `json:"payoutId" valid:"required"`
 }
 
+// AddressApprovalRequest is provided to indicate approval of an on-chain address.
+type AddressApprovalRequest struct {
+	Address string `json:"address" valid:"required"`
+}
+
 // SubmitResponse is returned to provide the status of a payment after submission, along with any
 // error that resulted, if necessary.
 type SubmitResponse struct {
