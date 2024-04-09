@@ -85,7 +85,7 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 				s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("submit endpoint setup")
-		// submit will have an http signature from a known list of public keys
+		// address generation will have an http signature from a known list of public keys
 		r.Post(
 			"/generatesol",
 			middleware.InstrumentHandler(
@@ -93,6 +93,14 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 				s.AuthorizerSignedMiddleware()(GenerateSolanaAddressHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("solana address generation endpoint setup")
+		// address approval will have an http signature from a known list of public keys
+		r.Post(
+			"/approvesol",
+			middleware.InstrumentHandler(
+				"ApproveSolanaAddressHandler",
+				s.AuthorizerSignedMiddleware()(ApproveSolanaAddressHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("solana address approval endpoint setup")
 
 		r.Get(
 			"/info",
