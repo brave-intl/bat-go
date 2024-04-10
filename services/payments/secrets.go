@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -18,9 +19,11 @@ import (
 
 	"filippo.io/age"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	solTypes "github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/nitro"
@@ -126,11 +129,19 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	}
 
 	s3Client := s3.NewFromConfig(awsCfg)
+	encSeedBytes, err := io.ReadAll(encSeed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seed to bytes: %w", err)
+	}
+	h := md5.New()
+	h.Write(encSeedBytes)
 
 	input := &s3.PutObjectInput{
-		Body:   encSeed,
-		Bucket: aws.String(bucket),
-		Key:    aws.String("solana-address-" + b58PubKey),
+		Body:                      encSeed,
+		Bucket:                    aws.String(bucket),
+		Key:                       aws.String("solana-address-" + b58PubKey),
+		ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
+		ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 	}
 	_, err = s3Client.PutObject(ctx, input)
 	if err != nil {
