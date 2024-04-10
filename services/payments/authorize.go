@@ -20,15 +20,17 @@ var validAuthorizerKeys = map[string][]string{
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
 		// @sneagan
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
-		// @husobee
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOiLTWtWvC63Rkoip9yNUf7249w+RxR2PzG8O89KJsIs husobee+settlements@brave.com",
 	},
 	"development": {
 		// @kdenhartog for dev environment only
 		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEY/3VGKsrH5dp3mK5PJIHVkUMWpsmUhZkrLuZTf7Sqr kdenhartog+settlement+dev@brave.com",
-		// two development keys
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINGylZXIukc6tYnLj6wuSlg/foMCnslAEwFl7qG+TuBK dev1+settlements@brave.com",
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBBEASr19T3JQ1U7SFO2EcZDfqYjUkBlBtVq+KLQtmY dev2+settlements@brave.com",
+		// @jtieman
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK1fxpURIUAJNRqosAnPPXnKjpUBGGOKgkUOXmviJfFx jtieman+nitro@brave.com",
+		// @sneagan
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMKhViUd6Nwd8qre0go7Qc6Wa6Q7A3GiWj7q/GMF/NzV jegan+devsettlements@brave.com"
+		// @evq
+		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
 	},
 }
 
