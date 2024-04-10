@@ -126,8 +126,8 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aws config: %w", err)
 	}
-
 	s3Client := s3.NewFromConfig(awsCfg)
+
 	encSeedBytes, err := io.ReadAll(encSeed)
 	if err != nil {
 		return nil, fmt.Errorf("failed to seed to bytes: %w", err)
