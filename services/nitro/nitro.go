@@ -46,6 +46,8 @@ func init() {
 	NitroServeCmd.PersistentFlags().String("enclave-config-bucket-name", "", "the configuration bucket name in s3")
 	// enclave-operator-shares-bucket-name is the operator-shares bucket name in s3 (from bootstrap command)
 	NitroServeCmd.PersistentFlags().String("enclave-operator-shares-bucket-name", "", "the operator shares bucket name in s3")
+	// enclave-solana-address-name is the solana address to use for payouts (from configure command)
+	NitroServeCmd.PersistentFlags().String("enclave-solana-address-name", "", "the solana address to use for payouts")
 
 	rootcmd.Must(NitroServeCmd.MarkPersistentFlagRequired("upstream-url"))
 	rootcmd.Must(viper.BindPFlag("upstream-url", NitroServeCmd.PersistentFlags().Lookup("upstream-url")))
@@ -72,6 +74,8 @@ func init() {
 	rootcmd.Must(viper.BindEnv("enclave-config-bucket-name", "ENCLAVE_CONFIG_BUCKET_NAME"))
 	rootcmd.Must(viper.BindPFlag("enclave-operator-shares-bucket-name", NitroServeCmd.PersistentFlags().Lookup("enclave-operator-shares-bucket-name")))
 	rootcmd.Must(viper.BindEnv("enclave-operator-shares-bucket-name", "ENCLAVE_OPERATOR_SHARES_BUCKET_NAME"))
+	rootcmd.Must(viper.BindPFlag("enclave-solana-address-name", NitroServeCmd.PersistentFlags().Lookup("enclave-config-object-name")))
+	rootcmd.Must(viper.BindEnv("enclave-solana-address-name", "ENCLAVE_SOLANA_ADDRESS_NAME"))
 
 	// enclave decrypt key template used to create decryption key in enclave
 	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
