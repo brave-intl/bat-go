@@ -144,7 +144,7 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	}
 	_, err = s3Client.PutObject(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to put key to s3", err)
+		return nil, fmt.Errorf("failed to put key to s3: %w", err)
 	}
 
 	chainAdrress := ChainAddress{
@@ -270,6 +270,7 @@ func (s *Service) configureSecrets(ctx context.Context) error {
 func (s *Service) setEnvFromSecrets(secrets map[string]string) {
 	os.Setenv("ZEBPAY_API_KEY", secrets["zebpayApiKey"])
 	os.Setenv("ZEBPAY_SIGNING_KEY", secrets["zebpayPrivateKey"])
+	os.Setenv("SOLANA_RPC_ENDPOINT", secrets["solanaRpcEndpoint"])
 
 	if solKey, ok := secrets["solanaPrivateKey"]; ok {
 		os.Setenv("SOLANA_SIGNING_KEY", solKey)

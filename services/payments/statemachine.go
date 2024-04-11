@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	solanaClient "github.com/blocto/solana-go-sdk/client"
+	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
@@ -123,11 +125,12 @@ func (s *Service) StateMachineFromTransaction(
 			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
 		}
 	case "solana":
+		solClient := solanaClient.New(rpc.WithEndpoint(os.Getenv("SOLANA_RPC_ENDPOINT")), rpc.WithHTTPClient(&client))
 		machine = &SolanaMachine{
-			signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
-			solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
-			splMintAddress:    SPLBATMintAddress,
-			splMintDecimals:   SPLBATMintDecimals,
+			signingKey:      os.Getenv("SOLANA_SIGNING_KEY"),
+			solanaRpcClient: *solClient,
+			splMintAddress:  SPLBATMintAddress,
+			splMintDecimals: SPLBATMintDecimals,
 		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
