@@ -273,30 +273,17 @@ func (q *QLDBDatastore) UpdateChainAddress(ctx context.Context, address ChainAdd
 	_, err := q.Execute(
 		ctx,
 		func(txn qldbdriver.Transaction) (interface{}, error) {
-
-			documentID, err := txn.Execute(
-				"SELECT d_id as documentID FROM chainaddresses BY d_id where publicKey = ?",
-				address.PublicKey,
-			)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to insert key: %s due to: %w",
-					address.PublicKey,
-					err,
-				)
-			}
-
-			_, err = txn.Execute(
-				`UPDATE chainaddresses BY d_id
-						SET
-							publicKey = ?,
-							approvals = ?
-						WHERE
-							d_id = ?
+			_, err := txn.Execute(
+				`UPDATE chainaddresses
+					SET
+						publicKey = ?,
+						approvals = ?
+					WHERE
+						publicKey = ?
 				`,
 				address.PublicKey,
 				address.Approvals,
-				documentID,
+				address.PublicKey,
 			)
 			return nil, err
 		},
@@ -361,6 +348,26 @@ func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
 			}
 			if !ok {
 				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
+			}
+		}
+		ok = false
+		_, err = txn.Execute("CREATE TABLE chainaddresses")
+		if err != nil {
+			logger.Warn().Err(err).Msg("error creating transactions table")
+			if errors.As(err, &ae) {
+				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating transactions table")
+				if ae.ErrorCode() == tableAlreadyCreatedCode {
+					// table has already been created
+					ok = true
+				}
+			}
+			if !ok {
+				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
+			}
+		} else {
+			_, err = txn.Execute("CREATE INDEX ON chainaddresses (publicKey)")
+			if err != nil {
+				return nil, err
 			}
 		}
 		return nil, nil

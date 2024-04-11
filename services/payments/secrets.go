@@ -136,7 +136,7 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	h.Write(encSeedBytes)
 
 	input := &s3.PutObjectInput{
-		Body:                      encSeed,
+		Body:                      bytes.NewBuffer(encSeedBytes),
 		Bucket:                    aws.String(bucket),
 		Key:                       aws.String("solana-address-" + b58PubKey),
 		ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
