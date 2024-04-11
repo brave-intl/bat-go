@@ -264,6 +264,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 			if !ok {
 				return nil, nil, errNoSolanaAddressConfigured
 			}
+			logger.Debug().Str("solana address:", solanaAddress).Msg("solana address configured")
 
 			for {
 				// fetch the secrets, result will store the secrets (age ciphertext) on the service instance
