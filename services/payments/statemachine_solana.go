@@ -250,6 +250,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		},
 	)
 	if err != nil {
+		// Introspect the RPC error looking for specific error codes
 		var mapErr map[string]interface{}
 		err := json.Unmarshal([]byte(err.Error()), &mapErr)
 		if err != nil {
