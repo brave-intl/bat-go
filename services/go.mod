@@ -25,7 +25,6 @@ require (
 	github.com/aws/smithy-go v1.13.5
 	github.com/awslabs/amazon-qldb-driver-go/v3 v3.0.1
 	github.com/blocto/solana-go-sdk v1.27.0
-	github.com/brave-intl/bat-go v0.1.2
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
