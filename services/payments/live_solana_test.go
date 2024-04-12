@@ -231,7 +231,7 @@ func checkTransactionMatchesPaymentDetails(
 	if innerTxn, ok := txn.Result.Transaction.(map[string]interface{}); ok {
 		if message, ok := innerTxn["message"].(map[string]interface{}); ok {
 			if instructions, ok := message["instructions"].([]interface{}); ok {
-				if instructionOne, ok := instructions[0].(map[string]interface{}); ok {
+				if instructionOne, ok := instructions[1].(map[string]interface{}); ok {
 					if parsed, ok := instructionOne["parsed"].(map[string]interface{}); ok {
 						if info, ok := parsed["info"].(map[string]interface{}); ok {
 							t.Log("Verifying chain transaction mint, to, and from")
@@ -247,7 +247,7 @@ func checkTransactionMatchesPaymentDetails(
 				} else {
 					t.Fail()
 				}
-				if instructionTwo, ok := instructions[1].(map[string]interface{}); ok {
+				if instructionTwo, ok := instructions[2].(map[string]interface{}); ok {
 					if parsed, ok := instructionTwo["parsed"].(map[string]interface{}); ok {
 						if info, ok := parsed["info"].(map[string]interface{}); ok {
 							t.Log("Verifying chain transaction amount, ATA, and from")
