@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"time"
 
 	solanaClient "github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
@@ -87,7 +88,7 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 		return sm.transaction, fmt.Errorf("get recent block hash error, err: %w with result: %#v", err, latestBlockhashResult)
 	}
 	blockHash := latestBlockhashResult.Value.Blockhash
-	slotTarget := latestBlockhashResult.Context.Slot + 150
+	slotTarget := latestBlockhashResult.Value.LatestValidBlockHeight + 150
 
 	var signer types.Account
 	if os.Getenv("ENV") == "local" {
@@ -242,46 +243,59 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	// until the transaction is either confirmed or the blockhash expires.
 	//
 	// Ref: https://solana.com/docs/core/transactions/retry#customizing-rebroadcast-logic
-	signature, err := sm.solanaRpcClient.SendTransactionWithConfig(
-		ctx,
-		idempotencyData.Transaction,
-		solanaClient.SendTransactionConfig{
-			MaxRetries: 0,
-			PreflightCommitment: rpc.CommitmentConfirmed,
-			SkipPreflight: true,
-		},
-	)
-	if err != nil {
-		// Introspect the RPC error looking for specific error codes
-		var mapErr map[string]interface{}
-		err := json.Unmarshal([]byte(err.Error()), &mapErr)
+	for start := time.Now(); time.Since(start) < 10*time.Second; {
+		signature, err := sm.solanaRpcClient.SendTransactionWithConfig(
+			ctx,
+			idempotencyData.Transaction,
+			solanaClient.SendTransactionConfig{
+				MaxRetries:          0,
+				PreflightCommitment: rpc.CommitmentConfirmed,
+				SkipPreflight:       true,
+			},
+		)
 		if err != nil {
+			// Introspect the RPC error looking for specific error codes
+			var mapErr map[string]interface{}
+			err := json.Unmarshal([]byte(err.Error()), &mapErr)
+			if err != nil {
+				return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
+			}
+			data, ok := mapErr["data"].(map[string]interface{})
+			if !ok {
+				return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
+			}
+			if data["err"] == "BlockhashNotFound" {
+				_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
+				if setStateErr != nil {
+					return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
+				}
+				return sm.transaction, fmt.Errorf("block hash expired: %w", err)
+			}
 			return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
 		}
-		data, ok := mapErr["data"].(map[string]interface{})
-		if !ok {
-			return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
-		}
-		if data["err"] == "BlockhashNotFound" {
+
+		if signature != b58Signature {
 			_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
 			if setStateErr != nil {
 				return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
 			}
-			return sm.transaction, fmt.Errorf("block hash expired: %w", err)
+			return sm.transaction, fmt.Errorf(
+				"submitted signature did not match idempotency data: expected %s but got %s",
+				b58Signature,
+				signature,
+			)
 		}
-		return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
-	}
-
-	if signature != b58Signature {
-		_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
-		if setStateErr != nil {
-			return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
+		status, err := checkStatus(ctx, b58Signature, &sm.solanaRpcClient)
+		if err != nil {
+			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 		}
-		return sm.transaction, fmt.Errorf(
-			"submitted signature did not match idempotency data: expected %s but got %s",
-			b58Signature,
-			signature,
-		)
+		if status == TxnConfirmed || status == TxnFinalized {
+			entry, err := sm.SetNextState(ctx, paymentLib.Paid)
+			if err != nil {
+				return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
+			}
+			return sm.transaction, nil
+		}
 	}
 
 	// Once transaction is submitted set the state to pending
@@ -328,7 +342,7 @@ func makeInstructions(
 		Amount:  amount,
 	}
 	budgetParam := compute_budget.SetComputeUnitLimitParam{
-		Units: 100000,
+		Units: 4000000,
 	}
 
 	return []types.Instruction{
