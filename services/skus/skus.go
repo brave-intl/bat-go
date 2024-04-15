@@ -157,6 +157,11 @@ func skuNameByMobileName(subID string) (string, error) {
 		// Temporary: use the same sku as for monthly.
 		return "brave-vpn-premium", nil
 
+	// Legacy.
+	// Older iOS clients might still send this as subscription_id along with a receipt.
+	case "brave-firewall-vpn-premium", "brave-firewall-vpn-premium-year":
+		return "brave-vpn-premium", nil
+
 	default:
 		return "", model.ErrInvalidMobileProduct
 	}
