@@ -220,10 +220,9 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	// A transaction expires if it could not be committed to a block within 150 slots. Once expired,
 	// it can be safely retried with a new blockhash. However, for the initial implementation we will
 	// fail transactions that are dropped.
-	blockHeightResponse, err := sm.solanaRpcClient.GetLatestBlockhashAndContextWithConfig(
+	blockHeightResponse, err := sm.solanaRpcClient.RpcClient.GetBlockHeightWithConfig(
 		ctx,
-		// Defaults to Finalized, which decreases our available time to retry. Prefer Confirmed
-		solanaClient.GetLatestBlockhashConfig{
+		rpc.GetBlockHeightConfig{
 			Commitment: rpc.CommitmentConfirmed,
 		},
 	)
@@ -231,7 +230,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		// Failing to get the block height is a recoverable error, so return without state change
 		return sm.transaction, fmt.Errorf("failed to get block height: %w", err)
 	}
-	if blockHeightResponse.Value.LatestValidBlockHeight > idempotencyData.SlotTarget {
+	if blockHeightResponse.Result > idempotencyData.SlotTarget {
 		_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
 		if setStateErr != nil {
 			return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
