@@ -128,10 +128,6 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 		return "", fmt.Errorf("failed to verify receipt: %w", err)
 	}
 
-	// if len(resp.Receipt.InApp) == 0 {
-	// 	return "", errNoInAppTx
-	// }
-
 	// ProductID on an InApp object must match the SubscriptionID.
 	//
 	// By doing so we:
@@ -144,6 +140,13 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 
 	// Try finding in latest_receipt_info.
 	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID)
+	if ok {
+		return item.OriginalTransactionID, nil
+	}
+
+	// Handle legacy iOS versions predating the release that started using proper values for subscription_id.
+	// This only applies to VPN.
+	item, ok = findInAppBySubIDLegacy(resp, req.SubscriptionID)
 	if !ok {
 		return "", errIOSPurchaseNotFound
 	}
@@ -290,6 +293,26 @@ func findInAppBySubID(iap []appstore.InApp, subID string) (*appstore.InApp, bool
 	}
 
 	return nil, false
+}
+
+func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string) (*appstore.InApp, bool) {
+	item, ok := findInAppVPNLegacy(resp.Receipt.InApp, subID)
+	if ok {
+		return item, true
+	}
+
+	return findInAppVPNLegacy(resp.LatestReceiptInfo, subID)
+}
+
+func findInAppVPNLegacy(iap []appstore.InApp, subID string) (*appstore.InApp, bool) {
+	switch subID {
+	case "brave-firewall-vpn-premium":
+		return findInAppBySubID(iap, "bravevpn.monthly")
+	case "brave-firewall-vpn-premium-year":
+		return findInAppBySubID(iap, "bravevpn.yearly")
+	default:
+		return nil, false
+	}
 }
 
 // rootPEM is from `openssl x509 -inform der -in AppleRootCA-G3.cer -out apple_root.pem`

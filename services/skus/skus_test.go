@@ -124,6 +124,18 @@ func TestSKUNameByMobileName(t *testing.T) {
 			given: "something_else",
 			exp:   tcExpected{err: model.ErrInvalidMobileProduct},
 		},
+
+		{
+			name:  "legacy_ios_vpn_monthly",
+			given: "brave-firewall-vpn-premium",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "legacy_ios_vpn_annual",
+			given: "brave-firewall-vpn-premium-year",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
 	}
 
 	for i := range tests {
