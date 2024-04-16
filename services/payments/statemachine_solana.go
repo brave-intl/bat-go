@@ -249,7 +249,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			idempotencyData.Transaction,
 			solanaClient.SendTransactionConfig{
 				MaxRetries:          0,
-				PreflightCommitment: rpc.CommitmentConfirmed,
+				PreflightCommitment: rpc.CommitmentProcessed,
 				SkipPreflight:       true,
 			},
 		)
@@ -370,7 +370,11 @@ func (sm *SolanaMachine) makeInstructions(
 			}
 		}
 	}
-	//avg := int64(sum / count)
+	if max < 100000 {
+		max = 100000
+	} else {
+		max = max * 10
+	}
 
 	priceParam := compute_budget.SetComputeUnitPriceParam{MicroLamports: max}
 	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: 100000}
