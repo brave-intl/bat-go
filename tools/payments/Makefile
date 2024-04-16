@@ -1,9 +1,9 @@
 .PHONY: build clean tidy
 .DEFAULT: build
 
-build: dist/create-vault dist/prepare dist/authorize dist/configure dist/bootstrap dist/validate dist/status
-tidy: tidy-create tidy-prepare tidy-authorize tidy-configure tidy-bootstrap tidy-validate tidy-status
-clean: clean-create clean-prepare clean-authorize clean-configure clean-bootstrap clean-validate clean-status
+build: dist/create-vault dist/prepare dist/authorize dist/configure dist/bootstrap dist/validate dist/status dist/chain-account
+tidy: tidy-create tidy-prepare tidy-authorize tidy-configure tidy-bootstrap tidy-validate tidy-status tidy-chain-account
+clean: clean-create clean-prepare clean-authorize clean-configure clean-bootstrap clean-validate clean-status clean-chain-account
 
 dist/create-vault:
 	cd cmd/create && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/create-vault main.go
@@ -19,6 +19,8 @@ dist/validate:
 	cd cmd/validate && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/validate main.go
 dist/status:
 	cd cmd/status && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/status main.go
+dist/chain-account:
+	cd cmd/chain-account && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/chain-account main.go
 
 tidy-create:
 	cd cmd/create && go mod tidy
@@ -34,6 +36,8 @@ tidy-validate:
 	cd cmd/validate && go mod tidy
 tidy-status:
 	cd cmd/status && go mod tidy
+tidy-chain-account:
+	cd cmd/chain-account && go mod tidy
 
 clean-create:
 	cd cmd/create && go clean
@@ -56,3 +60,6 @@ clean-validate:
 clean-status:
 	cd cmd/status && go clean
 	rm dist/status
+clean-chain-account:
+	cd cmd/chain-account && go clean
+	rm dist/chain-account

@@ -13,6 +13,7 @@ import (
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
 
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -84,6 +85,22 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 				s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("submit endpoint setup")
+		// address generation will have an http signature from a known list of public keys
+		r.Post(
+			"/generatesol",
+			middleware.InstrumentHandler(
+				"GenerateSolanaAddressHandler",
+				s.AuthorizerSignedMiddleware()(GenerateSolanaAddressHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("solana address generation endpoint setup")
+		// address approval will have an http signature from a known list of public keys
+		r.Post(
+			"/approvesol",
+			middleware.InstrumentHandler(
+				"ApproveSolanaAddressHandler",
+				s.AuthorizerSignedMiddleware()(ApproveSolanaAddressHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("solana address approval endpoint setup")
 
 		r.Get(
 			"/info",
@@ -244,10 +261,88 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			Cause:   err,
 			Message: "submitted",
 			Code:    code,
-			Data:    paymentLib.SubmitResponse{
-				Status: status,
+			Data: paymentLib.SubmitResponse{
+				Status:         status,
 				PaymentDetails: authenticatedState.PaymentDetails,
 			},
+		}
+	}
+}
+
+// GenerateSolanaAddressHandler.
+func GenerateSolanaAddressHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		logger := logging.Logger(ctx, "GenerateSolanaAddressHandler")
+		logger.Debug().Msg("handling solana address generation request")
+
+		// we have passed the http signature middleware, record who authorized the tx
+		keyID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "error getting identity of transaction authorizer", http.StatusInternalServerError)
+		}
+
+		// get the secrets bucket name from environment
+		secretsBucketName, ok := service.baseCtx.Value(appctx.EnclaveSecretsBucketNameCTXKey).(string)
+		if !ok {
+			return handlers.WrapError(err, "no secrets bucket configured", http.StatusInternalServerError)
+		}
+		chainAddress, err := service.createSolanaAddress(ctx, secretsBucketName, keyID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to create solana address", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "key created",
+			Code:    http.StatusOK,
+			Data:    chainAddress,
+		}
+	}
+}
+
+// ApproveSolanaAddressHandler.
+func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			logger          = logging.Logger(ctx, "ApproveSolanaAddressHandler")
+			approvalRequest = &paymentLib.AddressApprovalRequest{}
+		)
+
+		// read the transactions in the body
+		err := requestutils.ReadJSON(ctx, r.Body, &approvalRequest)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(approvalRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str("approvals", fmt.Sprintf("%+v", approvalRequest)).Msg("handling approval request")
+
+		// we have passed the http signature middleware, record who authorized the tx
+		keyID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
+		}
+
+		chainAddress, err := service.approveSolanaAddress(ctx, approvalRequest.Address, keyID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to approve solana address", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "key approved",
+			Code:    http.StatusOK,
+			Data:    chainAddress,
 		}
 	}
 }

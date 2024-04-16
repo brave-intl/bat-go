@@ -110,7 +110,7 @@ docker-reproducible:
 docker-payments:
 	docker rmi -f bat-go/payments:latest
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) --target payments -t bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) .
+		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) .
 	docker tag bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) bat-go/payments:latest
 
 docker-up-dev:

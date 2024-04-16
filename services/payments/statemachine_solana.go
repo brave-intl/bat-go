@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"time"
 
 	solanaClient "github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
 	"github.com/blocto/solana-go-sdk/program/associated_token_account"
+	"github.com/blocto/solana-go-sdk/program/compute_budget"
 	"github.com/blocto/solana-go-sdk/program/token"
 	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/blocto/solana-go-sdk/types"
@@ -52,10 +55,10 @@ type SolanaMachine struct {
 	// 	path := `m/44'/501'/0'/0'`
 	// 	derivedKey, _ := hdwallet.Derived(path, seed)
 	// 	derivedKey.PrivateKey
-	signingKey        string
-	solanaRpcEndpoint string
-	splMintAddress    string
-	splMintDecimals   uint8
+	signingKey      string
+	solanaRpcClient solanaClient.Client
+	splMintAddress  string
+	splMintDecimals uint8
 }
 
 func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
@@ -74,15 +77,25 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 
 	// If the base Authorize method indicates we can proceed, generate, sign, and persist the
 	// transaction
-	client := solanaClient.NewClient(sm.solanaRpcEndpoint)
-	latestBlockhashResult, err := client.GetLatestBlockhashAndContext(ctx)
+	latestBlockhashResult, err := sm.solanaRpcClient.GetLatestBlockhashAndContextWithConfig(
+		ctx,
+		// Defaults to Finalized, which decreases our available time to retry. Prefer Confirmed
+		solanaClient.GetLatestBlockhashConfig{
+			Commitment: rpc.CommitmentConfirmed,
+		},
+	)
 	if err != nil {
-		return sm.transaction, fmt.Errorf("get recent block hash error, err: %v", err)
+		return sm.transaction, fmt.Errorf("get recent block hash error, err: %w with result: %#v", err, latestBlockhashResult)
 	}
 	blockHash := latestBlockhashResult.Value.Blockhash
-	slotTarget := latestBlockhashResult.Context.Slot + 150
+	slotTarget := latestBlockhashResult.Value.LatestValidBlockHeight + 150
 
-	signer, err := types.AccountFromBase58(sm.signingKey)
+	var signer types.Account
+	if os.Getenv("ENV") == "local" {
+		signer, err = types.AccountFromBase58(sm.signingKey)
+	} else {
+		signer, err = types.AccountFromSeed([]byte(sm.signingKey))
+	}
 	if err != nil {
 		return sm.transaction, fmt.Errorf("failed to derive account from base58: %w", err)
 	}
@@ -95,7 +108,8 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 		)
 	}
 
-	instructions, err := makeInstructions(
+	instructions, err := sm.makeInstructions(
+		ctx,
 		signer.PublicKey,
 		common.PublicKeyFromString(sm.transaction.To),
 		// Convert the amount to base units
@@ -170,7 +184,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		if err != nil {
 			return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
 		}
-		return sm.transaction, nil
+		return sm.transaction, fmt.Errorf("external idempotency data was unexpectedly empty")
 	}
 
 	idempotencyData := chainIdempotencyData{}
@@ -189,9 +203,8 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		)
 	}
 
-	client := solanaClient.NewClient(sm.solanaRpcEndpoint)
 	b58Signature := base58.Encode(idempotencyData.Transaction.Signatures[0])
-	status, err := checkStatus(ctx, b58Signature, client)
+	status, err := checkStatus(ctx, b58Signature, &sm.solanaRpcClient)
 	if err != nil {
 		return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 	}
@@ -208,10 +221,17 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	// A transaction expires if it could not be committed to a block within 150 slots. Once expired,
 	// it can be safely retried with a new blockhash. However, for the initial implementation we will
 	// fail transactions that are dropped.
-	if blockHeightResponse, err := client.RpcClient.GetBlockHeight(ctx); err != nil {
+	blockHeightResponse, err := sm.solanaRpcClient.RpcClient.GetBlockHeightWithConfig(
+		ctx,
+		rpc.GetBlockHeightConfig{
+			Commitment: rpc.CommitmentConfirmed,
+		},
+	)
+	if err != nil {
 		// Failing to get the block height is a recoverable error, so return without state change
 		return sm.transaction, fmt.Errorf("failed to get block height: %w", err)
-	} else if blockHeightResponse.Result > idempotencyData.SlotTarget {
+	}
+	if blockHeightResponse.Result > idempotencyData.SlotTarget {
 		_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
 		if setStateErr != nil {
 			return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
@@ -223,27 +243,60 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	// until the transaction is either confirmed or the blockhash expires.
 	//
 	// Ref: https://solana.com/docs/core/transactions/retry#customizing-rebroadcast-logic
-	signature, err := client.SendTransactionWithConfig(
-		ctx,
-		idempotencyData.Transaction,
-		solanaClient.SendTransactionConfig{
-			MaxRetries: 0,
-		},
-	)
-	if err != nil {
-		return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
-	}
-
-	if signature != b58Signature {
-		_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
-		if setStateErr != nil {
-			return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
-		}
-		return sm.transaction, fmt.Errorf(
-			"submitted signature did not match idempotency data: expected %s but got %s",
-			b58Signature,
-			signature,
+	for start := time.Now(); time.Since(start) < 50 * time.Second; {
+		signature, err := sm.solanaRpcClient.SendTransactionWithConfig(
+			ctx,
+			idempotencyData.Transaction,
+			solanaClient.SendTransactionConfig{
+				MaxRetries:          0,
+				PreflightCommitment: rpc.CommitmentConfirmed,
+				SkipPreflight:       true,
+			},
 		)
+		if err != nil {
+			// Introspect the RPC error looking for specific error codes
+			var mapErr map[string]interface{}
+			err := json.Unmarshal([]byte(err.Error()), &mapErr)
+			if err != nil {
+				return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
+			}
+			data, ok := mapErr["data"].(map[string]interface{})
+			if !ok {
+				return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
+			}
+			if data["err"] == "BlockhashNotFound" {
+				_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
+				if setStateErr != nil {
+					return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
+				}
+				return sm.transaction, fmt.Errorf("block hash expired: %w", err)
+			}
+			return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
+		}
+
+		if signature != b58Signature {
+			_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
+			if setStateErr != nil {
+				return sm.transaction, fmt.Errorf("failed to write next state: %w", setStateErr)
+			}
+			return sm.transaction, fmt.Errorf(
+				"submitted signature did not match idempotency data: expected %s but got %s",
+				b58Signature,
+				signature,
+			)
+		}
+		status, err := checkStatus(ctx, b58Signature, &sm.solanaRpcClient)
+		if err != nil {
+			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
+		}
+		if status == TxnConfirmed || status == TxnFinalized {
+			entry, err := sm.SetNextState(ctx, paymentLib.Paid)
+			if err != nil {
+				return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
+			}
+			return sm.transaction, nil
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	// Once transaction is submitted set the state to pending
@@ -260,7 +313,8 @@ func (sm *SolanaMachine) Fail(ctx context.Context) (*paymentLib.AuthenticatedPay
 	return sm.SetNextState(ctx, paymentLib.Failed)
 }
 
-func makeInstructions(
+func (sm *SolanaMachine) makeInstructions(
+	ctx context.Context,
 	feePayer common.PublicKey,
 	payeeWallet common.PublicKey,
 	amount uint64,
@@ -290,7 +344,44 @@ func makeInstructions(
 		Amount:  amount,
 	}
 
+	feesResp, err := sm.solanaRpcClient.GetRecentPrioritizationFees(
+		ctx,
+		[]common.PublicKey{
+			feePayer,
+			fromAta,
+			toAta,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		count uint64
+		sum   uint64
+		max   uint64 = 0
+	)
+	for _, value := range feesResp {
+		if value.PrioritizationFee != 0 {
+			count += 1
+			sum += value.PrioritizationFee
+			if value.PrioritizationFee > max {
+				max = value.PrioritizationFee
+			}
+		}
+	}
+	//avg := int64(sum / count)
+
+	priceParam := compute_budget.SetComputeUnitPriceParam{MicroLamports: max}
+	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: 100000}
+
 	return []types.Instruction{
+		// Set the transaction budget
+		compute_budget.SetComputeUnitLimit(budgetParam),
+
+		// Set the transaction price parameter
+		compute_budget.SetComputeUnitPrice(priceParam),
+
 		// Create an associated token account if it doesn't exist
 		associated_token_account.CreateIdempotent(ataCreationParam),
 

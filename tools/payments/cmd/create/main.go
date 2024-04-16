@@ -25,8 +25,11 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"filippo.io/age"
+	"filippo.io/age/agessh"
 	"github.com/hashicorp/vault/shamir"
 )
 
@@ -57,9 +60,20 @@ func main() {
 	}
 
 	// load up the operator recipients (x25519 public keys)
-	operatorRecipients := []*age.X25519Recipient{}
-	for _, key := range publicKeys {
-		recipient, err := age.ParseX25519Recipient(key)
+	operatorRecipients := []age.Recipient{}
+	for _, filename := range publicKeys {
+		f, err := os.Open(filename)
+		if err != nil {
+			log.Fatalf("failed to open key file: %w", err)
+		}
+		defer f.Close()
+
+		key, err := io.ReadAll(f)
+		if err != nil {
+			log.Fatalf("failed to read key file: %w", err)
+		}
+
+		recipient, err := agessh.ParseRecipient(string(key))
 		if err != nil {
 			log.Fatalf("Failed to parse public key %q: %v", key, err)
 		}
@@ -79,8 +93,9 @@ func main() {
 	}
 
 	for i, v := range operatorShares {
+		name := strings.TrimSuffix(filepath.Base(publicKeys[i]), filepath.Ext(publicKeys[i]))
 		// open output file for this operator
-		f, err := os.Create(fmt.Sprintf("share-%s.enc", operatorRecipients[i].String()))
+		f, err := os.Create(fmt.Sprintf("share-%s.enc", name))
 		if err != nil {
 			log.Fatalf("failed to open operator receipient share file", err.Error())
 		}

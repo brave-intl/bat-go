@@ -82,7 +82,7 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 		common.PublicKeyFromString(mint),
 	)
 	must.Nil(t, err)
-	solClient := client.NewClient(solMachine.solanaRpcEndpoint)
+	solClient := client.NewClient(os.Getenv("SOLANA_RPC_ENDPOINT"))
 	must.Nil(t, err)
 	// The RPC server caches the result of GetAccountInfo and the new value is not returned
 	// for over 10 seconds in our testing. Therefore, ugly as it is, loop until we get a result
@@ -102,7 +102,7 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	// it has an Owner field that is valid.
 	should.Equal(t, tokenAccountOwner, result.Owner.ToBase58())
 
-	checkTransactionMatchesPaymentDetails(ctx, t, solMachine.solanaRpcEndpoint, createdAta, state, *finalState)
+	checkTransactionMatchesPaymentDetails(ctx, t, os.Getenv("SOLANA_RPC_ENDPOINT"), createdAta, state, *finalState)
 }
 
 /*
@@ -147,7 +147,7 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 	)
 	must.Nil(t, err)
 
-	checkTransactionMatchesPaymentDetails(ctx, t, solMachine.solanaRpcEndpoint, staticAta, state, *finalState)
+	checkTransactionMatchesPaymentDetails(ctx, t, os.Getenv("SOLANA_RPC_ENDPOINT"), staticAta, state, *finalState)
 }
 
 func TestLiveSolanaStateMachineDropped(t *testing.T) {
@@ -231,7 +231,7 @@ func checkTransactionMatchesPaymentDetails(
 	if innerTxn, ok := txn.Result.Transaction.(map[string]interface{}); ok {
 		if message, ok := innerTxn["message"].(map[string]interface{}); ok {
 			if instructions, ok := message["instructions"].([]interface{}); ok {
-				if instructionOne, ok := instructions[0].(map[string]interface{}); ok {
+				if instructionOne, ok := instructions[2].(map[string]interface{}); ok {
 					if parsed, ok := instructionOne["parsed"].(map[string]interface{}); ok {
 						if info, ok := parsed["info"].(map[string]interface{}); ok {
 							t.Log("Verifying chain transaction mint, to, and from")
@@ -247,7 +247,7 @@ func checkTransactionMatchesPaymentDetails(
 				} else {
 					t.Fail()
 				}
-				if instructionTwo, ok := instructions[1].(map[string]interface{}); ok {
+				if instructionTwo, ok := instructions[3].(map[string]interface{}); ok {
 					if parsed, ok := instructionTwo["parsed"].(map[string]interface{}); ok {
 						if info, ok := parsed["info"].(map[string]interface{}); ok {
 							t.Log("Verifying chain transaction amount, ATA, and from")
@@ -353,10 +353,10 @@ func setupState(
 	[]byte,
 ) {
 	solMachine := SolanaMachine{
-		signingKey:        os.Getenv("SOLANA_SIGNING_KEY"),
-		solanaRpcEndpoint: os.Getenv("SOLANA_RPC_ENDPOINT"),
-		splMintAddress:    mint, // SPL mint address on devnet
-		splMintDecimals:   8,    // SPL mint decimals on devnet
+		signingKey:      os.Getenv("SOLANA_SIGNING_KEY"),
+		solanaRpcClient: *client.NewClient(os.Getenv("SOLANA_RPC_ENDPOINT")),
+		splMintAddress:  mint, // SPL mint address on devnet
+		splMintDecimals: 8,    // SPL mint decimals on devnet
 	}
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Nil(t, err)

@@ -14,6 +14,7 @@ require (
 	github.com/amazon-ion/ion-go v1.2.0
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/awa/go-iap v1.3.22
+	github.com/aws/aws-sdk-go v1.44.206
 	github.com/aws/aws-sdk-go-v2 v1.18.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.12.23
 	github.com/aws/aws-sdk-go-v2/service/kms v1.21.1
@@ -27,6 +28,7 @@ require (
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
+	github.com/brave-intl/bat-go v0.1.2
 	github.com/getsentry/sentry-go v0.14.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.1
@@ -34,7 +36,7 @@ require (
 	github.com/go-playground/validator/v10 v10.11.1
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/golang/mock v1.6.0
-	github.com/gomodule/redigo v2.0.0+incompatible
+	github.com/gomodule/redigo v1.9.2
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/vault v1.12.7
 	github.com/jarcoal/httpmock v1.3.0
@@ -50,7 +52,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.13.0
 	github.com/square/go-jose v2.6.0+incompatible
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.4
 	github.com/stripe/stripe-go/v72 v72.122.0
 	golang.org/x/crypto v0.14.0
 	gopkg.in/macaroon.v2 v2.1.0
