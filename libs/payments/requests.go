@@ -27,6 +27,7 @@ type AddressApprovalRequest struct {
 // SubmitResponse is returned to provide the status of a payment after submission, along with any
 // error that resulted, if necessary.
 type SubmitResponse struct {
-	Status         PaymentStatus `json:"status" valid:"required"`
-	PaymentDetails `json:"paymentDetails,omitempty"`
+	Status              PaymentStatus `json:"status" valid:"required"`
+	PaymentDetails      `json:"paymentDetails,omitempty"`
+	ExternalIdempotency string `json:"externalIdempotency,omitempty"`
 }

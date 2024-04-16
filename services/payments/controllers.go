@@ -310,7 +310,7 @@ func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 
 		var (
-			logger        = logging.Logger(ctx, "ApproveSolanaAddressHandler")
+			logger          = logging.Logger(ctx, "ApproveSolanaAddressHandler")
 			approvalRequest = &paymentLib.AddressApprovalRequest{}
 		)
 
