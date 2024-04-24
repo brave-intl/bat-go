@@ -145,7 +145,7 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 	}
 
 	// Special case for VPN.
-	// Theclient may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
+	// The client may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
 	if req.SubscriptionID == "bravevpn.monthly" {
 		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly")
 		if ok {
