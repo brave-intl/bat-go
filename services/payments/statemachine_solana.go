@@ -81,7 +81,7 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 		ctx,
 		// Defaults to Finalized, which decreases our available time to retry. Prefer Confirmed
 		solanaClient.GetLatestBlockhashConfig{
-			Commitment: rpc.CommitmentConfirmed,
+			Commitment: rpc.CommitmentProcessed,
 		},
 	)
 	if err != nil {
@@ -224,7 +224,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	blockHeightResponse, err := sm.solanaRpcClient.RpcClient.GetBlockHeightWithConfig(
 		ctx,
 		rpc.GetBlockHeightConfig{
-			Commitment: rpc.CommitmentConfirmed,
+			Commitment: rpc.CommitmentProcessed,
 		},
 	)
 	if err != nil {
@@ -248,7 +248,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			ctx,
 			idempotencyData.Transaction,
 			solanaClient.SendTransactionConfig{
-				MaxRetries:          0,
+				MaxRetries:          100,
 				PreflightCommitment: rpc.CommitmentProcessed,
 				SkipPreflight:       true,
 			},
