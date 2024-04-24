@@ -1285,7 +1285,8 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 	if err != nil {
 		return nil, fmt.Errorf("unable to compute expiry")
 	}
-	// Add at least 5 days of grace period
+
+	// Add a grace period of 5 days.
 	*expiresAt = (*expiresAt).AddDate(0, 0, 5)
 
 	chunkingFn := credChunkFn(interval)

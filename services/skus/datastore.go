@@ -21,7 +21,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -1252,90 +1251,79 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	return nil
 }
 
-// InsertSignedOrderCredentialsTx inserts a signed order request. It handles both TimeLimitedV2Creds and
-// SingleUse credentials. All SigningOrder's in the SigningOrderResult must be successful to persist the overall result.
-func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error {
-	var requestID = signedOrderResult.RequestID
-	if len(signedOrderResult.Data) == 0 {
-		return fmt.Errorf("error no signing order result is empty for requestID %s",
-			signedOrderResult.RequestID)
+// InsertSignedOrderCredentialsTx inserts a signed order request.
+//
+// It handles both TimeLimitedV2Creds and SingleUse credentials. All SigningOrder's in the SigningOrderResult must be successful to persist the overall result.
+func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, soResult *SigningOrderResult) error {
+	if len(soResult.Data) == 0 {
+		return fmt.Errorf("error no signing order result is empty for requestID %s", soResult.RequestID)
 	}
 
-	for _, so := range signedOrderResult.Data {
-
+	for i := range soResult.Data {
 		var metadata Metadata
-		err := json.Unmarshal(so.AssociatedData, &metadata)
-		if err != nil {
-			return fmt.Errorf("error desearializing associated data for requestID %s: %w",
-				signedOrderResult.RequestID, err)
+		if err := json.Unmarshal(soResult.Data[i].AssociatedData, &metadata); err != nil {
+			return fmt.Errorf("error desearializing associated data for requestID %s: %w", soResult.RequestID, err)
 		}
 
-		if so.Status != SignedOrderStatusOk {
-			return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
-				metadata.OrderID, metadata.ItemID, metadata.IssuerID, so.Status.String())
+		if soResult.Data[i].Status != SignedOrderStatusOk {
+			return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s", metadata.OrderID, metadata.ItemID, metadata.IssuerID, soResult.Data[i].Status.String())
 		}
 
-		blindedCreds := jsonutils.JSONStringArray(so.BlindedTokens)
+		blindedCreds := jsonutils.JSONStringArray(soResult.Data[i].BlindedTokens)
 		if len(blindedCreds) == 0 {
-			return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s: %w",
-				metadata.OrderID, metadata.ItemID, err)
+			return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s", metadata.OrderID, metadata.ItemID)
 		}
 
-		signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
+		signedTokens := jsonutils.JSONStringArray(soResult.Data[i].SignedTokens)
 		if len(signedTokens) == 0 {
-			return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s: %w",
-				metadata.OrderID, metadata.ItemID, err)
+			return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s", metadata.OrderID, metadata.ItemID)
 		}
 
 		switch metadata.CredentialType {
-
 		case singleUse:
-
 			cred := &OrderCreds{
 				ID:           metadata.ItemID,
 				OrderID:      metadata.OrderID,
 				IssuerID:     metadata.IssuerID,
 				BlindedCreds: blindedCreds,
 				SignedCreds:  &signedTokens,
-				BatchProof:   ptr.FromString(so.Proof),
-				PublicKey:    ptr.FromString(so.PublicKey),
+				BatchProof:   ptrTo(soResult.Data[i].Proof),
+				PublicKey:    ptrTo(soResult.Data[i].PublicKey),
 			}
 
-			err = pg.InsertOrderCredsTx(ctx, tx, cred)
-			if err != nil {
-				return fmt.Errorf("error inserting single use order credential orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			if err := pg.InsertOrderCredsTx(ctx, tx, cred); err != nil {
+				return fmt.Errorf("error inserting single use order credential orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
 		case timeLimitedV2:
-			if so.ValidTo.Value() == nil {
-				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			validToRaw := soResult.Data[i].ValidTo.Value()
+			if validToRaw == nil {
+				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null", metadata.OrderID, metadata.ItemID)
 			}
 
-			validTo, err := time.Parse(time.RFC3339, *so.ValidTo.Value())
+			validTo, err := time.Parse(time.RFC3339, *validToRaw)
 			if err != nil {
-				return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+				return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			if so.ValidFrom.Value() == nil {
-				return fmt.Errorf("error validFrom for order creds orderID %s itemID %s is null: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			validToFromRaw := soResult.Data[i].ValidFrom.Value()
+			if validToFromRaw == nil {
+				return fmt.Errorf("error validFrom for order creds orderID %s itemID %s is null: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			validFrom, err := time.Parse(time.RFC3339, *so.ValidFrom.Value())
+			validFrom, err := time.Parse(time.RFC3339, *validToFromRaw)
 			if err != nil {
-				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			o, err := pg.GetOrder(metadata.OrderID)
+			ord, err := pg.GetOrder(metadata.OrderID)
 			if err != nil {
 				return fmt.Errorf("failed to get the order %s: %w", metadata.OrderID, err)
 			}
-			if o.ExpiresAt == nil || validFrom.After(*o.ExpiresAt) {
-				// filter out creds after the order expires
+
+			// Filter out credentials for order with no or after the expiry date.
+			// It accounts for the grace period set in timeChunking (5 days).
+			if ord.ExpiresAt == nil || validFrom.After((*ord.ExpiresAt).AddDate(0, 0, 5)) {
 				continue
 			}
 
@@ -1345,22 +1333,19 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				IssuerID:     metadata.IssuerID,
 				BlindedCreds: blindedCreds,
 				SignedCreds:  signedTokens,
-				BatchProof:   so.Proof,
-				PublicKey:    so.PublicKey,
+				BatchProof:   soResult.Data[i].Proof,
+				PublicKey:    soResult.Data[i].PublicKey,
 				ValidTo:      validTo,
 				ValidFrom:    validFrom,
-				RequestID:    requestID,
+				RequestID:    soResult.RequestID,
 			}
 
-			err = pg.InsertTimeLimitedV2OrderCredsTx(ctx, tx, cred)
-			if err != nil {
-				return fmt.Errorf("error inserting time limited order credential orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			if err := pg.InsertTimeLimitedV2OrderCredsTx(ctx, tx, cred); err != nil {
+				return fmt.Errorf("error inserting time limited order credential orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
 		default:
-			return fmt.Errorf("error unknown credential type %s for order credential orderID %s itemID %s",
-				metadata.CredentialType, metadata.OrderID, metadata.ItemID)
+			return fmt.Errorf("error unknown credential type %s for order credential orderID %s itemID %s", metadata.CredentialType, metadata.OrderID, metadata.ItemID)
 		}
 	}
 
