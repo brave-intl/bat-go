@@ -144,6 +144,20 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 		return item.OriginalTransactionID, nil
 	}
 
+	// Special case for VPN.
+	// Theclient may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
+	if req.SubscriptionID == "bravevpn.monthly" {
+		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly")
+		if ok {
+			return item.OriginalTransactionID, nil
+		}
+
+		item, ok = findInAppBySubID(resp.LatestReceiptInfo, "bravevpn.yearly")
+		if ok {
+			return item.OriginalTransactionID, nil
+		}
+	}
+
 	// Handle legacy iOS versions predating the release that started using proper values for subscription_id.
 	// This only applies to VPN.
 	item, ok = findInAppBySubIDLegacy(resp, req.SubscriptionID)
