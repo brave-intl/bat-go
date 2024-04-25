@@ -33,6 +33,7 @@ import (
 // ChainAddress represents an on-chain address used for payouts. It needs to be persisted
 // to QLDB in this form to manage approvals and record the creator.
 type ChainAddress struct {
+	Chain     string   `ion:"chain"`
 	PublicKey string   `ion:"publicKey"`
 	Creator   string   `ion:"creator"`
 	Approvals []string `ion:"approvals"`
@@ -150,6 +151,7 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	chainAdrress := ChainAddress{
 		PublicKey: b58PubKey,
 		Creator:   creatorKey,
+		Chain: "solana",
 	}
 	_, err = s.datastore.InsertChainAddress(ctx, chainAdrress)
 	if err != nil {
