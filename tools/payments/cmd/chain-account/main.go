@@ -85,10 +85,6 @@ func main() {
 }
 
 func generateSolanaAddress(ctx context.Context, key, env, pcr2 string, verbose bool) {
-	if env != "development" && len(pcr2) != 96 {
-		log.Fatal("a valid pcr2 is required to generate an address outside of development\n")
-	}
-
 	priv, err := paymentscli.GetOperatorPrivateKey(key)
 	if err != nil {
 		log.Fatalf("failed to parse operator key file: %v\n", err)
