@@ -410,10 +410,6 @@ func (s *Service) encryptWithShares(ctx context.Context, data []byte) (io.Reader
 	}
 
 	identity, err := age.ParseX25519Identity(string(privateKey))
-	// zero the private key
-	for i := 0; i < len(privateKey); i++ {
-		privateKey[i] = 0
-	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key bytes for secret decryption: %w", err)
 	}
