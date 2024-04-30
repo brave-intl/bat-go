@@ -26,6 +26,7 @@ import (
 type getConfResponse struct {
 	EncryptionKeyARN string `json:"encryptionKeyArn"`
 	Environment      string `json:"environment"`
+	PublicKey        string `json:"publicKey"`
 }
 
 func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
@@ -123,6 +124,7 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 		resp := &getConfResponse{
 			EncryptionKeyARN: service.kmsDecryptKeyArn,
 			Environment:      os.Getenv("ENV"),
+			PublicKey:        service.publicKey,
 		}
 
 		logger.Debug().Msg("handling configuration request")
