@@ -218,7 +218,7 @@ func main() {
 		ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 	})
 	if err != nil {
-		log.Fatalf("failed to encrypt operator key share: %v", err)
+		log.Fatalf("failed to put operator key share to s3: %v", err)
 	}
 
 	if *verbose {

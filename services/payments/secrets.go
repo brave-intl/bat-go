@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -21,11 +22,22 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	solTypes "github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	"github.com/hashicorp/vault/shamir"
 )
+
+// ChainAddress represents an on-chain address used for payouts. It needs to be persisted
+// to QLDB in this form to manage approvals and record the creator.
+type ChainAddress struct {
+	Chain     string   `ion:"chain"`
+	PublicKey string   `ion:"publicKey"`
+	Creator   string   `ion:"creator"`
+	Approvals []string `ion:"approvals"`
+}
 
 // createAttestationDocument will create an attestation document and return the private key and
 // attestation document which is attesting over the userData supplied
@@ -102,9 +114,81 @@ func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
 	return false
 }
 
+func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey string) (*ChainAddress, error) {
+	solAccount := solTypes.NewAccount()
+	b58PubKey := solAccount.PublicKey.ToBase58()
+	encSeed, err := s.encryptWithShares(ctx, solAccount.PrivateKey.Seed())
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt seed: %w", err)
+	}
+
+	// get the aws configuration
+	awsCfg, err := nitroAwsCfg(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create aws config: %w", err)
+	}
+	s3Client := s3.NewFromConfig(awsCfg)
+
+	encSeedBytes, err := io.ReadAll(encSeed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seed to bytes: %w", err)
+	}
+	h := md5.New()
+	h.Write(encSeedBytes)
+
+	input := &s3.PutObjectInput{
+		Body:                      bytes.NewBuffer(encSeedBytes),
+		Bucket:                    aws.String(bucket),
+		Key:                       aws.String("solana-address-" + b58PubKey),
+		ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
+		ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
+	}
+	_, err = s3Client.PutObject(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to put key to s3: %w", err)
+	}
+
+	chainAdrress := ChainAddress{
+		PublicKey: b58PubKey,
+		Creator:   creatorKey,
+		Chain: "solana",
+	}
+	_, err = s.datastore.InsertChainAddress(ctx, chainAdrress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
+	}
+
+	return &chainAdrress, nil
+}
+
+// NOTE: This function assumes that the http signature has been
+// verified before running. This is achieved in the SubmitHandler middleware.
+func (s *Service) approveSolanaAddress(ctx context.Context, address, approverKey string) (*ChainAddress, error) {
+	chainAddress, err := s.datastore.GetChainAddress(ctx, address)
+	if err != nil {
+		return nil, fmt.Errorf("failed get address from QLDB: %w", err)
+	}
+
+	keyHasNotYetApproved := true
+	for _, approval := range chainAddress.Approvals {
+		if approval == approverKey {
+			keyHasNotYetApproved = false
+		}
+	}
+	if keyHasNotYetApproved {
+		chainAddress.Approvals = append(chainAddress.Approvals, approverKey)
+		err = s.datastore.UpdateChainAddress(ctx, *chainAddress)
+		if err != nil {
+			return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
+		}
+	}
+
+	return chainAddress, nil
+}
+
 // fetchSecrets will take an s3 bucket/object and fetch the configuration and store the
 // ciphertext on the service for decryption later
-func (s *Service) fetchSecrets(ctx context.Context, bucket, object string) error {
+func (s *Service) fetchSecrets(ctx context.Context, bucket, secretsObject string, solanaPubAddr string) error {
 	awsCfg, err := nitroAwsCfg(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create aws config for s3 client: %w", err)
@@ -113,7 +197,7 @@ func (s *Service) fetchSecrets(ctx context.Context, bucket, object string) error
 	// get the secrets configurations from s3
 	secretsResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
-		Key:    aws.String(object),
+		Key:    aws.String(secretsObject),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to get secrets from s3: %w", err)
@@ -123,6 +207,29 @@ func (s *Service) fetchSecrets(ctx context.Context, bucket, object string) error
 	s.secretsCiphertext, err = io.ReadAll(secretsResponse.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read secrets bytes: %w", err)
+	}
+
+	if solanaPubAddr != "" {
+		chainAddress, err := s.datastore.GetChainAddress(ctx, solanaPubAddr)
+		if err != nil {
+			return fmt.Errorf("failed to get solana address from QLDB: %w", err)
+		}
+		if len(chainAddress.Approvals) >= 2 {
+			// get the solana address from s3
+			solanaAddressResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
+				Bucket: aws.String(bucket),
+				Key:    aws.String("solana-address-" + solanaPubAddr),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get solana address from s3: %w", err)
+			}
+			s.solanaPrivCiphertext, err = io.ReadAll(solanaAddressResponse.Body)
+			if err != nil {
+				return fmt.Errorf("failed to read solana address bytes: %w", err)
+			}
+		} else {
+			return fmt.Errorf("provided solana address has insufficient approvals")
+		}
 	}
 
 	return nil
@@ -165,6 +272,11 @@ func (s *Service) configureSecrets(ctx context.Context) error {
 func (s *Service) setEnvFromSecrets(secrets map[string]string) {
 	os.Setenv("ZEBPAY_API_KEY", secrets["zebpayApiKey"])
 	os.Setenv("ZEBPAY_SIGNING_KEY", secrets["zebpayPrivateKey"])
+	os.Setenv("SOLANA_RPC_ENDPOINT", secrets["solanaRpcEndpoint"])
+
+	if solKey, ok := secrets["solanaPrivateKey"]; ok {
+		os.Setenv("SOLANA_SIGNING_KEY", solKey)
+	}
 }
 
 // fetchOperatorShares will take an s3 bucket and fetch all of the operator shares and store them
@@ -249,6 +361,33 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 // decryptSecrets combines the shamir shares stored on the service instance and decrypts the ciphertext
 // returning a map of secret values from the configuration
 func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error) {
+	var output = map[string]string{}
+
+	secBuf := bytes.NewBuffer(s.secretsCiphertext)
+
+	sec, err := s.decryptWithShares(ctx, *secBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt secrets with shares: %w", err)
+	}
+	if err := json.NewDecoder(sec).Decode(&output); err != nil {
+		return nil, fmt.Errorf("failed to json decode the secrets: %w", err)
+	}
+
+	if len(s.solanaPrivCiphertext) > 0 {
+		solBuf := bytes.NewBuffer(s.solanaPrivCiphertext)
+		solReader, err := s.decryptWithShares(ctx, *solBuf)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt solana address with shares: %w", err)
+		}
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(solReader)
+		output["solanaPrivateKey"] = buf.String()
+	}
+
+	return output, nil
+}
+
+func (s *Service) decryptWithShares(ctx context.Context, buf bytes.Buffer) (io.Reader, error) {
 	// combine the service configured key shares
 	privateKey, err := shamir.Combine(s.keyShares)
 	if err != nil {
@@ -260,17 +399,32 @@ func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error)
 		return nil, fmt.Errorf("failed to parse private key bytes for secret decryption: %w", err)
 	}
 
-	buf := bytes.NewBuffer(s.secretsCiphertext)
+	return age.Decrypt(bytes.NewReader(buf.Bytes()), identity)
+}
 
-	r, err := age.Decrypt(buf, identity)
+func (s *Service) encryptWithShares(ctx context.Context, data []byte) (io.Reader, error) {
+	// combine the service configured key shares
+	privateKey, err := shamir.Combine(s.keyShares)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt the secrets ciphertext: %w", err)
+		return nil, fmt.Errorf("failed to combine keyShares: %w", err)
 	}
 
-	var output = map[string]string{}
-	if err := json.NewDecoder(r).Decode(&output); err != nil {
-		return nil, fmt.Errorf("failed to json decode the secrets: %w", err)
+	identity, err := age.ParseX25519Identity(string(privateKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key bytes for secret decryption: %w", err)
 	}
 
-	return output, nil
+	out := &bytes.Buffer{}
+
+	w, err := age.Encrypt(out, identity.Recipient())
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create encrypted file: %v", err)
+	}
+	if _, err := io.WriteString(w, string(data)); err != nil {
+		return nil, fmt.Errorf("Failed to write to encrypted file: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		return nil, fmt.Errorf("Failed to close encrypted file: %v", err)
+	}
+	return out, nil
 }

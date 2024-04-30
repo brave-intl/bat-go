@@ -11,6 +11,8 @@ import (
 	"os"
 	"time"
 
+	solanaClient "github.com/blocto/solana-go-sdk/client"
+	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
@@ -122,6 +124,14 @@ func (s *Service) StateMachineFromTransaction(
 			signingKey: signingKey,
 			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
 		}
+	case "solana":
+		solClient := solanaClient.New(rpc.WithEndpoint(os.Getenv("SOLANA_RPC_ENDPOINT")), rpc.WithHTTPClient(&client))
+		machine = &SolanaMachine{
+			signingKey:      os.Getenv("SOLANA_SIGNING_KEY"),
+			solanaRpcClient: *solClient,
+			splMintAddress:  SPLBATMintAddress,
+			splMintDecimals: SPLBATMintDecimals,
+		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
 	case "dryrun-prepare-fails":
@@ -141,8 +151,8 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 ) (*paymentLib.AuthenticatedPaymentState, error) {
-	// Drive is called recursively, so we need to check whether a deadline has been set
-	// by a prior caller and only set the default deadline if not.
+	// Check whether a deadline has been set by a prior caller and only set the default deadline if
+	// not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)

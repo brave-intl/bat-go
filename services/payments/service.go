@@ -32,11 +32,12 @@ type Service struct {
 	awsCfg     aws.Config
 	egressAddr string
 
-	baseCtx           context.Context
-	keyShares         [][]byte
-	secretsCiphertext []byte
-	secrets           map[string]string
-	kmsDecryptKeyArn  string
+	baseCtx              context.Context
+	keyShares            [][]byte
+	secretsCiphertext    []byte
+	solanaPrivCiphertext []byte
+	secrets              map[string]string
+	kmsDecryptKeyArn     string
 
 	publicKey     string
 	signer        paymentLib.Signator
@@ -46,6 +47,7 @@ type Service struct {
 var (
 	errNoSecretsBucketConfigured        = errors.New("no secrets bucket name for payments service")
 	errNoSecretsObjectConfigured        = errors.New("no secrets object name for payments service")
+	errNoSolanaAddressConfigured        = errors.New("no solana address for payments service")
 	errNoOperatorSharesBucketConfigured = errors.New("no secrets operator shares bucket name for payments service")
 )
 
@@ -258,10 +260,15 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 			if !ok {
 				return nil, nil, errNoSecretsObjectConfigured
 			}
+			solanaAddress, ok := ctx.Value(appctx.EnclaveSolanaAddressCTXKey).(string)
+			if !ok {
+				return nil, nil, errNoSolanaAddressConfigured
+			}
+			logger.Debug().Str("solana address:", solanaAddress).Msg("solana address configured")
 
 			for {
 				// fetch the secrets, result will store the secrets (age ciphertext) on the service instance
-				if err := service.fetchSecrets(ctx, secretsBucketName, secretsObjectName); err != nil {
+				if err := service.fetchSecrets(ctx, secretsBucketName, secretsObjectName, solanaAddress); err != nil {
 					// log the error, we will retry again
 					logger.Error().Err(err).Msg("failed to fetch secrets, will retry shortly")
 					<-time.After(30 * time.Second)
