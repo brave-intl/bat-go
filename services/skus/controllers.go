@@ -951,12 +951,15 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 }
 
 // WebhookRouter - handles calls from various payment method webhooks informing payments of completion
-func WebhookRouter(service *Service) chi.Router {
+func WebhookRouter(svc *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(service)))
-	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
-	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
-	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(service)))
+
+	r.Method(http.MethodPost, "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(svc)))
+	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(svc)))
+	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(svc)))
+	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(svc)))
+	r.Method(http.MethodPost, "/iosx", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
+
 	return r
 }
 
