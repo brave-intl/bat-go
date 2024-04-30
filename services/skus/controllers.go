@@ -1137,6 +1137,60 @@ func handleIOSWebhook(service *Service) handlers.AppHandler {
 	}
 }
 
+func handleWebhookAppStore(svc *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		return handleWebhookAppStoreH(w, r, svc)
+	}
+}
+
+func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
+	ctx := r.Context()
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookAppStore").Logger()
+
+	data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Error().Err(err).Msg("failed to read request body")
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	}
+
+	spayload := &struct {
+		SignedPayload string `json:"signedPayload"`
+	}{}
+
+	if err := json.Unmarshal(data, spayload); err != nil {
+		lg.Error().Err(err).Str("data", string(data)).Msg("failed to unmarshal responseBodyV2")
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	}
+
+	ntf, err := parseAppStoreSrvNotification(svc.assnCertVrf, spayload.SignedPayload)
+	if err != nil {
+		// TODO: Reply with http.StatusOK after testing is complete.
+		// None of these errors is recoverable.
+
+		lg.Error().Err(err).Str("payload", spayload.SignedPayload).Msg("failed to parse app store notification")
+
+		return handlers.ValidationError("request", map[string]interface{}{"parse-signed-payload": err.Error()})
+	}
+
+	if err := svc.processAppStoreNotification(ctx, ntf); err != nil {
+		lg.Error().Err(err).Msg("failed to process app store notification")
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			// There is no const for 499.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", 499)
+
+		default:
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
 // HandleRadomWebhook handles Radom checkout session webhooks.
 func HandleRadomWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {

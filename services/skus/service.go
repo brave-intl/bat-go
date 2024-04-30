@@ -128,6 +128,7 @@ type Service struct {
 
 	vendorReceiptValid vendorReceiptValidator
 	gcpValidator       gcpRequestValidator
+	assnCertVrf        *assnCertVerifier
 
 	payProcCfg    *premiumPaymentProcConfig
 	newItemReqSet map[string]model.OrderItemRequestNew
@@ -261,6 +262,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		return nil, err
 	}
 
+	assnCertVrf, err := newASSNCertVerifier()
+	if err != nil {
+		return nil, err
+	}
+
 	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {
 		return nil, err
@@ -317,6 +323,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 
 		vendorReceiptValid: rcptValidator,
 		gcpValidator:       gcpValidator,
+		assnCertVrf:        assnCertVrf,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
 		newItemReqSet: newOrderItemReqNewMobileSet(env),
@@ -1623,6 +1630,10 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 		return fmt.Errorf("failed to renew subscription in skus: %w", err)
 	}
 
+	return nil
+}
+
+func (s *Service) processAppStoreNotification(ctx context.Context, ntf *appStoreSrvNotification) error {
 	return nil
 }
 
