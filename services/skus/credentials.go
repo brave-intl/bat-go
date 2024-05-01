@@ -30,6 +30,9 @@ import (
 const (
 	defaultMaxTokensPerIssuer       = 4000000 // ~1M BAT
 	defaultCohort             int16 = 1
+
+	// maxTLV2ActiveDailyItemCreds specifies the number of credentials an item is allowed to have in the given day.
+	maxTLV2ActiveDailyItemCreds = 10
 )
 
 var (
@@ -44,6 +47,7 @@ var (
 	errItemDoesNotExist              model.Error = "order item does not exist for order"
 	errCredsAlreadySubmitted         model.Error = "credentials already submitted"
 	errCredsAlreadySubmittedMismatch model.Error = "credentials already submitted with a different request"
+	errExceededMaxTLV2DailyCreds     model.Error = "exceeded max number of daily tlv2 creds"
 
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
 	retryPolicy      = retrypolicy.DefaultRetry
@@ -693,10 +697,14 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 // - create repos for credentials;
 // - move the corresponding methods there;
 // - make those methods work on per-item basis.
-func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
+func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, reqID uuid.UUID, isSigned bool) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err
+	}
+
+	if order == nil {
+		return model.ErrOrderNotFound
 	}
 
 	if len(order.Items) == 0 {
@@ -725,7 +733,7 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	if doTlv2 {
-		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
+		if err := s.deleteTLV2(ctx, tx, order, reqID, time.Now()); err != nil {
 			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
 		}
 	}
@@ -739,6 +747,31 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	return nil
+}
+
+func (s *Service) deleteTLV2(ctx context.Context, dbi sqlx.ExtContext, order *model.Order, reqID uuid.UUID, now time.Time) error {
+	// New behaviour.
+	// Delete only credentials for the specified reqID (used as itemID).
+	if !uuid.Equal(reqID, uuid.Nil) {
+		nActiveCreds, err := s.Datastore.GetNumActiveCreds(ctx, dbi, order.ID, now)
+		if err != nil {
+			return err
+		}
+
+		if nActiveCreds > maxTLV2ActiveDailyItemCreds {
+			return errExceededMaxTLV2DailyCreds
+		}
+
+		return s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, order.ID, reqID)
+	}
+
+	// Legacy, delete all items.
+	itemIDs := make([]uuid.UUID, 0, len(order.Items))
+	for i := range order.Items {
+		itemIDs = append(itemIDs, order.Items[i].ID)
+	}
+
+	return s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, order.ID, itemIDs...)
 }
 
 // checkNumBlindedCreds checks the number of submitted blinded credentials.

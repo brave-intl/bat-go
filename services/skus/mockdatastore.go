@@ -238,17 +238,37 @@ func (mr *MockDatastoreMockRecorder) DeleteSingleUseOrderCredsByOrderTx(ctx, tx,
 }
 
 // DeleteTimeLimitedV2OrderCredsByOrderTx mocks base method.
-func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID go_uuid.UUID) error {
+func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, dbi sqlx.ExtContext, orderID go_uuid.UUID, itemIDs ...go_uuid.UUID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteTimeLimitedV2OrderCredsByOrderTx", ctx, tx, orderID)
+	varargs := []interface{}{ctx, dbi, orderID}
+	for _, a := range itemIDs {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteTimeLimitedV2OrderCredsByOrderTx", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteTimeLimitedV2OrderCredsByOrderTx indicates an expected call of DeleteTimeLimitedV2OrderCredsByOrderTx.
-func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, dbi, orderID interface{}, itemIDs ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrderTx), ctx, tx, orderID)
+	varargs := append([]interface{}{ctx, dbi, orderID}, itemIDs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrderTx), varargs...)
+}
+
+// GetNumActiveCreds mocks base method.
+func (m *MockDatastore) GetNumActiveCreds(ctx context.Context, dbi sqlx.ExtContext, orderID go_uuid.UUID, now time.Time) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNumActiveCreds", ctx, dbi, orderID, now)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNumActiveCreds indicates an expected call of GetNumActiveCreds.
+func (mr *MockDatastoreMockRecorder) GetNumActiveCreds(ctx, dbi, orderID, now interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNumActiveCreds", reflect.TypeOf((*MockDatastore)(nil).GetNumActiveCreds), ctx, dbi, orderID, now)
 }
 
 // GetIssuerByPublicKey mocks base method.

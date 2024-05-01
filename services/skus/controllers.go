@@ -122,6 +122,7 @@ func Router(
 		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, false)))
 
 		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", createItemCreds(svc)))
+		cr.Method(http.MethodDelete, "/items/{itemID}/batches/{requestID}", metricsMwr("DeleteOrderItemCreds", authMwr(deleteItemCreds(svc))))
 	})
 
 	return r
@@ -600,6 +601,53 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 	}
 }
 
+// deleteItemCreds handles requests for deleting credentials for an item.
+func deleteItemCreds(svc *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "deleteItemCreds").Logger()
+
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
+			lg.Error().Err(err).Msg("failed to parse orderID")
+
+			return handlers.ValidationError("orderID", map[string]interface{}{"orderID": err.Error()})
+		}
+
+		reqID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "requestID"))
+		if err != nil {
+			lg.Error().Err(err).Msg("failed to parse requestID")
+
+			return handlers.ValidationError("requestID", map[string]interface{}{"requestID": err.Error()})
+		}
+
+		isSigned := r.URL.Query().Get("isSigned") == "true"
+
+		if err := svc.DeleteOrderCreds(ctx, orderID, reqID, isSigned); err != nil {
+			lg.Error().Err(err).Msg("failed to delete credentials")
+
+			switch {
+			case errors.Is(err, context.Canceled):
+				return handlers.WrapError(err, "cliend ended request", model.StatusClientClosedConn)
+
+			case errors.Is(err, model.ErrOrderNotFound):
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+			case errors.Is(err, ErrOrderHasNoItems):
+				return handlers.WrapError(err, "order has no items", http.StatusBadRequest)
+
+			case errors.Is(err, errExceededMaxTLV2DailyCreds):
+				return handlers.WrapError(err, err.Error(), http.StatusUnprocessableEntity)
+
+			default:
+				return handlers.WrapError(model.ErrSomethingWentWrong, "failed to delete credentials", http.StatusInternalServerError)
+			}
+		}
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	}
+}
+
 // createItemCredsRequest includes the blinded credentials to be signed.
 type createItemCredsRequest struct {
 	BlindedCreds []string `json:"blindedCreds" valid:"base64"`
@@ -694,22 +742,35 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 func DeleteOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		orderID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{"orderID": err.Error()},
-			)
+
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
+			return handlers.ValidationError("orderID", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		id := *orderID.UUID()
-		if err := service.validateOrderMerchantAndCaveats(ctx, id); err != nil {
+		if err := service.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-		if err := service.DeleteOrderCreds(ctx, id, isSigned); err != nil {
-			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
+
+		if err := service.DeleteOrderCreds(ctx, orderID, uuid.Nil, isSigned); err != nil {
+			switch {
+			case errors.Is(err, context.Canceled):
+				return handlers.WrapError(err, "cliend ended request", model.StatusClientClosedConn)
+
+			case errors.Is(err, model.ErrOrderNotFound):
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+			case errors.Is(err, ErrOrderHasNoItems):
+				return handlers.WrapError(err, "order has no items", http.StatusBadRequest)
+
+			case errors.Is(err, errExceededMaxTLV2DailyCreds):
+				return handlers.WrapError(err, err.Error(), http.StatusUnprocessableEntity)
+
+			default:
+				return handlers.WrapError(model.ErrSomethingWentWrong, "failed to delete credentials", http.StatusBadRequest)
+			}
 		}
 
 		return handlers.RenderContent(ctx, "Order credentials successfully deleted", w, http.StatusOK)
