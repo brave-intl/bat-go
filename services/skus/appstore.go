@@ -51,6 +51,70 @@ type appStoreSrvNotification struct {
 	val    *appstore.SubscriptionNotificationV2DecodedPayload
 }
 
+// shouldProcess determines whether x should be processed.
+//
+// More details https://developer.apple.com/documentation/appstoreservernotifications/notificationtype#4304524.
+func (x *appStoreSrvNotification) shouldProcess() bool {
+	// Other interesting types.
+	//
+	// - x.val.NotificationType == appstore.NotificationTypeV2Subscribed && x.val.Subtype == appstore.SubTypeV2InitialBuy:
+	//     - the first-time subscription or a family member gained access for the first time;
+	//     - can be used to create a new order or prepare to working in multi-device mode;
+	// - x.val.NotificationType == appstore.NotificationTypeV2Revoke && x.val.Subtype == "":
+	//     - a family member lost access to the subscription.
+
+	return x.shouldRenew() || x.shouldCancel()
+}
+
+func (x *appStoreSrvNotification) shouldRenew() bool {
+	switch {
+	// Auto-renew.
+	case x.val.NotificationType == appstore.NotificationTypeV2DidRenew && x.val.Subtype == "":
+		return true
+
+	// Billing has recovered.
+	case x.val.NotificationType == appstore.NotificationTypeV2DidRenew && x.val.Subtype == appstore.SubTypeV2BillingRecovery:
+		return true
+
+	// Resubscribed after cancellation.
+	case x.val.NotificationType == appstore.NotificationTypeV2DidChangeRenewalStatus && x.val.Subtype == appstore.SubTypeV2AutoRenewEnabled:
+		return true
+
+	// Resubscribed after expiration or a family member gained access after resubscription.
+	case x.val.NotificationType == appstore.NotificationTypeV2Subscribed && x.val.Subtype == appstore.SubTypeV2Resubscribe:
+		return true
+
+	default:
+		return false
+	}
+}
+
+func (x *appStoreSrvNotification) shouldCancel() bool {
+	switch {
+	// Cancellation or refund.
+	case x.val.NotificationType == appstore.NotificationTypeV2DidChangeRenewalStatus && x.val.Subtype == appstore.SubTypeV2AutoRenewDisabled:
+		return true
+
+	// Extra events relating to cancellations or refunds.
+	//
+	// Need to make sure the order is cancelled.
+	// Apple processed a refund.
+	case x.val.NotificationType == appstore.NotificationTypeV2Refund && x.val.Subtype == "":
+		return true
+
+	// Expiration after user's cancellation.
+	case x.val.NotificationType == appstore.NotificationTypeV2Expired && x.val.Subtype == appstore.SubTypeV2Voluntary:
+		return true
+
+	// Expiration after billing retry ended without recovery.
+	case x.val.NotificationType == appstore.NotificationTypeV2Expired && x.val.Subtype == appstore.SubTypeV2BillingRetry:
+		return true
+
+	default:
+		return false
+	}
+}
+
 func parseAppStoreSrvNotification(vrf *assnCertVerifier, spayload string) (*appStoreSrvNotification, error) {
 	certs, err := extractASSNCerts(spayload)
 	if err != nil {

@@ -1633,7 +1633,14 @@ func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JW
 	return nil
 }
 
+// processAppStoreNotification determines whether ntf is worth processing, and does it if it is.
+//
+// More on ntf types https://developer.apple.com/documentation/appstoreservernotifications/notificationtype#4304524.
 func (s *Service) processAppStoreNotification(ctx context.Context, ntf *appStoreSrvNotification) error {
+	if !ntf.shouldProcess() {
+		return nil
+	}
+
 	return nil
 }
 
