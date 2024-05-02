@@ -9,8 +9,8 @@ multiple operators with the same arguments to take effect.
 
 Usage:
 
-create-vault [flags] create [pubkeyFile]
-create-vault [flags] approve [pubkeyFile]
+vault [flags] create [pubkeyFile]
+vault [flags] approve [pubkeyFile]
 
 The flags are:
 
