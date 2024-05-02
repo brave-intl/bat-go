@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"slices"
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
@@ -32,7 +33,6 @@ import (
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/google/uuid"
 	"github.com/hashicorp/vault/shamir"
-	"golang.org/x/exp/slices"
 )
 
 // ChainAddress represents an on-chain address used for payouts. It needs to be persisted
@@ -76,6 +76,7 @@ func (v *Vault) SetIdempotencyKey() error {
 		uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c"),
 		[]byte(fmt.Sprintf("%s%s", v.Threshold, strings.Join(v.OperatorKeys, ","))),
 	).String()
+	return nil
 }
 
 // createAttestationDocument will create an attestation document and return the private key and

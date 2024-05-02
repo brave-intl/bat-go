@@ -46,7 +46,7 @@ type Datastore interface {
 	GetVaultWithPublicKey(ctx context.Context, pubkey string) (*Vault, error)
 	UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error
 	UpdateChainAddress(ctx context.Context, address ChainAddress) error
-	ApproveVault(ctx context.Context, id, pubKey, approval string) (Vault, error)
+	ApproveVault(ctx context.Context, id, pubKey, approval string) (*Vault, error)
 }
 
 func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error) {

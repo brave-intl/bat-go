@@ -397,7 +397,7 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
 		}
 
-		chainAddress, err := service.createVault(ctx, *vaultRequest, keyID, publicKey)
+		createdVaultResponse, err := service.createVault(ctx, *vaultRequest, keyID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
 		}
@@ -406,7 +406,7 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 			Cause:   err,
 			Message: "key approved",
 			Code:    http.StatusOK,
-			Data:    chainAddress,
+			Data:    createdVaultResponse,
 		}
 	}
 }
