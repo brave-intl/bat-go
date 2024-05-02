@@ -8,6 +8,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
+	"golang.org/x/exp/slices"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -39,10 +40,13 @@ const (
 type Datastore interface {
 	InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error)
 	InsertChainAddress(ctx context.Context, address ChainAddress) (string, error)
+	InsertVault(ctx context.Context, vault Vault) error
 	GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error)
 	GetChainAddress(ctx context.Context, address string) (*ChainAddress, error)
+	GetVault(ctx context.Context, pubkey string) (*Vault, error)
 	UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error
 	UpdateChainAddress(ctx context.Context, address ChainAddress) error
+	ApproveVault(ctx context.Context, id, pubKey, approval string) (Vault, error)
 }
 
 func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error) {
@@ -169,6 +173,122 @@ func (q *QLDBDatastore) InsertChainAddress(ctx context.Context, address ChainAdd
 	return insertedDocumentID.(string), nil
 }
 
+// InsertVault checks if a vault already exists. If it does, it returns with no error and no changes.
+// If the vault does not exist, it is inserted into QLDB.
+func (q *QLDBDatastore) InsertVault(ctx context.Context, vault Vault) error {
+	// Always ensure that an idempotency key is set at this point.
+	vault.SetIdempotencyKey()
+
+	_, err := q.Execute(
+		context.Background(),
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+			// Check if this vault's idempotency key already exists. If not, perform the
+			// insertion. We can't use the public key in this case because the key will
+			// be recently genereated and different from any existing keys at this point.
+			existingkey, err := txn.Execute(
+				"SELECT d_id as documentID FROM vaults BY d_id where idempotencyKey = ?",
+				vault.IdempotencyKey,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to insert key: %s due to: %w",
+					vault.PublicKey,
+					err,
+				)
+			}
+
+			// Check if there are any results. If there are, we should skip insert.
+			if existingkey.Next(txn) {
+				documentIDResult := new(qldbDocumentIDResult)
+				err = ion.Unmarshal(existingkey.GetCurrentData(), &documentIDResult)
+				if err != nil {
+					return nil, err
+				}
+				return documentIDResult.DocumentID, nil
+			}
+			documentIDResultBinary, err := txn.Execute(
+				"INSERT INTO vaults ?",
+				vault,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to insert key: %s due to: %w",
+					vault.PublicKey,
+					err,
+				)
+			}
+
+			if documentIDResultBinary.Next(txn) {
+				documentIDResult := new(qldbDocumentIDResult)
+				err = ion.Unmarshal(documentIDResultBinary.GetCurrentData(), &documentIDResult)
+				if err != nil {
+					return nil, err
+				}
+				return documentIDResult.DocumentID, nil
+			}
+
+			err = documentIDResultBinary.Err()
+			return nil, fmt.Errorf(
+				"failed to insert key: %s due to: %w",
+				vault.PublicKey,
+				err,
+			)
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert key: %s due to: %w", vault.PublicKey, err)
+	}
+	return nil
+}
+
+// ApproveVault checks if a vault exists. If it doesn't, it returns with an error. If the vault does
+// exist the provided approver is added to the approvers list.
+func (q *QLDBDatastore) ApproveVault(ctx context.Context, id, pubKey, approval string) (*Vault, error) {
+	qldbVault, err := q.GetVault(ctx, id, pubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vault from QLDB: %w", pubKey, err)
+	}
+	if qldbVault == nil {
+		return nil, fmt.Errorf(
+			"vault with idempotency key %s and publick key %s does not exist",
+			id,
+			pubKey,
+		)
+	}
+	// Only add new approval if it's not already in the approval list
+	for _, existingApproval := range qldbVault.Approvals {
+		if approval == existingApproval {
+			continue
+		}
+		qldbVault.Approvals = append(qldbVault.Approvals, approval)
+	}
+
+	// Save qldbVault with updated Approvals
+	_, err = q.Execute(
+		ctx,
+		func(txn qldbdriver.Transaction) (interface{}, error) {
+			_, err := txn.Execute(
+				`UPDATE vaults
+					SET
+						publicKey = ?,
+						approvals = ?
+					WHERE
+						publicKey = ?
+				`,
+				qldbVault.PublicKey,
+				qldbVault.Approvals,
+				qldbVault.PublicKey,
+			)
+			return nil, err
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("QLDB write execution failed: %w", err)
+	}
+
+	return qldbVault, nil
+}
+
 func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error) {
 	logger := logging.Logger(ctx, "payments.setupLedger")
 
@@ -269,6 +389,33 @@ func (q *QLDBDatastore) GetChainAddress(ctx context.Context, address string) (*C
 	return chainAddress.(*ChainAddress), err
 }
 
+func (q *QLDBDatastore) GetVault(ctx context.Context, idempotencyKey, publicKey string) (*Vault, error) {
+	vault, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		result, err := txn.Execute(
+			"SELECT * FROM vaults WHERE publicKey = ? and idempotencyKey = ?",
+			publicKey,
+			idempotencyKey,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("QLDB transaction failed: %w", err)
+		}
+		var vault Vault
+		for result.Next(txn) {
+			err := ion.Unmarshal(result.GetCurrentData(), &vault)
+			if err != nil {
+				return nil, fmt.Errorf("ion unmarshal failed: %w", err)
+			}
+		}
+
+		return &vault, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return vault.(*Vault), err
+}
+
+// UpdateChainAddress adds approvals to an existing chain address
 func (q *QLDBDatastore) UpdateChainAddress(ctx context.Context, address ChainAddress) error {
 	_, err := q.Execute(
 		ctx,
@@ -347,25 +494,49 @@ func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
 				}
 			}
 			if !ok {
-				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
+				return nil, fmt.Errorf("failed to create authorizations table due to: %w", err)
 			}
 		}
 		ok = false
 		_, err = txn.Execute("CREATE TABLE chainaddresses")
 		if err != nil {
-			logger.Warn().Err(err).Msg("error creating transactions table")
+			logger.Warn().Err(err).Msg("error creating chainaddresses table")
 			if errors.As(err, &ae) {
-				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating transactions table")
+				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating chainaddresses table")
 				if ae.ErrorCode() == tableAlreadyCreatedCode {
 					// table has already been created
 					ok = true
 				}
 			}
 			if !ok {
-				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
+				return nil, fmt.Errorf("failed to create chainaddresses table due to: %w", err)
 			}
 		} else {
 			_, err = txn.Execute("CREATE INDEX ON chainaddresses (publicKey)")
+			if err != nil {
+				return nil, err
+			}
+		}
+		ok = false
+		_, err = txn.Execute("CREATE TABLE vaults")
+		if err != nil {
+			logger.Warn().Err(err).Msg("error creating vaults table")
+			if errors.As(err, &ae) {
+				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating vaults table")
+				if ae.ErrorCode() == tableAlreadyCreatedCode {
+					// table has already been created
+					ok = true
+				}
+			}
+			if !ok {
+				return nil, fmt.Errorf("failed to create vaults table due to: %w", err)
+			}
+		} else {
+			_, err = txn.Execute("CREATE INDEX ON vaults (publicKey)")
+			if err != nil {
+				return nil, err
+			}
+			_, err = txn.Execute("CREATE INDEX ON vaults (idempotencyKey)")
 			if err != nil {
 				return nil, err
 			}

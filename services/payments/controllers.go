@@ -102,6 +102,22 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 				s.AuthorizerSignedMiddleware()(ApproveSolanaAddressHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("solana address approval endpoint setup")
+		// vault creation will have an http signature from a known list of public keys
+		r.Post(
+			"/vault/create",
+			middleware.InstrumentHandler(
+				"CreateVaultHandler",
+				s.AuthorizerSignedMiddleware()(CreateVaultHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("solana address approval endpoint setup")
+		// vault approval will have an http signature from a known list of public keys
+		r.Post(
+			"/vault/approve",
+			middleware.InstrumentHandler(
+				"ApproveVaultHandler",
+				s.AuthorizerSignedMiddleware()(ApproveVaultHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("solana address approval endpoint setup")
 
 		r.Get(
 			"/info",
@@ -305,7 +321,8 @@ func GenerateSolanaAddressHandler(service *Service) handlers.AppHandler {
 	}
 }
 
-// ApproveSolanaAddressHandler.
+// ApproveSolanaAddressHandler.handles requests to approve solana addresses. 2 calls to this endpoiont
+// from separate operators is needed to fully approve an address for use.
 func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
@@ -345,6 +362,95 @@ func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
 			Message: "key approved",
 			Code:    http.StatusOK,
 			Data:    chainAddress,
+		}
+	}
+}
+
+// CreateVaultHandler generates a key with shamir shares, stores metadata about this key in QLDB,
+// returns the shamir shares, and discards the private key.
+func CreateVaultHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			logger       = logging.Logger(ctx, "CreateVaultHandler")
+			vaultRequest = &paymentLib.CreateVaultRequest{}
+		)
+
+		// read the transactions in the body
+		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(vaultRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str("approvals", fmt.Sprintf("%+v", vaultRequest)).Msg("handling approval request")
+
+		// we have passed the http signature middleware, record who authorized the tx
+		keyID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
+		}
+
+		chainAddress, err := service.createVault(ctx, *vaultRequest, keyID, publicKey)
+		if err != nil {
+			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "key approved",
+			Code:    http.StatusOK,
+			Data:    chainAddress,
+		}
+	}
+}
+
+// ApproveVaultHandler adds an approval to a created vault
+func ApproveVaultHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			logger       = logging.Logger(ctx, "CreateVaultHandler")
+			vaultRequest = &paymentLib.ApproveVaultRequest{}
+		)
+
+		// read the transactions in the body
+		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(vaultRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str("approvals", fmt.Sprintf("%+v", vaultRequest)).Msg("handling approval request")
+
+		// we have passed the http signature middleware, record who authorized the tx
+		keyID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
+		}
+
+		approvedVaultResponse, err := service.approveVault(ctx, *vaultRequest, keyID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "key approved",
+			Code:    http.StatusOK,
+			Data:    approvedVaultResponse,
 		}
 	}
 }

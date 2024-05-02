@@ -16,8 +16,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sort"
+	"strings"
 
 	"filippo.io/age"
+	"filippo.io/age/agessh"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
@@ -27,7 +30,10 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/google/uuid"
 	"github.com/hashicorp/vault/shamir"
+	"golang.org/x/exp/slices"
 )
 
 // ChainAddress represents an on-chain address used for payouts. It needs to be persisted
@@ -37,6 +43,40 @@ type ChainAddress struct {
 	PublicKey string   `ion:"publicKey"`
 	Creator   string   `ion:"creator"`
 	Approvals []string `ion:"approvals"`
+}
+
+// Vault represents a key which has been broken into shamir shares and is used for encrypting
+// secrets.
+type Vault struct {
+	PublicKey      string   `ion:"publicKey"`
+	Creator        string   `ion:"creator"`
+	Approvals      []string `ion:"approvals"`
+	Threshold      int      `ion:"threshold"`
+	OperatorKeys   []string `ion:"operatorKeys"`
+	IdempotencyKey string   `ion:"idempotencyKey"`
+	// must be unexported. these values should never be presisted to QLDB
+	shares paymentLib.CreateVaultResponse
+}
+
+// SetIdempotencyKey takes and existing vault, checks if it has valid threshold and operators, and
+// generates a UUIDv5 using our Payment Service namespace, threshold, and operators.
+func (v *Vault) SetIdempotencyKey() error {
+	if v.Threshold < 1 {
+		return errors.New("invalid threshold")
+	}
+	if v.OperatorKeys == nil || len(v.OperatorKeys) < 1 || len(v.OperatorKeys) < v.Threshold {
+		return errors.New("invalid number of operator keys")
+	}
+	// We have to sort the opKeys to ensure that the idempotency key we generate is the same for the
+	// same set of keys.
+	slices.Sort(v.OperatorKeys)
+	v.OperatorKeys = slices.Compact(v.OperatorKeys)
+	// Generate an idempotency key using the keys and threshold. This is used to prevent us from
+	// creating multiple vaults with the same configuration.
+	v.IdempotencyKey = uuid.NewSHA1(
+		uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c"),
+		[]byte(fmt.Sprintf("%s%s", v.Threshold, strings.Join(v.OperatorKeys, ","))),
+	).String()
 }
 
 // createAttestationDocument will create an attestation document and return the private key and
@@ -106,6 +146,125 @@ func nitroAwsCfg(ctx context.Context) (aws.Config, error) {
 
 var errSecretsNotLoaded = errors.New("secrets are not yet loaded")
 
+func (s *Service) createVault(
+	ctx context.Context,
+	request paymentLib.CreateVaultRequest,
+	approverKey string,
+) (*paymentLib.CreateVaultResponse, error) {
+	vault, err := vaultFromRequest(ctx, request.Operators, request.Threshold, approverKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate vault from request: %w", err)
+	}
+	err = s.datastore.InsertVault(ctx, *vault)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
+	}
+
+	return &vault.shares, nil
+}
+
+func (s *Service) approveVault(
+	ctx context.Context,
+	request paymentLib.ApproveVaultRequest,
+	approverKey string,
+) (*paymentLib.ApproveVaultResponse, error) {
+	var opKeys []string
+	for _, key := range request.Operators {
+		opKeys = append(opKeys, key.Material)
+	}
+	vault := Vault{
+		Threshold:    request.Threshold,
+		OperatorKeys: opKeys,
+	}
+	vault.SetIdempotencyKey()
+	updatedVault, err := s.datastore.ApproveVault(
+		ctx,
+		vault.IdempotencyKey,
+		request.PublicKey,
+		approverKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
+	}
+
+	return &paymentLib.ApproveVaultResponse{
+		Approvals:     updatedVault.Approvals,
+		PublicKey:     updatedVault.PublicKey,
+		FullyApproved: len(updatedVault.Approvals) > 1,
+	}, nil
+}
+
+func vaultFromRequest(
+	ctx context.Context,
+	operators []paymentLib.NamedOperator,
+	threshold int,
+	approverKey string,
+) (*Vault, error) {
+	opRecpt := []age.Recipient{}
+	var opNames []string
+	var opKeys []string
+	for _, operator := range operators {
+		recipient, err := agessh.ParseRecipient(string(operator.Material))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse public key", err)
+		}
+		// Keys and names must match indices, as these are used to associate encrypted shares
+		// with names in createVault.
+		opRecpt = append(opRecpt, recipient)
+		opNames = append(opNames, operator.Name)
+		opKeys = append(opKeys, operator.Material)
+	}
+	// In order to map keys to names, we need an equal number of each. They should share an order.
+	// The key at index 0 should be the name at index 0, etc.
+	if len(opRecpt) != len(opNames) || len(opNames) != len(opKeys) {
+		return nil, fmt.Errorf("have %d keys but %d names", len(opKeys), len(opNames))
+	}
+	// generate key
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate X25519 identity: %w", err)
+	}
+
+	sharesResult := paymentLib.CreateVaultResponse{
+		PublicKey: identity.Recipient().String(),
+		Threshold: threshold,
+	}
+
+	// Create shares
+	operatorShares, err := shamir.Split([]byte(identity.String()), len(opKeys), threshold)
+	if err != nil {
+		return nil, fmt.Errorf("failed to split identity into shamir shares: %w", err)
+	}
+
+	// Encrypt each share with an operator key and associate that key to the operator
+	// name in a NamedOperator
+	var shares []paymentLib.NamedOperator
+	for i, share := range operatorShares {
+		buf := new(bytes.Buffer)
+		// encrypt each with an operator recipient
+		w, err := age.Encrypt(buf, opRecpt[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt to receipient share file: %w", err)
+		}
+		if _, err := io.WriteString(w, base64.StdEncoding.EncodeToString(share)); err != nil {
+			return nil, fmt.Errorf("failed to write ciphertext to receipient share file: %w", err)
+		}
+		shares = append(shares, paymentLib.NamedOperator{
+			Name:     opNames[i],
+			Material: buf.String(),
+		})
+	}
+	sharesResult.Shares = shares
+	return &Vault{
+		PublicKey:    sharesResult.PublicKey,
+		Creator:      approverKey,
+		Approvals:    []string{approverKey},
+		Threshold:    threshold,
+		OperatorKeys: opKeys,
+		shares:       sharesResult,
+	}, nil
+}
+
 // AreSecretsLoaded will tell you if we have successfully loaded secrets on the service
 func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
 	if len(s.secrets) > 0 {
@@ -151,7 +310,7 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	chainAdrress := ChainAddress{
 		PublicKey: b58PubKey,
 		Creator:   creatorKey,
-		Chain: "solana",
+		Chain:     "solana",
 	}
 	_, err = s.datastore.InsertChainAddress(ctx, chainAdrress)
 	if err != nil {

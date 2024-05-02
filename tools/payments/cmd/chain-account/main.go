@@ -3,7 +3,7 @@ chain-account allows payment operators to add addresses to be used for on-chain 
 
 Usage:
 
-chain-account [flags] generatePUBLIC_KEY
+chain-account [flags] [command] args...
 
 The flags are:
 

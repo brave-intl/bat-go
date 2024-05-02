@@ -1,123 +1,192 @@
 /*
-Create generates a random asymmetric key pair, breaks the private key into operator shares, and outputs
-the number of shares at a given threshold to standard out, along with the public key.  After this is
-performed the private key is discarded.
+Vault instructs the enclave to generate and approve a random asymmetric key
+pair, break the private key into operator shares, return the shares after they
+have been encrypted with provided operator keys, and then discard the private
+key so that the operators are needed to access it again. It must be run by
+multiple operators with the same arguments to take effect.
 
-Create takes as parameters the threshold and number of operator shares.
+# Create takes as parameters a set of operator pubkeys and a threshold
 
 Usage:
 
-create-vault [flags] [pubkeys ...]
+create-vault [flags] create [pubkeyFile]
+create-vault [flags] approve [pubkeyFile]
 
 The flags are:
 
 	-t
 		The Shamir share threshold to reconstitute the private key
-	-n
-		The number of operator shares to output
+	-k
+		Location on file system of the operators private ED25519 signing key in PEM format.
+	-p
+		The public key for the vault private key that is being approved. Only needed for approve subcommand.
 */
 package main
 
 import (
-	"encoding/base64"
+	"bytes"
+	"context"
+	"crypto"
+	"crypto/ed25519"
+	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
+	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
+	"time"
 
-	"filippo.io/age"
-	"filippo.io/age/agessh"
-	"github.com/hashicorp/vault/shamir"
+	client "github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/payments"
+	paymentscli "github.com/brave-intl/bat-go/tools/payments"
 )
 
 func main() {
+	ctx := context.Background()
+
 	// command line flags
+	operatorKey := flag.String(
+		"k", "test/private.pem",
+		"the operator's key file location (ed25519 private key) in PEM format")
 	threshold := flag.Int(
 		"t", 2,
 		"the threshold for Shamir shares to reconstitute the private key")
-	shares := flag.Int(
-		"s", 5,
-		"the number of operator shares to generate")
+	publicKey := flag.String(
+		"p", "",
+		"the public key for the vault private key that is being approved. only needed for approve subcommand")
 	verbose := flag.Bool(
 		"v", false,
 		"view verbose logging")
 
 	flag.Parse()
 
-	publicKeys := flag.Args()
+	args := flag.Args()
+	if len(args) < 2 {
+		log.Fatal("Expected subcommand and key file arguments")
+	}
+
+	f, err := os.Open(args[1])
+	if err != nil {
+		log.Fatalf("failed to open key file: %v\n", err)
+	}
+	defer f.Close()
+
+	keys := paymentscli.OperatorKeys{}
+	if err := json.NewDecoder(f).Decode(keys); err != nil {
+		log.Fatalf("failed to parse operator key file: %w", err)
+	}
 
 	if *verbose {
 		// print out the configuration
 		log.Printf("Threshold: %d\n", *threshold)
-		log.Printf("Shares: %s\n", *shares)
+		log.Printf("Shares: %s\n", len(keys.Keys))
+	}
+	if len(keys.Keys) < 2 {
+		log.Fatalf("insufficient number of keys to create a share")
 	}
 
-	if *shares != len(publicKeys) {
-		log.Fatalf("invalid number of shares specified for number of public key files")
+	var resp *http.Response
+
+	switch args[0] {
+	case "create":
+		resp = doRequestWithSignature(
+			ctx,
+			*operatorKey,
+			"/v1/vault/create",
+			payments.CreateVaultRequest{
+				Operators: keys.Keys,
+				Threshold: *threshold,
+			},
+		)
+	case "approve":
+		if len(*publicKey) == 0 {
+			log.Fatal("public key flag must be defined with -p")
+		}
+		resp = doRequestWithSignature(
+			ctx,
+			*operatorKey,
+			"/v1/vault/approve",
+			payments.ApproveVaultRequest{
+				Operators: keys.Keys,
+				Threshold: *threshold,
+				PublicKey: *publicKey,
+			},
+		)
+	default:
+		log.Fatal("unrecognized subcommand. options are create and approve")
 	}
 
-	// load up the operator recipients (x25519 public keys)
-	operatorRecipients := []age.Recipient{}
-	for _, filename := range publicKeys {
-		f, err := os.Open(filename)
-		if err != nil {
-			log.Fatalf("failed to open key file: %w", err)
-		}
-		defer f.Close()
-
-		key, err := io.ReadAll(f)
-		if err != nil {
-			log.Fatalf("failed to read key file: %w", err)
-		}
-
-		recipient, err := agessh.ParseRecipient(string(key))
-		if err != nil {
-			log.Fatalf("Failed to parse public key %q: %v", key, err)
-		}
-		operatorRecipients = append(operatorRecipients, recipient)
-	}
-
-	// generate key
-	identity, err := age.GenerateX25519Identity()
-	if err != nil {
-		log.Fatalf("failed to generate X25519 identity: %s", err.Error())
-	}
-
-	// perform Shamir
-	operatorShares, err := shamir.Split([]byte(identity.String()), *shares, *threshold)
-	if err != nil {
-		log.Fatalf("failed to split identity into shamir shares: %s", err.Error())
-	}
-
-	for i, v := range operatorShares {
-		name := strings.TrimSuffix(filepath.Base(publicKeys[i]), filepath.Ext(publicKeys[i]))
-		// open output file for this operator
-		f, err := os.Create(fmt.Sprintf("share-%s.enc", name))
-		if err != nil {
-			log.Fatalf("failed to open operator receipient share file", err.Error())
-		}
-
-		// encrypt each with an operator recipient
-		w, err := age.Encrypt(f, operatorRecipients[i])
-		if err != nil {
-			log.Fatalf("failed to encrypt to receipient share file", err.Error())
-		}
-
-		if _, err := io.WriteString(w, base64.StdEncoding.EncodeToString(v)); err != nil {
-			log.Fatalf("failed to write ciphertext to receipient share file", err.Error())
-		}
-
-		if err := w.Close(); err != nil {
-			log.Fatalf("failed to close receipient share file", err.Error())
-		}
-
-	}
-	log.Printf("!!! Public Key - %s\n", identity.Recipient().String())
+	log.Printf("%+v", resp)
 
 	if *verbose {
 		log.Println("completed create.")
 	}
+}
+
+func doRequestWithSignature(ctx context.Context, key, path string, data interface{}) *http.Response {
+	priv, err := paymentscli.GetOperatorPrivateKey(key)
+	if err != nil {
+		log.Fatalf("failed to parse operator key file: %v\n", err)
+	}
+	var (
+		// dateHeader needs to be lowercase to pass the signing verifier validation.
+		dateHeader          = "date"
+		contentLengthHeader = "Content-Length"
+		contentTypeHeader   = "Content-Type"
+	)
+
+	signer := httpsignature.ParameterizedSignator{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.ED25519,
+			KeyID:     hex.EncodeToString([]byte(priv.Public().(ed25519.PublicKey))),
+			Headers: []string{
+				"(request-target)",
+				"date",
+				"digest",
+				"content-length",
+				"content-type",
+			},
+		},
+		Signator: priv,
+		Opts:     crypto.Hash(0),
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	err = json.NewEncoder(buf).Encode(data)
+	body := buf.Bytes()
+	if err != nil {
+		log.Fatalf("failed to marshal attested transaction body: %w", err)
+	}
+	apiBase := os.Getenv("NITRO_API_BASE")
+
+	// Create a request and set the headers we require for signing. The Digest header is added
+	// during the signing call and the request.Host is set during the new request creation so,
+	// we don't need to explicitly set them here.
+	req, err := http.NewRequest(http.MethodPost, apiBase+path, buf)
+	if err != nil {
+		log.Fatalf("failed to create request to sign: %w", err)
+	}
+	req.Header.Set(dateHeader, time.Now().Format(time.RFC1123))
+	req.Header.Set(contentLengthHeader, fmt.Sprintf("%d", len(body)))
+	req.Header.Set(contentTypeHeader, "application/json")
+
+	// http sign the request
+	err = signer.SignRequest(req)
+	if err != nil {
+		log.Fatalf("failed to sign request: %w", err)
+	}
+
+	httpClient, err := client.NewWithHTTPClient(apiBase, "", &http.Client{
+		Timeout: time.Second * 60,
+	})
+	if err != nil {
+		log.Fatalf("failed to create http client: %w", err)
+	}
+	resp, err := httpClient.Do(ctx, req, nil)
+	if err != nil {
+		log.Fatalf("failed to submit http request: %w", err)
+	}
+	return resp
 }
