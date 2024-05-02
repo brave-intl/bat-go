@@ -8,7 +8,6 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
-	"golang.org/x/exp/slices"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -43,7 +42,8 @@ type Datastore interface {
 	InsertVault(ctx context.Context, vault Vault) error
 	GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error)
 	GetChainAddress(ctx context.Context, address string) (*ChainAddress, error)
-	GetVault(ctx context.Context, pubkey string) (*Vault, error)
+	GetVault(ctx context.Context, idempotencyKey string, pubkey string) (*Vault, error)
+	GetVaultWithPublicKey(ctx context.Context, pubkey string) (*Vault, error)
 	UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error
 	UpdateChainAddress(ctx context.Context, address ChainAddress) error
 	ApproveVault(ctx context.Context, id, pubKey, approval string) (Vault, error)
@@ -389,12 +389,41 @@ func (q *QLDBDatastore) GetChainAddress(ctx context.Context, address string) (*C
 	return chainAddress.(*ChainAddress), err
 }
 
-func (q *QLDBDatastore) GetVault(ctx context.Context, idempotencyKey, publicKey string) (*Vault, error) {
+func (q *QLDBDatastore) GetVault(
+	ctx context.Context,
+	idempotencyKey string,
+	publicKey string,
+) (*Vault, error) {
 	vault, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		result, err := txn.Execute(
 			"SELECT * FROM vaults WHERE publicKey = ? and idempotencyKey = ?",
 			publicKey,
 			idempotencyKey,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("QLDB transaction failed: %w", err)
+		}
+		var vault Vault
+		for result.Next(txn) {
+			err := ion.Unmarshal(result.GetCurrentData(), &vault)
+			if err != nil {
+				return nil, fmt.Errorf("ion unmarshal failed: %w", err)
+			}
+		}
+
+		return &vault, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return vault.(*Vault), err
+}
+
+func (q *QLDBDatastore) GetVaultWithPublicKey(ctx context.Context, publicKey string) (*Vault, error) {
+	vault, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		result, err := txn.Execute(
+			"SELECT * FROM vaults WHERE publicKey = ?",
+			publicKey,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("QLDB transaction failed: %w", err)
