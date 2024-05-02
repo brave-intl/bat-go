@@ -92,6 +92,9 @@ const (
 type orderStoreSvc interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
 type vendorReceiptValidator interface {
@@ -105,8 +108,9 @@ type gcpRequestValidator interface {
 
 // Service contains datastore
 type Service struct {
-	orderRepo  orderStoreSvc
-	issuerRepo issuerStore
+	orderRepo   orderStoreSvc
+	issuerRepo  issuerStore
+	payHistRepo orderPayHistoryStore
 
 	// TODO: Eventually remove it.
 	Datastore Datastore
@@ -175,8 +179,15 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	return nil
 }
 
-// InitService creates a service using the passed datastore and clients configured from the environment.
-func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service, orderRepo orderStoreSvc, issuerRepo issuerStore) (*Service, error) {
+// InitService creates a Service using the passed datastore and clients configured from the environment.
+func InitService(
+	ctx context.Context,
+	datastore Datastore,
+	walletService *wallet.Service,
+	orderRepo orderStoreSvc,
+	issuerRepo issuerStore,
+	payHistRepo orderPayHistoryStore,
+) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
 	// setup stripe if exists in context and enabled
@@ -307,9 +318,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	gcpValidator := newGcpPushNotificationValidator(idv, conf)
 
 	service := &Service{
-		orderRepo:  orderRepo,
-		issuerRepo: issuerRepo,
-		Datastore:  datastore,
+		orderRepo:   orderRepo,
+		issuerRepo:  issuerRepo,
+		payHistRepo: payHistRepo,
+
+		Datastore: datastore,
 
 		wallet:             walletService,
 		geminiClient:       geminiClient,
@@ -1641,6 +1654,45 @@ func (s *Service) processAppStoreNotification(ctx context.Context, ntf *appStore
 		return nil
 	}
 
+	txn, err := parseTxnInfo(ntf.pubKey, ntf.val.Data.SignedTransactionInfo)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processAppStoreNotificationTx(ctx, tx, ntf, txn); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *appStoreSrvNotification, txn *appstore.JWSTransactionDecodedPayload) error {
+	ord, err := s.orderRepo.GetByExternalID(ctx, dbi, txn.OriginalTransactionId)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case ntf.shouldRenew():
+		expt := time.UnixMilli(txn.ExpiresDate)
+		paidt := time.Now()
+
+		if err := s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt); err != nil {
+			return err
+		}
+
+	case ntf.shouldCancel():
+		if err := s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -1917,6 +1969,29 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		return handlers.RenderContent(ctx, &blindedCredVrfResult{ID: cred.TokenPreimage}, w, http.StatusOK)
 	}
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+}
+
+// renewOrderWithExpPaidTime performs updates relevant to advancing a paid order forward after renewal.
+//
+// TODO: Add a repo method to update all three fields at once.
+func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expt, paidt time.Time) error {
+	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.SetExpiresAt(ctx, dbi, id, expt); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.SetLastPaidAt(ctx, dbi, id, paidt); err != nil {
+		return err
+	}
+
+	if err := s.payHistRepo.Insert(ctx, dbi, id, paidt); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {

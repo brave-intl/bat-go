@@ -161,6 +161,25 @@ func parseAppStoreSrvNotification(vrf *assnCertVerifier, spayload string) (*appS
 	return result, nil
 }
 
+func parseTxnInfo(pubKey *ecdsa.PublicKey, spayload appstore.JWSTransaction) (*appstore.JWSTransactionDecodedPayload, error) {
+	raw, err := jose.ParseSigned(string(spayload))
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := raw.Verify(pubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &appstore.JWSTransactionDecodedPayload{}
+	if err := json.Unmarshal(data, result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 //nolint:unused
 func parseRenewalInfo(pubKey *ecdsa.PublicKey, spayload appstore.JWSRenewalInfo) (*appstore.JWSRenewalInfoDecodedPayload, error) {
 	raw, err := jose.ParseSigned(string(spayload))
@@ -174,26 +193,6 @@ func parseRenewalInfo(pubKey *ecdsa.PublicKey, spayload appstore.JWSRenewalInfo)
 	}
 
 	result := &appstore.JWSRenewalInfoDecodedPayload{}
-	if err := json.Unmarshal(data, result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-//nolint:unused
-func parseTxnInfo(pubKey *ecdsa.PublicKey, spayload appstore.JWSTransaction) (*appstore.JWSTransactionDecodedPayload, error) {
-	raw, err := jose.ParseSigned(string(spayload))
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := raw.Verify(pubKey)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &appstore.JWSTransactionDecodedPayload{}
 	if err := json.Unmarshal(data, result); err != nil {
 		return nil, err
 	}
