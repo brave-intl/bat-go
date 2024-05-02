@@ -116,3 +116,15 @@ func (r *MockIssuer) Create(ctx context.Context, dbi sqlx.QueryerContext, req mo
 
 	return r.FnCreate(ctx, dbi, req)
 }
+
+type MockOrderPayHistory struct {
+	FnInsert func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+}
+
+func (r *MockOrderPayHistory) Insert(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+	if r.FnInsert == nil {
+		return nil
+	}
+
+	return r.FnInsert(ctx, dbi, id, when)
+}

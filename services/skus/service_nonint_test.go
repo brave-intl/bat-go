@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -21,6 +22,54 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
+
+func TestService_processAppStoreNotificationTx(t *testing.T) {
+	type tcGiven struct {
+		ntf   *appStoreSrvNotification
+		txn   *appstore.JWSTransactionDecodedPayload
+		orepo *repository.MockOrder
+		prepo *repository.MockOrderPayHistory
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "get_order_error",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{val: &appstore.SubscriptionNotificationV2DecodedPayload{}},
+				txn: &appstore.JWSTransactionDecodedPayload{OriginalTransactionId: "123456789000001"},
+				orepo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:   tc.given.orepo,
+				payHistRepo: tc.given.prepo,
+			}
+
+			ctx := context.Background()
+
+			err := svc.processAppStoreNotificationTx(ctx, nil, tc.given.ntf, tc.given.txn)
+			should.Equal(t, true, errors.Is(err, tc.exp))
+		})
+	}
+}
 
 func TestCheckNumBlindedCreds(t *testing.T) {
 	type tcGiven struct {
