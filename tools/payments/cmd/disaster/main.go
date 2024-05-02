@@ -1,18 +1,21 @@
 /*
 disaster is a disaster recovery command that will download the encrypted secrets
 file from S3 and decrypt it using locally-possessed shares. It also has an
-optional decrypt command that will print an unencrypted string of the share
-given a key and an encrypted share.
+optional enc-for-leader command that will re-encrypt an existing share with a
+provided public key. The purpose of this command is to prepare a local share for
+being sent to a leader for disaster recovery.
 
 Usage:
 
-disaster [flags] [shares...]
-disaster [flags] decrypt shareFile
+disaster [flags] [sharesFiles...]
+disaster [flags] enc-for-leader shareFile
 
 The flags are:
 
 	-k
 		Location on file system of the operators private ED25519 signing key in PEM format.
+	-p
+		Public key file for re-encrypting a share for transmission to leader.
 	-e
 		The environment to which the operator is sending approval for transactions.
 	-b
@@ -51,9 +54,11 @@ func main() {
 		"k", "test/private.pem",
 		"the operator's key file location (ed25519 private key) in PEM format")
 
-	s3Bucket := flag.String(
-		"b", "",
-		"the s3 bucket to upload to")
+	leaderPubkeyFile := flag.String(
+		"p", "",
+		"file containing the leader's pubkey for encrypting a given share for the purpose of secure transmission")
+
+	s3Bucket := flag.String("b", "", "the s3 bucket to upload to")
 
 	s3Object := flag.String(
 		"o", "",
@@ -74,40 +79,46 @@ func main() {
 		log.Fatal("insufficient shares provided")
 	}
 
-	if args[0] == "decrypt" {
-		log.Println("!!!! WARNING: THIS WILL REVEAL YOUR SECRET SHARE !!!!")
-		priv, err := payments.GetOperatorPrivateKey(*operatorKey)
+	if args[0] == "enc-for-leader" {
+		log.Println("encrypting existing share for leader")
+		decryptedShare := decryptShare(*operatorKey, args[1])
+		leaderPubkey, err := os.ReadFile(*leaderPubkeyFile)
 		if err != nil {
-			log.Fatalf("failed to open operator key file: %v\n", err.Error())
+			log.Fatalf("failed to read file: %w", err)
 		}
-
-		identity, err := agessh.NewEd25519Identity(priv)
+		leaderRecipient, err := agessh.ParseRecipient(string(leaderPubkey))
 		if err != nil {
-			log.Fatalf("Failed to parse private key as identity: %v", err)
+			log.Fatalf("failed to parse public key %q: %w", leaderPubkey, err)
 		}
 
-		sf, err := os.Open(args[1])
+		name := "for-leader"
+		// open output file for this operator
+		f, err := os.Create(fmt.Sprintf("share-%s.enc", name))
 		if err != nil {
-			log.Fatalf("Failed to open file: %v", err)
+			log.Fatalf("failed to open leader receipient share file", err.Error())
 		}
 
-		r, err := age.Decrypt(sf, identity)
+		// encrypt each with an operator recipient
+		w, err := age.Encrypt(f, leaderRecipient)
 		if err != nil {
-			log.Fatalf("Failed to open encrypted file: %v", err)
+			log.Fatalf("failed to encrypt to receipient share file", err.Error())
 		}
 
-		shareVal := &bytes.Buffer{}
-		if _, err := io.Copy(shareVal, r); err != nil {
-			log.Fatalf("Failed to read encrypted file: %v", err)
+		if _, err := io.WriteString(w, decryptedShare); err != nil {
+			log.Fatalf("failed to write ciphertext to receipient share file", err.Error())
 		}
 
-		// s is the shamir share
-		log.Printf("Share: %s", shareVal.String())
+		if err := w.Close(); err != nil {
+			log.Fatalf("failed to close receipient share file", err.Error())
+		}
+
 		return
 	}
+
 	var shares [][]byte
-	for _, encShare := range args {
-		share, err := base64.StdEncoding.DecodeString(string(encShare))
+	for _, encShareFile := range args {
+		decryptedShare := decryptShare(*operatorKey, encShareFile)
+		share, err := base64.StdEncoding.DecodeString(decryptedShare)
 		if err != nil {
 			log.Fatalf("failed to base64 decode operator key share: %w", err)
 		}
@@ -157,7 +168,6 @@ func decryptRecoveryData(encData []byte, shares [][]byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to combine keyShares: %w", err)
 	}
-	log.Printf("PRIVATE KEY: %s", privateKey)
 	identity, err := age.ParseX25519Identity(string(privateKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key bytes for secret decryption: %w", err)
@@ -172,4 +182,32 @@ func decryptRecoveryData(encData []byte, shares [][]byte) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+func decryptShare(operatorKeyFile, shareFile string) string {
+	priv, err := payments.GetOperatorPrivateKey(operatorKeyFile)
+	if err != nil {
+		log.Fatalf("failed to open operator key file: %v\n", err.Error())
+	}
+
+	identity, err := agessh.NewEd25519Identity(priv)
+	if err != nil {
+		log.Fatalf("Failed to parse private key as identity: %v", err)
+	}
+
+	sf, err := os.Open(shareFile)
+	if err != nil {
+		log.Fatalf("failed to open file: %v", err)
+	}
+
+	r, err := age.Decrypt(sf, identity)
+	if err != nil {
+		log.Fatalf("failed to open encrypted file: %v", err)
+	}
+
+	shareVal := &bytes.Buffer{}
+	if _, err := io.Copy(shareVal, r); err != nil {
+		log.Fatalf("Failed to read encrypted file: %v", err)
+	}
+	return shareVal.String()
 }
