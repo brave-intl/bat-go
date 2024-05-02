@@ -110,6 +110,10 @@ func (x *appStoreSrvNotification) shouldCancel() bool {
 	case x.val.NotificationType == appstore.NotificationTypeV2Expired && x.val.Subtype == appstore.SubTypeV2BillingRetry:
 		return true
 
+	// Cancellation after price increase.
+	case x.val.NotificationType == appstore.NotificationTypeV2DidChangeRenewalStatus && x.val.Subtype == "":
+		return true
+
 	default:
 		return false
 	}
