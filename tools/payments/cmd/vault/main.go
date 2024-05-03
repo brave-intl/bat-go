@@ -101,17 +101,17 @@ func main() {
 		defer resp.Body.Close()
 
 		vaultResp := payments.CreateVaultResponseWrapper{}
-		bodyString, err := ioutil.ReadAll(resp.Body)
+		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalf("failed to read response json: %w", err)
 		}
-		err = json.Unmarshal(bodyString, &vaultResp)
+		err = json.Unmarshal(body, &vaultResp)
 		if err != nil {
 			log.Fatalf("failed to unmarshal response json: %w", err)
 		}
 
 		for _, share := range vaultResp.Data.Shares {
-			fname := "share-" + share.Name + ".enc"
+			fname := fmt.Sprintf("share-%s-%s.enc", share.Name, vaultResp.Data.PublicKey)
 			err = os.WriteFile(fname, []byte(share.Material), 0644)
 			if err != nil {
 				log.Fatalf("failed to write share file: %w", err)

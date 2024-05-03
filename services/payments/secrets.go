@@ -250,12 +250,13 @@ func vaultFromRequest(
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt to receipient share file: %w", err)
 		}
-		if _, err := io.WriteString(w, base64.StdEncoding.EncodeToString(share)); err != nil {
-			return nil, fmt.Errorf("failed to write ciphertext to receipient share file: %w", err)
+		_, err = io.WriteString(w, base64.RawStdEncoding.EncodeToString(share))
+		if err != nil {
+			return nil, fmt.Errorf("failed to write cyphertext to buffer: %w", err)
 		}
 		shares = append(shares, paymentLib.OperatorDataResponse{
 			Name:     opNames[i],
-			Material: buf.Bytes(),
+			Material: buf.String(),
 		})
 	}
 	sharesResult.Shares = shares
