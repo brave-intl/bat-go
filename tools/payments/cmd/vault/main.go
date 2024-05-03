@@ -116,12 +116,14 @@ func main() {
 			if err != nil {
 				log.Fatalf("failed to write share file: %w", err)
 			}
+			log.Printf("Wrote file for %s to %s", share.Name, fname)
 		}
+		log.Printf("Generated Public Key: %s", vaultResp.Data.PublicKey)
 	case "approve":
 		if len(*publicKey) == 0 {
 			log.Fatal("public key flag must be defined with -p")
 		}
-		_ = doRequestWithSignature(
+		resp := doRequestWithSignature(
 			ctx,
 			*operatorKey,
 			"/v1/payments/vault/approve",
@@ -131,6 +133,11 @@ func main() {
 				PublicKey: *publicKey,
 			},
 		)
+		bodyString, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatalf("failed to read response json: %w", err)
+		}
+		log.Printf("Result: %s", bodyString)
 	default:
 		log.Fatal("unrecognized subcommand. options are create and approve")
 	}
