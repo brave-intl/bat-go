@@ -66,6 +66,9 @@ func (x *appStoreSrvNotification) shouldProcess() bool {
 	return x.shouldRenew() || x.shouldCancel()
 }
 
+// shouldRenew reports whether the ntf is about renewal.
+//
+// TODO: Update to a lookup table instead.
 func (x *appStoreSrvNotification) shouldRenew() bool {
 	switch {
 	// Auto-renew.
@@ -89,6 +92,9 @@ func (x *appStoreSrvNotification) shouldRenew() bool {
 	}
 }
 
+// shouldCancel reports whether the ntf is about cancellation.
+//
+// TODO: Update to a lookup table instead.
 func (x *appStoreSrvNotification) shouldCancel() bool {
 	switch {
 	// Cancellation or refund.

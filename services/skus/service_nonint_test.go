@@ -52,6 +52,63 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 			},
 			exp: model.Error("something_went_wrong"),
 		},
+
+		{
+			name: "should_renew",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{
+					val: &appstore.SubscriptionNotificationV2DecodedPayload{
+						NotificationType: appstore.NotificationTypeV2DidRenew,
+						Subtype:          appstore.SubTypeV2BillingRecovery,
+					},
+				},
+				txn: &appstore.JWSTransactionDecodedPayload{
+					OriginalTransactionId: "123456789000001",
+					ExpiresDate:           1704067201000,
+				},
+
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+		},
+
+		{
+			name: "should_cancel",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{
+					val: &appstore.SubscriptionNotificationV2DecodedPayload{
+						NotificationType: appstore.NotificationTypeV2DidChangeRenewalStatus,
+						Subtype:          appstore.SubTypeV2AutoRenewDisabled,
+					},
+				},
+				txn: &appstore.JWSTransactionDecodedPayload{
+					OriginalTransactionId: "123456789000001",
+					ExpiresDate:           1704067201000,
+				},
+
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+		},
+
+		{
+			name: "anything_else",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{
+					val: &appstore.SubscriptionNotificationV2DecodedPayload{
+						NotificationType: appstore.NotificationTypeV2PriceIncrease,
+						Subtype:          appstore.SubTypeV2Accepted,
+					},
+				},
+				txn: &appstore.JWSTransactionDecodedPayload{
+					OriginalTransactionId: "123456789000001",
+					ExpiresDate:           1704067201000,
+				},
+
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+		},
 	}
 
 	for i := range tests {

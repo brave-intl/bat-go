@@ -1683,17 +1683,12 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 		expt := time.UnixMilli(txn.ExpiresDate)
 		paidt := time.Now()
 
-		if err := s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt); err != nil {
-			return err
-		}
-
+		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
 	case ntf.shouldCancel():
-		if err := s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled); err != nil {
-			return err
-		}
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+	default:
+		return nil
 	}
-
-	return nil
 }
 
 // verifyDeveloperNotification - verify the developer notification from playstore
