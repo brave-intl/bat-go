@@ -128,6 +128,160 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 	}
 }
 
+func TestService_renewOrderWithExpPaidTime(t *testing.T) {
+	type tcGiven struct {
+		id    uuid.UUID
+		expt  time.Time
+		paidt time.Time
+		orepo *repository.MockOrder
+		prepo *repository.MockOrderPayHistory
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "set_status_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "set_expires_at_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "set_last_paid_at_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetLastPaidAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "insert_pay_history_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{
+					FnInsert: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if status != model.OrderStatusPaid {
+							return model.Error("unexpected: status")
+						}
+
+						return nil
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if !when.Equal(time.UnixMilli(1735689599000)) {
+							return model.Error("unexpected: expt")
+						}
+
+						return nil
+					},
+
+					FnSetLastPaidAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if !when.Equal(time.UnixMilli(1704067201000)) {
+							return model.Error("unexpected: expt")
+						}
+
+						return nil
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{
+					FnInsert: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if !when.Equal(time.UnixMilli(1704067201000)) {
+							return model.Error("unexpected: expt")
+						}
+
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:   tc.given.orepo,
+				payHistRepo: tc.given.prepo,
+			}
+
+			ctx := context.Background()
+
+			err := svc.renewOrderWithExpPaidTime(ctx, nil, tc.given.id, tc.given.expt, tc.given.paidt)
+			should.Equal(t, true, errors.Is(err, tc.exp))
+		})
+	}
+}
+
 func TestCheckNumBlindedCreds(t *testing.T) {
 	type tcGiven struct {
 		ord    *model.Order
