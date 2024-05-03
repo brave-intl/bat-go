@@ -66,6 +66,9 @@ func (v *Vault) SetIdempotencyKey() error {
 	if v.OperatorKeys == nil || len(v.OperatorKeys) < 1 || len(v.OperatorKeys) < v.Threshold {
 		return errors.New("invalid number of operator keys")
 	}
+	if len(v.PublicKey) < 1 {
+		return errors.New("public key must be defined before idempotency key can be generated")
+	}
 	// We have to sort the opKeys to ensure that the idempotency key we generate is the same for the
 	// same set of keys.
 	slices.Sort(v.OperatorKeys)
@@ -74,7 +77,7 @@ func (v *Vault) SetIdempotencyKey() error {
 	// creating multiple vaults with the same configuration.
 	v.IdempotencyKey = uuid.NewSHA1(
 		uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c"),
-		[]byte(fmt.Sprintf("%s%s", v.Threshold, strings.Join(v.OperatorKeys, ","))),
+		[]byte(fmt.Sprintf("%s%s%s", v.Threshold, strings.Join(v.OperatorKeys, ","), v.PublicKey)),
 	).String()
 	return nil
 }
@@ -170,11 +173,12 @@ func (s *Service) approveVault(
 ) (*paymentLib.ApproveVaultResponse, error) {
 	var opKeys []string
 	for _, key := range request.Operators {
-		opKeys = append(opKeys, key.Material)
+		opKeys = append(opKeys, key.PublicKey)
 	}
 	vault := Vault{
 		Threshold:    request.Threshold,
 		OperatorKeys: opKeys,
+		PublicKey: request.PublicKey,
 	}
 	vault.SetIdempotencyKey()
 	updatedVault, err := s.datastore.ApproveVault(
@@ -196,7 +200,7 @@ func (s *Service) approveVault(
 
 func vaultFromRequest(
 	ctx context.Context,
-	operators []paymentLib.NamedOperator,
+	operators []paymentLib.OperatorDataRequest,
 	threshold int,
 	approverKey string,
 ) (*Vault, error) {
@@ -204,7 +208,7 @@ func vaultFromRequest(
 	var opNames []string
 	var opKeys []string
 	for _, operator := range operators {
-		recipient, err := agessh.ParseRecipient(string(operator.Material))
+		recipient, err := agessh.ParseRecipient(string(operator.PublicKey))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse public key", err)
 		}
@@ -212,7 +216,7 @@ func vaultFromRequest(
 		// with names in createVault.
 		opRecpt = append(opRecpt, recipient)
 		opNames = append(opNames, operator.Name)
-		opKeys = append(opKeys, operator.Material)
+		opKeys = append(opKeys, operator.PublicKey)
 	}
 	// In order to map keys to names, we need an equal number of each. They should share an order.
 	// The key at index 0 should be the name at index 0, etc.
@@ -238,7 +242,7 @@ func vaultFromRequest(
 
 	// Encrypt each share with an operator key and associate that key to the operator
 	// name in a NamedOperator
-	var shares []paymentLib.NamedOperator
+	var shares []paymentLib.OperatorDataResponse
 	for i, share := range operatorShares {
 		buf := new(bytes.Buffer)
 		// encrypt each with an operator recipient
@@ -249,9 +253,9 @@ func vaultFromRequest(
 		if _, err := io.WriteString(w, base64.StdEncoding.EncodeToString(share)); err != nil {
 			return nil, fmt.Errorf("failed to write ciphertext to receipient share file: %w", err)
 		}
-		shares = append(shares, paymentLib.NamedOperator{
+		shares = append(shares, paymentLib.OperatorDataResponse{
 			Name:     opNames[i],
-			Material: buf.String(),
+			Material: buf.Bytes(),
 		})
 	}
 	sharesResult.Shares = shares

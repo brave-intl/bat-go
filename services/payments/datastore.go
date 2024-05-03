@@ -228,11 +228,7 @@ func (q *QLDBDatastore) InsertVault(ctx context.Context, vault Vault) error {
 			}
 
 			err = documentIDResultBinary.Err()
-			return nil, fmt.Errorf(
-				"failed to insert key: %s due to: %w",
-				vault.PublicKey,
-				err,
-			)
+			return nil, fmt.Errorf("failed to insert key: %s due to: %w", vault.PublicKey, err)
 		},
 	)
 	if err != nil {

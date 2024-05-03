@@ -375,13 +375,12 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger       = logging.Logger(ctx, "CreateVaultHandler")
-			vaultRequest = &paymentLib.CreateVaultRequest{}
+			vaultRequest = paymentLib.CreateVaultRequest{}
 		)
 
-		// read the transactions in the body
 		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
 		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+			return handlers.WrapError(err, "error in request body", http.StatusBadRequest)
 		}
 
 		_, err = govalidator.ValidateStruct(vaultRequest)
@@ -389,7 +388,7 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		logger.Debug().Str("approvals", fmt.Sprintf("%+v", vaultRequest)).Msg("handling approval request")
+		logger.Debug().Str("vault", fmt.Sprintf("%+v", vaultRequest)).Msg("handling vault creation request")
 
 		// we have passed the http signature middleware, record who authorized the tx
 		keyID, err := middleware.GetKeyID(ctx)
@@ -397,14 +396,16 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
 		}
 
-		createdVaultResponse, err := service.createVault(ctx, *vaultRequest, keyID)
+		createdVaultResponse, err := service.createVault(ctx, vaultRequest, keyID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
 		}
 
+		logger.Debug().Str("vault", fmt.Sprintf("%+v", createdVaultResponse)).Msg("sending vault creation response")
+
 		return &handlers.AppError{
 			Cause:   err,
-			Message: "key approved",
+			Message: "vault created",
 			Code:    http.StatusOK,
 			Data:    createdVaultResponse,
 		}
@@ -419,10 +420,9 @@ func ApproveVaultHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger       = logging.Logger(ctx, "CreateVaultHandler")
-			vaultRequest = &paymentLib.ApproveVaultRequest{}
+			vaultRequest = paymentLib.ApproveVaultRequest{}
 		)
 
-		// read the transactions in the body
 		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
@@ -433,7 +433,7 @@ func ApproveVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		logger.Debug().Str("approvals", fmt.Sprintf("%+v", vaultRequest)).Msg("handling approval request")
+		logger.Debug().Str("vault", fmt.Sprintf("%+v", vaultRequest)).Msg("handling vault approval request")
 
 		// we have passed the http signature middleware, record who authorized the tx
 		keyID, err := middleware.GetKeyID(ctx)
@@ -441,14 +441,14 @@ func ApproveVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
 		}
 
-		approvedVaultResponse, err := service.approveVault(ctx, *vaultRequest, keyID)
+		approvedVaultResponse, err := service.approveVault(ctx, vaultRequest, keyID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
 		}
 
 		return &handlers.AppError{
 			Cause:   err,
-			Message: "key approved",
+			Message: "vault approved",
 			Code:    http.StatusOK,
 			Data:    approvedVaultResponse,
 		}

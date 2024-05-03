@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -64,18 +65,17 @@ func main() {
 
 	args := flag.Args()
 	if len(args) < 2 {
-		log.Fatal("Expected subcommand and key file arguments")
+		log.Fatal("expected subcommand (create or approve) and key file arguments")
 	}
 
-	f, err := os.Open(args[1])
+	f, err := os.ReadFile(args[1])
 	if err != nil {
 		log.Fatalf("failed to open key file: %v\n", err)
 	}
-	defer f.Close()
 
 	keys := paymentscli.OperatorKeys{}
-	if err := json.NewDecoder(f).Decode(keys); err != nil {
-		log.Fatalf("failed to parse operator key file: %w", err)
+	if err := json.Unmarshal(f, &keys); err != nil {
+		log.Fatalf("failed to parse operator public key file: %w", err)
 	}
 
 	if *verbose {
@@ -87,27 +87,44 @@ func main() {
 		log.Fatalf("insufficient number of keys to create a share")
 	}
 
-	var resp *http.Response
-
 	switch args[0] {
 	case "create":
-		resp = doRequestWithSignature(
+		resp := doRequestWithSignature(
 			ctx,
 			*operatorKey,
-			"/v1/vault/create",
+			"/v1/payments/vault/create",
 			payments.CreateVaultRequest{
 				Operators: keys.Keys,
 				Threshold: *threshold,
 			},
 		)
+		defer resp.Body.Close()
+
+		vaultResp := payments.CreateVaultResponseWrapper{}
+		bodyString, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatalf("failed to read response json: %w", err)
+		}
+		err = json.Unmarshal(bodyString, &vaultResp)
+		if err != nil {
+			log.Fatalf("failed to unmarshal response json: %w", err)
+		}
+
+		for _, share := range vaultResp.Data.Shares {
+			fname := "share-" + share.Name + ".enc"
+			err = os.WriteFile(fname, []byte(share.Material), 0644)
+			if err != nil {
+				log.Fatalf("failed to write share file: %w", err)
+			}
+		}
 	case "approve":
 		if len(*publicKey) == 0 {
 			log.Fatal("public key flag must be defined with -p")
 		}
-		resp = doRequestWithSignature(
+		_ = doRequestWithSignature(
 			ctx,
 			*operatorKey,
-			"/v1/vault/approve",
+			"/v1/payments/vault/approve",
 			payments.ApproveVaultRequest{
 				Operators: keys.Keys,
 				Threshold: *threshold,
@@ -117,8 +134,6 @@ func main() {
 	default:
 		log.Fatal("unrecognized subcommand. options are create and approve")
 	}
-
-	log.Printf("%+v", resp)
 
 	if *verbose {
 		log.Println("completed create.")
