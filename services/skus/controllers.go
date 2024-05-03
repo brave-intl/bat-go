@@ -957,8 +957,7 @@ func WebhookRouter(svc *Service) chi.Router {
 	r.Method(http.MethodPost, "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(svc)))
 	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(svc)))
 	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(svc)))
-	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(svc)))
-	r.Method(http.MethodPost, "/iosx", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
+	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
 
 	return r
 }
@@ -1090,54 +1089,6 @@ func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Req
 	}
 
 	return nil
-}
-
-func handleIOSWebhook(service *Service) handlers.AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-
-		l := logging.Logger(ctx, "skus").With().Str("func", "handleIOSWebhook").Logger()
-
-		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
-		if err != nil {
-			l.Error().Err(err).Msg("error reading request body")
-			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-		}
-
-		req := &IOSNotification{}
-		if err := inputs.DecodeAndValidate(ctx, req, data); err != nil {
-			l.Warn().Err(err).Msg("failed to decode and validate the payload")
-
-			return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
-		}
-
-		txInfo, err := req.GetTransactionInfo(ctx)
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to get transaction info from message")
-
-			return handlers.ValidationError("request", map[string]interface{}{"invalid-transaction-info": err.Error()})
-		}
-
-		renewalInfo, err := req.GetRenewalInfo(ctx)
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to get renewal info from message")
-
-			return handlers.ValidationError("request", map[string]interface{}{"invalid-renewal-info": err.Error()})
-		}
-
-		if err := service.verifyIOSNotification(ctx, txInfo, renewalInfo); err != nil {
-			l.Error().Err(err).Msg("failed to verify ios subscription notification")
-
-			switch {
-			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
-				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-			default:
-				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusInternalServerError)
-			}
-		}
-
-		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-	}
 }
 
 func handleWebhookAppStore(svc *Service) handlers.AppHandler {

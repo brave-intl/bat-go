@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	// Could be obtained from Apple and then extracted.
+	// openssl x509 -inform der -in AppleRootCA-G3.cer -out apple_root.pem
 	appleRootCert = `
 -----BEGIN CERTIFICATE-----
 MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwS

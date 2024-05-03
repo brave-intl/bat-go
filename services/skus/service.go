@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -1604,46 +1603,6 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 			}
 		}
 	}
-}
-
-// verifyIOSNotification - verify the developer notification from appstore
-func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JWSTransactionDecodedPayload, renewalInfo *appstore.JWSRenewalInfoDecodedPayload) error {
-	if txInfo == nil || renewalInfo == nil {
-		return errors.New("notification has no tx or renewal")
-	}
-
-	// TODO: The documentation says nothing about these conditions.
-	// Shall this be gone?
-	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
-		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
-	}
-
-	// lookup the order based on the token as externalID
-	ord, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
-	if err != nil {
-		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, err)
-	}
-
-	if ord == nil {
-		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, errNotFound)
-	}
-
-	// Check if we are past the expiration date on transaction or the order was revoked.
-	now := time.Now()
-
-	if shouldCancelOrderIOS(txInfo, now) {
-		if err := s.CancelOrder(ord.ID); err != nil {
-			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
-		}
-
-		return nil
-	}
-
-	if err := s.RenewOrder(ctx, ord.ID); err != nil {
-		return fmt.Errorf("failed to renew subscription in skus: %w", err)
-	}
-
-	return nil
 }
 
 // processAppStoreNotification determines whether ntf is worth processing, and does it if it is.
