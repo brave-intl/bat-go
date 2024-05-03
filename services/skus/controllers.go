@@ -1184,9 +1184,35 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 		switch {
 		case errors.Is(err, context.Canceled):
 			// There is no const for 499.
-			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", 499)
+			// Should retry.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+		case errors.Is(err, model.ErrOrderNotFound):
+			// Order was not found, so nothing can be done.
+			// It might be an issue for VPN:
+			// - user has not linked yet;
+			// - billing cycle comes through, subscription renews;
+			// - user links immediately after billing cycle (they get 1 month);
+			// - there might be a small gap between order's expiration and next successful renewal;
+			// - the grace period should handle it.
+			// A better option is to create orders when the user subscribes, similar to Leo.
+			// Or allow for 1 or 2 retry attempts for the notification, but this requires tracking.
+			// (Which can easily be done by setting ntf.val.NotificationUUID in Redis with EX).
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+			// No rows have changed whilst processing.
+			// This could happen in theory, but not in practice.
+			// It would mean that we attempted to update with the same data as it's in the database.
+			// This could happen when trying to process the same event twice, which could happen
+			// if the App Store sends multiple notifications about the same event.
+			// (E.g. auto-renew and billing recovery).
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
 		default:
+			// Retry for all other errors for now.
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}
