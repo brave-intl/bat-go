@@ -81,7 +81,7 @@ func (mr *MockClientMockRecorder) FetchBalances(ctx, APIKey, signer, payload int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchBalances", reflect.TypeOf((*MockClient)(nil).FetchBalances), ctx, APIKey, signer, payload)
 }
 
-// FetchValidateAccount mocks base method.
+// FetchValidatedAccount mocks base method.
 func (m *MockClient) FetchValidatedAccount(ctx context.Context, verificationToken, recipientID string) (gemini.ValidatedAccount, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchValidatedAccount", ctx, verificationToken, recipientID)
