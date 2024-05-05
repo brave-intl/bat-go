@@ -35,7 +35,7 @@ type AddressApprovalRequest struct {
 // OperatorShare represents the association between an operator name and their encrypted share
 type OperatorDataResponse struct {
 	Name     string `json:"name" valid:"required"`
-	Material string `json:"material" valid:"required"`
+	Material []byte `json:"material" valid:"required"`
 }
 
 type OperatorDataRequest struct {

@@ -112,7 +112,7 @@ func main() {
 
 		for _, share := range vaultResp.Data.Shares {
 			fname := fmt.Sprintf("share-%s-%s.enc", share.Name, vaultResp.Data.PublicKey)
-			err = os.WriteFile(fname, []byte(share.Material), 0644)
+			err = os.WriteFile(fname, share.Material, 0644)
 			if err != nil {
 				log.Fatalf("failed to write share file: %w", err)
 			}
@@ -133,11 +133,11 @@ func main() {
 				PublicKey: *publicKey,
 			},
 		)
-		bodyString, err := ioutil.ReadAll(resp.Body)
+		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalf("failed to read response json: %w", err)
 		}
-		log.Printf("Result: %s", bodyString)
+		log.Printf("Result: %s", body)
 	default:
 		log.Fatal("unrecognized subcommand. options are create and approve")
 	}

@@ -16,8 +16,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"strings"
 	"slices"
+	"strings"
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
@@ -178,7 +178,7 @@ func (s *Service) approveVault(
 	vault := Vault{
 		Threshold:    request.Threshold,
 		OperatorKeys: opKeys,
-		PublicKey: request.PublicKey,
+		PublicKey:    request.PublicKey,
 	}
 	vault.SetIdempotencyKey()
 	updatedVault, err := s.datastore.ApproveVault(
@@ -204,11 +204,13 @@ func vaultFromRequest(
 	threshold int,
 	approverKey string,
 ) (*Vault, error) {
-	opRecpt := []age.Recipient{}
-	var opNames []string
-	var opKeys []string
+	var (
+		opRecpt []age.Recipient
+		opNames []string
+		opKeys  []string
+	)
 	for _, operator := range operators {
-		recipient, err := agessh.ParseRecipient(string(operator.PublicKey))
+		recipient, err := agessh.ParseRecipient(operator.PublicKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse public key", err)
 		}
@@ -250,13 +252,15 @@ func vaultFromRequest(
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt to receipient share file: %w", err)
 		}
-		_, err = io.WriteString(w, base64.RawStdEncoding.EncodeToString(share))
+
+		_, err = w.Write(share)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write cyphertext to buffer: %w", err)
 		}
+		w.Close()
 		shares = append(shares, paymentLib.OperatorDataResponse{
 			Name:     opNames[i],
-			Material: buf.String(),
+			Material: buf.Bytes(),
 		})
 	}
 	sharesResult.Shares = shares
@@ -613,7 +617,7 @@ func (s *Service) encryptWithShares(ctx context.Context, data []byte) (io.Reader
 	return out, nil
 }
 
-func(s *Service) keyIsApproved(ctx context.Context, pubKey string) (bool, error) {
+func (s *Service) keyIsApproved(ctx context.Context, pubKey string) (bool, error) {
 	vault, err := s.datastore.GetVaultWithPublicKey(ctx, pubKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch vault from QLDB with key: %s", pubKey)
