@@ -19,7 +19,7 @@ The flags are:
 	-e
 		The environment to which the operator is sending approval for transactions.
 	-b
-		The s3 from which to retrieve the configuration
+		The s3 bucket from which to retrieve the configuration
 	-f
 		The filename to get from the s3 bucket
 */
