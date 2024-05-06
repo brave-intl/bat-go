@@ -20,8 +20,10 @@ The flags are:
 		The environment to which the operator is sending approval for transactions.
 	-b
 		The s3 bucket from which to retrieve the configuration
-	-f
-		The filename to get from the s3 bucket
+	-o
+		The object filename to get from the s3 bucket
+	-v
+		Verbose logging
 */
 package main
 
@@ -51,26 +53,19 @@ func main() {
 
 	// command line flags
 	operatorKey := flag.String(
-		"k", "test/private.pem",
-		"the operator's key file location (ed25519 private key) in PEM format")
-
+		"k",
+		"test/private.pem",
+		"the operator's key file location (ed25519 private key) in PEM format",
+	)
 	leaderPubkeyFile := flag.String(
-		"p", "",
-		"file containing the leader's pubkey for encrypting a given share for the purpose of secure transmission")
-
-	s3Bucket := flag.String("b", "", "the s3 bucket to upload to")
-
-	s3Object := flag.String(
-		"o", "",
-		"the s3 object name for output")
-
-	env := flag.String(
-		"e", "local",
-		"the environment to which the tool will interact")
-
-	verbose := flag.Bool(
-		"v", false,
-		"view verbose logging")
+		"p",
+		"",
+		"file containing the leader's pubkey for encrypting a given share for the purpose of secure transmission",
+	)
+	s3Bucket := flag.String("b", "", "the s3 bucket from which to retrieve the configuration")
+	s3Object := flag.String("o", "", "the filename to get from the s3 bucket")
+	env := flag.String("e", "local", "the environment to which the tool will interact")
+	verbose := flag.Bool("v", false, "view verbose logging")
 
 	flag.Parse()
 
