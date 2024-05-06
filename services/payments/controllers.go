@@ -366,7 +366,7 @@ func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
 	}
 }
 
-// CreateVaultHandler generates a key with shamir shares, stores metadata about this key in QLDB,
+// CreateVaultHandler generates a key used to encrypt API keys and wallet private keys with shamir shares, stores metadata about this key in QLDB,
 // returns the shamir shares, and discards the private key.
 func CreateVaultHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
