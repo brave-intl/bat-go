@@ -112,10 +112,10 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 		logger.Info().Msg("solana address approval endpoint setup")
 		// vault approval will have an http signature from a known list of public keys
 		r.Post(
-			"/vault/approve",
+			"/vault/verify",
 			middleware.InstrumentHandler(
-				"ApproveVaultHandler",
-				s.AuthorizerSignedMiddleware()(ApproveVaultHandler(s)),
+				"VerifyVaultHandler",
+				s.AuthorizerSignedMiddleware()(VerifyVaultHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("solana address approval endpoint setup")
 
@@ -412,15 +412,15 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 	}
 }
 
-// ApproveVaultHandler adds an approval to a created vault
-func ApproveVaultHandler(service *Service) handlers.AppHandler {
+// VerifyVaultHandler adds an approval to a created vault
+func VerifyVaultHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
 		ctx := r.Context()
 
 		var (
 			logger       = logging.Logger(ctx, "CreateVaultHandler")
-			vaultRequest = paymentLib.ApproveVaultRequest{}
+			vaultRequest = paymentLib.VerifyVaultRequest{}
 		)
 
 		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
@@ -441,7 +441,7 @@ func ApproveVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
 		}
 
-		approvedVaultResponse, err := service.approveVault(ctx, vaultRequest, keyID)
+		verifyVaultResponse, err := service.verifyVault(ctx, vaultRequest, keyID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
 		}
@@ -450,7 +450,7 @@ func ApproveVaultHandler(service *Service) handlers.AppHandler {
 			Cause:   err,
 			Message: "vault approved",
 			Code:    http.StatusOK,
-			Data:    approvedVaultResponse,
+			Data:    verifyVaultResponse,
 		}
 	}
 }

@@ -42,11 +42,10 @@ type Datastore interface {
 	InsertVault(ctx context.Context, vault Vault) error
 	GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error)
 	GetChainAddress(ctx context.Context, address string) (*ChainAddress, error)
-	GetVault(ctx context.Context, idempotencyKey string, pubkey string) (*Vault, error)
+	GetVault(ctx context.Context, pubkey string) (*Vault, error)
 	GetVaultWithPublicKey(ctx context.Context, pubkey string) (*Vault, error)
 	UpdatePaymentState(ctx context.Context, documentID string, state *paymentLib.PaymentState) error
 	UpdateChainAddress(ctx context.Context, address ChainAddress) error
-	ApproveVault(ctx context.Context, id, pubKey, approval string) (*Vault, error)
 }
 
 func (q *QLDBDatastore) InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error) {
@@ -176,9 +175,6 @@ func (q *QLDBDatastore) InsertChainAddress(ctx context.Context, address ChainAdd
 // InsertVault checks if a vault already exists. If it does, it returns with no error and no changes.
 // If the vault does not exist, it is inserted into QLDB.
 func (q *QLDBDatastore) InsertVault(ctx context.Context, vault Vault) error {
-	// Always ensure that an idempotency key is set at this point.
-	vault.SetIdempotencyKey()
-
 	_, err := q.Execute(
 		context.Background(),
 		func(txn qldbdriver.Transaction) (interface{}, error) {
@@ -186,8 +182,8 @@ func (q *QLDBDatastore) InsertVault(ctx context.Context, vault Vault) error {
 			// insertion. We can't use the public key in this case because the key will
 			// be recently genereated and different from any existing keys at this point.
 			existingkey, err := txn.Execute(
-				"SELECT d_id as documentID FROM vaults BY d_id where idempotencyKey = ?",
-				vault.IdempotencyKey,
+				"SELECT d_id as documentID FROM vaults BY d_id where publicKey = ?",
+				vault.PublicKey,
 			)
 			if err != nil {
 				return nil, fmt.Errorf(
@@ -235,54 +231,6 @@ func (q *QLDBDatastore) InsertVault(ctx context.Context, vault Vault) error {
 		return fmt.Errorf("failed to insert key: %s due to: %w", vault.PublicKey, err)
 	}
 	return nil
-}
-
-// ApproveVault checks if a vault exists. If it doesn't, it returns with an error. If the vault does
-// exist the provided approver is added to the approvers list.
-func (q *QLDBDatastore) ApproveVault(ctx context.Context, id, pubKey, approval string) (*Vault, error) {
-	qldbVault, err := q.GetVault(ctx, id, pubKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get vault from QLDB: %w", pubKey, err)
-	}
-	if qldbVault == nil {
-		return nil, fmt.Errorf(
-			"vault with idempotency key %s and publick key %s does not exist",
-			id,
-			pubKey,
-		)
-	}
-	// Only add new approval if it's not already in the approval list
-	for _, existingApproval := range qldbVault.Approvals {
-		if approval == existingApproval {
-			continue
-		}
-		qldbVault.Approvals = append(qldbVault.Approvals, approval)
-	}
-
-	// Save qldbVault with updated Approvals
-	_, err = q.Execute(
-		ctx,
-		func(txn qldbdriver.Transaction) (interface{}, error) {
-			_, err := txn.Execute(
-				`UPDATE vaults
-					SET
-						publicKey = ?,
-						approvals = ?
-					WHERE
-						publicKey = ?
-				`,
-				qldbVault.PublicKey,
-				qldbVault.Approvals,
-				qldbVault.PublicKey,
-			)
-			return nil, err
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("QLDB write execution failed: %w", err)
-	}
-
-	return qldbVault, nil
 }
 
 func (q *QLDBDatastore) GetPaymentStateHistory(ctx context.Context, documentID string) (*paymentLib.PaymentStateHistory, error) {
@@ -385,16 +333,15 @@ func (q *QLDBDatastore) GetChainAddress(ctx context.Context, address string) (*C
 	return chainAddress.(*ChainAddress), err
 }
 
+// GetVault fetches a vault from QLDB using both the public key and the idempotency key
 func (q *QLDBDatastore) GetVault(
 	ctx context.Context,
-	idempotencyKey string,
 	publicKey string,
 ) (*Vault, error) {
 	vault, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		result, err := txn.Execute(
-			"SELECT * FROM vaults WHERE publicKey = ? and idempotencyKey = ?",
+			"SELECT * FROM vaults WHERE publicKey = ?",
 			publicKey,
-			idempotencyKey,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("QLDB transaction failed: %w", err)

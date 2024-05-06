@@ -2,15 +2,14 @@
 Vault instructs the enclave to generate and approve a random asymmetric key
 pair, break the private key into operator shares, return the shares after they
 have been encrypted with provided operator keys, and then discard the private
-key so that the operators are needed to access it again. It must be run by
-multiple operators with the same arguments to take effect.
+key so that the operators are needed to access it again.
 
 # Create takes as parameters a set of operator pubkeys and a threshold
 
 Usage:
 
 vault [flags] create [pubkeyFile]
-vault [flags] approve [pubkeyFile]
+vault [flags] verify [pubkeyFile]
 
 The flags are:
 
@@ -119,15 +118,15 @@ func main() {
 			log.Printf("Wrote file for %s to %s", share.Name, fname)
 		}
 		log.Printf("Generated Public Key: %s", vaultResp.Data.PublicKey)
-	case "approve":
+	case "verify":
 		if len(*publicKey) == 0 {
 			log.Fatal("public key flag must be defined with -p")
 		}
 		resp := doRequestWithSignature(
 			ctx,
 			*operatorKey,
-			"/v1/payments/vault/approve",
-			payments.ApproveVaultRequest{
+			"/v1/payments/vault/verify",
+			payments.VerifyVaultRequest{
 				Operators: keys.Keys,
 				Threshold: *threshold,
 				PublicKey: *publicKey,

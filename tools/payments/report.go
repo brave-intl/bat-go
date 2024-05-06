@@ -244,5 +244,5 @@ func (r PreparedReport) Prepare(ctx context.Context, key ed25519.PrivateKey, cli
 // OperatorKeys represents a file used for vault creation and approval that contains a set of
 // operator keys mapped to names.
 type OperatorKeys struct {
-	Keys []payments.OperatorDataRequest `json:"keys"`
+	Keys []payments.OperatorPubkeyData `json:"keys"`
 }

@@ -49,37 +49,11 @@ type ChainAddress struct {
 type Vault struct {
 	PublicKey      string   `ion:"publicKey"`
 	Creator        string   `ion:"creator"`
-	Approvals      []string `ion:"approvals"`
 	Threshold      int      `ion:"threshold"`
 	OperatorKeys   []string `ion:"operatorKeys"`
 	IdempotencyKey string   `ion:"idempotencyKey"`
 	// must be unexported. these values should never be presisted to QLDB
 	shares paymentLib.CreateVaultResponse
-}
-
-// SetIdempotencyKey takes and existing vault, checks if it has valid threshold and operators, and
-// generates a UUIDv5 using our Payment Service namespace, threshold, and operators.
-func (v *Vault) SetIdempotencyKey() error {
-	if v.Threshold < 1 {
-		return errors.New("invalid threshold")
-	}
-	if v.OperatorKeys == nil || len(v.OperatorKeys) < 1 || len(v.OperatorKeys) < v.Threshold {
-		return errors.New("invalid number of operator keys")
-	}
-	if len(v.PublicKey) < 1 {
-		return errors.New("public key must be defined before idempotency key can be generated")
-	}
-	// We have to sort the opKeys to ensure that the idempotency key we generate is the same for the
-	// same set of keys.
-	slices.Sort(v.OperatorKeys)
-	v.OperatorKeys = slices.Compact(v.OperatorKeys)
-	// Generate an idempotency key using the keys and threshold. This is used to prevent us from
-	// creating multiple vaults with the same configuration.
-	v.IdempotencyKey = uuid.NewSHA1(
-		uuid.MustParse("3c0e75eb-9150-40b4-a988-a017d115de3c"),
-		[]byte(fmt.Sprintf("%s%s%s", v.Threshold, strings.Join(v.OperatorKeys, ","), v.PublicKey)),
-	).String()
-	return nil
 }
 
 // createAttestationDocument will create an attestation document and return the private key and
@@ -166,41 +140,29 @@ func (s *Service) createVault(
 	return &vault.shares, nil
 }
 
-func (s *Service) approveVault(
+func (s *Service) verifyVault(
 	ctx context.Context,
-	request paymentLib.ApproveVaultRequest,
+	request paymentLib.VerifyVaultRequest,
 	approverKey string,
-) (*paymentLib.ApproveVaultResponse, error) {
-	var opKeys []string
-	for _, key := range request.Operators {
-		opKeys = append(opKeys, key.PublicKey)
-	}
-	vault := Vault{
-		Threshold:    request.Threshold,
-		OperatorKeys: opKeys,
-		PublicKey:    request.PublicKey,
-	}
-	vault.SetIdempotencyKey()
-	updatedVault, err := s.datastore.ApproveVault(
+) (*paymentLib.VerifyVaultResponse, error) {
+	fetchedVault, err := s.datastore.GetVault(
 		ctx,
-		vault.IdempotencyKey,
 		request.PublicKey,
-		approverKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
 	}
 
-	return &paymentLib.ApproveVaultResponse{
-		Approvals:     updatedVault.Approvals,
-		PublicKey:     updatedVault.PublicKey,
-		FullyApproved: len(updatedVault.Approvals) > 1,
+	return &paymentLib.VerifyVaultResponse{
+		Operators: fetchedVault.OperatorKeys,
+		Threshold: fetchedVault.Threshold,
+		PublicKey: fetchedVault.PublicKey,
 	}, nil
 }
 
 func vaultFromRequest(
 	ctx context.Context,
-	operators []paymentLib.OperatorDataRequest,
+	operators []paymentLib.OperatorPubkeyData,
 	threshold int,
 	approverKey string,
 ) (*Vault, error) {
@@ -244,7 +206,7 @@ func vaultFromRequest(
 
 	// Encrypt each share with an operator key and associate that key to the operator
 	// name in a NamedOperator
-	var shares []paymentLib.OperatorDataResponse
+	var shares []paymentLib.OperatorShareData
 	for i, share := range operatorShares {
 		buf := new(bytes.Buffer)
 		// encrypt each with an operator recipient
@@ -259,7 +221,7 @@ func vaultFromRequest(
 
 		w.Close()
 
-		shares = append(shares, paymentLib.OperatorDataResponse{
+		shares = append(shares, paymentLib.OperatorShareData{
 			Name:     opNames[i],
 			Material: buf.Bytes(),
 		})
