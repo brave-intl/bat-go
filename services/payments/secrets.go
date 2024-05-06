@@ -16,8 +16,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"slices"
-	"strings"
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
@@ -31,7 +29,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/google/uuid"
 	"github.com/hashicorp/vault/shamir"
 )
 
@@ -230,7 +227,6 @@ func vaultFromRequest(
 	return &Vault{
 		PublicKey:    sharesResult.PublicKey,
 		Creator:      approverKey,
-		Approvals:    []string{approverKey},
 		Threshold:    threshold,
 		OperatorKeys: opKeys,
 		shares:       sharesResult,
