@@ -568,16 +568,6 @@ func (s *Service) decryptWithShares(ctx context.Context, buf bytes.Buffer) (io.R
 		return nil, fmt.Errorf("failed to parse private key bytes for secret decryption: %w", err)
 	}
 
-	// Before we decrypt with this key we must confirm that the key is known to the system and has
-	// approved by a sufficient number of operators.
-	ok, err := s.keyIsApproved(ctx, identity.Recipient().String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if key is approved: %w", err)
-	}
-	if !ok {
-		return nil, fmt.Errorf("provided shares represent an unapproved key")
-	}
-
 	return age.Decrypt(bytes.NewReader(buf.Bytes()), identity)
 }
 
@@ -593,16 +583,6 @@ func (s *Service) encryptWithShares(ctx context.Context, data []byte) (io.Reader
 		return nil, fmt.Errorf("failed to parse private key bytes for secret decryption: %w", err)
 	}
 
-	// Before we decrypt with this key we must confirm that the key is known to the system and has
-	// approved by a sufficient number of operators.
-	ok, err := s.keyIsApproved(ctx, identity.Recipient().String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if key is approved: %w", err)
-	}
-	if !ok {
-		return nil, fmt.Errorf("provided shares represent an unapproved key")
-	}
-
 	out := &bytes.Buffer{}
 
 	w, err := age.Encrypt(out, identity.Recipient())
@@ -616,12 +596,4 @@ func (s *Service) encryptWithShares(ctx context.Context, data []byte) (io.Reader
 		return nil, fmt.Errorf("Failed to close encrypted file: %v", err)
 	}
 	return out, nil
-}
-
-func (s *Service) keyIsApproved(ctx context.Context, pubKey string) (bool, error) {
-	vault, err := s.datastore.GetVaultWithPublicKey(ctx, pubKey)
-	if err != nil {
-		return false, fmt.Errorf("failed to fetch vault from QLDB with key: %s", pubKey)
-	}
-	return len(vault.Approvals) > 1, nil
 }
