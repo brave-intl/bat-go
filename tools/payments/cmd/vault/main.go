@@ -19,6 +19,8 @@ The flags are:
 		Location on file system of the operators private ED25519 signing key in PEM format.
 	-p
 		The public key for the vault private key that is being approved. Only needed for approve subcommand.
+	-pcr2
+		The public key for the vault private key that is being approved. Only needed for approve subcommand.
 */
 package main
 
@@ -35,6 +37,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"time"
 
 	client "github.com/brave-intl/bat-go/libs/clients"
@@ -56,6 +59,8 @@ func main() {
 	publicKey := flag.String(
 		"p", "",
 		"the public key for the vault private key that is being approved. only needed for approve subcommand")
+	pcr2 := flag.String(
+		"pcr2", "", "the hex PCR2 value for this enclave")
 	verbose := flag.Bool(
 		"v", false,
 		"view verbose logging")
@@ -86,12 +91,14 @@ func main() {
 		log.Fatalf("insufficient number of keys to create a share")
 	}
 
+
 	switch args[0] {
 	case "create":
 		resp := doRequestWithSignature(
 			ctx,
 			*operatorKey,
 			"/v1/payments/vault/create",
+			pcr2,
 			payments.CreateVaultRequest{
 				Operators: keys.Keys,
 				Threshold: *threshold,
@@ -126,17 +133,46 @@ func main() {
 			ctx,
 			*operatorKey,
 			"/v1/payments/vault/verify",
+			pcr2,
 			payments.VerifyVaultRequest{
 				Operators: keys.Keys,
 				Threshold: *threshold,
 				PublicKey: *publicKey,
 			},
 		)
+		vaultResp := payments.VerifyVaultResponseWrapper{}
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalf("failed to read response json: %w", err)
 		}
+		err = json.Unmarshal(body, &vaultResp)
+		if err != nil {
+			log.Fatalf("failed to unmarshal response json: %w", err)
+		}
+		if vaultResp.Data.PublicKey != *publicKey {
+			log.Fatalf(
+				"public key mismatch between what was provided and what is stored in the service. ours: %s theirs: %s",
+				*publicKey,
+				vaultResp.Data.PublicKey,
+			)
+		}
+		if vaultResp.Data.Threshold != *threshold {
+			log.Fatalf(
+				"threshold mismatch between what was provided and what is stored in the service. ours: %s theirs: %s",
+				*threshold,
+				vaultResp.Data.Threshold,
+			)
+		}
+		if len(vaultResp.Data.Operators) != len(keys.Keys) {
+			log.Fatal("different number of operator keys between what we provided and what is stored in the service")
+		}
+		for _, pubkey := range keys.Keys {
+			if !slices.Contains(vaultResp.Data.Operators, pubkey.PublicKey) {
+				log.Fatalf("operator key %s is missing from response", pubkey)
+			}
+		}
 		log.Printf("Result: %s", body)
+		log.Print("Results match expected data. Verification complete.")
 	default:
 		log.Fatal("unrecognized subcommand. options are create and approve")
 	}
@@ -146,7 +182,13 @@ func main() {
 	}
 }
 
-func doRequestWithSignature(ctx context.Context, key, path string, data interface{}) *http.Response {
+func doRequestWithSignature(
+	ctx context.Context,
+	key,
+	path string,
+	pcr2 *string,
+	data interface{},
+) *http.Response {
 	priv, err := paymentscli.GetOperatorPrivateKey(key)
 	if err != nil {
 		log.Fatalf("failed to parse operator key file: %v\n", err)
@@ -208,6 +250,19 @@ func doRequestWithSignature(ctx context.Context, key, path string, data interfac
 	resp, err := httpClient.Do(ctx, req, nil)
 	if err != nil {
 		log.Fatalf("failed to submit http request: %w", err)
+	}
+
+	sp, verifier, err := paymentscli.NewNitroVerifier(pcr2)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if !valid {
+		log.Fatalln("http signature was not valid, nitro attestation failed")
 	}
 	return resp
 }

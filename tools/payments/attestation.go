@@ -7,6 +7,8 @@ import (
 	"github.com/brave-intl/bat-go/libs/nitro"
 )
 
+// NewNitroVerifier provides a verifier for a given PRC2 string that is used to verify the signature
+// in an HTTP signed response
 func NewNitroVerifier(pcr2Hex *string) (*httpsignature.SignatureParams, *httpsignature.NitroVerifier, error) {
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO

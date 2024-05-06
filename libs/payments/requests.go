@@ -57,8 +57,16 @@ type CreateVaultResponse struct {
 	Threshold int                    `json:"threshold" valid:"required"`
 }
 
+// CreateVaultResponseWrapper is a data wrapper that exposes the service's response object to the
+// client
 type CreateVaultResponseWrapper struct {
 	Data CreateVaultResponse `json:"data"`
+}
+
+// VerifyVaultResponseWrapper is a data wrapper that exposes the service's response object to the
+// client
+type VerifyVaultResponseWrapper struct {
+	Data VerifyVaultResponse `json:"data"`
 }
 
 // VerifyVaultRequest is provided to request vault approval for a given configuration and public

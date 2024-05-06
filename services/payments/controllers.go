@@ -448,7 +448,7 @@ func VerifyVaultHandler(service *Service) handlers.AppHandler {
 
 		return &handlers.AppError{
 			Cause:   err,
-			Message: "vault approved",
+			Message: "vault verification data",
 			Code:    http.StatusOK,
 			Data:    verifyVaultResponse,
 		}
