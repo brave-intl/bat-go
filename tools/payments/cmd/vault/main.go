@@ -40,7 +40,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"slices"
 	"time"
 
 	"filippo.io/age"
