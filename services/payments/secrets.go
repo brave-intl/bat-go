@@ -126,7 +126,19 @@ func (s *Service) createVault(
 	threshold int,
 	creatorKey string,
 ) (*paymentLib.CreateVaultResponse, error) {
-	opKeys := validAuthorizerKeys[os.Getenv("ENV")]
+	var validVaultManagerKeys = map[string][]string{
+		"production": {},
+		"staging": {
+			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
+			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
+		},
+		"development": {
+			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
+			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMKhViUd6Nwd8qre0go7Qc6Wa6Q7A3GiWj7q/GMF/NzV jegan+devsettlements@brave.com",
+			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
+		},
+	}
+	opKeys := validVaultManagerKeys[os.Getenv("ENV")]
 	shares, vaultPubkey, err := generateShares(opKeys, threshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate new key with shares: %w", err)
