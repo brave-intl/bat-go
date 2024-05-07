@@ -15,14 +15,14 @@ The flags are:
 
 	-t
 		The Shamir share threshold to reconstitute the private key
-	-k
-		Location on file system of the operators private ED25519 signing key in PEM format.
 	-pcr2
-		The public key for the vault private key that is being approved. Only needed for approve subcommand.
+		The public key for the vault private key that is being approved.
 	-s
-		The encrypted share file for the verifying operator. Only needed for verify
+		The encrypted share file for the verifying operator. Only needed for verify subcommand
 	-p
-		The vault public key. Only needed for verify
+		The vault public key. Only needed for verify subcommand
+	-k
+		Location on file system of the operators private ED25519 signing key in PEM format. Only needed for verify subcommand
 */
 package main
 
@@ -30,8 +30,6 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -45,7 +43,6 @@ import (
 	"filippo.io/age"
 	"filippo.io/age/agessh"
 	client "github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/payments"
 	paymentscli "github.com/brave-intl/bat-go/tools/payments"
 )
@@ -54,15 +51,15 @@ func main() {
 	ctx := context.Background()
 
 	// command line flags
-	operatorKeyFile := flag.String(
-		"k",
-		"test/private.pem",
-		"the operator's key file location (ed25519 private key) in PEM format",
-	)
 	threshold := flag.Int("t", 2, "the threshold for Shamir shares to reconstitute the private key")
 	pcr2 := flag.String("pcr2", "", "the hex PCR2 value for this enclave")
 	vaultPublicKey := flag.String("p", "", "the vault public key. only needed for verify subcommand")
 	shareFile := flag.String("s", "", "the encrypted share file for the verifying operator. only needed for verify subcommand")
+	operatorKeyFile := flag.String(
+		"k",
+		"test/private.pem",
+		"the operator's key file location (ed25519 private key) in PEM format. only needed for verify subcommand",
+	)
 	verbose := flag.Bool("v", false, "view verbose logging")
 
 	flag.Parse()
@@ -79,9 +76,8 @@ func main() {
 
 	switch args[0] {
 	case "create":
-		resp := doRequestWithSignature(
+		resp := doRequest(
 			ctx,
-			*operatorKeyFile,
 			"/v1/payments/vault/create",
 			pcr2,
 			payments.CreateVaultRequest{Threshold: *threshold},
@@ -140,9 +136,8 @@ func main() {
 			log.Fatal("share is empty")
 		}
 
-		resp := doRequestWithSignature(
+		resp := doRequest(
 			ctx,
-			*operatorKeyFile,
 			"/v1/payments/vault/verify",
 			pcr2,
 			payments.VerifyVaultRequest{
@@ -184,65 +179,23 @@ func main() {
 	}
 }
 
-func doRequestWithSignature(
+func doRequest(
 	ctx context.Context,
-	keyFile,
 	path string,
 	pcr2 *string,
 	data interface{},
 ) *http.Response {
-	priv, err := paymentscli.GetOperatorPrivateKey(keyFile)
-	if err != nil {
-		log.Fatalf("failed to parse operator key file: %v\n", err)
-	}
-	var (
-		// dateHeader needs to be lowercase to pass the signing verifier validation.
-		dateHeader          = "date"
-		contentLengthHeader = "Content-Length"
-		contentTypeHeader   = "Content-Type"
-	)
-
-	signer := httpsignature.ParameterizedSignator{
-		SignatureParams: httpsignature.SignatureParams{
-			Algorithm: httpsignature.ED25519,
-			KeyID:     hex.EncodeToString([]byte(priv.Public().(ed25519.PublicKey))),
-			Headers: []string{
-				"(request-target)",
-				"date",
-				"digest",
-				"content-length",
-				"content-type",
-			},
-		},
-		Signator: priv,
-		Opts:     crypto.Hash(0),
-	}
-
 	buf := bytes.NewBuffer([]byte{})
-	err = json.NewEncoder(buf).Encode(data)
-	body := buf.Bytes()
+	err := json.NewEncoder(buf).Encode(data)
 	if err != nil {
 		log.Fatalf("failed to marshal attested transaction body: %w", err)
 	}
 	apiBase := os.Getenv("NITRO_API_BASE")
 
-	// Create a request and set the headers we require for signing. The Digest header is added
-	// during the signing call and the request.Host is set during the new request creation so,
-	// we don't need to explicitly set them here.
 	req, err := http.NewRequest(http.MethodPost, apiBase+path, buf)
 	if err != nil {
 		log.Fatalf("failed to create request to sign: %w", err)
 	}
-	req.Header.Set(dateHeader, time.Now().Format(time.RFC1123))
-	req.Header.Set(contentLengthHeader, fmt.Sprintf("%d", len(body)))
-	req.Header.Set(contentTypeHeader, "application/json")
-
-	// http sign the request
-	err = signer.SignRequest(req)
-	if err != nil {
-		log.Fatalf("failed to sign request: %w", err)
-	}
-
 	httpClient, err := client.NewWithHTTPClient(apiBase, "", &http.Client{
 		Timeout: time.Second * 60,
 	})

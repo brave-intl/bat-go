@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -13,26 +12,11 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var validAuthorizerKeys = map[string][]string{
-	"production": {},
-	"staging": {
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
-	},
-	"development": {
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEY/3VGKsrH5dp3mK5PJIHVkUMWpsmUhZkrLuZTf7Sqr kdenhartog+settlement+dev@brave.com",
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK1fxpURIUAJNRqosAnPPXnKjpUBGGOKgkUOXmviJfFx jtieman+nitro@brave.com",
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMKhViUd6Nwd8qre0go7Qc6Wa6Q7A3GiWj7q/GMF/NzV jegan+devsettlements@brave.com",
-		"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
-	},
-}
-
 // validAuthorizers is the list of payment authorizers, mapping to individuals in payments-ops.
 var validAuthorizers = make(map[string]httpsignature.Ed25519PubKey)
 
 func init() {
-	for _, key := range validAuthorizerKeys[os.Getenv("ENV")] {
+	for _, key := range paymentOperatorKeys() {
 		pub, err := DecodePublicKey(key)
 		if err != nil {
 			panic(err)

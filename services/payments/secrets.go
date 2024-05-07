@@ -46,7 +46,6 @@ type ChainAddress struct {
 // secrets.
 type Vault struct {
 	PublicKey      string   `ion:"publicKey"`
-	Creator        string   `ion:"creator"`
 	Threshold      int      `ion:"threshold"`
 	OperatorKeys   []string `ion:"operatorKeys"`
 	IdempotencyKey string   `ion:"idempotencyKey"`
@@ -124,35 +123,21 @@ var errSecretsNotLoaded = errors.New("secrets are not yet loaded")
 func (s *Service) createVault(
 	ctx context.Context,
 	threshold int,
-	creatorKey string,
 ) (*paymentLib.CreateVaultResponse, error) {
-	var validVaultManagerKeys = map[string][]string{
-		"production": {},
-		"staging": {
-			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
-			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
-		},
-		"development": {
-			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com",
-			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMKhViUd6Nwd8qre0go7Qc6Wa6Q7A3GiWj7q/GMF/NzV jegan+devsettlements@brave.com",
-			"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA91/jZI+hcisdAURdqgdAKyetA4b2mVJIypfEtTyXW+ evq+settlements@brave.com",
-		},
-	}
-	opKeys := validVaultManagerKeys[os.Getenv("ENV")]
-	shares, vaultPubkey, err := generateShares(opKeys, threshold)
+	managerKeys := vaultManagerKeys()
+	shares, vaultPubkey, err := generateShares(managerKeys, threshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate new key with shares: %w", err)
 	}
-	operatorShareData, err := encryptShares(shares, opKeys)
+	operatorShareData, err := encryptShares(shares, managerKeys)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt shares to operator keys: %w", err)
 	}
 
 	vault := Vault{
 		PublicKey:    vaultPubkey,
-		Creator:      creatorKey,
 		Threshold:    threshold,
-		OperatorKeys: opKeys,
+		OperatorKeys: managerKeys,
 		shares: paymentLib.CreateVaultResponse{
 			PublicKey: vaultPubkey,
 			Threshold: threshold,
@@ -171,14 +156,10 @@ func (s *Service) createVault(
 func (s *Service) verifyVault(
 	ctx context.Context,
 	request paymentLib.VerifyVaultRequest,
-	approverKey string,
 ) (*paymentLib.VerifyVaultResponse, error) {
-	fetchedVault, err := s.datastore.GetVault(
-		ctx,
-		request.PublicKey,
-	)
+	fetchedVault, err := s.datastore.GetVault(ctx, request.PublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
+		return nil, fmt.Errorf("failed to get vault from QLDB: %w", err)
 	}
 
 	return &paymentLib.VerifyVaultResponse{

@@ -68,8 +68,8 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 		// Log all payments requests
 		r.Use(middleware.RequestLogger(logger))
 
-		// prepare inserts transactions into qldb, returning a document which needs to be submitted by
-		// an authorizer
+		// prepare inserts transactions into qldb, returning a document which needs to be submitted
+		// by an authorizer
 		r.Post(
 			"/prepare",
 			middleware.InstrumentHandler(
@@ -102,22 +102,14 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 				s.AuthorizerSignedMiddleware()(ApproveSolanaAddressHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("solana address approval endpoint setup")
-		// vault creation will have an http signature from a known list of public keys
 		r.Post(
 			"/vault/create",
-			middleware.InstrumentHandler(
-				"CreateVaultHandler",
-				s.AuthorizerSignedMiddleware()(CreateVaultHandler(s)),
-			).ServeHTTP)
-		logger.Info().Msg("solana address approval endpoint setup")
-		// vault approval will have an http signature from a known list of public keys
+			middleware.InstrumentHandler("CreateVaultHandler", CreateVaultHandler(s)).ServeHTTP)
+		logger.Info().Msg("vault create endpoint set up")
 		r.Post(
 			"/vault/verify",
-			middleware.InstrumentHandler(
-				"VerifyVaultHandler",
-				s.AuthorizerSignedMiddleware()(VerifyVaultHandler(s)),
-			).ServeHTTP)
-		logger.Info().Msg("solana address approval endpoint setup")
+			middleware.InstrumentHandler("VerifyVaultHandler", VerifyVaultHandler(s)).ServeHTTP)
+		logger.Info().Msg("vault verify endpoint set up")
 
 		r.Get(
 			"/info",
@@ -366,8 +358,9 @@ func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
 	}
 }
 
-// CreateVaultHandler generates a key used to encrypt API keys and wallet private keys with shamir shares, stores metadata about this key in QLDB,
-// returns the shamir shares, and discards the private key.
+// CreateVaultHandler generates a key used to encrypt API keys and wallet private keys with shamir
+// shares, stores metadata about this key in QLDB, returns the shamir shares, and discards the
+// private key.
 func CreateVaultHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
@@ -388,20 +381,20 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		logger.Debug().Str("vault", fmt.Sprintf("%+v", vaultRequest)).Msg("handling vault creation request")
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", vaultRequest),
+		).Msg("handling vault creation request")
 
-		// we have passed the http signature middleware, record who authorized the tx
-		callerID, err := middleware.GetKeyID(ctx)
-		if err != nil {
-			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
-		}
-
-		createdVaultResponse, err := service.createVault(ctx, vaultRequest.Threshold, callerID)
+		createdVaultResponse, err := service.createVault(ctx, vaultRequest.Threshold)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
 		}
 
-		logger.Debug().Str("vault", fmt.Sprintf("%+v", createdVaultResponse)).Msg("sending vault creation response")
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", createdVaultResponse),
+		).Msg("sending vault creation response")
 
 		return &handlers.AppError{
 			Cause:   err,
@@ -412,14 +405,14 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 	}
 }
 
-// VerifyVaultHandler adds an approval to a created vault
+// VerifyVaultHandler returns the QLDB record for a vault for the purposes of configuration
+// verification in the operator tooling
 func VerifyVaultHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		// get context from request
 		ctx := r.Context()
 
 		var (
-			logger       = logging.Logger(ctx, "CreateVaultHandler")
+			logger       = logging.Logger(ctx, "VerifyVaultHandler")
 			vaultRequest = paymentLib.VerifyVaultRequest{}
 		)
 
@@ -433,17 +426,14 @@ func VerifyVaultHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		logger.Debug().Str("vault", fmt.Sprintf("%+v", vaultRequest)).Msg("handling vault approval request")
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", vaultRequest),
+		).Msg("handling vault verify request")
 
-		// we have passed the http signature middleware, record who authorized the tx
-		keyID, err := middleware.GetKeyID(ctx)
+		verifyVaultResponse, err := service.verifyVault(ctx, vaultRequest)
 		if err != nil {
-			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
-		}
-
-		verifyVaultResponse, err := service.verifyVault(ctx, vaultRequest, keyID)
-		if err != nil {
-			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
+			return handlers.WrapError(err, "failed to verify vault", http.StatusInternalServerError)
 		}
 
 		return &handlers.AppError{
