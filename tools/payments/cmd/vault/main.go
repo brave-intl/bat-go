@@ -17,10 +17,12 @@ The flags are:
 		The Shamir share threshold to reconstitute the private key
 	-k
 		Location on file system of the operators private ED25519 signing key in PEM format.
-	-p
-		The public key for the vault private key that is being approved. Only needed for approve subcommand.
 	-pcr2
 		The public key for the vault private key that is being approved. Only needed for approve subcommand.
+	-s
+		The encrypted share file for the verifying operator. Only needed for verify
+	-p
+		The vault public key. Only needed for verify
 */
 package main
 
@@ -33,6 +35,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -40,6 +43,8 @@ import (
 	"slices"
 	"time"
 
+	"filippo.io/age"
+	"filippo.io/age/agessh"
 	client "github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/payments"
@@ -50,20 +55,16 @@ func main() {
 	ctx := context.Background()
 
 	// command line flags
-	operatorKey := flag.String(
-		"k", "test/private.pem",
-		"the operator's key file location (ed25519 private key) in PEM format")
-	threshold := flag.Int(
-		"t", 2,
-		"the threshold for Shamir shares to reconstitute the private key")
-	publicKey := flag.String(
-		"p", "",
-		"the public key for the vault private key that is being approved. only needed for approve subcommand")
-	pcr2 := flag.String(
-		"pcr2", "", "the hex PCR2 value for this enclave")
-	verbose := flag.Bool(
-		"v", false,
-		"view verbose logging")
+	operatorKeyFile := flag.String(
+		"k",
+		"test/private.pem",
+		"the operator's key file location (ed25519 private key) in PEM format",
+	)
+	threshold := flag.Int("t", 2, "the threshold for Shamir shares to reconstitute the private key")
+	pcr2 := flag.String("pcr2", "", "the hex PCR2 value for this enclave")
+	vaultPublicKey := flag.String("p", "", "the vault public key. only needed for verify subcommand")
+	shareFile := flag.String("s", "", "the encrypted share file for the verifying operator. only needed for verify subcommand")
+	verbose := flag.Bool("v", false, "view verbose logging")
 
 	flag.Parse()
 
@@ -91,12 +92,11 @@ func main() {
 		log.Fatalf("insufficient number of keys to create a share")
 	}
 
-
 	switch args[0] {
 	case "create":
 		resp := doRequestWithSignature(
 			ctx,
-			*operatorKey,
+			*operatorKeyFile,
 			"/v1/payments/vault/create",
 			pcr2,
 			payments.CreateVaultRequest{
@@ -126,18 +126,47 @@ func main() {
 		}
 		log.Printf("Generated Public Key: %s", vaultResp.Data.PublicKey)
 	case "verify":
-		if len(*publicKey) == 0 {
-			log.Fatal("public key flag must be defined with -p")
+		priv, err := paymentscli.GetOperatorPrivateKey(*operatorKeyFile)
+		if err != nil {
+			log.Fatalf("failed to open operator key file: %v\n", err.Error())
 		}
+
+		identity, err := agessh.NewEd25519Identity(priv)
+		if err != nil {
+			log.Fatalf("failed to parse private key as identity: %v", err)
+		}
+
+		sf, err := os.Open(*shareFile)
+		if err != nil {
+			log.Fatalf("failed to open file: %v", err)
+		}
+
+		r, err := age.Decrypt(sf, identity)
+		if err != nil {
+			log.Fatalf("failed to decrypt file: %v", err)
+		}
+
+		shareVal := &bytes.Buffer{}
+		if _, err := io.Copy(shareVal, r); err != nil {
+			log.Fatalf("failed to read encrypted file: %v", err)
+		}
+		s := shareVal.Bytes()
+		// We don't actually need this value, but we do want to make sure that we are able to
+		// decrypt it with the operator key as validation that the share was created with the
+		// expected public key.
+		if len(s) < 1 {
+			log.Fatal("share is empty")
+		}
+
 		resp := doRequestWithSignature(
 			ctx,
-			*operatorKey,
+			*operatorKeyFile,
 			"/v1/payments/vault/verify",
 			pcr2,
 			payments.VerifyVaultRequest{
 				Operators: keys.Keys,
 				Threshold: *threshold,
-				PublicKey: *publicKey,
+				PublicKey: *vaultPublicKey,
 			},
 		)
 		vaultResp := payments.VerifyVaultResponseWrapper{}
@@ -149,10 +178,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to unmarshal response json: %w", err)
 		}
-		if vaultResp.Data.PublicKey != *publicKey {
+		if vaultResp.Data.PublicKey != *vaultPublicKey {
 			log.Fatalf(
 				"public key mismatch between what was provided and what is stored in the service. ours: %s theirs: %s",
-				*publicKey,
+				*vaultPublicKey,
 				vaultResp.Data.PublicKey,
 			)
 		}
@@ -166,9 +195,9 @@ func main() {
 		if len(vaultResp.Data.Operators) != len(keys.Keys) {
 			log.Fatal("different number of operator keys between what we provided and what is stored in the service")
 		}
-		for _, pubkey := range keys.Keys {
-			if !slices.Contains(vaultResp.Data.Operators, pubkey.PublicKey) {
-				log.Fatalf("operator key %s is missing from response", pubkey)
+		for _, operator := range keys.Keys {
+			if !slices.Contains(vaultResp.Data.Operators, operator.PublicKey) {
+				log.Fatalf("operator key %s is missing from response", operator.PublicKey)
 			}
 		}
 		log.Printf("Result: %s", body)
@@ -184,12 +213,12 @@ func main() {
 
 func doRequestWithSignature(
 	ctx context.Context,
-	key,
+	keyFile,
 	path string,
 	pcr2 *string,
 	data interface{},
 ) *http.Response {
-	priv, err := paymentscli.GetOperatorPrivateKey(key)
+	priv, err := paymentscli.GetOperatorPrivateKey(keyFile)
 	if err != nil {
 		log.Fatalf("failed to parse operator key file: %v\n", err)
 	}
