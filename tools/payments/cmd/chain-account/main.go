@@ -3,7 +3,7 @@ chain-account allows payment operators to add addresses to be used for on-chain 
 
 Usage:
 
-chain-account [flags] generatePUBLIC_KEY
+chain-account [flags] [command] args...
 
 The flags are:
 
@@ -68,13 +68,13 @@ func main() {
 	case "solana":
 		switch args[1] {
 		case "generate":
-			generateSolanaAddress(ctx, *operatorKey, *env, *pcr2, *verbose)
+			generateSolanaAddress(ctx, *operatorKey, *env, pcr2, *verbose)
 		case "approve":
 			if len(args) < 3 {
 				log.Fatal("Expected public key argument for approval")
 			}
 			pubKey := args[2]
-			approveSolanaAddress(ctx, pubKey, *operatorKey, *env, *pcr2, *verbose)
+			approveSolanaAddress(ctx, pubKey, *operatorKey, *env, pcr2, *verbose)
 		default:
 			log.Fatal("unrecognized solana command")
 		}
@@ -84,7 +84,7 @@ func main() {
 
 }
 
-func generateSolanaAddress(ctx context.Context, key, env, pcr2 string, verbose bool) {
+func generateSolanaAddress(ctx context.Context, key, env string, pcr2 *string, verbose bool) {
 	priv, err := paymentscli.GetOperatorPrivateKey(key)
 	if err != nil {
 		log.Fatalf("failed to parse operator key file: %v\n", err)
@@ -148,6 +148,18 @@ func generateSolanaAddress(ctx context.Context, key, env, pcr2 string, verbose b
 	if err != nil {
 		log.Fatalf("failed to submit http request: %w", err)
 	}
+	sp, verifier, err := paymentscli.NewNitroVerifier(pcr2)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if !valid {
+		log.Fatalln("http signature was not valid, nitro attestation failed")
+	}
 	log.Printf("%+v", resp)
 
 	if verbose {
@@ -155,11 +167,7 @@ func generateSolanaAddress(ctx context.Context, key, env, pcr2 string, verbose b
 	}
 }
 
-func approveSolanaAddress(ctx context.Context, pubKey, key, env, pcr2 string, verbose bool) {
-	if env != "development" && len(pcr2) != 96 {
-		log.Fatal("a valid pcr2 is required to approve an address outside of development\n")
-	}
-
+func approveSolanaAddress(ctx context.Context, pubKey, key, env string, pcr2 *string, verbose bool) {
 	priv, err := paymentscli.GetOperatorPrivateKey(key)
 	if err != nil {
 		log.Fatalf("failed to parse operator key file: %v\n", err)
@@ -225,6 +233,18 @@ func approveSolanaAddress(ctx context.Context, pubKey, key, env, pcr2 string, ve
 	resp, err := httpClient.Do(ctx, req, nil)
 	if err != nil {
 		log.Fatalf("failed to submit http request: %w", err)
+	}
+	sp, verifier, err := paymentscli.NewNitroVerifier(pcr2)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if !valid {
+		log.Fatalln("http signature was not valid, nitro attestation failed")
 	}
 	log.Printf("%+v", resp)
 

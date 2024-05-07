@@ -68,8 +68,8 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 		// Log all payments requests
 		r.Use(middleware.RequestLogger(logger))
 
-		// prepare inserts transactions into qldb, returning a document which needs to be submitted by
-		// an authorizer
+		// prepare inserts transactions into qldb, returning a document which needs to be submitted
+		// by an authorizer
 		r.Post(
 			"/prepare",
 			middleware.InstrumentHandler(
@@ -102,6 +102,14 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 				s.AuthorizerSignedMiddleware()(ApproveSolanaAddressHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("solana address approval endpoint setup")
+		r.Post(
+			"/vault/create",
+			middleware.InstrumentHandler("CreateVaultHandler", CreateVaultHandler(s)).ServeHTTP)
+		logger.Info().Msg("vault create endpoint set up")
+		r.Post(
+			"/vault/verify",
+			middleware.InstrumentHandler("VerifyVaultHandler", VerifyVaultHandler(s)).ServeHTTP)
+		logger.Info().Msg("vault verify endpoint set up")
 
 		r.Get(
 			"/info",
@@ -305,7 +313,8 @@ func GenerateSolanaAddressHandler(service *Service) handlers.AppHandler {
 	}
 }
 
-// ApproveSolanaAddressHandler.
+// ApproveSolanaAddressHandler.handles requests to approve solana addresses. 2 calls to this endpoiont
+// from separate operators is needed to fully approve an address for use.
 func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
@@ -345,6 +354,93 @@ func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
 			Message: "key approved",
 			Code:    http.StatusOK,
 			Data:    chainAddress,
+		}
+	}
+}
+
+// CreateVaultHandler generates a key used to encrypt API keys and wallet private keys with shamir
+// shares, stores metadata about this key in QLDB, returns the shamir shares, and discards the
+// private key.
+func CreateVaultHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			logger       = logging.Logger(ctx, "CreateVaultHandler")
+			vaultRequest = paymentLib.CreateVaultRequest{}
+		)
+
+		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(vaultRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", vaultRequest),
+		).Msg("handling vault creation request")
+
+		createdVaultResponse, err := service.createVault(ctx, vaultRequest.Threshold)
+		if err != nil {
+			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
+		}
+
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", createdVaultResponse),
+		).Msg("sending vault creation response")
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "vault created",
+			Code:    http.StatusOK,
+			Data:    createdVaultResponse,
+		}
+	}
+}
+
+// VerifyVaultHandler returns the QLDB record for a vault for the purposes of configuration
+// verification in the operator tooling
+func VerifyVaultHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		var (
+			logger       = logging.Logger(ctx, "VerifyVaultHandler")
+			vaultRequest = paymentLib.VerifyVaultRequest{}
+		)
+
+		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(vaultRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", vaultRequest),
+		).Msg("handling vault verify request")
+
+		verifyVaultResponse, err := service.verifyVault(ctx, vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "failed to verify vault", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "vault verification data",
+			Code:    http.StatusOK,
+			Data:    verifyVaultResponse,
 		}
 	}
 }

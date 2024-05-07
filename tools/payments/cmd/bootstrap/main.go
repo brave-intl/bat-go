@@ -73,7 +73,7 @@ func main() {
 	}
 
 	if shareFile == "" {
-		log.Fatalln("Invalid share file parameter:", shareFile)
+		log.Fatalln("invalid share file parameter:", shareFile)
 	}
 
 	priv, err := payments.GetOperatorPrivateKey(*p)
@@ -83,22 +83,22 @@ func main() {
 
 	identity, err := agessh.NewEd25519Identity(priv)
 	if err != nil {
-		log.Fatalf("Failed to parse private key as identity: %v", err)
+		log.Fatalf("failed to parse private key as identity: %v", err)
 	}
 
 	sf, err := os.Open(shareFile)
 	if err != nil {
-		log.Fatalf("Failed to open file: %v", err)
+		log.Fatalf("failed to open file: %v", err)
 	}
 
 	r, err := age.Decrypt(sf, identity)
 	if err != nil {
-		log.Fatalf("Failed to open encrypted file: %v", err)
+		log.Fatalf("failed to open encrypted file: %v", err)
 	}
 
 	shareVal := &bytes.Buffer{}
 	if _, err := io.Copy(shareVal, r); err != nil {
-		log.Fatalf("Failed to read encrypted file: %v", err)
+		log.Fatalf("failed to read encrypted file: %v", err)
 	}
 
 	// s is the shamir share
@@ -112,7 +112,7 @@ func main() {
 
 	enclaveBaseURI, ok := paymentslib.APIBase[*env]
 	if !ok {
-		log.Fatalln("Invalid env:", *env)
+		log.Fatalln("invalid env:", *env)
 	}
 
 	// get the info endpoint to key kms arn

@@ -16,8 +16,10 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"filippo.io/age"
+	"filippo.io/age/agessh"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
@@ -27,6 +29,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
+	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/hashicorp/vault/shamir"
 )
 
@@ -37,6 +40,17 @@ type ChainAddress struct {
 	PublicKey string   `ion:"publicKey"`
 	Creator   string   `ion:"creator"`
 	Approvals []string `ion:"approvals"`
+}
+
+// Vault represents a key which has been broken into shamir shares and is used for encrypting
+// secrets.
+type Vault struct {
+	PublicKey      string   `ion:"publicKey"`
+	Threshold      int      `ion:"threshold"`
+	OperatorKeys   []string `ion:"operatorKeys"`
+	IdempotencyKey string   `ion:"idempotencyKey"`
+	// must be unexported. these values should never be presisted to QLDB
+	shares paymentLib.CreateVaultResponse
 }
 
 // createAttestationDocument will create an attestation document and return the private key and
@@ -106,6 +120,102 @@ func nitroAwsCfg(ctx context.Context) (aws.Config, error) {
 
 var errSecretsNotLoaded = errors.New("secrets are not yet loaded")
 
+func (s *Service) createVault(
+	ctx context.Context,
+	threshold int,
+) (*paymentLib.CreateVaultResponse, error) {
+	managerKeys := vaultManagerKeys()
+	shares, vaultPubkey, err := generateShares(managerKeys, threshold)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new key with shares: %w", err)
+	}
+	operatorShareData, err := encryptShares(shares, managerKeys)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt shares to operator keys: %w", err)
+	}
+
+	vault := Vault{
+		PublicKey:    vaultPubkey,
+		Threshold:    threshold,
+		OperatorKeys: managerKeys,
+		shares: paymentLib.CreateVaultResponse{
+			PublicKey: vaultPubkey,
+			Threshold: threshold,
+			Shares:    operatorShareData,
+		},
+	}
+
+	err = s.datastore.InsertVault(ctx, vault)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
+	}
+
+	return &vault.shares, nil
+}
+
+func (s *Service) verifyVault(
+	ctx context.Context,
+	request paymentLib.VerifyVaultRequest,
+) (*paymentLib.VerifyVaultResponse, error) {
+	fetchedVault, err := s.datastore.GetVault(ctx, request.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vault from QLDB: %w", err)
+	}
+
+	return &paymentLib.VerifyVaultResponse{
+		Operators: fetchedVault.OperatorKeys,
+		Threshold: fetchedVault.Threshold,
+		PublicKey: fetchedVault.PublicKey,
+	}, nil
+}
+
+// generateShares generates a new ed25519 key and splits it into shares, returning the shares and
+// the public key for the newly generated private key.
+func generateShares(operatorKeys []string, threshold int) ([][]byte, string, error) {
+	vaultIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to generate X25519 identity: %w", err)
+	}
+	shares, err := shamir.Split([]byte(vaultIdentity.String()), len(operatorKeys), threshold)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to split key into shares: %w", err)
+	}
+	return shares, vaultIdentity.Recipient().String(), nil
+}
+
+func encryptShares(shares [][]byte, operatorKeys []string) ([]paymentLib.OperatorShareData, error) {
+	// Encrypt each share with an operator key and associate that key to the operator
+	// name in a NamedOperator
+	var shareResult []paymentLib.OperatorShareData
+	for i, share := range shares {
+		recipient, err := agessh.ParseRecipient(operatorKeys[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse public key", err)
+		}
+		buf := new(bytes.Buffer)
+		// encrypt each with an operator recipient
+		w, err := age.Encrypt(buf, recipient)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encrypt to receipient share file: %w", err)
+		}
+
+		if _, err = io.WriteString(w, base64.StdEncoding.EncodeToString(share)); err != nil {
+			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer", err)
+		}
+
+		// Cannot defer this close because we are writing and using this writer in a loop. If this
+		// close is deferred, the shares will be corrupted.
+		w.Close()
+
+		keyEmail := strings.Split(string(operatorKeys[i]), " ")
+		shareResult = append(shareResult, paymentLib.OperatorShareData{
+			Name:     strings.TrimSpace(keyEmail[len(keyEmail)-1]),
+			Material: buf.Bytes(),
+		})
+	}
+	return shareResult, nil
+}
+
 // AreSecretsLoaded will tell you if we have successfully loaded secrets on the service
 func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
 	if len(s.secrets) > 0 {
@@ -151,7 +261,7 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	chainAdrress := ChainAddress{
 		PublicKey: b58PubKey,
 		Creator:   creatorKey,
-		Chain: "solana",
+		Chain:     "solana",
 	}
 	_, err = s.datastore.InsertChainAddress(ctx, chainAdrress)
 	if err != nil {
