@@ -391,12 +391,12 @@ func CreateVaultHandler(service *Service) handlers.AppHandler {
 		logger.Debug().Str("vault", fmt.Sprintf("%+v", vaultRequest)).Msg("handling vault creation request")
 
 		// we have passed the http signature middleware, record who authorized the tx
-		keyID, err := middleware.GetKeyID(ctx)
+		callerID, err := middleware.GetKeyID(ctx)
 		if err != nil {
 			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
 		}
 
-		createdVaultResponse, err := service.createVault(ctx, vaultRequest, keyID)
+		createdVaultResponse, err := service.createVault(ctx, vaultRequest.Threshold, callerID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
 		}

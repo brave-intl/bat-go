@@ -16,6 +16,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
@@ -122,14 +123,32 @@ var errSecretsNotLoaded = errors.New("secrets are not yet loaded")
 
 func (s *Service) createVault(
 	ctx context.Context,
-	request paymentLib.CreateVaultRequest,
-	approverKey string,
+	threshold int,
+	creatorKey string,
 ) (*paymentLib.CreateVaultResponse, error) {
-	vault, err := vaultFromRequest(ctx, request.Operators, request.Threshold, approverKey)
+	opKeys := validAuthorizerKeys[os.Getenv("ENV")]
+	shares, vaultPubkey, err := generateShares(opKeys, threshold)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate vault from request: %w", err)
+		return nil, fmt.Errorf("failed to generate new key with shares: %w", err)
 	}
-	err = s.datastore.InsertVault(ctx, *vault)
+	operatorShareData, err := encryptShares(shares, opKeys)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt shares to operator keys: %w", err)
+	}
+
+	vault := Vault{
+		PublicKey:    vaultPubkey,
+		Creator:      creatorKey,
+		Threshold:    threshold,
+		OperatorKeys: opKeys,
+		shares: paymentLib.CreateVaultResponse{
+			PublicKey: vaultPubkey,
+			Threshold: threshold,
+			Shares:    operatorShareData,
+		},
+	}
+
+	err = s.datastore.InsertVault(ctx, vault)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
 	}
@@ -157,57 +176,32 @@ func (s *Service) verifyVault(
 	}, nil
 }
 
-func vaultFromRequest(
-	ctx context.Context,
-	operators []paymentLib.OperatorPubkeyData,
-	threshold int,
-	approverKey string,
-) (*Vault, error) {
-	var (
-		opRecpt []age.Recipient
-		opNames []string
-		opKeys  []string
-	)
-	for _, operator := range operators {
-		recipient, err := agessh.ParseRecipient(operator.PublicKey)
+// generateShares generates a new ed25519 key and splits it into shares, returning the shares and
+// the public key for the newly generated private key.
+func generateShares(operatorKeys []string, threshold int) ([][]byte, string, error) {
+	vaultIdentity, err := age.GenerateX25519Identity()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to generate X25519 identity: %w", err)
+	}
+	shares, err := shamir.Split([]byte(vaultIdentity.String()), len(operatorKeys), threshold)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to split key into shares: %w", err)
+	}
+	return shares, vaultIdentity.Recipient().String(), nil
+}
+
+func encryptShares(shares [][]byte, operatorKeys []string) ([]paymentLib.OperatorShareData, error) {
+	// Encrypt each share with an operator key and associate that key to the operator
+	// name in a NamedOperator
+	var shareResult []paymentLib.OperatorShareData
+	for i, share := range shares {
+		recipient, err := agessh.ParseRecipient(operatorKeys[i])
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse public key", err)
 		}
-		// Keys and names must match indices, as these are used to associate encrypted shares
-		// with names in createVault.
-		opRecpt = append(opRecpt, recipient)
-		opNames = append(opNames, operator.Name)
-		opKeys = append(opKeys, operator.PublicKey)
-	}
-	// In order to map keys to names, we need an equal number of each. They should share an order.
-	// The key at index 0 should be the name at index 0, etc.
-	if len(opRecpt) != len(opNames) || len(opNames) != len(opKeys) {
-		return nil, fmt.Errorf("have %d keys but %d names", len(opKeys), len(opNames))
-	}
-	// generate key
-	identity, err := age.GenerateX25519Identity()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate X25519 identity: %w", err)
-	}
-
-	sharesResult := paymentLib.CreateVaultResponse{
-		PublicKey: identity.Recipient().String(),
-		Threshold: threshold,
-	}
-
-	// Create shares
-	operatorShares, err := shamir.Split([]byte(identity.String()), len(opKeys), threshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to split identity into shamir shares: %w", err)
-	}
-
-	// Encrypt each share with an operator key and associate that key to the operator
-	// name in a NamedOperator
-	var shares []paymentLib.OperatorShareData
-	for i, share := range operatorShares {
 		buf := new(bytes.Buffer)
 		// encrypt each with an operator recipient
-		w, err := age.Encrypt(buf, opRecpt[i])
+		w, err := age.Encrypt(buf, recipient)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt to receipient share file: %w", err)
 		}
@@ -216,21 +210,17 @@ func vaultFromRequest(
 			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer", err)
 		}
 
+		// Cannot defer this close because we are writing and using this writer in a loop. If this
+		// close is deferred, the shares will be corrupted.
 		w.Close()
 
-		shares = append(shares, paymentLib.OperatorShareData{
-			Name:     opNames[i],
+		keyEmail := strings.Split(string(operatorKeys[i]), " ")
+		shareResult = append(shareResult, paymentLib.OperatorShareData{
+			Name:     strings.TrimSpace(keyEmail[len(keyEmail)-1]),
 			Material: buf.Bytes(),
 		})
 	}
-	sharesResult.Shares = shares
-	return &Vault{
-		PublicKey:    sharesResult.PublicKey,
-		Creator:      approverKey,
-		Threshold:    threshold,
-		OperatorKeys: opKeys,
-		shares:       sharesResult,
-	}, nil
+	return shareResult, nil
 }
 
 // AreSecretsLoaded will tell you if we have successfully loaded secrets on the service

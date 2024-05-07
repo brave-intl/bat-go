@@ -8,8 +8,8 @@ key so that the operators are needed to access it again.
 
 Usage:
 
-vault [flags] create [pubkeyFile]
-vault [flags] verify [pubkeyFile]
+vault [flags] create
+vault [flags] verify
 
 The flags are:
 
@@ -69,27 +69,13 @@ func main() {
 	flag.Parse()
 
 	args := flag.Args()
-	if len(args) < 2 {
-		log.Fatal("expected subcommand (create or approve) and key file arguments")
-	}
-
-	f, err := os.ReadFile(args[1])
-	if err != nil {
-		log.Fatalf("failed to open key file: %v\n", err)
-	}
-
-	keys := paymentscli.OperatorKeys{}
-	if err := json.Unmarshal(f, &keys); err != nil {
-		log.Fatalf("failed to parse operator public key file: %w", err)
+	if len(args) < 1 {
+		log.Fatal("expected subcommand (create or approve)")
 	}
 
 	if *verbose {
 		// print out the configuration
 		log.Printf("Threshold: %d\n", *threshold)
-		log.Printf("Shares: %s\n", len(keys.Keys))
-	}
-	if len(keys.Keys) < 2 {
-		log.Fatalf("insufficient number of keys to create a share")
 	}
 
 	switch args[0] {
@@ -99,10 +85,7 @@ func main() {
 			*operatorKeyFile,
 			"/v1/payments/vault/create",
 			pcr2,
-			payments.CreateVaultRequest{
-				Operators: keys.Keys,
-				Threshold: *threshold,
-			},
+			payments.CreateVaultRequest{Threshold: *threshold},
 		)
 		defer resp.Body.Close()
 
@@ -164,7 +147,6 @@ func main() {
 			"/v1/payments/vault/verify",
 			pcr2,
 			payments.VerifyVaultRequest{
-				Operators: keys.Keys,
 				Threshold: *threshold,
 				PublicKey: *vaultPublicKey,
 			},
@@ -191,14 +173,6 @@ func main() {
 				*threshold,
 				vaultResp.Data.Threshold,
 			)
-		}
-		if len(vaultResp.Data.Operators) != len(keys.Keys) {
-			log.Fatal("different number of operator keys between what we provided and what is stored in the service")
-		}
-		for _, operator := range keys.Keys {
-			if !slices.Contains(vaultResp.Data.Operators, operator.PublicKey) {
-				log.Fatalf("operator key %s is missing from response", operator.PublicKey)
-			}
 		}
 		log.Printf("Result: %s", body)
 		log.Print("Results match expected data. Verification complete.")

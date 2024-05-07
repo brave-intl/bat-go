@@ -45,7 +45,6 @@ type OperatorPubkeyData struct {
 
 // CreateVaultRequest is provided to request vault creation for secrets storage.
 type CreateVaultRequest struct {
-	Operators []OperatorPubkeyData `json:"operatorData" valid:"required"`
 	Threshold int                  `json:"threshold" valid:"required"`
 }
 
