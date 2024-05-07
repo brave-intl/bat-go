@@ -37,6 +37,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
@@ -86,9 +87,10 @@ func main() {
 			log.Fatalf("failed to parse public key %q: %w", leaderPubkey, err)
 		}
 
-		name := "for-leader"
-		// open output file for this operator
-		f, err := os.Create(fmt.Sprintf("share-%s.enc", name))
+		// open output file for this operator named for the email address on the pubkey
+		keyEmail := strings.Split(string(leaderPubkey), " ")
+		name := fmt.Sprintf("share-for-%s.enc", strings.TrimSpace(keyEmail[len(keyEmail)-1]))
+		f, err := os.Create(name)
 		if err != nil {
 			log.Fatalf("failed to open leader receipient share file", err.Error())
 		}
@@ -106,6 +108,8 @@ func main() {
 		if err := w.Close(); err != nil {
 			log.Fatalf("failed to close receipient share file", err.Error())
 		}
+
+		log.Printf("Wrote share encrypted for leader to %s", name)
 
 		return
 	}
@@ -147,8 +151,8 @@ func disaster(ctx context.Context, key, bucket, file string, shares [][]byte, en
 		log.Fatalf("failed to read attested recovery file: %v\n", err)
 	}
 
-	responseFile := "recovered-secrets.txt"
-	err = os.WriteFile(responseFile, recoveredData, 0644)
+	secretsFile := "recovered-secrets.txt"
+	err = os.WriteFile(secretsFile, recoveredData, 0644)
 	if err != nil {
 		log.Fatalf("failed to write recovery data to file: %w", err)
 	}
@@ -156,6 +160,7 @@ func disaster(ctx context.Context, key, bucket, file string, shares [][]byte, en
 	if verbose {
 		log.Println("disaster command complete")
 	}
+	log.Printf("Wrote secrets file to %s", secretsFile)
 }
 
 func decryptRecoveryData(encData []byte, shares [][]byte) ([]byte, error) {
@@ -204,5 +209,6 @@ func decryptShare(operatorKeyFile, shareFile string) string {
 	if _, err := io.Copy(shareVal, r); err != nil {
 		log.Fatalf("Failed to read encrypted file: %v", err)
 	}
+
 	return shareVal.String()
 }
