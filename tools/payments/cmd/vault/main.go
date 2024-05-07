@@ -116,17 +116,17 @@ func main() {
 
 		sf, err := os.Open(*shareFile)
 		if err != nil {
-			log.Fatalf("failed to open file: %v", err)
+			log.Fatalf("failed to open share file: %v", err)
 		}
 
 		r, err := age.Decrypt(sf, identity)
 		if err != nil {
-			log.Fatalf("failed to decrypt file: %v", err)
+			log.Fatalf("failed to decrypt share file: %v", err)
 		}
 
 		shareVal := &bytes.Buffer{}
 		if _, err := io.Copy(shareVal, r); err != nil {
-			log.Fatalf("failed to read encrypted file: %v", err)
+			log.Fatalf("failed to read encrypted share file: %v", err)
 		}
 		s := shareVal.Bytes()
 		// We don't actually need this value, but we do want to make sure that we are able to

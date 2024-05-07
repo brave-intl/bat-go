@@ -71,7 +71,6 @@ type VerifyVaultResponseWrapper struct {
 // VerifyVaultRequest is provided to request vault approval for a given configuration and public
 // key. The provided parameters and public key must exist and match in QLDB for approval to succeed.
 type VerifyVaultRequest struct {
-	Operators []OperatorPubkeyData `json:"operatorKeys" valid:"required"`
 	Threshold int                  `json:"threshold" valid:"required"`
 	PublicKey string               `json:"publicKey" valid:"required"`
 }
