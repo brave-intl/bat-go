@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
 	"time"
 
 	solanaClient "github.com/blocto/solana-go-sdk/client"
@@ -55,7 +54,7 @@ type SolanaMachine struct {
 	// 	path := `m/44'/501'/0'/0'`
 	// 	derivedKey, _ := hdwallet.Derived(path, seed)
 	// 	derivedKey.PrivateKey
-	signingKey      string
+	signingKey      []byte
 	solanaRpcClient solanaClient.Client
 	splMintAddress  string
 	splMintDecimals uint8
@@ -91,11 +90,7 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 	slotTarget := latestBlockhashResult.Value.LatestValidBlockHeight + 150
 
 	var signer types.Account
-	if os.Getenv("ENV") == "local" {
-		signer, err = types.AccountFromBase58(sm.signingKey)
-	} else {
-		signer, err = types.AccountFromSeed([]byte(sm.signingKey))
-	}
+	signer, err = types.AccountFromSeed(sm.signingKey)
 	if err != nil {
 		return sm.transaction, fmt.Errorf("failed to derive account from base58: %w", err)
 	}
@@ -243,7 +238,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	// until the transaction is either confirmed or the blockhash expires.
 	//
 	// Ref: https://solana.com/docs/core/transactions/retry#customizing-rebroadcast-logic
-	for start := time.Now(); time.Since(start) < 50 * time.Second; {
+	for start := time.Now(); time.Since(start) < 50*time.Second; {
 		signature, err := sm.solanaRpcClient.SendTransactionWithConfig(
 			ctx,
 			idempotencyData.Transaction,

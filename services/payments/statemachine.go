@@ -3,6 +3,7 @@ package payments
 import (
 	"context"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -126,8 +127,12 @@ func (s *Service) StateMachineFromTransaction(
 		}
 	case "solana":
 		solClient := solanaClient.New(rpc.WithEndpoint(os.Getenv("SOLANA_RPC_ENDPOINT")), rpc.WithHTTPClient(&client))
+		keyBytes, err := base64.StdEncoding.DecodeString(os.Getenv("SOLANA_SIGNING_KEY"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode solana private key: %w", err)
+		}
 		machine = &SolanaMachine{
-			signingKey:      os.Getenv("SOLANA_SIGNING_KEY"),
+			signingKey:      keyBytes,
 			solanaRpcClient: *solClient,
 			splMintAddress:  SPLBATMintAddress,
 			splMintDecimals: SPLBATMintDecimals,
