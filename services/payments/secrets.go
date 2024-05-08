@@ -300,7 +300,7 @@ func (s *Service) approveSolanaAddress(ctx context.Context, address, approverKey
 // fetchSecrets will take an s3 bucket/object and fetch the configuration and store the
 // ciphertext on the service for decryption later
 func (s *Service) fetchSecrets(ctx context.Context, bucket, secretsObject string, solanaPubAddr string) error {
-	logger := logging.Logger(ctx, "requestutils.ReadJSON")
+	logger := logging.Logger(ctx, "payments.secrets")
 	awsCfg, err := nitroAwsCfg(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create aws config for s3 client: %w", err)
@@ -342,7 +342,7 @@ func (s *Service) fetchSecrets(ctx context.Context, bucket, secretsObject string
 			if err != nil {
 				return fmt.Errorf("failed to read solana address bytes: %w", err)
 			}
-			logger.Debug().Str("solana ciphertext length", string(len(s.solanaPrivCiphertext))).Msg("setting solana ciphertext to service")
+			logger.Debug().Int("solana ciphertext length", len(s.solanaPrivCiphertext)).Msg("setting solana ciphertext to service")
 		} else {
 			return fmt.Errorf("provided solana address has insufficient approvals")
 		}
@@ -366,7 +366,7 @@ var (
 // configureSecrets takes the ciphertext configuration from fetchSecrets, then decrypts it with the keyshares
 // from fetchOperatorShares then stores the values in the configuration map
 func (s *Service) configureSecrets(ctx context.Context) error {
-	logger := logging.Logger(ctx, "requestutils.ReadJSON")
+	logger := logging.Logger(ctx, "payments.secrets")
 	// do we have secrets downloaded?
 	if len(s.secretsCiphertext) < 1 {
 		return errNoSecretsCiphertext
@@ -389,15 +389,15 @@ func (s *Service) configureSecrets(ctx context.Context) error {
 
 // setEnvFromSecrets takes a secrets map and loads the secrets as environment variables
 func (s *Service) setEnvFromSecrets(ctx context.Context, secrets map[string]string) {
-	logger := logging.Logger(ctx, "requestutils.ReadJSON")
+	logger := logging.Logger(ctx, "payments.secrets")
 	os.Setenv("ZEBPAY_API_KEY", secrets["zebpayApiKey"])
 	os.Setenv("ZEBPAY_SIGNING_KEY", secrets["zebpayPrivateKey"])
 	os.Setenv("SOLANA_RPC_ENDPOINT", secrets["solanaRpcEndpoint"])
 
 	if solKey, ok := secrets["solanaPrivateKey"]; ok {
-		logger.Debug().Str("solana key length", string(len(secrets["solanaPrivateKey"]))).Msg("setting solana key environment varialbe")
+		logger.Debug().Int("solana key length", len(secrets["solanaPrivateKey"])).Msg("setting solana key environment varialbe")
 		os.Setenv("SOLANA_SIGNING_KEY", solKey)
-		logger.Debug().Str("solana env var key length", string(len(os.Getenv("SOLANA_SIGNING_KEY")))).Msg("set solana key environment varialbe")
+		logger.Debug().Int("solana env var key length", len(os.Getenv("SOLANA_SIGNING_KEY"))).Msg("set solana key environment varialbe")
 	}
 }
 
@@ -483,7 +483,7 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 // decryptSecrets combines the shamir shares stored on the service instance and decrypts the ciphertext
 // returning a map of secret values from the configuration
 func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error) {
-	logger := logging.Logger(ctx, "requestutils.ReadJSON")
+	logger := logging.Logger(ctx, "payments.secrets")
 	var output = map[string]string{}
 
 	secBuf := bytes.NewBuffer(s.secretsCiphertext)
@@ -497,7 +497,7 @@ func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error)
 	}
 
 	if len(s.solanaPrivCiphertext) > 0 {
-		logger.Debug().Str("solana ciphertext length", string(len(s.solanaPrivCiphertext))).Msg("decrypting solana ciphertext")
+		logger.Debug().Int("solana ciphertext length", len(s.solanaPrivCiphertext)).Msg("decrypting solana ciphertext")
 		solBuf := bytes.NewBuffer(s.solanaPrivCiphertext)
 		solReader, err := s.decryptWithShares(ctx, *solBuf)
 		if err != nil {
@@ -506,8 +506,9 @@ func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error)
 		logger.Debug().Msg("decryptWithShares completed without error")
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(solReader)
-		output["solanaPrivateKey"] = buf.String()
-		logger.Debug().Str("solana key length", string(len(output["solanaPrivateKey"]))).Msg("set decrypted key to secret map")
+
+		output["solanaPrivateKey"] = base64.StdEncoding.EncodeToString(buf.Bytes())
+		logger.Debug().Int("solana key length", len(output["solanaPrivateKey"])).Msg("set decrypted key to secret map")
 	}
 
 	return output, nil
