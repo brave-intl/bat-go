@@ -129,7 +129,7 @@ func (s *Service) StateMachineFromTransaction(
 		solClient := solanaClient.New(rpc.WithEndpoint(os.Getenv("SOLANA_RPC_ENDPOINT")), rpc.WithHTTPClient(&client))
 		keyBytes, err := base64.StdEncoding.DecodeString(os.Getenv("SOLANA_SIGNING_KEY"))
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode solana private key: %w", keyBytes)
+			return nil, fmt.Errorf("failed to decode solana private key: %w", err)
 		}
 		machine = &SolanaMachine{
 			signingKey:      keyBytes,
