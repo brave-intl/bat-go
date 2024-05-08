@@ -382,13 +382,13 @@ func (s *Service) configureSecrets(ctx context.Context) error {
 	// store conf on service
 	s.secrets = secrets
 
-	s.setEnvFromSecrets(secrets)
+	s.setEnvFromSecrets(ctx, secrets)
 	logger.Debug().Msg("set env from secrets")
 	return nil
 }
 
 // setEnvFromSecrets takes a secrets map and loads the secrets as environment variables
-func (s *Service) setEnvFromSecrets(secrets map[string]string) {
+func (s *Service) setEnvFromSecrets(ctx context.Context, secrets map[string]string) {
 	logger := logging.Logger(ctx, "requestutils.ReadJSON")
 	os.Setenv("ZEBPAY_API_KEY", secrets["zebpayApiKey"])
 	os.Setenv("ZEBPAY_SIGNING_KEY", secrets["zebpayPrivateKey"])
