@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
 	"time"
 
 	solanaClient "github.com/blocto/solana-go-sdk/client"
