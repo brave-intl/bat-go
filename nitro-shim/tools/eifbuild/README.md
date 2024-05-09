@@ -7,7 +7,7 @@ cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --exa
 
 download the aws-nitro-enclaves-cli repo ( contains binary blobs needed to build eif images. )
 ```
-mkdir -p vendor && git clone https://github.com/aws/aws-nitro-enclaves-cli --depth 1 vendor/aws-nitro-enclaves-cli
+mkdir -p third_party && git clone https://github.com/aws/aws-nitro-enclaves-cli --depth 1 third_party/aws-nitro-enclaves-cli
 ```
 
 build eifbuild.
@@ -22,8 +22,9 @@ make
 # export FOO="BAR"
 # ...
 
-# also set PASS_ENV to the same value as defined in the pod
-# export PASS_ENV="FOO"
+# also set EIF_PASS_ENV and EIF_COMMAND to the same value as defined in the pod
+# export EIF_PASS_ENV="FOO"
+# export EIF_COMMAND="BAZ"
 
-./eifbuild -pass-env $PASS_ENV -docker-uri 168134825737.dkr.ecr.us-west-2.amazonaws.com/brave-intl/bat-go/dev/payments:v1.0.3-434-g06a3557d-dirty1696629608 -output-file test.eif -blobs-path ./vendor/aws-nitro-enclaves-cli/blobs/x86_64
+./eifbuild -pass-env $PASS_ENV -docker-uri 168134825737.dkr.ecr.us-west-2.amazonaws.com/brave-intl/bat-go/dev/payments:v1.0.3-434-g06a3557d-dirty1696629608 -output-file test.eif -blobs-path ./third_party/aws-nitro-enclaves-cli/blobs/x86_64 -- $EIF_COMMAND
 ```

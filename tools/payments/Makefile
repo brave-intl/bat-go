@@ -45,28 +45,28 @@ tidy-disaster:
 
 clean-vault:
 	cd cmd/vault && go clean
-	rm dist/vault
+	rm -f dist/vault
 clean-prepare:
 	cd cmd/prepare && go clean
-	rm dist/prepare
+	rm -f dist/prepare
 clean-authorize:
 	cd cmd/authorize && go clean
-	rm dist/authorize
+	rm -f dist/authorize
 clean-configure:
 	cd cmd/configure && go clean
-	rm dist/configure
+	rm -f dist/configure
 clean-bootstrap:
 	cd cmd/bootstrap && go clean
-	rm dist/bootstrap
+	rm -f dist/bootstrap
 clean-validate:
 	cd cmd/validate && go clean
-	rm dist/validate
+	rm -f dist/validate
 clean-status:
 	cd cmd/status && go clean
-	rm dist/status
+	rm -f dist/status
 clean-chain-account:
 	cd cmd/chain-account && go clean
-	rm dist/chain-account
+	rm -f dist/chain-account
 clean-disaster:
 	cd cmd/disaster && go clean
-	rm dist/disaster
+	rm -f dist/disaster
