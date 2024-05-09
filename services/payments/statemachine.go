@@ -56,9 +56,14 @@ func (s *baseStateMachine) Prepare(ctx context.Context) (*paymentLib.Authenticat
 	return s.SetNextState(ctx, paymentLib.Prepared)
 }
 
+// IsAuthorized checks whether the state machine has 2 or more authorization, returning true if so
+func (s *baseStateMachine) IsAuthorized(ctx context.Context) bool {
+	return len(s.getTransaction().Authorizations) >= 2
+}
+
 // Authorize implements TxStateMachine for the baseStateMachine.
 func (s *baseStateMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
-	if len(s.getTransaction().Authorizations) >= 2 {
+	if s.IsAuthorized(ctx) {
 		return s.SetNextState(ctx, paymentLib.Authorized)
 	}
 	return s.transaction, &InsufficientAuthorizationsError{}
