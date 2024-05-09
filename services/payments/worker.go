@@ -91,7 +91,7 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 		Path: r.URL.RequestURI(),
 	})
 
-	delay := 1 * time.Second
+	delay := 30 * time.Second
 	resp, err := client.Do(ctx, r, nil)
 	if resp != nil {
 		retry := resp.Header.Get("x-retry-after")
