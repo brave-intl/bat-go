@@ -1130,7 +1130,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 	}
 
 	if err := svc.processAppStoreNotification(ctx, ntf); err != nil {
-		lg.Err(err).Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Msg("failed to process app store notification")
+		lg.Err(err).Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg("failed to process app store notification")
 
 		switch {
 		case errors.Is(err, context.Canceled):
