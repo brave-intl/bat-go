@@ -62,7 +62,7 @@ type SolanaMachine struct {
 
 func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	var err error
-	if len(sm.getTransaction().Authorizations) < 2 {
+	if !sm.IsAuthorized(ctx) {
 		return sm.transaction, &InsufficientAuthorizationsError{}
 	}
 
