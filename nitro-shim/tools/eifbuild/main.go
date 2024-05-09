@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -152,6 +153,17 @@ func main() {
 			fmt.Println(k, "=", v)
 		}
 	}
+
+	if len(cmd) == 0 || len(*passEnvPtr) == 0 {
+		fmt.Println("\nWarning: Either `Command` or `Env` are empty, are you sure you want to continue? (y,N)")
+		reader := bufio.NewReader(os.Stdin)
+		text, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(text)) != "y" {
+			fmt.Println("Input was not \"y\", exiting...")
+			os.Exit(1)
+		}
+	}
+
 
 	fmt.Println("\nBuilding...")
 

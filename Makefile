@@ -16,7 +16,8 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test create-json-schema lint clean download-mod
+.PHONY: all buildcmd docker test create-json-schema lint clean download-mod pcrs nitro-shim/tools/eifbuild/eifbuild
+
 all: test create-json-schema buildcmd
 
 .DEFAULT: buildcmd
@@ -223,3 +224,19 @@ ensure-gomod-volume:
 
 ensure-shared-net:
 	if [ -z $$(docker network ls -q -f "name=brave_shared_net") ]; then docker network create brave_shared_net; fi
+
+install-eifbuild:
+	cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
+
+nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli:
+	mkdir -p nitro-shim/tools/eifbuild/third_party && git clone https://github.com/aws/aws-nitro-enclaves-cli --depth 1 nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli
+
+nitro-shim/tools/eifbuild/eifbuild:
+	cd nitro-shim/tools/eifbuild && make
+
+pcrs: nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli nitro-shim/tools/eifbuild/eifbuild docker-reproducible
+	@which eifbuild || echo "Missing eifbuild, ensure that you've run `make install-eifbuild`"
+	@echo
+	@echo './nitro-shim/tools/eifbuild/eifbuild -pass-env "$$(EIF_PASS_ENV)" -output-file nitro-image.eif -blobs-path nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli/blobs/x86_64 -- "$$(EIF_COMMAND)"'
+	@echo
+	@./nitro-shim/tools/eifbuild/eifbuild -pass-env "$(EIF_PASS_ENV)" -output-file nitro-image.eif -blobs-path nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli/blobs/x86_64 -- "$(EIF_COMMAND)"
