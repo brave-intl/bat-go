@@ -127,6 +127,17 @@ func (x *appStoreSrvNotification) shouldCancel() bool {
 	}
 }
 
+func (x *appStoreSrvNotification) effect() string {
+	switch {
+	case x.shouldRenew():
+		return "renew"
+	case x.shouldCancel():
+		return "cancel"
+	default:
+		return "skip"
+	}
+}
+
 func parseAppStoreSrvNotification(vrf *assnCertVerifier, spayload string) (*appStoreSrvNotification, error) {
 	certs, err := extractASSNCerts(spayload)
 	if err != nil {

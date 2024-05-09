@@ -1104,7 +1104,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 
 	data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 	if err != nil {
-		lg.Error().Err(err).Msg("failed to read request body")
+		lg.Err(err).Msg("failed to read request body")
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
@@ -1114,7 +1114,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 	}{}
 
 	if err := json.Unmarshal(data, spayload); err != nil {
-		lg.Error().Err(err).Str("data", string(data)).Msg("failed to unmarshal responseBodyV2")
+		lg.Err(err).Str("data", string(data)).Msg("failed to unmarshal responseBodyV2")
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
@@ -1124,17 +1124,16 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 		// TODO: Reply with http.StatusOK after testing is complete.
 		// None of these errors is recoverable.
 
-		lg.Error().Err(err).Str("payload", spayload.SignedPayload).Msg("failed to parse app store notification")
+		lg.Err(err).Str("payload", spayload.SignedPayload).Msg("failed to parse app store notification")
 
 		return handlers.ValidationError("request", map[string]interface{}{"parse-signed-payload": err.Error()})
 	}
 
 	if err := svc.processAppStoreNotification(ctx, ntf); err != nil {
-		lg.Error().Err(err).Msg("failed to process app store notification")
+		lg.Err(err).Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Msg("failed to process app store notification")
 
 		switch {
 		case errors.Is(err, context.Canceled):
-			// There is no const for 499.
 			// Should retry.
 			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
 
@@ -1167,6 +1166,8 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}
+
+	lg.Info().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg("processed app store notification")
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }

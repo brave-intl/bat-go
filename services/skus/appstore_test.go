@@ -210,3 +210,54 @@ func TestAppStoreSrvNotification_shouldCancel(t *testing.T) {
 		})
 	}
 }
+
+func TestAppStoreSrvNotification_effect(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *appStoreSrvNotification
+		exp   string
+	}
+
+	tests := []testCase{
+		{
+			name: "should_renew",
+			given: &appStoreSrvNotification{
+				val: &appstore.SubscriptionNotificationV2DecodedPayload{
+					NotificationType: appstore.NotificationTypeV2DidRenew,
+				},
+			},
+			exp: "renew",
+		},
+
+		{
+			name: "should_cancel",
+			given: &appStoreSrvNotification{
+				val: &appstore.SubscriptionNotificationV2DecodedPayload{
+					NotificationType: appstore.NotificationTypeV2DidChangeRenewalStatus,
+					Subtype:          appstore.SubTypeV2AutoRenewDisabled,
+				},
+			},
+			exp: "cancel",
+		},
+
+		{
+			name: "anything_else",
+			given: &appStoreSrvNotification{
+				val: &appstore.SubscriptionNotificationV2DecodedPayload{
+					NotificationType: appstore.NotificationTypeV2PriceIncrease,
+					Subtype:          appstore.SubTypeV2Accepted,
+				},
+			},
+			exp: "skip",
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.effect()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
