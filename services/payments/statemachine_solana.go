@@ -62,10 +62,8 @@ type SolanaMachine struct {
 
 func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	var err error
-	// Allow the base Authorize implementation to dictate error behavior until it succeeds
-	sm.transaction, err = sm.baseStateMachine.Authorize(ctx)
-	if err != nil {
-		return sm.transaction, err
+	if len(sm.getTransaction().Authorizations) < 2 {
+		return sm.transaction, &InsufficientAuthorizationsError{}
 	}
 
 	// In the event of extra calls to Authorize (i.e. a third authorization when only two are needed)
@@ -157,7 +155,7 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 
 	sm.transaction.ExternalIdempotency = marshaledData
 
-	return sm.transaction, nil
+	return sm.SetNextState(ctx, paymentLib.Authorized)
 }
 
 // Pay implements TxStateMachine for the Solana machine.
