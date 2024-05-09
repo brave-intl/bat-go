@@ -454,7 +454,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientIDCTXKey, viper.GetString("skus-gemini-client-id"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientSecretCTXKey, viper.GetString("skus-gemini-client-secret"))
 
-	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuIssuerRepo)
+	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuIssuerRepo, skuOrderPayHistRepo)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("SKUs service initialization failed")

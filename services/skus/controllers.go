@@ -951,12 +951,14 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 }
 
 // WebhookRouter - handles calls from various payment method webhooks informing payments of completion
-func WebhookRouter(service *Service) chi.Router {
+func WebhookRouter(svc *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(service)))
-	r.Method("POST", "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(service)))
-	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
-	r.Method("POST", "/ios", middleware.InstrumentHandler("HandleIOSWebhook", handleIOSWebhook(service)))
+
+	r.Method(http.MethodPost, "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(svc)))
+	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(svc)))
+	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(svc)))
+	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
+
 	return r
 }
 
@@ -1089,52 +1091,85 @@ func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Req
 	return nil
 }
 
-func handleIOSWebhook(service *Service) handlers.AppHandler {
+func handleWebhookAppStore(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
+		return handleWebhookAppStoreH(w, r, svc)
+	}
+}
 
-		l := logging.Logger(ctx, "skus").With().Str("func", "handleIOSWebhook").Logger()
+func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
+	ctx := r.Context()
 
-		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
-		if err != nil {
-			l.Error().Err(err).Msg("error reading request body")
-			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-		}
+	lg := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookAppStore").Logger()
 
-		req := &IOSNotification{}
-		if err := inputs.DecodeAndValidate(ctx, req, data); err != nil {
-			l.Warn().Err(err).Msg("failed to decode and validate the payload")
-
-			return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
-		}
-
-		txInfo, err := req.GetTransactionInfo(ctx)
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to get transaction info from message")
-
-			return handlers.ValidationError("request", map[string]interface{}{"invalid-transaction-info": err.Error()})
-		}
-
-		renewalInfo, err := req.GetRenewalInfo(ctx)
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to get renewal info from message")
-
-			return handlers.ValidationError("request", map[string]interface{}{"invalid-renewal-info": err.Error()})
-		}
-
-		if err := service.verifyIOSNotification(ctx, txInfo, renewalInfo); err != nil {
-			l.Error().Err(err).Msg("failed to verify ios subscription notification")
-
-			switch {
-			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
-				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-			default:
-				return handlers.WrapError(err, "failed to verify ios subscription notification", http.StatusInternalServerError)
-			}
-		}
+	data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Err(err).Msg("failed to read request body")
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
+
+	spayload := &struct {
+		SignedPayload string `json:"signedPayload"`
+	}{}
+
+	if err := json.Unmarshal(data, spayload); err != nil {
+		lg.Err(err).Str("data", string(data)).Msg("failed to unmarshal responseBodyV2")
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	}
+
+	ntf, err := parseAppStoreSrvNotification(svc.assnCertVrf, spayload.SignedPayload)
+	if err != nil {
+		// TODO: Reply with http.StatusOK after testing is complete.
+		// None of these errors is recoverable.
+
+		lg.Err(err).Str("payload", spayload.SignedPayload).Msg("failed to parse app store notification")
+
+		return handlers.ValidationError("request", map[string]interface{}{"parse-signed-payload": err.Error()})
+	}
+
+	if err := svc.processAppStoreNotification(ctx, ntf); err != nil {
+		lg.Err(err).Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg("failed to process app store notification")
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			// Should retry.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+		case errors.Is(err, model.ErrOrderNotFound):
+			// Order was not found, so nothing can be done.
+			// It might be an issue for VPN:
+			// - user has not linked yet;
+			// - billing cycle comes through, subscription renews;
+			// - user links immediately after billing cycle (they get 1 month);
+			// - there might be a small gap between order's expiration and next successful renewal;
+			// - the grace period should handle it.
+			// A better option is to create orders when the user subscribes, similar to Leo.
+			// Or allow for 1 or 2 retry attempts for the notification, but this requires tracking.
+			// (Which can easily be done by setting ntf.val.NotificationUUID in Redis with EX).
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+			// No rows have changed whilst processing.
+			// This could happen in theory, but not in practice.
+			// It would mean that we attempted to update with the same data as it's in the database.
+			// This could happen when trying to process the same event twice, which could happen
+			// if the App Store sends multiple notifications about the same event.
+			// (E.g. auto-renew and billing recovery).
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+		default:
+			// Retry for all other errors for now.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	lg.Info().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg("processed app store notification")
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 // HandleRadomWebhook handles Radom checkout session webhooks.
