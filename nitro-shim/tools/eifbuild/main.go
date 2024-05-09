@@ -1,15 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
+
+	"github.com/google/shlex"
 )
 
 const (
@@ -52,9 +54,22 @@ files:
     mode: "0644"`
 )
 
+type OciIndex struct {
+	SchemaVersion int    `json:"schemaVersion"`
+	MediaType     string `json:"mediaType"`
+	Manifests     []struct {
+		MediaType   string `json:"mediaType"`
+		Size        int    `json:"size"`
+		Digest      string `json:"digest"`
+		Annotations struct {
+			OrgOpencontainersImageRefName string `json:"org.opencontainers.image.ref.name"`
+		} `json:"annotations"`
+	} `json:"manifests"`
+}
+
 func printusage() {
 	fmt.Println("Usage:\n")
-	fmt.Println("eifbuild [-blobs-path BLOBS_PATH] -pass-envs ENVS -docker-uri IMAGE -output-file OUTPUT -- COMMAND...\n")
+	fmt.Println("eifbuild [-blobs-path BLOBS_PATH] -pass-envs ENVS [-docker-uri IMAGE] -output-file OUTPUT -- COMMAND...\n")
 
 	flag.PrintDefaults()
 }
@@ -81,10 +96,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *imagePtr == "" || *outPtr == "" {
-		fmt.Println("Both -docker-uri and -output-file flags must be set!")
+	if *outPtr == "" {
+		fmt.Println("Error: -output-file flag must be set!")
 		printusage()
 		os.Exit(1)
+	}
+
+	if *imagePtr == "" {
+		fmt.Println("No -docker-uri was passed, defaulting to use oci layout path from last kaniko build\n")
+		imageName, err := PrepareOciIndex()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		*imagePtr = imageName
 	}
 
 	fmt.Println("Image:", *imagePtr, "\n")
@@ -98,6 +123,16 @@ func main() {
 		}
 		if arg == "--" {
 			afterSep = true
+		}
+	}
+
+	if len(cmd) == 1 {
+		var err error
+		// try to split according to shell style tokenization
+		cmd, err = shlex.Split(cmd[0])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
 		}
 	}
 
@@ -154,6 +189,49 @@ func generateCustomer(image, cmdPath, envPath string) (*os.File, error) {
 		"env":   envPath,
 	})
 	return file, err
+}
+
+func PrepareOciIndex() (imageName string, err error) {
+	homePath, err := os.UserHomeDir()
+	if err != nil {
+		return imageName, err
+	}
+	cachePath := filepath.Join(homePath, ".linuxkit/cache")
+	indexPath := filepath.Join(cachePath, "index.json")
+	indexBytes, err := os.ReadFile(indexPath)
+	if err != nil {
+		return imageName, err
+	}
+
+	index := OciIndex{}
+	if err := json.Unmarshal(indexBytes, &index); err != nil {
+		return imageName, err
+	}
+
+	if len(index.Manifests) != 1 {
+		return imageName, fmt.Errorf("Error: Length of manifests must be 1!")
+	}
+
+	manifest := index.Manifests[0]
+	digest := manifest.Digest
+	imageName = "docker.io/library/" + digest
+	currentRef := manifest.Annotations.OrgOpencontainersImageRefName
+	if len(currentRef) > 0 && currentRef != imageName {
+		return imageName, fmt.Errorf("Error: Image with unexpected name!")
+	}
+	index.Manifests[0].Annotations.OrgOpencontainersImageRefName = imageName
+
+	indexBytes, err = json.Marshal(&index)
+	if err != nil {
+		return imageName, err
+	}
+
+	err = os.WriteFile(indexPath, indexBytes, 755)
+	if err != nil {
+		return imageName, err
+	}
+
+	return imageName, nil
 }
 
 func BuildEif(blobsPath string, image string, cmds []string, envs map[string]string, output string) error {
@@ -235,7 +313,7 @@ func BuildEif(blobsPath string, image string, cmds []string, envs map[string]str
 		return err
 	}
 
-	cmdline, err := ioutil.ReadFile(filepath.Join(blobsPath, "cmdline"))
+	cmdline, err := os.ReadFile(filepath.Join(blobsPath, "cmdline"))
 	if err != nil {
 		return err
 	}

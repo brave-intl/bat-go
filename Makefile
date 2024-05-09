@@ -101,17 +101,14 @@ docker:
 	docker tag bat-go:$(GIT_VERSION)$(BUILD_TIME) bat-go:latest
 
 docker-reproducible:
-	docker run -v $(PWD):/workspace --network=host \
+	docker run -v $(HOME)/.cache/kaniko:/cache -v $(HOME)/.linuxkit/cache:/linuxkit -v $(PWD):/workspace --network=host \
 		gcr.io/kaniko-project/executor:latest \
 		--reproducible --dockerfile /workspace/Dockerfile \
 		--no-push --tarPath /workspace/bat-go-repro.tar \
+		--cache --cache-dir /cache --cache-repo oci:/cache/bat-go-repro \
+		--oci-layout-path /linuxkit \
 		--destination bat-go-repro:latest --context dir:///workspace/ && cat bat-go-repro.tar | docker load
-
-docker-payments:
-	docker rmi -f bat-go/payments:latest
-	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) .
-	docker tag bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) bat-go/payments:latest
+	sudo chown -R $(USER):$(USER) $(HOME)/.linuxkit/cache
 
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
