@@ -159,19 +159,8 @@ func setupDBI() (*sqlx.DB, error) {
 		return nil, err
 	}
 
-	ver, dirty, err := mg.Version()
-	if err != nil {
-		return nil, err
-	}
-
-	if dirty {
+	if ver, dirty, _ := mg.Version(); dirty {
 		if err := mg.Force(int(ver)); err != nil {
-			return nil, err
-		}
-	}
-
-	if ver > 0 {
-		if err := mg.Down(); err != nil {
 			return nil, err
 		}
 	}
