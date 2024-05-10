@@ -52,6 +52,9 @@ const (
 )
 
 const (
+	// StatusClientClosedConn is not declared in net/http.
+	StatusClientClosedConn = 499
+
 	MerchID             = "brave.com"
 	StripePaymentMethod = "stripe"
 	RadomPaymentMethod  = "radom"

@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -92,6 +91,9 @@ const (
 type orderStoreSvc interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
 type vendorReceiptValidator interface {
@@ -105,8 +107,9 @@ type gcpRequestValidator interface {
 
 // Service contains datastore
 type Service struct {
-	orderRepo  orderStoreSvc
-	issuerRepo issuerStore
+	orderRepo   orderStoreSvc
+	issuerRepo  issuerStore
+	payHistRepo orderPayHistoryStore
 
 	// TODO: Eventually remove it.
 	Datastore Datastore
@@ -128,6 +131,7 @@ type Service struct {
 
 	vendorReceiptValid vendorReceiptValidator
 	gcpValidator       gcpRequestValidator
+	assnCertVrf        *assnCertVerifier
 
 	payProcCfg    *premiumPaymentProcConfig
 	newItemReqSet map[string]model.OrderItemRequestNew
@@ -174,8 +178,15 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	return nil
 }
 
-// InitService creates a service using the passed datastore and clients configured from the environment.
-func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service, orderRepo orderStoreSvc, issuerRepo issuerStore) (*Service, error) {
+// InitService creates a Service using the passed datastore and clients configured from the environment.
+func InitService(
+	ctx context.Context,
+	datastore Datastore,
+	walletService *wallet.Service,
+	orderRepo orderStoreSvc,
+	issuerRepo issuerStore,
+	payHistRepo orderPayHistoryStore,
+) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
 	// setup stripe if exists in context and enabled
@@ -261,6 +272,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		return nil, err
 	}
 
+	assnCertVrf, err := newASSNCertVerifier()
+	if err != nil {
+		return nil, err
+	}
+
 	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {
 		return nil, err
@@ -301,9 +317,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	gcpValidator := newGcpPushNotificationValidator(idv, conf)
 
 	service := &Service{
-		orderRepo:  orderRepo,
-		issuerRepo: issuerRepo,
-		Datastore:  datastore,
+		orderRepo:   orderRepo,
+		issuerRepo:  issuerRepo,
+		payHistRepo: payHistRepo,
+
+		Datastore: datastore,
 
 		wallet:             walletService,
 		geminiClient:       geminiClient,
@@ -317,6 +335,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 
 		vendorReceiptValid: rcptValidator,
 		gcpValidator:       gcpValidator,
+		assnCertVrf:        assnCertVrf,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
 		newItemReqSet: newOrderItemReqNewMobileSet(env),
@@ -1586,44 +1605,49 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	}
 }
 
-// verifyIOSNotification - verify the developer notification from appstore
-func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JWSTransactionDecodedPayload, renewalInfo *appstore.JWSRenewalInfoDecodedPayload) error {
-	if txInfo == nil || renewalInfo == nil {
-		return errors.New("notification has no tx or renewal")
-	}
-
-	// TODO: The documentation says nothing about these conditions.
-	// Shall this be gone?
-	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
-		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
-	}
-
-	// lookup the order based on the token as externalID
-	ord, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
-	if err != nil {
-		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, err)
-	}
-
-	if ord == nil {
-		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, errNotFound)
-	}
-
-	// Check if we are past the expiration date on transaction or the order was revoked.
-	now := time.Now()
-
-	if shouldCancelOrderIOS(txInfo, now) {
-		if err := s.CancelOrder(ord.ID); err != nil {
-			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
-		}
-
+// processAppStoreNotification determines whether ntf is worth processing, and does it if it is.
+//
+// More on ntf types https://developer.apple.com/documentation/appstoreservernotifications/notificationtype#4304524.
+func (s *Service) processAppStoreNotification(ctx context.Context, ntf *appStoreSrvNotification) error {
+	if !ntf.shouldProcess() {
 		return nil
 	}
 
-	if err := s.RenewOrder(ctx, ord.ID); err != nil {
-		return fmt.Errorf("failed to renew subscription in skus: %w", err)
+	txn, err := parseTxnInfo(ntf.pubKey, ntf.val.Data.SignedTransactionInfo)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processAppStoreNotificationTx(ctx, tx, ntf, txn); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *appStoreSrvNotification, txn *appstore.JWSTransactionDecodedPayload) error {
+	ord, err := s.orderRepo.GetByExternalID(ctx, dbi, txn.OriginalTransactionId)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case ntf.shouldRenew():
+		expt := time.UnixMilli(txn.ExpiresDate)
+		paidt := time.Now()
+
+		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+	case ntf.shouldCancel():
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+	default:
+		return nil
+	}
 }
 
 // verifyDeveloperNotification - verify the developer notification from playstore
@@ -1899,6 +1923,29 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		return handlers.RenderContent(ctx, &blindedCredVrfResult{ID: cred.TokenPreimage}, w, http.StatusOK)
 	}
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+}
+
+// renewOrderWithExpPaidTime performs updates relevant to advancing a paid order forward after renewal.
+//
+// TODO: Add a repo method to update all three fields at once.
+func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expt, paidt time.Time) error {
+	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.SetExpiresAt(ctx, dbi, id, expt); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.SetLastPaidAt(ctx, dbi, id, paidt); err != nil {
+		return err
+	}
+
+	if err := s.payHistRepo.Insert(ctx, dbi, id, paidt); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
