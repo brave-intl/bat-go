@@ -140,14 +140,8 @@ func httpDoWhileRetryZero(ctx context.Context, client *client.SimpleHTTPClient, 
 	resp, err := client.Do(ctx, req, nil)
 	if resp != nil {
 		retry := resp.Header.Get("x-retry-after")
-		if retry != "" {
-			intRetry, err := strconv.Atoi(retry)
-			if err != nil {
-				return resp, fmt.Errorf("failed to parse x-retry-after header: %w", err)
-			}
-			if resp.StatusCode != http.StatusOK && intRetry == 0 {
-				return httpDoWhileRetryZero(ctx, client, req)
-			}
+		if resp.StatusCode != http.StatusOK && retry == "0" {
+			return httpDoWhileRetryZero(ctx, client, req)
 		}
 	}
 	return resp, err
