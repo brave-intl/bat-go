@@ -273,7 +273,7 @@ func (rc *redisClient) WaitForResponses(ctx context.Context, payoutID string, nu
 
 	consumerCtx, cancelFunc := context.WithCancel(ctx)
 	go func() {
-		redisconsumer.StartConsumer(consumerCtx, rc.redis, stream, consumerGroup, consumerID, rc.HandlePrepareResponse)
+		redisconsumer.StartConsumer(consumerCtx, rc.redis, stream, consumerGroup, consumerID, rc.HandlePrepareResponse, 10)
 	}()
 
 wait:

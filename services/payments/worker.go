@@ -1,12 +1,12 @@
 package payments
 
 import (
-	"os"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -92,7 +92,10 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 	})
 
 	delay := 1 * time.Second
-	resp, err := client.Do(ctx, r, nil)
+	resp, err := httpDoWhileRetryZero(ctx, client, r)
+	if err != nil {
+		return err
+	}
 	if resp != nil {
 		retry := resp.Header.Get("x-retry-after")
 		if retry != "" {
@@ -132,6 +135,27 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 	return w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, respWrapper)
 }
 
+func httpDoWhileRetryZero(ctx context.Context, client *client.SimpleHTTPClient, req *http.Request) (*http.Response, error) {
+	var (
+		resp *http.Response
+		err error
+	)
+	for i := 0; i < 500; i++ {
+		resp, err = client.Do(ctx, req, nil)
+		if err != nil {
+			break
+		}
+		if resp != nil {
+			retry := resp.Header.Get("x-retry-after")
+			if resp.StatusCode != http.StatusOK && retry == "0" {
+				continue
+			}
+		}
+		break
+	}
+	return resp, err
+}
+
 // HandlePrepareConfigMessage creates a new prepare consumer, waiting for all messages to be consumed
 func (w *Worker) HandlePrepareConfigMessage(ctx context.Context, stream, id string, data []byte) error {
 	return w.handleConfigMessage(ctx, w.HandlePrepareMessage, id, data)
@@ -158,11 +182,15 @@ func (w *Worker) handleConfigMessage(ctx context.Context, handle redisconsumer.M
 		return err
 	}
 
+	if config.BatchSize == 0 {
+		config.BatchSize = 10
+	}
+
 	ctx, logger = logging.UpdateContext(ctx, logger.With().Str("childGroup", config.ConsumerGroup).Logger())
 
 	logger.Info().Msg("processed config")
 	go func() {
-		redisconsumer.StartConsumer(consumerCtx, w.rc, config.Stream, config.ConsumerGroup, "0", handle)
+		redisconsumer.StartConsumer(consumerCtx, w.rc, config.Stream, config.ConsumerGroup, "0", handle, config.BatchSize)
 	}()
 
 	for {
@@ -186,10 +214,10 @@ func (w *Worker) handleConfigMessage(ctx context.Context, handle redisconsumer.M
 
 // StartPrepareConfigConsumer is a convenience function for starting the prepare config consumer
 func (w *Worker) StartPrepareConfigConsumer(ctx context.Context) error {
-	return redisconsumer.StartConsumer(ctx, w.rc, payments.PrepareConfigStream, payments.PrepareConfigConsumerGroup, "0", w.HandlePrepareConfigMessage)
+	return redisconsumer.StartConsumer(ctx, w.rc, payments.PrepareConfigStream, payments.PrepareConfigConsumerGroup, "0", w.HandlePrepareConfigMessage, 1)
 }
 
 // StartSubmitConfigConsumer is a convenience function for starting the prepare config consumer
 func (w *Worker) StartSubmitConfigConsumer(ctx context.Context) error {
-	return redisconsumer.StartConsumer(ctx, w.rc, payments.SubmitConfigStream, payments.SubmitConfigConsumerGroup, "0", w.HandleSubmitConfigMessage)
+	return redisconsumer.StartConsumer(ctx, w.rc, payments.SubmitConfigStream, payments.SubmitConfigConsumerGroup, "0", w.HandleSubmitConfigMessage, 1)
 }
