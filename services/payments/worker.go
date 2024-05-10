@@ -136,15 +136,22 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 }
 
 func httpDoWhileRetryZero(ctx context.Context, client *client.SimpleHTTPClient, req *http.Request) (*http.Response, error) {
-	resp, err := client.Do(ctx, req, nil)
-	if err != nil {
-		return resp, err
-	}
-	if resp != nil {
-		retry := resp.Header.Get("x-retry-after")
-		if resp.StatusCode != http.StatusOK && retry == "0" {
-			return httpDoWhileRetryZero(ctx, client, req)
+	var (
+		resp *http.Response
+		err error
+	)
+	for i := 0; i < 500; i++ {
+		resp, err = client.Do(ctx, req, nil)
+		if err != nil {
+			break
 		}
+		if resp != nil {
+			retry := resp.Header.Get("x-retry-after")
+			if resp.StatusCode != http.StatusOK && retry == "0" {
+				continue
+			}
+		}
+		break
 	}
 	return resp, err
 }

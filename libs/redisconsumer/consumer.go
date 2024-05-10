@@ -166,7 +166,7 @@ func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consu
 			Group:    consumerGroup,
 			Consumer: consumerID,
 			Streams:  []string{stream, id},
-			Count:    10,
+			Count:    50,
 			Block:    100 * time.Millisecond,
 			NoAck:    false,
 		}).Result()

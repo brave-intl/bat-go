@@ -269,7 +269,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// Pay. Set the retry header to 0 to indicate to the Worker that is should call again
 		// without delay. This is especially important for Solana, where we have only a short time
 		// (~1 minute) to get the transaction into the chain.
-		if status == paymentLib.Authorized && authenticatedState.PaymentDetails.Custodian == "solana" {
+		if (status == paymentLib.Authorized || status == paymentLib.Pending) && authenticatedState.PaymentDetails.Custodian == "solana" {
 			w.Header().Add("x-retry-after", "0")
 		}
 
