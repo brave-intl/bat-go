@@ -77,6 +77,10 @@ func main() {
 		"resubmit", false,
 		"resubmit to prepare stream")
 
+	batchSize := flag.Int64(
+		"bsize", 10,
+		"batch size for worker prepare processing")
+
 	flag.Parse()
 
 	// get the list of report files for prepare
@@ -150,6 +154,7 @@ func main() {
 			ConsumerGroup: payments.PreparePrefix + *payoutID + "-cg",
 			Stream:        payments.PreparePrefix + *payoutID,
 			Count:         len(report),
+			BatchSize:     *batchSize,
 		}
 
 		err = client.ConfigureWorker(ctx, payments.PrepareConfigStream, wc)

@@ -182,11 +182,15 @@ func (w *Worker) handleConfigMessage(ctx context.Context, handle redisconsumer.M
 		return err
 	}
 
+	if config.BatchSize == 0 {
+		config.BatchSize = 10
+	}
+
 	ctx, logger = logging.UpdateContext(ctx, logger.With().Str("childGroup", config.ConsumerGroup).Logger())
 
 	logger.Info().Msg("processed config")
 	go func() {
-		redisconsumer.StartConsumer(consumerCtx, w.rc, config.Stream, config.ConsumerGroup, "0", handle)
+		redisconsumer.StartConsumer(consumerCtx, w.rc, config.Stream, config.ConsumerGroup, "0", handle, config.BatchSize)
 	}()
 
 	for {
@@ -210,10 +214,10 @@ func (w *Worker) handleConfigMessage(ctx context.Context, handle redisconsumer.M
 
 // StartPrepareConfigConsumer is a convenience function for starting the prepare config consumer
 func (w *Worker) StartPrepareConfigConsumer(ctx context.Context) error {
-	return redisconsumer.StartConsumer(ctx, w.rc, payments.PrepareConfigStream, payments.PrepareConfigConsumerGroup, "0", w.HandlePrepareConfigMessage)
+	return redisconsumer.StartConsumer(ctx, w.rc, payments.PrepareConfigStream, payments.PrepareConfigConsumerGroup, "0", w.HandlePrepareConfigMessage, 1)
 }
 
 // StartSubmitConfigConsumer is a convenience function for starting the prepare config consumer
 func (w *Worker) StartSubmitConfigConsumer(ctx context.Context) error {
-	return redisconsumer.StartConsumer(ctx, w.rc, payments.SubmitConfigStream, payments.SubmitConfigConsumerGroup, "0", w.HandleSubmitConfigMessage)
+	return redisconsumer.StartConsumer(ctx, w.rc, payments.SubmitConfigStream, payments.SubmitConfigConsumerGroup, "0", w.HandleSubmitConfigMessage, 1)
 }
