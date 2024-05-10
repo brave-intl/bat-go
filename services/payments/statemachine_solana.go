@@ -104,7 +104,7 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 			return sm.transaction, fmt.Errorf("cached solana blockHash was of the wrong type", err)
 		}
 		slotTarget, ok = ctx.Value("solanaSlotTarget").(uint64)
-		if ok != true {
+		if !ok {
 			return sm.transaction, fmt.Errorf("cached solana slotTarget was of the wrong type", err)
 		}
 	}
