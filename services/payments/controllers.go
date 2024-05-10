@@ -265,6 +265,14 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			code = http.StatusOK
 		}
 
+		// If the status is Authorized and we're using Solana then we need to proceed immediately to
+		// Pay. Set the retry header to 0 to indicate to the Worker that is should call again
+		// without delay. This is especially important for Solana, where we have only a short time
+		// (~1 minute) to get the transaction into the chain.
+		if status == paymentLib.Authorized && authenticatedState.PaymentDetails.Custodian == "solana" {
+			w.Header().Add("x-retry-after", "0")
+		}
+
 		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
 		// "permanent" errors indiciating a transaction state machine has reached an end state
 		return &handlers.AppError{

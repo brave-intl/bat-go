@@ -1,12 +1,13 @@
 package payments
 
 import (
-	"os"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -92,7 +93,10 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 	})
 
 	delay := 1 * time.Second
-	resp, err := client.Do(ctx, r, nil)
+	resp, err := httpDoWhileRetryZero(ctx, client, r)
+	if err != nil {
+		return err
+	}
 	if resp != nil {
 		retry := resp.Header.Get("x-retry-after")
 		if retry != "" {
@@ -130,6 +134,23 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 	}
 
 	return w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, respWrapper)
+}
+
+func httpDoWhileRetryZero(ctx context.Context, client *client.SimpleHTTPClient, req *http.Request) (*http.Response, error) {
+	resp, err := client.Do(ctx, req, nil)
+	if resp != nil {
+		retry := resp.Header.Get("x-retry-after")
+		if retry != "" {
+			intRetry, err := strconv.Atoi(retry)
+			if err != nil {
+				return resp, fmt.Errorf("failed to parse x-retry-after header: %w", err)
+			}
+			if resp.StatusCode != http.StatusOK && intRetry == 0 {
+				return httpDoWhileRetryZero(ctx, client, req)
+			}
+		}
+	}
+	return resp, err
 }
 
 // HandlePrepareConfigMessage creates a new prepare consumer, waiting for all messages to be consumed
