@@ -59,6 +59,10 @@ func (suite *PostgresTestSuite) SetupTest() {
 	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 }
 
+func (s *PostgresTestSuite) TearDownSuite(sn, tn string) {
+	skustest.CleanDB(s.T(), s.storage.RawDB())
+}
+
 func TestGetPagedMerchantTransactions(t *testing.T) {
 	ctx := context.Background()
 	// setup mock DB we will inject into our pg
@@ -498,7 +502,7 @@ func createOrderAndIssuer(t *testing.T, ctx context.Context, storage Datastore, 
 
 	repo := repository.NewIssuer()
 	issuer, err := repo.Create(ctx, storage.RawDB(), model.IssuerNew{
-		MerchantID: test.RandomString(),
+		MerchantID: model.MerchID,
 		PublicKey:  test.RandomString(),
 	})
 	must.NoError(t, err)

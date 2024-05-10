@@ -10,6 +10,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
+	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -213,4 +214,30 @@ func TestVoteGoodAndBadSKU(t *testing.T) {
 	if !errors.Is(err, ErrInvalidSKUTokenSKU) {
 		t.Error("invalid error, should have gotten invalidskutokensku: ", err)
 	}
+}
+
+func TestMigration(t *testing.T) {
+	// The main case here is the down path to avoid repeating it in other tests.
+	t.Run("happy_path_up_down", func(t *testing.T) {
+		pg, err := datastore.NewPostgres("", false, "skus_db")
+		must.Equal(t, nil, err)
+
+		m, err := pg.NewMigrate()
+		must.Equal(t, nil, err)
+
+		if ver, dirty, _ := m.Version(); dirty {
+			must.Equal(t, nil, m.Force(int(ver)))
+		}
+
+		{
+			err := pg.Migrate()
+			must.Equal(t, nil, err)
+		}
+
+		{
+			err := m.Down()
+			must.Equal(t, nil, err)
+		}
+	})
+
 }

@@ -273,6 +273,10 @@ func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	suite.mockCtrl.Finish()
 }
 
+func (s *ControllersTestSuite) TearDownSuite(sn, tn string) {
+	skustest.CleanDB(s.T(), s.storage.RawDB())
+}
+
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macaroon.Token, quantity int) (Order, *Issuer) {
 	issuerID, err := encodeIssuerID(token.Location, token.FirstPartyCaveats[0]["sku"])
 	suite.Require().NoError(err)
