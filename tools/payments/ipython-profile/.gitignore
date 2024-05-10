@@ -1,0 +1,5 @@
+*
+!.gitignore
+!startup
+!startup/*.py
+!ipython_config.py

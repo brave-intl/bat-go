@@ -23,11 +23,15 @@ If you want to start clean, to remove the go cache and resulting `dist` binary f
 make clean
 ```
 
-### Setup Redis Locally
-```bash
-// add `127.0.0.1 redis` to hosts file
-docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the local redis cluster
+## Shell mode
+
+You can enter the payments shell via:
 ```
+aws-vault exec settlements-stg-developer-role -- ipython --profile-dir=ipython-profile
+```
+
+It has aliases defined for the commands below. Many of the required arguments
+are prefilled.
 
 ## Commands
 
@@ -253,3 +257,11 @@ The flags are:
 	-ru
 		The redis cluster user
 ```
+
+### Setup Redis Locally
+```bash
+// add `127.0.0.1 redis` to hosts file
+docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the local redis cluster
+```
+
+
