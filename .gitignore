@@ -40,3 +40,6 @@ main/main
 zebpay_test.env
 zebpay_stage.pem
 prepare-*response.log
+nitro-shim/tools/eifbuild/third_party/**
+nitro-image.eif
+bat-go-repro.tar
