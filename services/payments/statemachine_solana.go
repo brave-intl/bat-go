@@ -80,7 +80,7 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 	// seconds
 	cachedBlockTime, ok := ctx.Value("solanaSlotTargetTime").(time.Time)
 	// If the cache is bad or more than 10 seconds old, refresh it
-	if ok != true || time.Now().Add(-10*time.Second).After(cachedBlockTime) {
+	if !ok || time.Now().Add(-10*time.Second).After(cachedBlockTime) {
 		// If the base Authorize method indicates we can proceed, generate, sign, and persist the
 		// transaction
 		latestBlockhashResult, err := sm.solanaRpcClient.GetLatestBlockhashAndContextWithConfig(
