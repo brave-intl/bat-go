@@ -100,7 +100,7 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 		ctx = context.WithValue(ctx, "solanaSlotTargetTime", time.Now())
 	} else {
 		blockHash, ok = ctx.Value("solanaBlockHash").(string)
-		if ok != true {
+		if !ok {
 			return sm.transaction, fmt.Errorf("cached solana blockHash was of the wrong type", err)
 		}
 		slotTarget, ok = ctx.Value("solanaSlotTarget").(uint64)
