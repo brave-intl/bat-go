@@ -93,9 +93,6 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 
 	delay := 1 * time.Second
 	resp, err := httpDoWhileRetryZero(ctx, client, r)
-	if err != nil {
-		return err
-	}
 	if resp != nil {
 		retry := resp.Header.Get("x-retry-after")
 		if retry != "" {
@@ -142,9 +139,6 @@ func httpDoWhileRetryZero(ctx context.Context, client *client.SimpleHTTPClient, 
 	)
 	for i := 0; i < 500; i++ {
 		resp, err = client.Do(ctx, req, nil)
-		if err != nil {
-			break
-		}
 		if resp != nil {
 			retry := resp.Header.Get("x-retry-after")
 			if resp.StatusCode != http.StatusOK && retry == "0" {
