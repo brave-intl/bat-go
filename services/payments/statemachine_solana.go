@@ -322,40 +322,8 @@ func (sm *SolanaMachine) makeInstructions(
 		Amount:  amount,
 	}
 
-	feesResp, err := sm.solanaRpcClient.GetRecentPrioritizationFees(
-		ctx,
-		[]common.PublicKey{
-			feePayer,
-			fromAta,
-			toAta,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var (
-		count uint64
-		sum   uint64
-		max   uint64 = 0
-	)
-	for _, value := range feesResp {
-		if value.PrioritizationFee != 0 {
-			count += 1
-			sum += value.PrioritizationFee
-			if value.PrioritizationFee > max {
-				max = value.PrioritizationFee
-			}
-		}
-	}
-	if max < 100000 {
-		max = 100000
-	} else {
-		max = max * 10
-	}
-
-	priceParam := compute_budget.SetComputeUnitPriceParam{MicroLamports: max}
-	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: 100000}
+	priceParam := compute_budget.SetComputeUnitPriceParam{MicroLamports: 10}
+	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: 30000}
 
 	return []types.Instruction{
 		// Set the transaction budget
