@@ -9,10 +9,13 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
+//nolint:unused
 type TLV2 struct{}
 
+//nolint:unused
 func NewTLV2() *TLV2 { return &TLV2{} }
 
+//nolint:unused
 func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
 	if len(creds) == 0 {
 		return model.TLV2CredSubmissionReport{}, model.ErrTLV2InvalidCredNum

@@ -13,10 +13,11 @@ type mockGetContext struct {
 	getContext func(ctx context.Context, dest interface{}, query string, args ...interface{}) error
 }
 
-func (mgc *mockGetContext) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
-	if mgc.getContext != nil {
-		return mgc.getContext(ctx, dest, query, args)
+func (x *mockGetContext) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+	if x.getContext != nil {
+		return x.getContext(ctx, dest, query, args)
 	}
+
 	return nil
 }
 
@@ -53,7 +54,7 @@ func TestAreTimeLimitedV2CredsSubmitted(t *testing.T) {
 				noErr: true,
 				result: map[string]bool{
 					"alreadySubmitted": true,
-					"mismatch": false,
+					"mismatch":         false,
 				},
 			},
 		},
@@ -73,7 +74,7 @@ func TestAreTimeLimitedV2CredsSubmitted(t *testing.T) {
 				noErr: true,
 				result: map[string]bool{
 					"alreadySubmitted": false,
-					"mismatch": true,
+					"mismatch":         true,
 				},
 			},
 		},
