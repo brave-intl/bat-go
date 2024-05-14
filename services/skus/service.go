@@ -96,6 +96,10 @@ type orderStoreSvc interface {
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
+type tlv2Store interface {
+	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
+}
+
 type vendorReceiptValidator interface {
 	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
@@ -110,6 +114,7 @@ type Service struct {
 	orderRepo   orderStoreSvc
 	issuerRepo  issuerStore
 	payHistRepo orderPayHistoryStore
+	tlv2Repo    tlv2Store
 
 	// TODO: Eventually remove it.
 	Datastore Datastore
@@ -186,6 +191,7 @@ func InitService(
 	orderRepo orderStoreSvc,
 	issuerRepo issuerStore,
 	payHistRepo orderPayHistoryStore,
+	tlv2repo tlv2Store,
 ) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 

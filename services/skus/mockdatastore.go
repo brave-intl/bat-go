@@ -84,26 +84,6 @@ func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt64(arg0, arg1, arg2, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt64", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt64), arg0, arg1, arg2, arg3)
 }
 
-// AreTimeLimitedV2CredsSubmitted mocks base method.
-func (m *MockDatastore) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID go_uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, requestID}
-	for _, a := range blindedCreds {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "AreTimeLimitedV2CredsSubmitted", varargs...)
-	ret0, _ := ret[0].(AreTimeLimitedV2CredsSubmittedResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AreTimeLimitedV2CredsSubmitted indicates an expected call of AreTimeLimitedV2CredsSubmitted.
-func (mr *MockDatastoreMockRecorder) AreTimeLimitedV2CredsSubmitted(ctx, requestID interface{}, blindedCreds ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, requestID}, blindedCreds...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AreTimeLimitedV2CredsSubmitted", reflect.TypeOf((*MockDatastore)(nil).AreTimeLimitedV2CredsSubmitted), varargs...)
-}
-
 // BeginTx mocks base method.
 func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
 	m.ctrl.T.Helper()

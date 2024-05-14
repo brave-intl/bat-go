@@ -325,23 +325,24 @@ func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, i
 	}
 }
 
-func (s *Service) doTLV2Exist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, blindedCreds []string) error {
+func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.OrderItem, bcreds []string) error {
 	if item.CredentialType != timeLimitedV2 {
 		return errUnsupportedCredType
 	}
 
 	// Check TLV2 to see if we have credentials signed that match incoming blinded tokens.
-	credsSubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, requestID, blindedCreds...)
+	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, s.Datastore.RawDB(), reqID, bcreds...)
 	if err != nil {
-		return fmt.Errorf("error validating credentials exist for order item: %w", err)
+		return err
 	}
 
-	if credsSubmitted.AlreadySubmitted {
-		// No need to create order credentials, since these are already submitted.
+	// Don't create credentials, since these are already submitted.
+	if report.Submitted {
 		return errCredsAlreadySubmitted
 	}
-	if credsSubmitted.Mismatch {
-		// conflict because those credentials were submitted with a different request id
+
+	// Fail because these creds were submitted with a different req_id.
+	if report.ReqIDMistmatch {
 		return errCredsAlreadySubmittedMismatch
 	}
 
