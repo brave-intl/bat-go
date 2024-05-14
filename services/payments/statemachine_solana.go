@@ -323,7 +323,7 @@ func (sm *SolanaMachine) makeInstructions(
 	}
 
 	priceParam := compute_budget.SetComputeUnitPriceParam{MicroLamports: 10}
-	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: 30000}
+	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: 50000}
 
 	return []types.Instruction{
 		// Set the transaction budget
