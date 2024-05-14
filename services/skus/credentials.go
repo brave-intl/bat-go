@@ -30,6 +30,9 @@ import (
 const (
 	defaultMaxTokensPerIssuer       = 4000000 // ~1M BAT
 	defaultCohort             int16 = 1
+
+	// maxTLV2ActiveDailyItemCreds specifies the number of credentials an item is allowed to have in a given day.
+	maxTLV2ActiveDailyItemCreds = 10
 )
 
 var (
@@ -326,12 +329,18 @@ func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, i
 }
 
 func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.OrderItem, bcreds []string) error {
+	now := time.Now()
+
+	return s.doTLV2ExistTxTime(ctx, s.Datastore.RawDB(), reqID, item, bcreds, now, now)
+}
+
+func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, item *model.OrderItem, bcreds []string, from, to time.Time) error {
 	if item.CredentialType != timeLimitedV2 {
 		return errUnsupportedCredType
 	}
 
 	// Check TLV2 to see if we have credentials signed that match incoming blinded tokens.
-	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, s.Datastore.RawDB(), reqID, bcreds...)
+	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, dbi, reqID, bcreds...)
 	if err != nil {
 		return err
 	}
@@ -346,15 +355,12 @@ func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.
 		return errCredsAlreadySubmittedMismatch
 	}
 
-	// Check if we have signed credentials for this order item.
-	// If there is no order and no creds, we can submit again.
-	// Similar to the outbox check case, delete order creds will wipe out any already signed order creds.
-	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(item.ID)
+	nsets, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
 	if err != nil {
-		return fmt.Errorf("error validating no credentials exist for order item: %w", err)
+		return err
 	}
 
-	if creds != nil {
+	if nsets >= maxTLV2ActiveDailyItemCreds {
 		return ErrCredsAlreadyExist
 	}
 

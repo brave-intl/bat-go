@@ -98,6 +98,7 @@ type orderStoreSvc interface {
 
 type tlv2Store interface {
 	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
+	UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
 }
 
 type vendorReceiptValidator interface {

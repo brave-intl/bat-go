@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
@@ -9,13 +10,10 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
-//nolint:unused
 type TLV2 struct{}
 
-//nolint:unused
 func NewTLV2() *TLV2 { return &TLV2{} }
 
-//nolint:unused
 func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
 	if len(creds) == 0 {
 		return model.TLV2CredSubmissionReport{}, model.ErrTLV2InvalidCredNum
@@ -30,6 +28,18 @@ func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerCont
 	result := model.TLV2CredSubmissionReport{}
 	if err := sqlx.GetContext(ctx, dbi, &result, q, reqID, creds[0]); err != nil {
 		return model.TLV2CredSubmissionReport{}, err
+	}
+
+	return result, nil
+}
+
+func (r *TLV2) UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+	const q = `SELECT COUNT(DISTINCT request_id) FROM time_limited_v2_order_creds
+	WHERE order_id=$1 AND item_id=$2 AND valid_to > $4 AND valid_from < $3;`
+
+	var result int
+	if err := sqlx.GetContext(ctx, dbi, &result, q, orderID, itemID, from, to); err != nil {
+		return 0, err
 	}
 
 	return result, nil

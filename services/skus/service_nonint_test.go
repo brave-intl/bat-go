@@ -1239,6 +1239,176 @@ func TestService_checkOrderReceipt(t *testing.T) {
 	}
 }
 
+func TestService_doTLV2ExistTxTime(t *testing.T) {
+	type tcGiven struct {
+		reqID uuid.UUID
+		item  *model.OrderItem
+		creds []string
+		from  time.Time
+		to    time.Time
+		repo  *repository.MockTLV2
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_credential_type",
+			given: tcGiven{
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo:  &repository.MockTLV2{},
+			},
+			exp: errUnsupportedCredType,
+		},
+
+		{
+			name: "submission_report_error",
+			given: tcGiven{
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+						return model.TLV2CredSubmissionReport{}, model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "submission_submitted",
+			given: tcGiven{
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+						return model.TLV2CredSubmissionReport{Submitted: true}, nil
+					},
+				},
+			},
+			exp: errCredsAlreadySubmitted,
+		},
+
+		{
+			name: "submission_mismatch",
+			given: tcGiven{
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+						return model.TLV2CredSubmissionReport{ReqIDMistmatch: true}, nil
+					},
+				},
+			},
+			exp: errCredsAlreadySubmittedMismatch,
+		},
+
+		{
+			name: "uniq_batches_error",
+			given: tcGiven{
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 0, model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "uniq_batches_over_limit",
+			given: tcGiven{
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 10, nil
+					},
+				},
+			},
+			exp: ErrCredsAlreadyExist,
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo:  &repository.MockTLV2{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{tlv2Repo: tc.given.repo}
+
+			ctx := context.Background()
+
+			actual := svc.doTLV2ExistTxTime(ctx, nil, tc.given.reqID, tc.given.item, tc.given.creds, tc.given.from, tc.given.to)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestShouldCancelOrderIOS(t *testing.T) {
 	type tcGiven struct {
 		now  time.Time
