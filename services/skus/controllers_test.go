@@ -248,9 +248,11 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	InitEncryptionKeys()
 
 	suite.service = &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  pg,
-		cbClient:   suite.mockCB,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     pg,
+		cbClient:      suite.mockCB,
 		wallet: &wallet.Service{
 			Datastore: walletDB,
 		},
@@ -1482,10 +1484,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
@@ -1628,10 +1632,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
@@ -1755,10 +1761,12 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
