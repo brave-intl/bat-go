@@ -233,13 +233,9 @@ type TimeLimitedCreds struct {
 //
 // It handles only paid orders.
 func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemID, requestID uuid.UUID, blindedCreds []string) error {
-	order, err := s.Datastore.GetOrder(orderID)
+	order, err := s.getOrderFull(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
-	}
-
-	if order == nil {
-		return fmt.Errorf("error retrieving orderID %s: %w", orderID, errorutils.ErrNotFound)
 	}
 
 	if !order.IsPaid() {
@@ -701,7 +697,13 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 // - move the corresponding methods there;
 // - make those methods work on per-item basis.
 func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
-	order, err := s.Datastore.GetOrder(orderID)
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer s.Datastore.RollbackTx(tx)
+
+	order, err := s.getOrderFullTx(ctx, tx, orderID)
 	if err != nil {
 		return err
 	}
@@ -719,12 +721,6 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return nil
 	}
 
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer s.Datastore.RollbackTx(tx)
-
 	if doSingleUse {
 		if err := s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned); err != nil {
 			return fmt.Errorf("error deleting single use order creds: %w", err)
@@ -732,8 +728,8 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	if doTlv2 {
-		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
-			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
+		if err := s.tlv2Repo.DeleteLegacy(ctx, tx, orderID); err != nil {
+			return err
 		}
 	}
 

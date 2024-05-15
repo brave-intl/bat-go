@@ -99,6 +99,7 @@ type orderStoreSvc interface {
 type tlv2Store interface {
 	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
 	UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
+	DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
 }
 
 type vendorReceiptValidator interface {
@@ -112,10 +113,11 @@ type gcpRequestValidator interface {
 
 // Service contains datastore
 type Service struct {
-	orderRepo   orderStoreSvc
-	issuerRepo  issuerStore
-	payHistRepo orderPayHistoryStore
-	tlv2Repo    tlv2Store
+	orderRepo     orderStoreSvc
+	orderItemRepo orderItemStore
+	issuerRepo    issuerStore
+	payHistRepo   orderPayHistoryStore
+	tlv2Repo      tlv2Store
 
 	// TODO: Eventually remove it.
 	Datastore Datastore
@@ -190,6 +192,7 @@ func InitService(
 	datastore Datastore,
 	walletService *wallet.Service,
 	orderRepo orderStoreSvc,
+	orderItemRepo orderItemStore,
 	issuerRepo issuerStore,
 	payHistRepo orderPayHistoryStore,
 	tlv2repo tlv2Store,
@@ -324,9 +327,10 @@ func InitService(
 	gcpValidator := newGcpPushNotificationValidator(idv, conf)
 
 	service := &Service{
-		orderRepo:   orderRepo,
-		issuerRepo:  issuerRepo,
-		payHistRepo: payHistRepo,
+		orderRepo:     orderRepo,
+		orderItemRepo: orderItemRepo,
+		issuerRepo:    issuerRepo,
+		payHistRepo:   payHistRepo,
 
 		Datastore: datastore,
 
@@ -1953,6 +1957,24 @@ func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, dbi sqlx.ExtCon
 	}
 
 	return nil
+}
+
+func (s *Service) getOrderFull(ctx context.Context, id uuid.UUID) (*model.Order, error) {
+	return s.getOrderFullTx(ctx, s.Datastore.RawDB(), id)
+}
+
+func (s *Service) getOrderFullTx(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+	result, err := s.orderRepo.Get(ctx, dbi, id)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Items, err = s.orderItemRepo.FindByOrderID(ctx, dbi, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {

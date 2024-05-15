@@ -113,7 +113,7 @@ func Router(
 		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))
 		cr.Method(http.MethodGet, "/", metricsMwr("GetOrderCreds", GetOrderCreds(svc)))
 		cr.Method(http.MethodPost, "/", metricsMwr("CreateOrderCreds", CreateOrderCreds(svc)))
-		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(DeleteOrderCreds(svc))))
+		cr.Method(http.MethodDelete, "/", metricsMwr("DeleteOrderCreds", authMwr(deleteOrderCreds(svc))))
 
 		// Handle the old endpoint while the new is being rolled out:
 		// - true: the handler uses itemID as the request id, which is the old mode;
@@ -589,14 +589,21 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 		reqID := req.ItemID
 
 		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), req.ItemID, reqID, req.BlindedCreds); err != nil {
-			lg.Error().Err(err).Msg("failed to create the order credentials")
-			if errors.Is(err, errCredsAlreadySubmittedMismatch) {
+			lg.Err(err).Msg("failed to create the order credentials")
+
+			switch {
+			case errors.Is(err, model.ErrOrderNotFound):
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+			case errors.Is(err, errCredsAlreadySubmittedMismatch):
 				return handlers.WrapError(err, "Order credentials already exist", http.StatusConflict)
+
+			default:
+				return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 			}
-			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
@@ -647,14 +654,21 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 		}
 
 		if err := svc.CreateOrderItemCredentials(ctx, *orderID.UUID(), *itemID.UUID(), *reqID.UUID(), req.BlindedCreds); err != nil {
-			lg.Error().Err(err).Msg("failed to create the order credentials")
-			if errors.Is(err, errCredsAlreadySubmittedMismatch) {
+			lg.Err(err).Msg("failed to create the order credentials")
+
+			switch {
+			case errors.Is(err, model.ErrOrderNotFound):
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+			case errors.Is(err, errCredsAlreadySubmittedMismatch):
 				return handlers.WrapError(err, "Order credentials already exist", http.StatusConflict)
+
+			default:
+				return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 			}
-			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 }
 
@@ -690,26 +704,38 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 	}
 }
 
-// DeleteOrderCreds handles requests for deleting order credentials.
-func DeleteOrderCreds(service *Service) handlers.AppHandler {
+// deleteOrderCreds handles requests for deleting order credentials.
+func deleteOrderCreds(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		orderID := &inputs.ID{}
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{"orderID": err.Error()},
-			)
+
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
+			return handlers.ValidationError("orderID", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		id := *orderID.UUID()
-		if err := service.validateOrderMerchantAndCaveats(ctx, id); err != nil {
+		if err := service.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"
-		if err := service.DeleteOrderCreds(ctx, id, isSigned); err != nil {
-			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
+		if err := service.DeleteOrderCreds(ctx, orderID, isSigned); err != nil {
+			switch {
+			case errors.Is(err, context.Canceled):
+				return handlers.WrapError(err, "cliend ended request", model.StatusClientClosedConn)
+
+			case errors.Is(err, model.ErrOrderNotFound):
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+			case errors.Is(err, ErrOrderHasNoItems):
+				return handlers.WrapError(err, "order has no items", http.StatusBadRequest)
+
+			// case errors.Is(err, errExceededMaxTLV2DailyCreds):
+			// 	return handlers.WrapError(err, err.Error(), http.StatusUnprocessableEntity)
+
+			default:
+				return handlers.WrapError(model.ErrSomethingWentWrong, "failed to delete credentials", http.StatusBadRequest)
+			}
 		}
 
 		return handlers.RenderContent(ctx, "Order credentials successfully deleted", w, http.StatusOK)

@@ -360,6 +360,8 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 }
 
 // GetOrder returns an order from the database.
+//
+// Deprecated: Use s.orderRepo.Get for order only or s.getOrderFull for order with items.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	ctx := context.TODO()
 	dbi := pg.RawDB()
@@ -787,8 +789,13 @@ func (pg *Postgres) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *
 	return nil
 }
 
-// DeleteTimeLimitedV2OrderCredsByOrderTx performs a hard delete for all time limited v2 order
-// credentials for a given OrderID.
+// DeleteTimeLimitedV2OrderCredsByOrderTx deletes all tlv2 creds for a given orderID.
+//
+// Deprecated: Use s.tlv2Repo.DeleteLegacy instead.
+//
+// TODO(pavelb): Remove this once MDR has been deployed because it's not used and needed anymore.
+//
+//nolint:unused
 func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
 	_, err := tx.ExecContext(ctx, `delete from time_limited_v2_order_creds where order_id = $1`, orderID)
 	if err != nil {
@@ -1279,7 +1286,7 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			ord, err := pg.GetOrder(metadata.OrderID)
+			ord, err := pg.orderRepo.Get(ctx, tx, metadata.OrderID)
 			if err != nil {
 				return fmt.Errorf("failed to get the order %s: %w", metadata.OrderID, err)
 			}
