@@ -1121,23 +1121,24 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 
 	ntf, err := parseAppStoreSrvNotification(svc.assnCertVrf, spayload.SignedPayload)
 	if err != nil {
-		// TODO: Reply with http.StatusOK after testing is complete.
-		// None of these errors is recoverable.
-
 		lg.Err(err).Str("payload", spayload.SignedPayload).Msg("failed to parse app store notification")
 
 		return handlers.ValidationError("request", map[string]interface{}{"parse-signed-payload": err.Error()})
 	}
 
 	if err := svc.processAppStoreNotification(ctx, ntf); err != nil {
-		lg.Err(err).Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg("failed to process app store notification")
+		l := lg.With().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Logger()
 
 		switch {
 		case errors.Is(err, context.Canceled):
+			l.Warn().Err(err).Msg("failed to process app store notification")
+
 			// Should retry.
 			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
 
 		case errors.Is(err, model.ErrOrderNotFound):
+			l.Warn().Err(err).Msg("failed to process app store notification")
+
 			// Order was not found, so nothing can be done.
 			// It might be an issue for VPN:
 			// - user has not linked yet;
@@ -1152,6 +1153,8 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
 		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+			l.Warn().Err(err).Msg("failed to process app store notification")
+
 			// No rows have changed whilst processing.
 			// This could happen in theory, but not in practice.
 			// It would mean that we attempted to update with the same data as it's in the database.
@@ -1162,12 +1165,19 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
 		default:
+			l.Err(err).Msg("failed to process app store notification")
+
 			// Retry for all other errors for now.
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}
 
-	lg.Info().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg("processed app store notification")
+	msg := "skipped app store notification"
+	if ntf.shouldProcess() {
+		msg = "processed app store notification"
+	}
+
+	lg.Info().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg(msg)
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
