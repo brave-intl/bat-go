@@ -247,13 +247,13 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	if err != nil {
 		// Introspect the RPC error looking for specific error codes
 		var mapErr map[string]interface{}
-		err := json.Unmarshal([]byte(err.Error()), &mapErr)
-		if err != nil {
-			return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
+		unmarshalErr := json.Unmarshal([]byte(err.Error()), &mapErr)
+		if unmarshalErr != nil {
+			return sm.transaction, fmt.Errorf("failed to submit transaction: %w", unmarshalErr)
 		}
 		data, ok := mapErr["data"].(map[string]interface{})
 		if !ok {
-			return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
+			return sm.transaction, fmt.Errorf("failed to assert error data to map: %v", mapErr["data"])
 		}
 		if data["err"] == "BlockhashNotFound" {
 			_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)

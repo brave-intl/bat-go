@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -70,29 +71,8 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 		return errors.New("waiting for retry-after")
 	}
 
-	reqWrapper := payments.RequestWrapper{}
-	err = json.Unmarshal(data, &reqWrapper)
-	if err != nil {
-		return err
-	}
-
-	r, err := client.NewRequest(ctx, method, path, nil, nil)
-	if err != nil {
-		return err
-	}
-
-	_, err = reqWrapper.Request.Extract(r)
-	if err != nil {
-		return err
-	}
-
-	// FIXME we should probably complete override the url based on params
-	r.URL = client.BaseURL.ResolveReference(&url.URL{
-		Path: r.URL.RequestURI(),
-	})
-
 	delay := 1 * time.Second
-	resp, err := httpDoWhileRetryZero(ctx, client, r)
+	resp, err := httpDoWhileRetryZero(ctx, client, data, method, path)
 	if resp != nil {
 		retry := resp.Header.Get("x-retry-after")
 		if retry != "" {
@@ -132,22 +112,46 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 	return w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, respWrapper)
 }
 
-func httpDoWhileRetryZero(ctx context.Context, client *client.SimpleHTTPClient, req *http.Request) (*http.Response, error) {
-	var (
-		resp *http.Response
-		err error
-	)
+func httpDoWhileRetryZero(
+	ctx context.Context,
+	client *client.SimpleHTTPClient,
+	data []byte,
+	method,
+	path string,
+) (*http.Response, error) {
 	for i := 0; i < 500; i++ {
-		resp, err = client.Do(ctx, req, nil)
+		// Generate wrapped request. It must be generated each loop because the request and response
+		// can be Closed, breaking them across iterations.
+		reqWrapper := payments.RequestWrapper{}
+		err := json.Unmarshal(data, &reqWrapper)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal request into wrapper: %w", err)
+		}
+
+		req, err := client.NewRequest(ctx, method, path, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create new request: %w", err)
+		}
+
+		_, err = reqWrapper.Request.Extract(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract request from wrapper: %w", err)
+		}
+
+		// FIXME we should probably complete override the url based on params
+		req.URL = client.BaseURL.ResolveReference(&url.URL{
+			Path: req.URL.RequestURI(),
+		})
+		resp, err := client.Do(ctx, req, nil)
 		if resp != nil {
 			retry := resp.Header.Get("x-retry-after")
 			if resp.StatusCode != http.StatusOK && retry == "0" {
 				continue
 			}
 		}
-		break
+		return resp, err
 	}
-	return resp, err
+	return nil, nil
 }
 
 // HandlePrepareConfigMessage creates a new prepare consumer, waiting for all messages to be consumed

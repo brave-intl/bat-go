@@ -227,8 +227,7 @@ func (s *Service) DriveTransaction(
 			return fmt.Errorf("failed to sign transaction: %w", err)
 		}
 
-		s.datastore.UpdatePaymentState(ctx, state.DocumentID, &paymentState)
-
+		err = s.datastore.UpdatePaymentState(ctx, state.DocumentID, &paymentState)
 		if err != nil {
 			return fmt.Errorf("failed to update transaction: %w", err)
 		}
