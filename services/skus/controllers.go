@@ -109,7 +109,7 @@ func Router(
 		r.Method(http.MethodPost, "/{orderID}/receipt", metricsMwr("checkOrderReceipt", authMwr(handleCheckOrderReceipt(svc, valid))))
 	}
 
-	credh := handler.NewCredential(svc)
+	credh := handler.NewCred(svc)
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(NewCORSMwr(copts, http.MethodGet, http.MethodPost))

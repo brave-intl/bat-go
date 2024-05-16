@@ -16,17 +16,17 @@ type tlv2Svc interface {
 	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
 }
 
-type Credential struct {
+type Cred struct {
 	tlv2 tlv2Svc
 }
 
-func NewCredential(tlv2 tlv2Svc) *Credential {
-	result := &Credential{tlv2: tlv2}
+func NewCred(tlv2 tlv2Svc) *Cred {
+	result := &Cred{tlv2: tlv2}
 
 	return result
 }
 
-func (h *Credential) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
