@@ -31,7 +31,7 @@ func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID
 	return s.FnUniqBatches(ctx, orderID, itemID)
 }
 
-func TestCredential_CountBatches(t *testing.T) {
+func TestCred_CountBatches(t *testing.T) {
 	type tcGiven struct {
 		ctx context.Context
 		svc *mockTLV2Svc
