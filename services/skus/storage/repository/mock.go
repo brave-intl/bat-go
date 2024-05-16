@@ -66,6 +66,36 @@ func (r *MockOrder) SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, i
 	return r.FnSetLastPaidAt(ctx, dbi, id, when)
 }
 
+type MockOrderItem struct {
+	FnGet           func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FnFindByOrderID func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
+	FnInsertMany    func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+}
+
+func (r *MockOrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+	if r.FnGet == nil {
+		return &model.OrderItem{ID: id}, nil
+	}
+
+	return r.FnGet(ctx, dbi, id)
+}
+
+func (r *MockOrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+	if r.FnFindByOrderID == nil {
+		return []model.OrderItem{{ID: uuid.Nil, OrderID: orderID}}, nil
+	}
+
+	return r.FnFindByOrderID(ctx, dbi, orderID)
+}
+
+func (r *MockOrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error) {
+	if r.InsertMany == nil {
+		return items, nil
+	}
+
+	return r.FnInsertMany(ctx, dbi, items...)
+}
+
 type MockIssuer struct {
 	FnGetByMerchID func(ctx context.Context, dbi sqlx.QueryerContext, merchID string) (*model.Issuer, error)
 	FnGetByPubKey  func(ctx context.Context, dbi sqlx.QueryerContext, pubKey string) (*model.Issuer, error)

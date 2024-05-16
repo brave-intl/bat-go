@@ -1121,7 +1121,7 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		}
 	}
 
-	if item.CredentialType == timeLimitedV2 {
+	if item.CredentialType != timeLimitedV2 {
 		return 0, 0, model.ErrUnsupportedCredType
 	}
 

@@ -23,6 +23,327 @@ import (
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
+func TestService_uniqBatchesTxTime(t *testing.T) {
+	type tcGiven struct {
+		orderID  uuid.UUID
+		itemID   uuid.UUID
+		from     time.Time
+		to       time.Time
+		ordRepo  *repository.MockOrder
+		itemRepo *repository.MockOrderItem
+		tlv2Repo *repository.MockTLV2
+	}
+
+	type tcExpected struct {
+		lim int
+		val int
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderNotFound,
+			},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "pending",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderNotPaid,
+			},
+		},
+
+		{
+			name: "invalid_order_no_items",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrInvalidOrderNoItems,
+			},
+		},
+
+		{
+			name: "legacy_default_item_unsupported_cred_type",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:      uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrUnsupportedCredType,
+			},
+		},
+
+		{
+			name: "legacy_default_item_uniq_batches_error",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+								CredentialType: "time-limited-v2",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 0, model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "legacy_default_item_success",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+								CredentialType: "time-limited-v2",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 1, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				lim: 10,
+				val: 1,
+			},
+		},
+
+		{
+			name: "explicit_item_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:      uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000001")),
+								OrderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderItemNotFound,
+			},
+		},
+
+		{
+			name: "explicit_item_success",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+								CredentialType: "time-limited-v2",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 2, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				lim: 10,
+				val: 2,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itemRepo,
+				tlv2Repo:      tc.given.tlv2Repo,
+			}
+
+			ctx := context.Background()
+
+			lim, nact, err := svc.uniqBatchesTxTime(ctx, nil, tc.given.orderID, tc.given.itemID, tc.given.from, tc.given.to)
+			must.Equal(t, true, errors.Is(err, tc.exp.err))
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.lim, lim)
+			should.Equal(t, tc.exp.val, nact)
+		})
+	}
+}
+
 func TestService_processAppStoreNotificationTx(t *testing.T) {
 	type tcGiven struct {
 		ntf   *appStoreSrvNotification
