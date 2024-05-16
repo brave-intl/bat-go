@@ -25,6 +25,7 @@ const (
 	ErrSomethingWentWrong                     Error = "something went wrong"
 	ErrOrderNotFound                          Error = "model: order not found"
 	ErrOrderItemNotFound                      Error = "model: order item not found"
+	ErrOrderNotPaid                           Error = "order not paid"
 	ErrIssuerNotFound                         Error = "model: issuer not found"
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
@@ -49,6 +50,12 @@ const (
 	ErrReceiptAlreadyLinked    Error = "model: receipt already linked"
 
 	ErrTLV2InvalidCredNum Error = "model: invalid number of creds"
+
+	// ErrInvalidCredType is returned when an invalid cred type has been detected.
+	ErrInvalidCredType Error = "invalid credential type on order"
+
+	// ErrUnsupportedCredType is returned when requested operation is not supported for the cred type.
+	ErrUnsupportedCredType Error = "unsupported credential type"
 
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
@@ -322,13 +329,7 @@ func (o *Order) NumIntervals() (int, error) {
 // It exposes a comma, ok API similar to a map.
 // Today items are stored in a slice, but it might change to a map in the future.
 func (o *Order) HasItem(id uuid.UUID) (*OrderItem, bool) {
-	for i := range o.Items {
-		if uuid.Equal(o.Items[i].ID, id) {
-			return &o.Items[i], true
-		}
-	}
-
-	return nil, false
+	return OrderItemList(o.Items).HasItem(id)
 }
 
 func (o *Order) StripeSubID() (string, bool) {
@@ -449,6 +450,17 @@ func (l OrderItemList) TotalCost() decimal.Decimal {
 	}
 
 	return result
+}
+
+func (l OrderItemList) HasItem(id uuid.UUID) (*OrderItem, bool) {
+	for i := range l {
+		if uuid.Equal(l[i].ID, id) {
+			return &l[i], true
+		}
+	}
+
+	return nil, false
+
 }
 
 func (l OrderItemList) stripeLineItems() []*stripe.CheckoutSessionLineItemParams {

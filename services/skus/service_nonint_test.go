@@ -1270,7 +1270,7 @@ func TestService_doTLV2ExistTxTime(t *testing.T) {
 				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				repo:  &repository.MockTLV2{},
 			},
-			exp: errUnsupportedCredType,
+			exp: model.ErrUnsupportedCredType,
 		},
 
 		{
