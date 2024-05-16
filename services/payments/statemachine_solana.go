@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"strconv"
 
 	solanaClient "github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
@@ -322,8 +324,18 @@ func (sm *SolanaMachine) makeInstructions(
 		Amount:  amount,
 	}
 
-	priceParam := compute_budget.SetComputeUnitPriceParam{MicroLamports: 10}
-	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: 50000}
+	computeUnitPrice := 100
+	if envCUPrice, err := strconv.Atoi(os.Getenv("SOLANA_COMPUTE_UNIT_PRICE")); err == nil {
+		computeUnitPrice = envCUPrice
+	}
+
+	computeUnitLimit := 50000
+	if envCULimit, err := strconv.Atoi(os.Getenv("SOLANA_COMPUTE_UNIT_LIMIT")); err == nil {
+		computeUnitLimit = envCULimit
+	}
+
+	priceParam := compute_budget.SetComputeUnitPriceParam{MicroLamports: uint64(computeUnitPrice)}
+	budgetParam := compute_budget.SetComputeUnitLimitParam{Units: uint32(computeUnitLimit)}
 
 	return []types.Instruction{
 		// Set the transaction budget
