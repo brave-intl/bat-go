@@ -89,7 +89,7 @@ func (r *MockOrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerConte
 }
 
 func (r *MockOrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error) {
-	if r.InsertMany == nil {
+	if r.FnInsertMany == nil {
 		return items, nil
 	}
 
