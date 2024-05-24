@@ -604,10 +604,13 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 
 	requestID, err := uuid.FromString(soresult.RequestID)
 	if err != nil {
-		return fmt.Errorf("error getting uuid from signed order request %w", err)
+		return fmt.Errorf("error getting uuid from signed order request: %w", err)
 	}
 
 	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, h.datastore)
+	if err != nil {
+		return fmt.Errorf("failed to open tx: %w", err)
+	}
 	defer rollback()
 
 	// Check to see if the signing request has not been deleted whilst signing the request.
