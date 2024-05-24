@@ -1561,6 +1561,7 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	handler := &SignedOrderCredentialsHandler{
 		decoder:   decoder,
 		datastore: s.Datastore,
+		tlv2Repo:  s.tlv2Repo,
 	}
 
 	errorHandler := &SigningOrderResultErrorHandler{
