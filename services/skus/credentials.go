@@ -349,16 +349,12 @@ func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		return errCredsAlreadySubmittedMismatch
 	}
 
-	nsets, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
+	nact, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
 	if err != nil {
 		return err
 	}
 
-	if nsets >= maxTLV2ActiveDailyItemCreds {
-		return ErrCredsAlreadyExist
-	}
-
-	return nil
+	return checkTLV2BatchLimit(maxTLV2ActiveDailyItemCreds, nact)
 }
 
 func (s *Service) doCredsExist(ctx context.Context, item *model.OrderItem) error {
@@ -584,30 +580,35 @@ func encodeIssuerID(merchantID, sku string) (string, error) {
 	return u.String(), nil
 }
 
-// SignedOrderCredentialsHandler - this is the handler for getting the signed order credentials
+// SignedOrderCredentialsHandler handles requests for signing credentials.
 type SignedOrderCredentialsHandler struct {
 	decoder   Decoder
 	datastore Datastore
+	tlv2Repo  tlv2Store
 }
 
 // Handle processes Kafka message of type SigningOrderResult.
-func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafka.Message) (err error) {
-	signedOrderResult, err := s.decoder.Decode(message)
+//
+// TODO(pavelb): Refactor this to not require real database for testing, and use deterministic time.
+func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Message) error {
+	soresult, err := h.decoder.Decode(msg)
 	if err != nil {
-		return fmt.Errorf("error decoding message key %s partition %d offset %d: %w",
-			string(message.Key), message.Partition, message.Offset, err)
+		return fmt.Errorf("error decoding message key %s partition %d offset %d: %w", string(msg.Key), msg.Partition, msg.Offset, err)
 	}
 
-	requestID, err := uuid.FromString(signedOrderResult.RequestID)
+	requestID, err := uuid.FromString(soresult.RequestID)
 	if err != nil {
-		return fmt.Errorf("error getting uuid from signed order request %w", err)
+		return fmt.Errorf("error getting uuid from signed order request: %w", err)
 	}
 
-	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.datastore)
+	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, h.datastore)
+	if err != nil {
+		return fmt.Errorf("failed to open tx: %w", err)
+	}
 	defer rollback()
 
 	// Check to see if the signing request has not been deleted whilst signing the request.
-	sor, err := s.datastore.GetSigningOrderRequestOutboxByRequestID(ctx, tx, requestID)
+	sor, err := h.datastore.GetSigningOrderRequestOutboxByRequestID(ctx, tx, requestID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("error get signing order credentials tx: %w", err)
 	}
@@ -616,18 +617,27 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 		return nil
 	}
 
-	err = s.datastore.InsertSignedOrderCredentialsTx(ctx, tx, signedOrderResult)
+	now := time.Now()
+
+	nact, err := h.tlv2Repo.UniqBatches(ctx, tx, sor.OrderID, sor.ItemID, now, now)
 	if err != nil {
+		return fmt.Errorf("failed to get number of active batches: %w", err)
+	}
+
+	if err := checkTLV2BatchLimit(maxTLV2ActiveDailyItemCreds, nact); err != nil {
+		// Save to the dead letter queue for now.
+		return fmt.Errorf("failed to pass active batches limit check: %w", err)
+	}
+
+	if err := h.datastore.InsertSignedOrderCredentialsTx(ctx, tx, soresult); err != nil {
 		return fmt.Errorf("error inserting signed order credentials: %w", err)
 	}
 
-	err = s.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, time.Now())
-	if err != nil {
+	if err := h.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, now); err != nil {
 		return fmt.Errorf("error updating signing order request outbox: %w", err)
 	}
 
-	err = commit()
-	if err != nil {
+	if err := commit(); err != nil {
 		return fmt.Errorf("error commiting signing order request outbox: %w", err)
 	}
 
@@ -789,4 +799,12 @@ func doItemsHaveSUOrTlv2(items []model.OrderItem) (bool, bool) {
 	}
 
 	return hasSingleUse, hasTlv2
+}
+
+func checkTLV2BatchLimit(lim, nact int) error {
+	if nact >= lim {
+		return ErrCredsAlreadyExist
+	}
+
+	return nil
 }
