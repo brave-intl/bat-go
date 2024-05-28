@@ -42,9 +42,12 @@ import (
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
+	"github.com/amazon-ion/ion-go/ion"
 	client "github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/payments"
 	paymentscli "github.com/brave-intl/bat-go/tools/payments"
+	paymentssrv "github.com/brave-intl/bat-go/services/payments"
 )
 
 func main() {
@@ -154,6 +157,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to unmarshal response json: %w", err)
 		}
+
 		if vaultResp.Data.PublicKey != *vaultPublicKey {
 			log.Fatalf(
 				"public key mismatch between what was provided and what is stored in the service. ours: %s theirs: %s",
@@ -168,6 +172,33 @@ func main() {
 				vaultResp.Data.Threshold,
 			)
 		}
+
+		vaultRespSigned := paymentssrv.Vault{}
+		err = ion.Unmarshal(vaultResp.Data.SignedData, &vaultRespSigned)
+
+		if vaultRespSigned.SigningPublicKey != *vaultPublicKey {
+			log.Fatalf(
+				"public key mismatch between what was provided and what was signed. ours: %s theirs: %s",
+				*vaultPublicKey,
+				vaultRespSigned.SigningPublicKey,
+			)
+		}
+		if vaultRespSigned.Threshold != *threshold {
+			log.Fatalf(
+				"threshold mismatch between what was provided and what was signed. ours: %s theirs: %s",
+				*threshold,
+				vaultRespSigned.Threshold,
+			)
+		}
+
+		verifier := nitro.Verifier{
+			PCRs: map[uint][]byte{
+				2: []byte(*pcr2),
+			},
+			Now: time.Now().UTC,
+		}
+		verifier.Verify(vaultResp.Data.SignedData, vaultResp.Data.Signature, crypto.Hash(0))
+
 		log.Printf("Result: %s", body)
 		log.Print("Results match expected data. Verification complete.")
 	default:

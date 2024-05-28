@@ -37,19 +37,25 @@ import (
 // ChainAddress represents an on-chain address used for payouts. It needs to be persisted
 // to QLDB in this form to manage approvals and record the creator.
 type ChainAddress struct {
-	Chain     string   `ion:"chain"`
-	PublicKey string   `ion:"publicKey"`
-	Creator   string   `ion:"creator"`
-	Approvals []string `ion:"approvals"`
+	Chain            string   `ion:"chain"`
+	PublicKey        string   `ion:"publicKey"`
+	Creator          string   `ion:"creator"`
+	Approvals        []string `ion:"approvals"`
+	Signature        []byte   `ion:"signature"`
+	SigningPublicKey string   `ion:"signingPublicKey"`
+	SignedData       []byte   `ion:"signedData"`
 }
 
 // Vault represents a key which has been broken into shamir shares and is used for encrypting
 // secrets.
 type Vault struct {
-	PublicKey      string   `ion:"publicKey"`
-	Threshold      int      `ion:"threshold"`
-	OperatorKeys   []string `ion:"operatorKeys"`
-	IdempotencyKey string   `ion:"idempotencyKey"`
+	PublicKey        string   `ion:"publicKey"`
+	Threshold        int      `ion:"threshold"`
+	OperatorKeys     []string `ion:"operatorKeys"`
+	IdempotencyKey   string   `ion:"idempotencyKey"`
+	Signature        []byte   `ion:"signature"`
+	SigningPublicKey string   `ion:"signingPublicKey"`
+	SignedData       []byte   `ion:"signedData"`
 	// must be unexported. these values should never be presisted to QLDB
 	shares paymentLib.CreateVaultResponse
 }
@@ -146,6 +152,19 @@ func (s *Service) createVault(
 		},
 	}
 
+	marshaled, err := json.Marshal(vault)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal chain address: %w", err)
+	}
+
+	vault.Signature, err = s.signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign chain address: %w", err)
+	}
+
+	vault.SigningPublicKey = s.publicKey
+	vault.SignedData = marshaled
+
 	err = s.datastore.InsertVault(ctx, vault)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
@@ -164,9 +183,12 @@ func (s *Service) verifyVault(
 	}
 
 	return &paymentLib.VerifyVaultResponse{
-		Operators: fetchedVault.OperatorKeys,
-		Threshold: fetchedVault.Threshold,
-		PublicKey: fetchedVault.PublicKey,
+		Operators:        fetchedVault.OperatorKeys,
+		Threshold:        fetchedVault.Threshold,
+		PublicKey:        fetchedVault.PublicKey,
+		Signature:        fetchedVault.Signature,
+		SigningPublicKey: fetchedVault.SigningPublicKey,
+		SignedData:       fetchedVault.SignedData,
 	}, nil
 }
 
@@ -259,17 +281,31 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 		return nil, fmt.Errorf("failed to put key to s3: %w", err)
 	}
 
-	chainAdrress := ChainAddress{
+	chainAddress := ChainAddress{
 		PublicKey: b58PubKey,
 		Creator:   creatorKey,
 		Chain:     "solana",
 	}
-	_, err = s.datastore.InsertChainAddress(ctx, chainAdrress)
+
+	marshaled, err := json.Marshal(chainAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal chain address: %w", err)
+	}
+
+	chainAddress.Signature, err = s.signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign chain address: %w", err)
+	}
+
+	chainAddress.SigningPublicKey = s.publicKey
+	chainAddress.SignedData = marshaled
+
+	_, err = s.datastore.InsertChainAddress(ctx, chainAddress)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
 	}
 
-	return &chainAdrress, nil
+	return &chainAddress, nil
 }
 
 // NOTE: This function assumes that the http signature has been
@@ -288,6 +324,20 @@ func (s *Service) approveSolanaAddress(ctx context.Context, address, approverKey
 	}
 	if keyHasNotYetApproved {
 		chainAddress.Approvals = append(chainAddress.Approvals, approverKey)
+
+		marshaled, err := json.Marshal(chainAddress)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal chain address: %w", err)
+		}
+
+		chainAddress.Signature, err = s.signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign chain address: %w", err)
+		}
+
+		chainAddress.SigningPublicKey = s.publicKey
+		chainAddress.SignedData = marshaled
+
 		err = s.datastore.UpdateChainAddress(ctx, *chainAddress)
 		if err != nil {
 			return nil, fmt.Errorf("failed to save address to QLDB: %w", err)

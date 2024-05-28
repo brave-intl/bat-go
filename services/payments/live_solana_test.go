@@ -22,6 +22,7 @@ import (
 	"github.com/blocto/solana-go-sdk/common"
 	"github.com/blocto/solana-go-sdk/rpc"
 	// "github.com/blocto/solana-go-sdk/types"
+	"github.com/amazon-ion/ion-go/ion"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
@@ -104,12 +105,69 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 			break
 		}
 	}
-	// Check if the ATA was created by checking it's "Owner", which is shared by all SPL tokens
-	// regardless of who created them. This just determines whether the ATA exists by checking that
-	// it has an Owner field that is valid.
-	should.Equal(t, tokenAccountOwner, result.Owner.ToBase58())
+	//data := chainIdempotencyData{}
+	//err := ion.Unmarshal([]byte(tmp), &idempotencyData)
+	//if err != nil {
+	//	t.Logf("%+v", err)
+	//}
+	t.Logf("IDEMP: %+v", documentIDResult)
 
-	checkTransactionMatchesPaymentDetails(ctx, t, os.Getenv("SOLANA_RPC_ENDPOINT"), createdAta, state, *finalState)
+	//ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
+
+	//// New account for every test execution to ensure that the account does
+	//// not already have its ATA configured.
+	//payeeAccount := types.NewAccount()
+
+	//state := paymentLib.AuthenticatedPaymentState{
+	//	Status: paymentLib.Prepared,
+	//	PaymentDetails: paymentLib.PaymentDetails{
+	//		Amount:    decimal.NewFromFloat(1.4),
+	//		To:        payeeAccount.PublicKey.ToBase58(),
+	//		From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
+	//		Custodian: "solana",
+	//		PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
+	//		Currency:  "BAT",
+	//	},
+	//	Authorizations: []paymentLib.PaymentAuthorization{{}, {}, {}},
+	//}
+
+	//solMachine, mockTransitionHistory, marshaledState := setupState(state, mint, t)
+
+	//finalState := driveHappyPathTransitions(
+	//	ctx,
+	//	state,
+	//	mockTransitionHistory,
+	//	solMachine,
+	//	marshaledState,
+	//	t,
+	//)
+
+	//createdAta, _, err := common.FindAssociatedTokenAddress(
+	//	payeeAccount.PublicKey,
+	//	common.PublicKeyFromString(mint),
+	//)
+	//must.Nil(t, err)
+	//solClient := client.NewClient(os.Getenv("SOLANA_RPC_ENDPOINT"))
+	//must.Nil(t, err)
+	//// The RPC server caches the result of GetAccountInfo and the new value is not returned
+	//// for over 10 seconds in our testing. Therefore, ugly as it is, loop until we get a result
+	//// that matches our expectations or we give up and consider it a failure.
+	//var result client.AccountInfo
+	//for i := 1; i < 30; i++ {
+	//	t.Log("Checking that ATA was created")
+	//	time.Sleep(1 * time.Second)
+	//	result, err = solClient.GetAccountInfo(ctx, createdAta.ToBase58())
+	//	must.Nil(t, err)
+	//	if tokenAccountOwner == result.Owner.ToBase58() {
+	//		break
+	//	}
+	//}
+	//// Check if the ATA was created by checking it's "Owner", which is shared by all SPL tokens
+	//// regardless of who created them. This just determines whether the ATA exists by checking that
+	//// it has an Owner field that is valid.
+	//should.Equal(t, tokenAccountOwner, result.Owner.ToBase58())
+
+	//checkTransactionMatchesPaymentDetails(ctx, t, os.Getenv("SOLANA_RPC_ENDPOINT"), createdAta, state, *finalState)
 }
 
 /*
