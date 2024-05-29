@@ -61,6 +61,12 @@ type SolanaMachine struct {
 	splMintDecimals uint8
 }
 
+// IsAuthorized overrides the base state machine and checks whether the state machine has 1 or more
+// authorization, returning true if so
+func (sm *SolanaMachine) IsAuthorized(ctx context.Context) bool {
+	return len(sm.getTransaction().Authorizations) >= 1
+}
+
 func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
 	var err error
 	if !sm.IsAuthorized(ctx) {
