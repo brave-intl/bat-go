@@ -132,6 +132,7 @@ func (r *MockOrderPayHistory) Insert(ctx context.Context, dbi sqlx.ExecerContext
 type MockTLV2 struct {
 	FnGetCredSubmissionReport func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
 	FnUniqBatches             func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
+	FnDeleteLegacy            func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
 }
 
 func (r *MockTLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
@@ -148,4 +149,12 @@ func (r *MockTLV2) UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, ord
 	}
 
 	return r.FnUniqBatches(ctx, dbi, orderID, itemID, from, to)
+}
+
+func (r *MockTLV2) DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error {
+	if r.FnDeleteLegacy == nil {
+		return nil
+	}
+
+	return r.FnDeleteLegacy(ctx, dbi, orderID)
 }

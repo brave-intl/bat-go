@@ -456,7 +456,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	skuTLV2Repo := repository.NewTLV2()
 
-	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuIssuerRepo, skuOrderPayHistRepo, skuTLV2Repo)
+	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuOrderItemRepo, skuIssuerRepo, skuOrderPayHistRepo, skuTLV2Repo)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("SKUs service initialization failed")

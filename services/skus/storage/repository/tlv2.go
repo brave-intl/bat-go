@@ -44,3 +44,17 @@ func (r *TLV2) UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID
 
 	return result, nil
 }
+
+// DeleteLegacy deletes creds where request_id matches the item_id.
+//
+// Most of the time, there will be only one such set of creds for a given period of time
+// because there is only one item in an order.
+//
+// TODO(pavelb): Reconsider this when it's time for Bundles. By that time this method might be gone.
+func (r *TLV2) DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error {
+	const q = `DELETE FROM time_limited_v2_order_creds WHERE order_id=$1 AND request_id=item_id::text;`
+
+	_, err := dbi.ExecContext(ctx, q, orderID)
+
+	return err
+}

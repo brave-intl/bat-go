@@ -233,13 +233,9 @@ type TimeLimitedCreds struct {
 //
 // It handles only paid orders.
 func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemID, requestID uuid.UUID, blindedCreds []string) error {
-	order, err := s.Datastore.GetOrder(orderID)
+	order, err := s.getOrderFull(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
-	}
-
-	if order == nil {
-		return fmt.Errorf("error retrieving orderID %s: %w", orderID, errorutils.ErrNotFound)
 	}
 
 	if !order.IsPaid() {
@@ -314,13 +310,10 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, blindedCreds []string) error {
 	switch item.CredentialType {
 	case timeLimitedV2:
-		// NOTE: This creates a possible race to submit between clients.
-		// Multiple signing request outboxes can be created since their
-		// uniqueness constraint is on the request id.
-		// Despite this, the uniqueness constraint of time_limited_v2_order_creds ensures that
-		// only one set of credentials is written for each order / item & time interval.
-		// As a result, one client will successfully unblind the credentials and
-		// the others will fail.
+		// NOTE: There was a possible race condition that would allow exceeding limits on the number of cred batches.
+		// The condition is currently mitigated by:
+		// - checking the number of active batches before accepting a request to create creds;
+		// - checking the number of active batches before inserting the signed creds.
 
 		return s.doTLV2Exist(ctx, requestID, item, blindedCreds)
 	default:
@@ -711,7 +704,13 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 // - move the corresponding methods there;
 // - make those methods work on per-item basis.
 func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
-	order, err := s.Datastore.GetOrder(orderID)
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer s.Datastore.RollbackTx(tx)
+
+	order, err := s.getOrderFullTx(ctx, tx, orderID)
 	if err != nil {
 		return err
 	}
@@ -729,12 +728,6 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return nil
 	}
 
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer s.Datastore.RollbackTx(tx)
-
 	if doSingleUse {
 		if err := s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned); err != nil {
 			return fmt.Errorf("error deleting single use order creds: %w", err)
@@ -742,8 +735,8 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	if doTlv2 {
-		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
-			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
+		if err := s.tlv2Repo.DeleteLegacy(ctx, tx, orderID); err != nil {
+			return err
 		}
 	}
 
