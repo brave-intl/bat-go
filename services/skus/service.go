@@ -29,25 +29,25 @@ import (
 	"github.com/stripe/stripe-go/v72/sub"
 	"google.golang.org/api/idtoken"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	srv "github.com/brave-intl/bat-go/libs/service"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
-	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/radom"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	"github.com/brave-intl/bat-go/libs/logging"
+	srv "github.com/brave-intl/bat-go/libs/service"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/wallet"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 var (
@@ -96,6 +96,11 @@ type orderStoreSvc interface {
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 }
 
+type tlv2Store interface {
+	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
+	UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
+}
+
 type vendorReceiptValidator interface {
 	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
@@ -110,6 +115,7 @@ type Service struct {
 	orderRepo   orderStoreSvc
 	issuerRepo  issuerStore
 	payHistRepo orderPayHistoryStore
+	tlv2Repo    tlv2Store
 
 	// TODO: Eventually remove it.
 	Datastore Datastore
@@ -186,6 +192,7 @@ func InitService(
 	orderRepo orderStoreSvc,
 	issuerRepo issuerStore,
 	payHistRepo orderPayHistoryStore,
+	tlv2repo tlv2Store,
 ) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
@@ -1554,6 +1561,7 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	handler := &SignedOrderCredentialsHandler{
 		decoder:   decoder,
 		datastore: s.Datastore,
+		tlv2Repo:  s.tlv2Repo,
 	}
 
 	errorHandler := &SigningOrderResultErrorHandler{

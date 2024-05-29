@@ -48,6 +48,8 @@ const (
 	ErrInvalidOrderRequest     Error = "model: no items to be created"
 	ErrReceiptAlreadyLinked    Error = "model: receipt already linked"
 
+	ErrTLV2InvalidCredNum Error = "model: invalid number of creds"
+
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 
@@ -685,6 +687,11 @@ type IssuerConfig struct {
 
 func (c *IssuerConfig) NumIntervals() int {
 	return c.Buffer + c.Overlap
+}
+
+type TLV2CredSubmissionReport struct {
+	Submitted      bool `db:"submitted"`
+	ReqIDMistmatch bool `db:"req_id_mismatch"`
 }
 
 // ReceiptRequest represents a receipt submitted by a mobile or web client.
