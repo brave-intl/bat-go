@@ -33,24 +33,22 @@ const (
 
 	// maxTLV2ActiveDailyItemCreds specifies the number of credentials an item is allowed to have in a given day.
 	maxTLV2ActiveDailyItemCreds = 10
+
+	ErrCredsAlreadyExist = model.Error("credentials already exist")
+
+	errInvalidIssuerResp             = model.Error("invalid issuer response")
+	errInvalidNCredsSingleUse        = model.Error("submitted more blinded creds than quantity of order item")
+	errInvalidNCredsTlv2             = model.Error("submitted more blinded creds than allowed for order")
+	errItemDoesNotExist              = model.Error("order item does not exist for order")
+	errCredsAlreadySubmitted         = model.Error("credentials already submitted")
+	errCredsAlreadySubmittedMismatch = model.Error("credentials already submitted with a different request")
 )
 
 var (
-	ErrOrderUnpaid                   = errors.New("order not paid")
-	ErrOrderHasNoItems   model.Error = "order has no items"
-	ErrCredsAlreadyExist model.Error = "credentials already exist"
-
-	errInvalidIssuerResp             model.Error = "invalid issuer response"
-	errInvalidNCredsSingleUse        model.Error = "submitted more blinded creds than quantity of order item"
-	errInvalidNCredsTlv2             model.Error = "submitted more blinded creds than allowed for order"
-	errUnsupportedCredType           model.Error = "unsupported credential type"
-	errItemDoesNotExist              model.Error = "order item does not exist for order"
-	errCredsAlreadySubmitted         model.Error = "credentials already submitted"
-	errCredsAlreadySubmittedMismatch model.Error = "credentials already submitted with a different request"
-
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
-	retryPolicy      = retrypolicy.DefaultRetry
-	dontRetryCodes   = map[int]struct{}{
+
+	retryPolicy    = retrypolicy.DefaultRetry
+	dontRetryCodes = map[int]struct{}{
 		http.StatusBadRequest:          struct{}{},
 		http.StatusUnauthorized:        struct{}{},
 		http.StatusForbidden:           struct{}{},
@@ -239,7 +237,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 	}
 
 	if !order.IsPaid() {
-		return ErrOrderUnpaid
+		return model.ErrOrderNotPaid
 	}
 
 	var orderItem *OrderItem
@@ -329,7 +327,7 @@ func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.
 
 func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, item *model.OrderItem, bcreds []string, from, to time.Time) error {
 	if item.CredentialType != timeLimitedV2 {
-		return errUnsupportedCredType
+		return model.ErrUnsupportedCredType
 	}
 
 	// Check TLV2 to see if we have credentials signed that match incoming blinded tokens.
@@ -358,7 +356,7 @@ func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext
 
 func (s *Service) doCredsExist(ctx context.Context, item *model.OrderItem) error {
 	if item.CredentialType == timeLimitedV2 {
-		return errUnsupportedCredType
+		return model.ErrUnsupportedCredType
 	}
 
 	// Check if we already have a signing request for this order, delete order creds will
@@ -716,7 +714,7 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	if len(order.Items) == 0 {
-		return ErrOrderHasNoItems
+		return model.ErrInvalidOrderNoItems
 	}
 
 	doSingleUse, doTlv2 := doItemsHaveSUOrTlv2(order.Items)

@@ -77,7 +77,7 @@ func TestOrder_Create(t *testing.T) {
 			},
 			exp: tcExpected{
 				err: handlers.ValidationError(
-					"Error validating request body",
+					"request body",
 					map[string]interface{}{
 						"items": "array must contain at least one item",
 					},

@@ -51,14 +51,6 @@ import (
 )
 
 var (
-	errSetRetryAfter             = errors.New("set retry-after")
-	errClosingResource           = errors.New("error closing resource")
-	errInvalidRadomURL           = model.Error("service: invalid radom url")
-	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
-	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
-	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
-	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
-
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
 	// TODO address in kafka refactor. Check topics are correct
@@ -82,10 +74,22 @@ const (
 	OrderStatusPending = model.OrderStatusPending
 )
 
-// Default issuer V3 config default values
 const (
+	// Default issuer V3 config default values
 	defaultBuffer  = 30
 	defaultOverlap = 5
+
+	singleUse     = "single-use"
+	timeLimited   = "time-limited"
+	timeLimitedV2 = "time-limited-v2"
+
+	errSetRetryAfter             = model.Error("set retry-after")
+	errClosingResource           = model.Error("error closing resource")
+	errInvalidRadomURL           = model.Error("service: invalid radom url")
+	errGeminiClientNotConfigured = model.Error("service: gemini client not configured")
+	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
+	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
+	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
 )
 
 type orderStoreSvc interface {
@@ -1086,13 +1090,48 @@ func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 	return u
 }
 
-const (
-	singleUse     = "single-use"
-	timeLimited   = "time-limited"
-	timeLimitedV2 = "time-limited-v2"
-)
+// UniqBatches returns the limit for active batches and the current number of active batches.
+func (s *Service) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
+	now := time.Now()
 
-var errInvalidCredentialType = errors.New("invalid credential type on order")
+	return s.uniqBatchesTxTime(ctx, s.Datastore.RawDB(), orderID, itemID, now, now)
+}
+
+func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, int, error) {
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if !ord.IsPaid() {
+		return 0, 0, model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return 0, 0, model.ErrInvalidOrderNoItems
+	}
+
+	// Legacy: the method can be called with no itemID.
+	item := &ord.Items[0]
+	if !uuid.Equal(itemID, uuid.Nil) {
+		var ok bool
+		item, ok = ord.HasItem(itemID)
+		if !ok {
+			return 0, 0, model.ErrOrderItemNotFound
+		}
+	}
+
+	if item.CredentialType != timeLimitedV2 {
+		return 0, 0, model.ErrUnsupportedCredType
+	}
+
+	nact, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return maxTLV2ActiveDailyItemCreds, nact, nil
+}
 
 // GetItemCredentials returns credentials based on the order, item and request id.
 func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
@@ -1118,7 +1157,7 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID
 	case timeLimitedV2:
 		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, reqID)
 	default:
-		return nil, http.StatusConflict, errInvalidCredentialType
+		return nil, http.StatusConflict, model.ErrInvalidCredType
 	}
 }
 
@@ -1150,7 +1189,7 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	case timeLimitedV2:
 		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, itemID)
 	default:
-		return nil, http.StatusConflict, errInvalidCredentialType
+		return nil, http.StatusConflict, model.ErrInvalidCredType
 	}
 }
 
