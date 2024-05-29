@@ -742,9 +742,6 @@ func deleteOrderCreds(service *Service) handlers.AppHandler {
 			case errors.Is(err, model.ErrInvalidOrderNoItems):
 				return handlers.WrapError(err, "order has no items", http.StatusBadRequest)
 
-			// case errors.Is(err, errExceededMaxTLV2DailyCreds):
-			// 	return handlers.WrapError(err, err.Error(), http.StatusUnprocessableEntity)
-
 			default:
 				return handlers.WrapError(model.ErrSomethingWentWrong, "failed to delete credentials", http.StatusBadRequest)
 			}
