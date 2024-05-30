@@ -335,6 +335,7 @@ func InitService(
 		orderItemRepo: orderItemRepo,
 		issuerRepo:    issuerRepo,
 		payHistRepo:   payHistRepo,
+		tlv2Repo:      tlv2repo,
 
 		Datastore: datastore,
 
