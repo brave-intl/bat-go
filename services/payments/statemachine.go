@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"encoding/base64"
@@ -211,6 +212,28 @@ func (s *Service) DriveTransaction(
 			state.LastError = paymentLib.ProcessingErrorFromError(lastErr, true)
 		} else {
 			state.LastError = nil
+		}
+
+		// Get the validated history of the transaction from qldb so that we can safely access
+		// current persisted state
+		history, err := s.datastore.GetPaymentStateHistory(ctx, state.DocumentID)
+		if err != nil {
+			return fmt.Errorf("failed to get history from document id", err)
+		}
+		persistedState, err := history.GetAuthenticatedPaymentState(
+			s.verifierStore,
+			state.DocumentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to validate payment state history", err)
+		}
+		// If there is idempotency data in qldb and it is different from the idempotency data in the
+		// current state it means that there was a race between two calls to Authenticate and we are
+		// operating on the loser. There is no risk to proceeding as long as we retain the winner
+		// idempotency.
+		if !bytes.Equal(state.ExternalIdempotency, persistedState.ExternalIdempotency) &&
+			persistedState != nil {
+			state.ExternalIdempotency = persistedState.ExternalIdempotency
 		}
 
 		marshaledState, err := json.Marshal(state)
