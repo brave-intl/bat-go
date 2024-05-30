@@ -198,16 +198,33 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	}
 
 	b58Signature := base58.Encode(idempotencyData.Transaction.Signatures[0])
+	// solanaError stores temporary errors that need to be recorded as the LastError in QLDB but
+	// that are expected and do not need to be acted upon. It will only be returned if no other
+	// unexpected errors arise from processing.
+	var solanaError error
 	status, err := checkStatus(ctx, b58Signature, &sm.solanaRpcClient)
 	if err != nil {
-		return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
+		// Some errors are expected and we just want to record them. Check if the status check
+		// returned such an error and prepare to return it after we attempt to make progress.
+		var (
+			errNotConfirmed SolanaTransactionNotConfirmedError
+			errNotFound     SolanaTransactionNotFoundError
+			errUnknown      SolanaTransactionUnknownError
+		)
+		if errors.As(err, &errNotConfirmed) ||
+			errors.As(err, errNotFound) ||
+			errors.As(err, errUnknown) {
+			solanaError = paymentLib.ProcessingErrorFromError(err, true)
+		} else {
+			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
+		}
 	}
 	if status == TxnConfirmed || status == TxnFinalized {
 		entry, err := sm.SetNextState(ctx, paymentLib.Paid)
 		if err != nil {
 			return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
 		}
-		return sm.transaction, nil
+		return sm.transaction, solanaError
 	}
 
 	// Check if idempotency data has expired before (re)submitting the transaction
@@ -285,7 +302,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
 	}
 
-	return sm.transaction, nil
+	return sm.transaction, solanaError
 }
 
 // Fail implements TxStateMachine for the Solana machine.
@@ -352,17 +369,21 @@ func (sm *SolanaMachine) makeInstructions(
 	}, nil
 }
 
-func checkStatus(ctx context.Context, signature string, client *solanaClient.Client) (TxnCommitmentStatus, error) {
+func checkStatus(
+	ctx context.Context,
+	signature string,
+	client *solanaClient.Client,
+) (TxnCommitmentStatus, error) {
 	sigStatus, err := client.GetSignatureStatus(ctx, signature)
 	if err != nil {
 		return TxnUnknown, fmt.Errorf("status check error: %w", err)
 	}
 
 	if sigStatus == nil {
-		return TxnNotFound, nil
+		return TxnNotFound, &SolanaTransactionNotFoundError{}
 	}
 	if sigStatus.ConfirmationStatus == nil {
-		return TxnUnknown, nil
+		return TxnUnknown, &SolanaTransactionUnknownError{}
 	}
 
 	if sigStatus.Err != nil {
@@ -377,7 +398,7 @@ func checkStatus(ctx context.Context, signature string, client *solanaClient.Cli
 
 	switch *sigStatus.ConfirmationStatus {
 	case rpc.CommitmentProcessed:
-		return TxnProcessed, nil
+		return TxnProcessed, &SolanaTransactionNotConfirmedError{}
 	case rpc.CommitmentConfirmed:
 		return TxnConfirmed, nil
 	case rpc.CommitmentFinalized:

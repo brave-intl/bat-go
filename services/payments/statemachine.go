@@ -204,10 +204,12 @@ func (s *Service) DriveTransaction(
 	state, lastErr := Drive(ctx, stateMachine)
 	if state != nil {
 		var errTmp paymentLib.PaymentError
+		// If the error is already a PaymentError use it
 		if errors.As(lastErr, &errTmp) {
 			state.LastError = &errTmp
 		} else if lastErr != nil {
-			// Assume any non-categorized error is temporary
+			// If it's not a PaymentError turn it into one Assume any error coming to us without
+			// PaymentError structure is temporary
 			state.LastError = paymentLib.ProcessingErrorFromError(lastErr, true)
 		} else {
 			state.LastError = nil
