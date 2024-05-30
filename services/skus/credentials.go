@@ -30,24 +30,25 @@ import (
 const (
 	defaultMaxTokensPerIssuer       = 4000000 // ~1M BAT
 	defaultCohort             int16 = 1
+
+	// maxTLV2ActiveDailyItemCreds specifies the number of credentials an item is allowed to have in a given day.
+	maxTLV2ActiveDailyItemCreds = 10
+
+	ErrCredsAlreadyExist = model.Error("credentials already exist")
+
+	errInvalidIssuerResp             = model.Error("invalid issuer response")
+	errInvalidNCredsSingleUse        = model.Error("submitted more blinded creds than quantity of order item")
+	errInvalidNCredsTlv2             = model.Error("submitted more blinded creds than allowed for order")
+	errItemDoesNotExist              = model.Error("order item does not exist for order")
+	errCredsAlreadySubmitted         = model.Error("credentials already submitted")
+	errCredsAlreadySubmittedMismatch = model.Error("credentials already submitted with a different request")
 )
 
 var (
-	ErrOrderUnpaid                   = errors.New("order not paid")
-	ErrOrderHasNoItems   model.Error = "order has no items"
-	ErrCredsAlreadyExist model.Error = "credentials already exist"
-
-	errInvalidIssuerResp             model.Error = "invalid issuer response"
-	errInvalidNCredsSingleUse        model.Error = "submitted more blinded creds than quantity of order item"
-	errInvalidNCredsTlv2             model.Error = "submitted more blinded creds than allowed for order"
-	errUnsupportedCredType           model.Error = "unsupported credential type"
-	errItemDoesNotExist              model.Error = "order item does not exist for order"
-	errCredsAlreadySubmitted         model.Error = "credentials already submitted"
-	errCredsAlreadySubmittedMismatch model.Error = "credentials already submitted with a different request"
-
 	defaultExpiresAt = time.Now().Add(17532 * time.Hour) // 2 years
-	retryPolicy      = retrypolicy.DefaultRetry
-	dontRetryCodes   = map[int]struct{}{
+
+	retryPolicy    = retrypolicy.DefaultRetry
+	dontRetryCodes = map[int]struct{}{
 		http.StatusBadRequest:          struct{}{},
 		http.StatusUnauthorized:        struct{}{},
 		http.StatusForbidden:           struct{}{},
@@ -230,17 +231,13 @@ type TimeLimitedCreds struct {
 //
 // It handles only paid orders.
 func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemID, requestID uuid.UUID, blindedCreds []string) error {
-	order, err := s.Datastore.GetOrder(orderID)
+	order, err := s.getOrderFull(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
 	}
 
-	if order == nil {
-		return fmt.Errorf("error retrieving orderID %s: %w", orderID, errorutils.ErrNotFound)
-	}
-
 	if !order.IsPaid() {
-		return ErrOrderUnpaid
+		return model.ErrOrderNotPaid
 	}
 
 	var orderItem *OrderItem
@@ -311,13 +308,10 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, blindedCreds []string) error {
 	switch item.CredentialType {
 	case timeLimitedV2:
-		// NOTE: This creates a possible race to submit between clients.
-		// Multiple signing request outboxes can be created since their
-		// uniqueness constraint is on the request id.
-		// Despite this, the uniqueness constraint of time_limited_v2_order_creds ensures that
-		// only one set of credentials is written for each order / item & time interval.
-		// As a result, one client will successfully unblind the credentials and
-		// the others will fail.
+		// NOTE: There was a possible race condition that would allow exceeding limits on the number of cred batches.
+		// The condition is currently mitigated by:
+		// - checking the number of active batches before accepting a request to create creds;
+		// - checking the number of active batches before inserting the signed creds.
 
 		return s.doTLV2Exist(ctx, requestID, item, blindedCreds)
 	default:
@@ -325,44 +319,44 @@ func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, i
 	}
 }
 
-func (s *Service) doTLV2Exist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, blindedCreds []string) error {
+func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.OrderItem, bcreds []string) error {
+	now := time.Now()
+
+	return s.doTLV2ExistTxTime(ctx, s.Datastore.RawDB(), reqID, item, bcreds, now, now)
+}
+
+func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, item *model.OrderItem, bcreds []string, from, to time.Time) error {
 	if item.CredentialType != timeLimitedV2 {
-		return errUnsupportedCredType
+		return model.ErrUnsupportedCredType
 	}
 
 	// Check TLV2 to see if we have credentials signed that match incoming blinded tokens.
-	credsSubmitted, err := s.Datastore.AreTimeLimitedV2CredsSubmitted(ctx, requestID, blindedCreds...)
+	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, dbi, reqID, bcreds...)
 	if err != nil {
-		return fmt.Errorf("error validating credentials exist for order item: %w", err)
+		return err
 	}
 
-	if credsSubmitted.AlreadySubmitted {
-		// No need to create order credentials, since these are already submitted.
+	// Don't create credentials, since these are already submitted.
+	if report.Submitted {
 		return errCredsAlreadySubmitted
 	}
-	if credsSubmitted.Mismatch {
-		// conflict because those credentials were submitted with a different request id
+
+	// Fail because these creds were submitted with a different req_id.
+	if report.ReqIDMistmatch {
 		return errCredsAlreadySubmittedMismatch
 	}
 
-	// Check if we have signed credentials for this order item.
-	// If there is no order and no creds, we can submit again.
-	// Similar to the outbox check case, delete order creds will wipe out any already signed order creds.
-	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(item.ID)
+	nact, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
 	if err != nil {
-		return fmt.Errorf("error validating no credentials exist for order item: %w", err)
+		return err
 	}
 
-	if creds != nil {
-		return ErrCredsAlreadyExist
-	}
-
-	return nil
+	return checkTLV2BatchLimit(maxTLV2ActiveDailyItemCreds, nact)
 }
 
 func (s *Service) doCredsExist(ctx context.Context, item *model.OrderItem) error {
 	if item.CredentialType == timeLimitedV2 {
-		return errUnsupportedCredType
+		return model.ErrUnsupportedCredType
 	}
 
 	// Check if we already have a signing request for this order, delete order creds will
@@ -583,30 +577,35 @@ func encodeIssuerID(merchantID, sku string) (string, error) {
 	return u.String(), nil
 }
 
-// SignedOrderCredentialsHandler - this is the handler for getting the signed order credentials
+// SignedOrderCredentialsHandler handles requests for signing credentials.
 type SignedOrderCredentialsHandler struct {
 	decoder   Decoder
 	datastore Datastore
+	tlv2Repo  tlv2Store
 }
 
 // Handle processes Kafka message of type SigningOrderResult.
-func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafka.Message) (err error) {
-	signedOrderResult, err := s.decoder.Decode(message)
+//
+// TODO(pavelb): Refactor this to not require real database for testing, and use deterministic time.
+func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Message) error {
+	soresult, err := h.decoder.Decode(msg)
 	if err != nil {
-		return fmt.Errorf("error decoding message key %s partition %d offset %d: %w",
-			string(message.Key), message.Partition, message.Offset, err)
+		return fmt.Errorf("error decoding message key %s partition %d offset %d: %w", string(msg.Key), msg.Partition, msg.Offset, err)
 	}
 
-	requestID, err := uuid.FromString(signedOrderResult.RequestID)
+	requestID, err := uuid.FromString(soresult.RequestID)
 	if err != nil {
-		return fmt.Errorf("error getting uuid from signed order request %w", err)
+		return fmt.Errorf("error getting uuid from signed order request: %w", err)
 	}
 
-	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, s.datastore)
+	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, h.datastore)
+	if err != nil {
+		return fmt.Errorf("failed to open tx: %w", err)
+	}
 	defer rollback()
 
 	// Check to see if the signing request has not been deleted whilst signing the request.
-	sor, err := s.datastore.GetSigningOrderRequestOutboxByRequestID(ctx, tx, requestID)
+	sor, err := h.datastore.GetSigningOrderRequestOutboxByRequestID(ctx, tx, requestID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("error get signing order credentials tx: %w", err)
 	}
@@ -615,18 +614,27 @@ func (s *SignedOrderCredentialsHandler) Handle(ctx context.Context, message kafk
 		return nil
 	}
 
-	err = s.datastore.InsertSignedOrderCredentialsTx(ctx, tx, signedOrderResult)
+	now := time.Now()
+
+	nact, err := h.tlv2Repo.UniqBatches(ctx, tx, sor.OrderID, sor.ItemID, now, now)
 	if err != nil {
+		return fmt.Errorf("failed to get number of active batches: %w", err)
+	}
+
+	if err := checkTLV2BatchLimit(maxTLV2ActiveDailyItemCreds, nact); err != nil {
+		// Save to the dead letter queue for now.
+		return fmt.Errorf("failed to pass active batches limit check: %w", err)
+	}
+
+	if err := h.datastore.InsertSignedOrderCredentialsTx(ctx, tx, soresult); err != nil {
 		return fmt.Errorf("error inserting signed order credentials: %w", err)
 	}
 
-	err = s.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, time.Now())
-	if err != nil {
+	if err := h.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, now); err != nil {
 		return fmt.Errorf("error updating signing order request outbox: %w", err)
 	}
 
-	err = commit()
-	if err != nil {
+	if err := commit(); err != nil {
 		return fmt.Errorf("error commiting signing order request outbox: %w", err)
 	}
 
@@ -694,13 +702,19 @@ func (s *SigningOrderResultErrorHandler) Handle(ctx context.Context, message kaf
 // - move the corresponding methods there;
 // - make those methods work on per-item basis.
 func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSigned bool) error {
-	order, err := s.Datastore.GetOrder(orderID)
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer s.Datastore.RollbackTx(tx)
+
+	order, err := s.getOrderFullTx(ctx, tx, orderID)
 	if err != nil {
 		return err
 	}
 
 	if len(order.Items) == 0 {
-		return ErrOrderHasNoItems
+		return model.ErrInvalidOrderNoItems
 	}
 
 	doSingleUse, doTlv2 := doItemsHaveSUOrTlv2(order.Items)
@@ -712,12 +726,6 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 		return nil
 	}
 
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer s.Datastore.RollbackTx(tx)
-
 	if doSingleUse {
 		if err := s.Datastore.DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned); err != nil {
 			return fmt.Errorf("error deleting single use order creds: %w", err)
@@ -725,8 +733,8 @@ func (s *Service) DeleteOrderCreds(ctx context.Context, orderID uuid.UUID, isSig
 	}
 
 	if doTlv2 {
-		if err := s.Datastore.DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID); err != nil {
-			return fmt.Errorf("error deleting time limited v2 order creds: %w", err)
+		if err := s.tlv2Repo.DeleteLegacy(ctx, tx, orderID); err != nil {
+			return err
 		}
 	}
 
@@ -788,4 +796,12 @@ func doItemsHaveSUOrTlv2(items []model.OrderItem) (bool, bool) {
 	}
 
 	return hasSingleUse, hasTlv2
+}
+
+func checkTLV2BatchLimit(lim, nact int) error {
+	if nact >= lim {
+		return ErrCredsAlreadyExist
+	}
+
+	return nil
 }

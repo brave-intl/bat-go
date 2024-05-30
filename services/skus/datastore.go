@@ -79,7 +79,6 @@ type Datastore interface {
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
-	AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
 	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -361,6 +360,8 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 }
 
 // GetOrder returns an order from the database.
+//
+// Deprecated: Use s.orderRepo.Get for order only or s.getOrderFull for order with items.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	ctx := context.TODO()
 	dbi := pg.RawDB()
@@ -788,8 +789,13 @@ func (pg *Postgres) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *
 	return nil
 }
 
-// DeleteTimeLimitedV2OrderCredsByOrderTx performs a hard delete for all time limited v2 order
-// credentials for a given OrderID.
+// DeleteTimeLimitedV2OrderCredsByOrderTx deletes all tlv2 creds for a given orderID.
+//
+// Deprecated: Use s.tlv2Repo.DeleteLegacy instead.
+//
+// TODO(pavelb): Remove this once MDR has been deployed because it's not used and needed anymore.
+//
+//nolint:unused
 func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
 	_, err := tx.ExecContext(ctx, `delete from time_limited_v2_order_creds where order_id = $1`, orderID)
 	if err != nil {
@@ -942,42 +948,6 @@ type TimeAwareSubIssuedCreds struct {
 	BatchProof   string                    `json:"batchProof" db:"batch_proof"`
 	PublicKey    string                    `json:"publicKey" db:"public_key"`
 	RequestID    string                    `json:"-" db:"request_id"`
-}
-
-type AreTimeLimitedV2CredsSubmittedResult struct {
-	AlreadySubmitted bool `db:"already_submitted"`
-	Mismatch         bool `db:"mismatch"`
-}
-
-func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
-	return areTimeLimitedV2CredsSubmitted(ctx, pg.RawDB(), requestID, blindedCreds...)
-}
-
-type getContext interface {
-	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
-}
-
-func areTimeLimitedV2CredsSubmitted(ctx context.Context, dbi getContext, requestID uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
-	var result = AreTimeLimitedV2CredsSubmittedResult{}
-
-	if len(blindedCreds) < 1 {
-		return result, errors.New("invalid parameter to tlv2 creds signed")
-	}
-
-	const query = `
-		select exists(
-			select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1
-		) as already_submitted,
-		exists(
-			select 1 from time_limited_v2_order_creds where blinded_creds->>0 != $1 and request_id = $2
-		) as mismatch
-	`
-	err := dbi.GetContext(ctx, &result, query, blindedCreds[0], requestID)
-	if err != nil {
-		return result, err
-	}
-
-	return result, nil
 }
 
 // GetTimeLimitedV2OrderCredsByOrder returns all the non expired time limited v2 order credentials for a given order.
@@ -1316,7 +1286,7 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			ord, err := pg.GetOrder(metadata.OrderID)
+			ord, err := pg.orderRepo.Get(ctx, tx, metadata.OrderID)
 			if err != nil {
 				return fmt.Errorf("failed to get the order %s: %w", metadata.OrderID, err)
 			}

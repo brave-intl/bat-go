@@ -29,36 +29,28 @@ import (
 	"github.com/stripe/stripe-go/v72/sub"
 	"google.golang.org/api/idtoken"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	srv "github.com/brave-intl/bat-go/libs/service"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
-	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/radom"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	"github.com/brave-intl/bat-go/libs/logging"
+	srv "github.com/brave-intl/bat-go/libs/service"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/wallet"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 var (
-	errSetRetryAfter             = errors.New("set retry-after")
-	errClosingResource           = errors.New("error closing resource")
-	errInvalidRadomURL           = model.Error("service: invalid radom url")
-	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
-	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
-	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
-	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
-
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
 	// TODO address in kafka refactor. Check topics are correct
@@ -82,10 +74,22 @@ const (
 	OrderStatusPending = model.OrderStatusPending
 )
 
-// Default issuer V3 config default values
 const (
+	// Default issuer V3 config default values
 	defaultBuffer  = 30
 	defaultOverlap = 5
+
+	singleUse     = "single-use"
+	timeLimited   = "time-limited"
+	timeLimitedV2 = "time-limited-v2"
+
+	errSetRetryAfter             = model.Error("set retry-after")
+	errClosingResource           = model.Error("error closing resource")
+	errInvalidRadomURL           = model.Error("service: invalid radom url")
+	errGeminiClientNotConfigured = model.Error("service: gemini client not configured")
+	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
+	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
+	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
 )
 
 type orderStoreSvc interface {
@@ -94,6 +98,12 @@ type orderStoreSvc interface {
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+}
+
+type tlv2Store interface {
+	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
+	UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
+	DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
 }
 
 type vendorReceiptValidator interface {
@@ -107,9 +117,11 @@ type gcpRequestValidator interface {
 
 // Service contains datastore
 type Service struct {
-	orderRepo   orderStoreSvc
-	issuerRepo  issuerStore
-	payHistRepo orderPayHistoryStore
+	orderRepo     orderStoreSvc
+	orderItemRepo orderItemStore
+	issuerRepo    issuerStore
+	payHistRepo   orderPayHistoryStore
+	tlv2Repo      tlv2Store
 
 	// TODO: Eventually remove it.
 	Datastore Datastore
@@ -184,8 +196,10 @@ func InitService(
 	datastore Datastore,
 	walletService *wallet.Service,
 	orderRepo orderStoreSvc,
+	orderItemRepo orderItemStore,
 	issuerRepo issuerStore,
 	payHistRepo orderPayHistoryStore,
+	tlv2repo tlv2Store,
 ) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
@@ -317,9 +331,10 @@ func InitService(
 	gcpValidator := newGcpPushNotificationValidator(idv, conf)
 
 	service := &Service{
-		orderRepo:   orderRepo,
-		issuerRepo:  issuerRepo,
-		payHistRepo: payHistRepo,
+		orderRepo:     orderRepo,
+		orderItemRepo: orderItemRepo,
+		issuerRepo:    issuerRepo,
+		payHistRepo:   payHistRepo,
 
 		Datastore: datastore,
 
@@ -1075,13 +1090,48 @@ func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 	return u
 }
 
-const (
-	singleUse     = "single-use"
-	timeLimited   = "time-limited"
-	timeLimitedV2 = "time-limited-v2"
-)
+// UniqBatches returns the limit for active batches and the current number of active batches.
+func (s *Service) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
+	now := time.Now()
 
-var errInvalidCredentialType = errors.New("invalid credential type on order")
+	return s.uniqBatchesTxTime(ctx, s.Datastore.RawDB(), orderID, itemID, now, now)
+}
+
+func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, int, error) {
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if !ord.IsPaid() {
+		return 0, 0, model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return 0, 0, model.ErrInvalidOrderNoItems
+	}
+
+	// Legacy: the method can be called with no itemID.
+	item := &ord.Items[0]
+	if !uuid.Equal(itemID, uuid.Nil) {
+		var ok bool
+		item, ok = ord.HasItem(itemID)
+		if !ok {
+			return 0, 0, model.ErrOrderItemNotFound
+		}
+	}
+
+	if item.CredentialType != timeLimitedV2 {
+		return 0, 0, model.ErrUnsupportedCredType
+	}
+
+	nact, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return maxTLV2ActiveDailyItemCreds, nact, nil
+}
 
 // GetItemCredentials returns credentials based on the order, item and request id.
 func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
@@ -1107,7 +1157,7 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID
 	case timeLimitedV2:
 		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, reqID)
 	default:
-		return nil, http.StatusConflict, errInvalidCredentialType
+		return nil, http.StatusConflict, model.ErrInvalidCredType
 	}
 }
 
@@ -1139,7 +1189,7 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	case timeLimitedV2:
 		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, itemID)
 	default:
-		return nil, http.StatusConflict, errInvalidCredentialType
+		return nil, http.StatusConflict, model.ErrInvalidCredType
 	}
 }
 
@@ -1554,6 +1604,7 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	handler := &SignedOrderCredentialsHandler{
 		decoder:   decoder,
 		datastore: s.Datastore,
+		tlv2Repo:  s.tlv2Repo,
 	}
 
 	errorHandler := &SigningOrderResultErrorHandler{
@@ -1946,6 +1997,24 @@ func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, dbi sqlx.ExtCon
 	}
 
 	return nil
+}
+
+func (s *Service) getOrderFull(ctx context.Context, id uuid.UUID) (*model.Order, error) {
+	return s.getOrderFullTx(ctx, s.Datastore.RawDB(), id)
+}
+
+func (s *Service) getOrderFullTx(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+	result, err := s.orderRepo.Get(ctx, dbi, id)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Items, err = s.orderItemRepo.FindByOrderID(ctx, dbi, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {

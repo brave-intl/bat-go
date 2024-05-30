@@ -248,9 +248,11 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	InitEncryptionKeys()
 
 	suite.service = &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  pg,
-		cbClient:   suite.mockCB,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     pg,
+		cbClient:      suite.mockCB,
 		wallet: &wallet.Service{
 			Datastore: walletDB,
 		},
@@ -271,6 +273,10 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 	suite.mockCtrl.Finish()
+}
+
+func (s *ControllersTestSuite) TearDownSuite(sn, tn string) {
+	skustest.CleanDB(s.T(), s.storage.RawDB())
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macaroon.Token, quantity int) (Order, *Issuer) {
@@ -1478,10 +1484,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
@@ -1510,7 +1518,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer(), repository.NewOrderPayHistory())
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), repository.NewTLV2())
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
@@ -1624,10 +1632,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
@@ -1659,7 +1669,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer(), repository.NewOrderPayHistory())
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), repository.NewTLV2())
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
@@ -1751,10 +1761,12 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
