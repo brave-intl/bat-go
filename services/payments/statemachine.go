@@ -231,8 +231,7 @@ func (s *Service) DriveTransaction(
 		// current state it means that there was a race between two calls to Authenticate and we are
 		// operating on the loser. There is no risk to proceeding as long as we retain the winner
 		// idempotency.
-		if !bytes.Equal(state.ExternalIdempotency, persistedState.ExternalIdempotency) &&
-			persistedState != nil {
+		if persistedState != nil && !bytes.Equal(state.ExternalIdempotency, persistedState.ExternalIdempotency) {
 			state.ExternalIdempotency = persistedState.ExternalIdempotency
 		}
 
