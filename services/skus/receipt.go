@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -18,42 +17,8 @@ import (
 )
 
 const (
-	androidPaymentStatePending int64 = iota
-	androidPaymentStatePaid
-	androidPaymentStateTrial
-	androidPaymentStatePendingDeferred
-)
-
-const (
-	androidCancelReasonUser      int64 = 0
-	androidCancelReasonSystem    int64 = 1
-	androidCancelReasonReplaced  int64 = 2
-	androidCancelReasonDeveloper int64 = 3
-
-	purchasePendingErrCode       = "purchase_pending"
-	purchaseDeferredErrCode      = "purchase_deferred"
-	purchaseStatusUnknownErrCode = "purchase_status_unknown"
-	purchaseFailedErrCode        = "purchase_failed"
-	purchaseValidationErrCode    = "validation_failed"
-)
-
-const (
 	errNoInAppTx           model.Error = "no in app info in response"
 	errIOSPurchaseNotFound model.Error = "ios: purchase not found"
-)
-
-var (
-	errPurchaseUserCanceled      = errors.New("purchase is canceled by user")
-	errPurchaseSystemCanceled    = errors.New("purchase is canceled by google playstore")
-	errPurchaseReplacedCanceled  = errors.New("purchase is canceled and replaced")
-	errPurchaseDeveloperCanceled = errors.New("purchase is canceled by developer")
-
-	errPurchasePending       = errors.New("purchase is pending")
-	errPurchaseDeferred      = errors.New("purchase is deferred")
-	errPurchaseStatusUnknown = errors.New("purchase status is unknown")
-	errPurchaseFailed        = errors.New("purchase failed")
-
-	errPurchaseExpired = errors.New("purchase expired")
 )
 
 type dumpTransport struct{}
@@ -111,6 +76,8 @@ func newReceiptVerifier(cl *http.Client, asKey string, playKey []byte) (*receipt
 }
 
 // validateApple validates Apple App Store receipt.
+//
+// TODO(pavelb): Propagate expiry time for properly updating the order.
 func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
 	asreq := appstore.IAPRequest{
 		Password:               v.asKey,
@@ -163,54 +130,29 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 	return item.OriginalTransactionID, nil
 }
 
-// validateGoogle validates Google Store receipt.
+// validateGoogle validates a Play Store receipt.
+//
+// TODO(pavelb): Propagate expiry time for properly updating the order.
 func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	l := logging.Logger(ctx, "skus").With().Str("func", "validateReceiptGoogle").Logger()
+	return v.validateGoogleTime(ctx, req, time.Now())
+}
 
-	l.Debug().Str("receipt", fmt.Sprintf("%+v", req)).Msg("about to verify subscription")
-
-	resp, err := v.playStoreCl.VerifySubscription(ctx, req.Package, req.SubscriptionID, req.Blob)
+func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (string, error) {
+	sub, err := v.playStoreCl.VerifySubscription(ctx, req.Package, req.SubscriptionID, req.Blob)
 	if err != nil {
-		l.Error().Err(err).Msg("failed to verify subscription")
-		return "", errPurchaseFailed
+		return "", fmt.Errorf("failed to fetch subscription purchase: %w", err)
 	}
 
-	// Check order expiration.
-	if time.Unix(0, resp.ExpiryTimeMillis*int64(time.Millisecond)).Before(time.Now()) {
-		return "", errPurchaseExpired
+	psub := (*playStoreSubPurchase)(sub)
+	if psub.hasExpired(now) {
+		return "", errExpiredGPSSubPurchase
 	}
 
-	l.Debug().Msgf("resp: %+v", resp)
-
-	if resp.PaymentState == nil {
-		l.Error().Err(err).Msg("failed to verify subscription: no payment state")
-		return "", errPurchaseFailed
+	if psub.isPending() {
+		return "", errPendingGPSSubPurchase
 	}
 
-	// Check that the order was paid.
-	switch *resp.PaymentState {
-	case androidPaymentStatePaid, androidPaymentStateTrial:
-		return req.Blob, nil
-
-	case androidPaymentStatePending:
-		// Check for cancel reason.
-		switch resp.CancelReason {
-		case androidCancelReasonUser:
-			return "", errPurchaseUserCanceled
-		case androidCancelReasonSystem:
-			return "", errPurchaseSystemCanceled
-		case androidCancelReasonReplaced:
-			return "", errPurchaseReplacedCanceled
-		case androidCancelReasonDeveloper:
-			return "", errPurchaseDeveloperCanceled
-		}
-		return "", errPurchasePending
-
-	case androidPaymentStatePendingDeferred:
-		return "", errPurchaseDeferred
-	default:
-		return "", errPurchaseStatusUnknown
-	}
+	return req.Blob, nil
 }
 
 func findInAppBySubID(iap []appstore.InApp, subID string) (*appstore.InApp, bool) {
