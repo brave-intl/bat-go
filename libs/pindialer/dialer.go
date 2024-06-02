@@ -2,20 +2,15 @@
 package pindialer
 
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
-	"fmt"
-	"net"
 )
 
-// ContextDialer is a function connecting to the address on the named network
-type ContextDialer func(ctx context.Context, network, addr string) (net.Conn, error)
-
-func validateChain(fingerprint string, connstate tls.ConnectionState) error {
-	for _, chain := range connstate.VerifiedChains {
+func validateChain(fingerprint string, verifiedChains [][]*x509.Certificate) error {
+	for _, chain := range verifiedChains {
 		for _, cert := range chain {
 			hash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 			digest := base64.StdEncoding.EncodeToString(hash[:])
@@ -27,22 +22,13 @@ func validateChain(fingerprint string, connstate tls.ConnectionState) error {
 	return errors.New("the server certificate was not valid")
 }
 
-// MakeContextDialer returns a ContextDialer that only succeeds on connection to a TLS secured address with the pinned fingerprint
-func MakeContextDialer(fingerprint string) ContextDialer {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		c, err := tls.Dial(network, addr, nil)
-		if err != nil {
-			return c, err
-		}
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("context completed")
-		default:
-			if err := validateChain(fingerprint, c.ConnectionState()); err != nil {
-				return nil, fmt.Errorf("failed to validate certificate chain: %w", err)
-			}
-		}
-		return c, nil
+// Get tls.Config that validates the connection certificate chain against the
+// given fingerprint.
+func GetTLSConfig(fingerprint string) *tls.Config {
+	return &tls.Config{
+		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			return validateChain(fingerprint, verifiedChains)
+		},
 	}
 }
 

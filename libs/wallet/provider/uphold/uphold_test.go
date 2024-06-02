@@ -2,6 +2,7 @@ package uphold
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -307,15 +308,6 @@ func TestFingerprintCheck(t *testing.T) {
 	var proxy func(*http.Request) (*url.URL, error)
 	wrongFingerprint := "IYSLsapSKlkofKfi6M2hmS4gzXbQKGIX/DHBWIgstw3="
 
-	client := &http.Client{
-		Timeout: time.Second * 60,
-		// remove middleware calls
-		Transport: &http.Transport{
-			Proxy:          proxy,
-			DialTLSContext: pindialer.MakeContextDialer(wrongFingerprint),
-		},
-	}
-
 	w := requireDonorWallet(t)
 
 	req, err := w.signRegistration("randomlabel")
@@ -323,12 +315,46 @@ func TestFingerprintCheck(t *testing.T) {
 		t.Error(err)
 	}
 
-	_, err = client.Do(req)
-	// should fail here
-	if err == nil {
-		t.Error("unable to fail with bad cert")
+	// Check fingerprint error case
+	client := &http.Client{
+		Timeout: time.Second * 60,
+		// remove middleware calls
+		Transport: &http.Transport{
+			Proxy:           proxy,
+			TLSClientConfig: pindialer.GetTLSConfig(wrongFingerprint),
+		},
 	}
-	assert.Equal(t, errors.Unwrap(err).Error(), "failed to validate certificate chain: the server certificate was not valid")
+
+	_, err = client.Do(req)
+	assert.ErrorContains(t, err, "the server certificate was not valid")
+
+	// Check the fingerprint success case.
+	tlsConfig := pindialer.GetTLSConfig(upholdCertFingerprint)
+
+	// VerifyConnection callback is only called after
+	// tlsConfig.VerifyPeerCertificate returns success.
+	verifyConnectionCalled := false
+	if tlsConfig.VerifyConnection != nil {
+		t.Fatalf("tlsConfig.VerifyConnection must be unset")
+	}
+	tlsConfig.VerifyConnection = func(tls.ConnectionState) error {
+		if verifyConnectionCalled {
+			t.Fatalf("Unexpected extra call to VerifyConnection")
+		}
+		verifyConnectionCalled = true
+		return nil
+	}
+
+	client = &http.Client{
+		Timeout: time.Second * 60,
+		Transport: &http.Transport{
+			Proxy:           proxy,
+			TLSClientConfig: tlsConfig,
+		},
+	}
+
+	_, _ = client.Do(req)
+	assert.Equal(t, true, verifyConnectionCalled)
 }
 
 func requireDonorWallet(t *testing.T) *Wallet {

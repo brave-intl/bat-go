@@ -123,11 +123,9 @@ func init() {
 		proxy = nil
 	}
 
-	fingerprintDialer := pindialer.MakeContextDialer(upholdCertFingerprint)
-
 	// Uphold reports HTTP 401 error when connecting with HTTP2, so disable
 	// HTTP/2 via setting TLSNextProto to an empty map. We do not need to set
-	// this field on defaultHTTPClient as we set DialTLSContext without setting
+	// this field on defaultHTTPClient as we set TLSClientConfig without setting
 	// ForceAttemptHTTP2 and that disables HTTP/2 also. But for clarity we
 	// always set TLSNextProto.
 	disableHTTP2 := make(
@@ -138,9 +136,9 @@ func init() {
 		Timeout: httpTimeout,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
-				DialTLSContext: fingerprintDialer,
-				Proxy:          proxy,
-				TLSNextProto:   disableHTTP2,
+				Proxy:           proxy,
+				TLSClientConfig: pindialer.GetTLSConfig(upholdCertFingerprint),
+				TLSNextProto:    disableHTTP2,
 			}, "uphold"),
 	}
 	httpClientNoFP = &http.Client{
@@ -889,12 +887,16 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.Transacti
 	return &txInfo
 }
 
-// SubmitTransaction submits the base64 encoded transaction for verification but
-// does not move funds unless confirm is set to true.
+// SubmitTransaction creates a transaction and, when `confirm` is true, also
+// submits it. If `conform` is false, ConfirmTransaction() should be used later
+// to actually submit the transaction.
 func (w *Wallet) SubmitTransaction(ctx context.Context, transactionB64 string, confirm bool) (*walletutils.TransactionInfo, error) {
 	return w.submitTransaction(ctx, defaultHTTPClient, transactionB64, confirm)
 }
 
+// The implementation helper for `SubmitTransaction()` that takes an extra
+// client argument to use fingeprinting/non-fingerprinting client depending on
+// the caller needs.
 func (w *Wallet) submitTransaction(
 	ctx context.Context,
 	client *http.Client,
