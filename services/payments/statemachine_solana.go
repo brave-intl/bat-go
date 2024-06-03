@@ -211,9 +211,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			errNotFound     *SolanaTransactionNotFoundError
 			errUnknown      *SolanaTransactionUnknownError
 		)
-		if errors.As(err, &errNotConfirmed) ||
-			errors.As(err, errNotFound) ||
-			errors.As(err, errUnknown) {
+		if errors.As(err, &errNotConfirmed) || errors.As(err, &errNotFound) || errors.As(err, &errUnknown) {
 			solanaError = paymentLib.ProcessingErrorFromError(err, true)
 		} else {
 			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
