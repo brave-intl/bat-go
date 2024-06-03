@@ -29,25 +29,14 @@ func (e *InsufficientAuthorizationsError) Error() string {
 	return "insufficient authorizations"
 }
 
-// SolanaTransactionNotConfirmedError indicates that a Solana transaction is in any known status
-// preceding confirmation on the Solana chain.
-type SolanaTransactionNotConfirmedError struct{}
+const (
+	SolanaTransactionUnknownError Error = "transaction status unknown"
+	SolanaTransactionNotFoundError Error = "transaction not found"
+	SolanaTransactionNotConfirmedError Error = "transaction not confirmed"
+)
 
-func (e *SolanaTransactionNotConfirmedError) Error() string {
-	return "transaction not confirmed"
-}
+type Error string
 
-// SolanaTransactionNotFoundError indicates that a Solana transaction was not found on the chain
-type SolanaTransactionNotFoundError struct{}
-
-func (e *SolanaTransactionNotFoundError) Error() string {
-	return "transaction not found"
-}
-
-// SolanaTransactionUnknownError indicates that a response was received but no known status could
-// be derived
-type SolanaTransactionUnknownError struct{}
-
-func (e *SolanaTransactionUnknownError) Error() string {
-	return "transaction status unknown"
+func (e Error) Error() string {
+	return string(e)
 }

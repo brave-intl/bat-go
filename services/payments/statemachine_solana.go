@@ -206,12 +206,9 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	if err != nil {
 		// Some errors are expected and we just want to record them. Check if the status check
 		// returned such an error and prepare to return it after we attempt to make progress.
-		var (
-			errNotConfirmed *SolanaTransactionNotConfirmedError
-			errNotFound     *SolanaTransactionNotFoundError
-			errUnknown      *SolanaTransactionUnknownError
-		)
-		if errors.As(err, &errNotConfirmed) || errors.As(err, &errNotFound) || errors.As(err, &errUnknown) {
+		if errors.Is(err, SolanaTransactionNotConfirmedError) ||
+			errors.As(err, SolanaTransactionNotFoundError) ||
+			errors.As(err, SolanaTransactionUnknownError) {
 			solanaError = paymentLib.ProcessingErrorFromError(err, true)
 		} else {
 			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
@@ -378,10 +375,10 @@ func checkStatus(
 	}
 
 	if sigStatus == nil {
-		return TxnNotFound, &SolanaTransactionNotFoundError{}
+		return TxnNotFound, SolanaTransactionNotFoundError
 	}
 	if sigStatus.ConfirmationStatus == nil {
-		return TxnUnknown, &SolanaTransactionUnknownError{}
+		return TxnUnknown, SolanaTransactionUnknownError
 	}
 
 	if sigStatus.Err != nil {
@@ -396,7 +393,7 @@ func checkStatus(
 
 	switch *sigStatus.ConfirmationStatus {
 	case rpc.CommitmentProcessed:
-		return TxnProcessed, &SolanaTransactionNotConfirmedError{}
+		return TxnProcessed, SolanaTransactionNotConfirmedError
 	case rpc.CommitmentConfirmed:
 		return TxnConfirmed, nil
 	case rpc.CommitmentFinalized:
