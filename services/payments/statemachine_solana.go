@@ -207,9 +207,9 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		// Some errors are expected and we just want to record them. Check if the status check
 		// returned such an error and prepare to return it after we attempt to make progress.
 		var (
-			errNotConfirmed SolanaTransactionNotConfirmedError
-			errNotFound     SolanaTransactionNotFoundError
-			errUnknown      SolanaTransactionUnknownError
+			errNotConfirmed *SolanaTransactionNotConfirmedError
+			errNotFound     *SolanaTransactionNotFoundError
+			errUnknown      *SolanaTransactionUnknownError
 		)
 		if errors.As(err, &errNotConfirmed) ||
 			errors.As(err, errNotFound) ||
