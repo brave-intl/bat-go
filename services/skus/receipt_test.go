@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/awa/go-iap/appstore"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+	"google.golang.org/api/androidpublisher/v3"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -35,6 +37,147 @@ func (c *mockASClient) Verify(ctx context.Context, req appstore.IAPRequest, resu
 	}
 
 	return c.fnVerify(ctx, req, result)
+}
+
+type mockPSClient struct {
+	fnVerifySubscription func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+}
+
+func (c *mockPSClient) VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+	if c.fnVerifySubscription == nil {
+		result := &androidpublisher.SubscriptionPurchase{
+			PaymentState:     ptrTo[int64](1),
+			ExpiryTimeMillis: time.Now().Add(15 * 24 * time.Hour).UnixMilli(),
+		}
+
+		return result, nil
+	}
+
+	return c.fnVerifySubscription(ctx, pkgName, subID, token)
+}
+
+func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
+	type tcGiven struct {
+		cl  *mockPSClient
+		req model.ReceiptRequest
+		now time.Time
+	}
+
+	type tcExpected struct {
+		val string
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "client_error",
+			given: tcGiven{
+				cl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "sub_id",
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "has_expired",
+			given: tcGiven{
+				cl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						result := &androidpublisher.SubscriptionPurchase{
+							PaymentState:     ptrTo[int64](1),
+							ExpiryTimeMillis: time.Now().Add(-1 * time.Hour).UnixMilli(),
+						}
+
+						return result, nil
+					},
+				},
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "sub_id",
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				err: errExpiredGPSSubPurchase,
+			},
+		},
+
+		{
+			name: "is_pending",
+			given: tcGiven{
+				cl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						result := &androidpublisher.SubscriptionPurchase{
+							PaymentState:     ptrTo[int64](0),
+							ExpiryTimeMillis: time.Now().Add(15 * 24 * time.Hour).UnixMilli(),
+						}
+
+						return result, nil
+					},
+				},
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "sub_id",
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				err: errPendingGPSSubPurchase,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				cl: &mockPSClient{},
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "sub_id",
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				val: "blob",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			vrf := &receiptVerifier{playStoreCl: tc.given.cl}
+
+			actual, err := vrf.validateGoogleTime(context.Background(), tc.given.req, tc.given.now)
+			must.Equal(t, true, errors.Is(err, tc.exp.err))
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
 }
 
 func TestReceiptVerifier_validateApple(t *testing.T) {
