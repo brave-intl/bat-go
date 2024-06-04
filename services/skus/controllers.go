@@ -997,7 +997,6 @@ func WebhookRouter(svc *Service) chi.Router {
 	return r
 }
 
-// HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
