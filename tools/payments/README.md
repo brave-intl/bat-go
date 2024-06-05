@@ -264,4 +264,25 @@ The flags are:
 docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the local redis cluster
 ```
 
+## Payout Execution Steps
 
+### CLI
+
+1. - [ ] Build the tooling in `bat-go/tools/payments`: `make clean && make`
+2. - [ ] Set all of the environment variables used in production, including `$PASS_ENV` and `$EIF_COMMAND`. Find others in the `payment-ops` repo
+3. - [ ] Generate PCR values from the version of code and environment variables used in production in bat-go/services/payments. This PCR will be used in subsequent commands:
+   ```
+   make docker-reproducible
+   ./eifbuild -pass-env $PASS_ENV -docker-uri $BUCKET_ID/brave-intl/bat-go/dev/payments:TAG -output-file test.eif -blobs-path ./vendor/aws-nitro-enclaves-cli/blobs/x86_64 -- $EIF_COMMAND
+   ```
+4. - [ ] Proxy Redis locally: `kubectl --context bsg-production --namespace payment-staging port-forward service/redis-proxy 6380:6379`
+5. - [ ] Set Redis environment variables `REDIS_USERNAME` and `REDIS_PASSWORD`.
+6. - [ ] Prepare the payout file: `./dist/prepare -e staging -p PAYOUT_ID -k ~/.ssh/key -ru $REDIS_USERNAME -rp $REDIS_PASSWORD -pcr2 PCR ./PAYOUT_FILE`
+7. - [ ] Verify the payout with the log file generated in the previous step: `./dist/validate -ar prepare-PAYOUT_ID-response.log -pr PAYOUT_FILE -v`
+8. - [ ] Authorize the payout: `./dist/authorize -e staging -p PAYOUT_ID -k ~/.ssh/key -ru $REDIS_USERNAME -rp $REDIS_PASSWORD -pr payout.json -pcr2 PCR prepare-PAYOUT_ID-response.log`
+9. - [ ] Request another authorizer to authorize. Provide them the PCR, Payout ID, and log file as needed.
+10. - [ ] Track payout status: `./dist/status -ru $REDIS_USERNAME -rp $REDIS_PASSWORD -p PAYOUT_ID`
+
+### Shell
+
+1. - [ ]
