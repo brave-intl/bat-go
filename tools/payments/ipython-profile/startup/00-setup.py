@@ -6,6 +6,7 @@ import functools
 import json
 import os
 import subprocess
+import sys
 
 from IPython.core.magic import register_line_magic
 from IPython.core.magic_arguments import (argument, magic_arguments, parse_argstring)
@@ -93,6 +94,18 @@ def _set_secrets_s3_bucket():
     env = _get_web_env()
     secrets_s3_bucket = env["ENCLAVE_CONFIG_BUCKET_NAME"]
 
+def _get_pcr2():
+    cwd = subprocess.run(['git', 'rev-parse', '--show-toplevel'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip()
+    p = subprocess.Popen(["make", "pcrs"], cwd=cwd, stdout=subprocess.PIPE)
+    lines = []
+    for line in p.stdout:
+        line = line.decode("utf-8")
+        print(line, end='', flush=True)
+        lines.append(line)
+
+    measurement = json.loads(lines[-1].split(":", 2)[-1])
+    return measurement["PCR2"]
+
 if environment != "local":
     jobs.new(_start_redis_forwarding, daemon=True)
     _set_redis_credentials()
@@ -105,6 +118,11 @@ def _redis_credentials(self):
 @register_line_magic
 def _redis_proxy(self):
     jobs.new(_start_redis_forwarding, daemon=True)
+
+@register_line_magic
+def _set_pcr2(self):
+    global pcr2
+    pcr2 = _get_pcr2()
 
 @magic_arguments()
 @argument('fn', type=str, help='The payout report filename.')
