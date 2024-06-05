@@ -54,6 +54,7 @@ const (
 	dateFormat              = "2006-01-02T15:04:05.000Z"
 	batchSize               = 50
 	listTransactionsRetries = 5
+	httpTimeout             = time.Second * 60
 )
 
 const (
@@ -90,8 +91,13 @@ var (
 		"sandbox": sandboxFingerprint,
 		"prod":    prodFingerprint,
 	}[environment]
-	defaultHTTPClient          *http.Client
-	httpClientNoFingerprinting *http.Client
+
+	// The client to connect to Uphold servers while performing fingerprint
+	// checks on the server certificates.
+	defaultHTTPClient *http.Client
+
+	// The client without fingerprint checks.
+	httpClientNoFP *http.Client
 )
 
 func init() {
@@ -120,16 +126,16 @@ func init() {
 	fingerprintDialer := pindialer.MakeContextDialer(upholdCertFingerprint)
 
 	// Uphold reports HTTP 401 error when connecting with HTTP2, so disable
-	// HTTP/2 via setting TLSNextProto to an empty map. As defaultHTTPClient
-	// sets DialTLSContext and that also disables HTTP/2 unless
-	// ForceAttemptHTTP2 is set, we do not need to set TLSNextProto there, but
-	// we do it for clarity.
+	// HTTP/2 via setting TLSNextProto to an empty map. We do not need to set
+	// this field on defaultHTTPClient as we set DialTLSContext without setting
+	// ForceAttemptHTTP2 and that disables HTTP/2 also. But for clarity we
+	// always set TLSNextProto.
 	disableHTTP2 := make(
 		map[string]func(authority string, c *tls.Conn) http.RoundTripper,
 		0,
 	)
 	defaultHTTPClient = &http.Client{
-		Timeout: time.Second * 60,
+		Timeout: httpTimeout,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
 				DialTLSContext: fingerprintDialer,
@@ -137,8 +143,8 @@ func init() {
 				TLSNextProto:   disableHTTP2,
 			}, "uphold"),
 	}
-	httpClientNoFingerprinting = &http.Client{
-		Timeout: defaultHTTPClient.Timeout,
+	httpClientNoFP = &http.Client{
+		Timeout: httpTimeout,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
 				Proxy:        proxy,
@@ -292,14 +298,15 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 		return "", false, "", fmt.Errorf("failed to prepare transaction: %w", err)
 	}
 
-	// submit the transaction the payload.
+	// Submit the transaction payload.
 	//
-	// As we use the wallet only for validation but not for payment, skip
-	// fingerprint checks to avoid outages when Uphold change the
-	// certificate.
+	// As we use the wallet only for validation but not for a payment, skip
+	// fingerprint checks to avoid outages when Uphold change the certificate.
+	// For payments it is not a problem as they are done in batch and can be
+	// repeated.
 	uhResp, err := grantWallet.submitTransaction(
 		ctx,
-		httpClientNoFingerprinting,
+		httpClientNoFP,
 		transactionB64,
 		false, /*confirm*/
 	)

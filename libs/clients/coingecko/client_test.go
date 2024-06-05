@@ -39,7 +39,7 @@ func (suite *CoingeckoTestSuite) SetupTest() {
 	// setup the context
 	suite.ctx = context.Background()
 
-	// debug logging generates too much noise, so use just info
+	// debug logging generates too much noise, so do not activate it.
 	suite.ctx = context.WithValue(suite.ctx, appctx.DebugLoggingCTXKey, false)
 
 	// setup a logger and put on context
