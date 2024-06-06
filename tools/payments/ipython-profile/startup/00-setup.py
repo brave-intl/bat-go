@@ -142,10 +142,12 @@ def _payout(fn):
     with builtins.open(os.path.expanduser(fn)) as f:
         payout_report = fn
         payments = json.load(f)
+        maximum = functools.reduce(lambda x, y: max(x, y['amount']), payments, 0)
         total = functools.reduce(lambda x, y: x + y['amount'], payments, 0)
         custodians = functools.reduce(lambda x, y: (x.add(y['custodian']), x)[-1], payments, set())
         currency = payments[0]['currency']
         print(f"{len(payments)} payments for a total of {total} {currency}")
+        print(f"max single payout for {maximum} {currency}")
         print(f"custodians: {', '.join(custodians)}")
         payout_id = payments[0]['payoutId']
         prepare_log = f"prepare-{payout_id}-response.log"
