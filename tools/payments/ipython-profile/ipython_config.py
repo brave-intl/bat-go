@@ -47,6 +47,7 @@ c.InteractiveShellApp.exec_lines = [
 "%alias_magic payout _payout",
 "%alias_magic redis_proxy _redis_proxy",
 "%alias_magic redis_credentials _redis_credentials",
+"%alias_magic set_pcr2 _set_pcr2",
 ]
 
 ## A list of dotted module names of IPython extensions to load.

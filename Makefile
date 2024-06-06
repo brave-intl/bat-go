@@ -102,13 +102,19 @@ docker:
 	docker tag bat-go:$(GIT_VERSION)$(BUILD_TIME) bat-go:latest
 
 docker-reproducible:
-	docker run -v $(HOME)/.cache/kaniko:/cache -v $(HOME)/.linuxkit/cache:/linuxkit -v $(PWD):/workspace --network=host \
+	$(eval TMP_CHECKOUT = $(shell mktemp -d 2>/dev/null || mktemp -d -t 'bat-go-tmp'))
+	git clone . $(TMP_CHECKOUT)
+	cd $(TMP_CHECKOUT) && bash -c 'for f in `git ls-files` ; do touch -d `git log -1 --format="%aI" "$$f"` "$$f" ; done'
+	rm -rf $(TMP_CHECKOUT)/.git
+	docker run --rm -v $(HOME)/.cache/kaniko:/cache -v $(HOME)/.linuxkit/cache:/linuxkit -v $(TMP_CHECKOUT):/workspace --network=host \
 		gcr.io/kaniko-project/executor:latest \
 		--reproducible --dockerfile /workspace/Dockerfile \
 		--no-push --tarPath /workspace/bat-go-repro.tar \
-		--cache --cache-dir /cache --cache-repo oci:/cache/bat-go-repro \
+		--cache --cache-copy-layers --cache-dir /cache --cache-repo oci:/cache/bat-go-repro \
 		--oci-layout-path /linuxkit \
-		--destination bat-go-repro:latest --context dir:///workspace/ && cat bat-go-repro.tar | docker load
+		--destination bat-go-repro:latest --context dir:///workspace/ || (rm -rf $(TMP_CHECKOUT) && false)
+	cat $(TMP_CHECKOUT)/bat-go-repro.tar | docker load
+	rm -rf $(TMP_CHECKOUT)
 	sudo chown -R $(USER):$(USER) $(HOME)/.linuxkit/cache
 
 docker-up-dev:
