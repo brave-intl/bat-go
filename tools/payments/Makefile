@@ -23,6 +23,8 @@ dist/chain-account:
 	cd cmd/chain-account && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/chain-account main.go
 dist/disaster:
 	cd cmd/disaster && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/disaster main.go
+dist/report:
+	cd cmd/report && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/report main.go
 
 tidy-vault:
 	cd cmd/vault && go mod tidy
@@ -42,6 +44,8 @@ tidy-chain-account:
 	cd cmd/chain-account && go mod tidy
 tidy-disaster:
 	cd cmd/disaster && go mod tidy
+tidy-report:
+	cd cmd/report && go mod tidy
 
 clean-vault:
 	cd cmd/vault && go clean
@@ -70,3 +74,6 @@ clean-chain-account:
 clean-disaster:
 	cd cmd/disaster && go clean
 	rm -f dist/disaster
+clean-report:
+	cd cmd/report && go clean
+	rm -f dist/report
