@@ -95,8 +95,16 @@ def _set_secrets_s3_bucket():
     secrets_s3_bucket = env["ENCLAVE_CONFIG_BUCKET_NAME"]
 
 def _get_pcr2():
+    env = os.environ.copy()
+    web_env = _get_web_env()
+    env["EIF_COMMAND"] = web_env["EIF_COMMAND"]
+    env["EIF_PASS_ENV"] = web_env["EIF_PASS_ENV"]
+    eif_pass_env = web_env["EIF_PASS_ENV"]
+    for v in eif_pass_env.split(","):
+        env[v] = web_env.get(v) or ""
+
     cwd = subprocess.run(['git', 'rev-parse', '--show-toplevel'], stdout=subprocess.PIPE).stdout.decode('utf-8').strip()
-    p = subprocess.Popen(["make", "pcrs"], cwd=cwd, stdout=subprocess.PIPE)
+    p = subprocess.Popen(["make", "pcrs"], env=env, cwd=cwd, stdout=subprocess.PIPE)
     lines = []
     for line in p.stdout:
         line = line.decode("utf-8")
