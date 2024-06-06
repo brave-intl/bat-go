@@ -266,32 +266,60 @@ docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the loc
 
 ## Payout Execution Steps
 
-### CLI
-
-1. - [ ] Build the tooling in `bat-go/tools/payments`: `make clean && make`
-2. - [ ] Set all of the environment variables used in production, including `PASS_ENV` and `EIF_COMMAND`. Find others in the `payment-ops` repo
-3. - [ ] Generate PCR values from the version of code and environment variables used in production in bat-go/services/payments. This PCR will be used in subsequent commands:
-   ```
-   make docker-reproducible
-   ./eifbuild -pass-env $PASS_ENV -docker-uri $BUCKET_ID/brave-intl/bat-go/dev/payments:TAG -output-file test.eif -blobs-path ./vendor/aws-nitro-enclaves-cli/blobs/x86_64 -- $EIF_COMMAND
-   ```
-4. - [ ] Proxy Redis locally: `kubectl --context bsg-production --namespace payment-staging port-forward service/redis-proxy 6380:6379`
-5. - [ ] Set Redis environment variables `REDIS_USERNAME` and `REDIS_PASSWORD`.
-6. - [ ] Prepare the payout file: `./dist/prepare -e staging -p PAYOUT_ID -k ~/.ssh/key -ru $REDIS_USERNAME -rp $REDIS_PASSWORD -pcr2 PCR ./PAYOUT_FILE`
-7. - [ ] Verify the payout with the log file generated in the previous step: `./dist/validate -ar prepare-PAYOUT_ID-response.log -pr PAYOUT_FILE -v`
-8. - [ ] Authorize the payout: `./dist/authorize -e staging -p PAYOUT_ID -k ~/.ssh/key -ru $REDIS_USERNAME -rp $REDIS_PASSWORD -pr payout.json -pcr2 PCR prepare-PAYOUT_ID-response.log`
-9. - [ ] Request another authorizer to authorize. Provide them the PCR, Payout ID, and log file as needed.
-10. - [ ] Track payout status: `./dist/status -ru $REDIS_USERNAME -rp $REDIS_PASSWORD -p PAYOUT_ID`
-
 ### Shell
 
-1. - [ ] Trigger AWS MFA before starting the shell, as it currently does not work as part of shell initialization: `kubectl --context bsg-production --namespace antifraud-prod get pods`
-2. - [ ] Set `$REDIS_USERNAME` and `$REDIS_PASSWORD` before starting the shell
-3. - [ ] Start the shell: `aws-vault exec settlements-stg-developer-role -- ipython --profile-dir=ipython-profile`
-4. - [ ] Run the payout in the shell
-   1. - [ ] If bootstrap is needed due to a recent release, run bootstrap: `bootstrap PATH_TO_OPERATOR_KEY`
-   2. - [ ] Initialize the payout from the file: `payout PATH_TO_FILE`
-   3. - [ ] Set the expected PCR to use: `pcr2="PCR_VALUE"`
-   4. - [ ] Prepare the payments: `prepare`
-   5. - [ ] Authorize the payments: `authorize`
-   6. - [ ] Monitor the status of the payments: `status`
+#### Lead Operator
+
+Before taking the below steps, SET_UP_ENVIRONMENT using instructions below
+
+##### Bootstrapping (if needed)
+
+1. From a running shell, run `bootstrap PATH_TO_OPERATOR_KEY`
+
+##### Payout Execution
+
+1. - [ ] Initialize the payout from the file: `payout PATH_TO_FILE`
+   1. - [ ] Confirm that the total amount and number of payments printed here
+      match those in the Payout Summary in #payouts-private for this payout ID.
+  2. Ensure that the custodian listed in the output of this step matches your expectation.
+  3. Sanity check the other values printed, such as maximum payment value
+  4. Verify that there are sufficient balances in the custodial accounts and
+     on-chain addresses to fulfill the payments.
+2. - [ ] Prepare the payments: `prepare`
+3. - [ ] Authorize the payments: `authorize`
+4. - [ ] Monitor the status of the payments: `status`
+5. - [ ] Check the results of the payout with: `report`. Note that this will be
+   long-running if executed before the payout is complete
+
+#### Support Operator
+
+##### Bootstrapping (if needed)
+
+1. From a running shell, run `bootstrap PATH_TO_OPERATOR_KEY`
+
+##### Payout Execution
+
+1. - [ ] Initialize the payout from the file: `payout PATH_TO_FILE`
+   1. - [ ] Confirm that the total amount and number of payments printed here
+      match those in the Payout Summary in #payouts-private for this payout ID.
+  2. Ensure that the custodian listed in the output of this step matches your expectation.
+  3. Sanity check the other values printed, such as maximum payment value
+  4. Verify that there are sufficient balances in the custodial accounts and
+     on-chain addresses to fulfill the payments.
+2. - [ ] Prepare the payments: `await_prepare`
+3. - [ ] Authorize the payments: `authorize`
+4. - [ ] Monitor the status of the payments: `status`
+5. - [ ] Check the results of the payout with: `report`. Note that this will be
+   long-running if executed before the payout is complete
+
+#### Preparing the Evnironment
+
+1. - [ ] Trigger AWS MFA before starting the shell, as it currently does not
+   work as part of shell initialization: `kubectl --context bsg-production
+   --namespace antifraud-prod get pods`
+2. - [ ] Check out the current production revision in you local git repo
+3. - [ ] `cd tools/payments`
+3. - [ ] Build the tooling: `make clean && make`
+4. - [ ] Start the shell: `aws-vault exec settlements-stg-developer-role --
+   ipython --profile-dir=ipython-profile`
+5. - [ ] `set_pcr2` to build and use the correct PCR for this revision
