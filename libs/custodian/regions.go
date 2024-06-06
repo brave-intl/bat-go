@@ -103,6 +103,7 @@ type PayoutStatus struct {
 	Gemini     string `json:"gemini" valid:"in(off|processing|complete)"`
 	Bitflyer   string `json:"bitflyer" valid:"in(off|processing|complete)"`
 	Zebpay     string `json:"zebpay" valid:"in(off|processing|complete)"`
+	Solana     string `json:"solana" valid:"in(off|processing|complete)"`
 	Date       string `json:"payoutDate" valid:"-"`
 }
 
@@ -117,7 +118,6 @@ func contains(countries, allowblock []string) bool {
 	for _, ab := range allowblock {
 		for _, country := range countries {
 			if strings.EqualFold(ab, country) {
-				fmt.Println("contains ", ab, country)
 				return true
 			}
 		}
@@ -141,6 +141,7 @@ type Regions struct {
 	Gemini   GeoAllowBlockMap `json:"gemini" valid:"-"`
 	Bitflyer GeoAllowBlockMap `json:"bitflyer" valid:"-"`
 	Zebpay   GeoAllowBlockMap `json:"zebpay" valid:"-"`
+	Solana   GeoAllowBlockMap `json:"solana" valid:"-"`
 }
 
 // HandleErrors - handle any errors in input
@@ -149,12 +150,12 @@ func (cr *Regions) HandleErrors(err error) *handlers.AppError {
 }
 
 // Decode - implement decodable
-func (cr *Regions) Decode(ctx context.Context, input []byte) error {
+func (cr *Regions) Decode(_ context.Context, input []byte) error {
 	return json.Unmarshal(input, cr)
 }
 
 // Validate - implement validatable
-func (cr *Regions) Validate(ctx context.Context) error {
+func (cr *Regions) Validate(_ context.Context) error {
 	isValid, err := govalidator.ValidateStruct(cr)
 	if err != nil {
 		return err

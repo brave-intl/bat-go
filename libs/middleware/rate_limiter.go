@@ -47,6 +47,7 @@ func IPRateLimiterWithStore(
 			// override for OPTIONS request methods, as sometimes many cors requests happen quickly??
 			if r.Method == http.MethodOptions {
 				next.ServeHTTP(w, r)
+				return
 			}
 
 			if !isSimpleTokenInContext(r.Context()) {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
@@ -23,8 +23,6 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -89,6 +87,11 @@ func init() {
 		"disable custodial linking for zebpay").
 		Bind("disable-zebpay-linking").
 		Env("DISABLE_ZEBPAY_LINKING")
+
+	flagBuilder.Flag().Bool("disable-solana-linking", false,
+		"disable address linking for solana").
+		Bind("disable-solana-linking").
+		Env("DISABLE_SOLANA_LINKING")
 
 	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
 		"brave vg deposit destination promotion id").
@@ -352,7 +355,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
 	ctx, walletService = wallet.SetupService(ctx)
-	r = wallet.RegisterRoutes(ctx, walletService, r)
+	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
+	if len(dappAO) == 0 {
+		logger.Panic().Msg("dapp origin env missing")
+	}
+	r = wallet.RegisterRoutes(ctx, walletService, r, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO))
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
@@ -389,9 +396,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	// add runnable jobs:
 	jobs = append(jobs, grantService.Jobs()...)
-
-	// add runnable jobs:
-	jobs = append(jobs, promotionService.Jobs()...)
 
 	// vbat expired var from env
 	vbatExpires, err := time.Parse(time.RFC3339, "2023-11-02T00:00:00Z") // default 11/2/23
@@ -450,7 +454,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientIDCTXKey, viper.GetString("skus-gemini-client-id"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientSecretCTXKey, viper.GetString("skus-gemini-client-secret"))
 
-	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuIssuerRepo)
+	skuTLV2Repo := repository.NewTLV2()
+
+	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuOrderItemRepo, skuIssuerRepo, skuOrderPayHistRepo, skuTLV2Repo)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("SKUs service initialization failed")
@@ -490,7 +496,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 				"/",
 				middleware.InstrumentHandler(
 					"CreateOrderNew",
-					corsMwrPost(handlers.AppHandler(orderh.Create)),
+					corsMwrPost(handlers.AppHandler(orderh.CreateNew)),
 				),
 			)
 		} else {
@@ -506,27 +512,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
 	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
-
-	if os.Getenv("FEATURE_MERCHANT") != "" {
-		skusDB, err := skus.NewPostgres(
-			skuOrderRepo,
-			skuOrderItemRepo,
-			skuOrderPayHistRepo,
-			skuIssuerRepo,
-			"", true, "merch_skus_db",
-		)
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
-		}
-
-		skusService, err := skus.InitService(ctx, skusDB, walletService, skuOrderRepo, skuIssuerRepo)
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("SKUs service initialization failed")
-		}
-		r.Mount("/v1/merchants", skus.MerchantRouter(skusService))
-	}
 
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
@@ -638,6 +623,7 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.DisableUpholdLinkingCTXKey, viper.GetBool("disable-uphold-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, viper.GetBool("disable-gemini-linking"))
 	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, viper.GetBool("disable-bitflyer-linking"))
+	ctx = context.WithValue(ctx, appctx.DisableSolanaLinkingCTXKey, viper.GetBool("disable-solana-linking"))
 
 	// stripe variables
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
@@ -705,21 +691,6 @@ func GrantServer(
 			}
 		}
 	}
-	if viper.GetString("environment") != "local" &&
-		viper.GetString("environment") != "development" {
-		// run gemini balance watch so we have balance info in prometheus
-		go func() {
-			// no need to panic here, log the error and move on with serving
-			if err := gemini.WatchGeminiBalance(ctx); err != nil {
-				logger.Error().Err(err).Msg("error launching gemini balance watch")
-			}
-		}()
-		go func() {
-			if err := bitflyer.WatchBitflyerBalance(ctx, 2*time.Minute); err != nil {
-				logger.Error().Err(err).Msg("error launching bitflyer balance watch")
-			}
-		}()
-	}
 
 	go func() {
 		err := http.ListenAndServe(":9090", middleware.Metrics())
@@ -748,6 +719,7 @@ func newSrvStatusFromCtx(ctx context.Context) map[string]any {
 	g, _ := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool)
 	bf, _ := ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool)
 	zp, _ := ctx.Value(appctx.DisableZebPayLinkingCTXKey).(bool)
+	s, _ := ctx.Value(appctx.DisableSolanaLinkingCTXKey).(bool)
 
 	result := map[string]interface{}{
 		"wallet": map[string]bool{
@@ -755,6 +727,7 @@ func newSrvStatusFromCtx(ctx context.Context) map[string]any {
 			"gemini":   !g,
 			"bitflyer": !bf,
 			"zebpay":   !zp,
+			"solana":   !s,
 		},
 	}
 

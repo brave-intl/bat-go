@@ -27,7 +27,7 @@ func TestOrder_SetTrialDays(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	t.Cleanup(func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
 	})
 
 	type tcExpected struct {
@@ -99,7 +99,7 @@ func TestOrder_AppendMetadata(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
 	}()
 
 	type tcGiven struct {
@@ -283,7 +283,7 @@ func TestOrder_AppendMetadataInt(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
 	}()
 
 	type tcGiven struct {
@@ -421,7 +421,7 @@ func TestOrder_AppendMetadataInt64(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
 	}()
 
 	type tcGiven struct {
@@ -559,7 +559,7 @@ func TestOrder_GetExpiresAtAfterISOPeriod(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
 	}()
 
 	type tcGiven struct {
@@ -737,7 +737,7 @@ func TestOrder_CreateGet(t *testing.T) {
 	must.Equal(t, nil, err)
 
 	defer func() {
-		_, _ = dbi.Exec("TRUNCATE_TABLE orders;")
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
 	}()
 
 	type tcGiven struct {

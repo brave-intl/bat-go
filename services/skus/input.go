@@ -4,21 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/awa/go-iap/appstore"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/square/go-jose"
 )
 
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob
 type VerifyCredentialRequestV1 struct {
-	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
 	Version      float64 `json:"version" valid:"-"`
+	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
 	SKU          string  `json:"sku" valid:"-"`
 	MerchantID   string  `json:"merchantId" valid:"-"`
 	Presentation string  `json:"presentation" valid:"base64"`
@@ -129,74 +124,6 @@ func credentialOpaqueFromString(s string) (*VerifyCredentialOpaque, error) {
 }
 
 const (
-	appleVendor  Vendor = "ios"
-	googleVendor        = "android"
-)
-
-var errInvalidVendor = errors.New("invalid vendor")
-
-// Vendor vendor url input param
-type Vendor string
-
-// String - stringer implementation
-func (v *Vendor) String() string {
-	return string(*v)
-}
-
-// Validate - take raw []byte input and populate id with the ID
-func (v *Vendor) Validate(ctx context.Context) error {
-	if *v != appleVendor && *v != googleVendor {
-		return fmt.Errorf("%s is not a valid vendor: %w", v, errInvalidVendor)
-	}
-	return nil
-}
-
-// Decode - take raw []byte input and populate id with the ID
-func (v *Vendor) Decode(ctx context.Context, input []byte) error {
-	if len(input) == 0 {
-		return inputs.ErrIDDecodeEmpty
-	}
-	*v = Vendor(string(input))
-	return nil
-}
-
-// SubmitReceiptRequestV1 - receipt submission request
-type SubmitReceiptRequestV1 struct {
-	Type           Vendor `json:"type" valid:"in(ios|android)"`
-	Blob           string `json:"raw_receipt" valid:"required"`
-	Package        string `json:"package" valid:"-"`
-	SubscriptionID string `json:"subscription_id" valid:"-"`
-}
-
-// Decode - take raw input and populate the struct
-func (srrv1 *SubmitReceiptRequestV1) Decode(ctx context.Context, input []byte) error {
-	buf := make([]byte, base64.StdEncoding.DecodedLen(len(input)))
-
-	// base64 decode the bytes
-	n, err := base64.StdEncoding.Decode(buf, input)
-	if err != nil {
-		return fmt.Errorf("failed to decode input base64: %w", err)
-	}
-	// read the json values
-	if err := json.Unmarshal(buf[:n], srrv1); err != nil {
-		return fmt.Errorf("failed to decode input json: %w", err)
-	}
-	return nil
-}
-
-// Validate - validate the struct
-func (srrv1 *SubmitReceiptRequestV1) Validate(ctx context.Context) error {
-	// validate struct
-	if _, err := govalidator.ValidateStruct(srrv1); err != nil {
-		return fmt.Errorf("failed to validate structure: %w", err)
-	}
-	if err := srrv1.Type.Validate(ctx); err != nil {
-		return fmt.Errorf("failed to validate vendor: %w", err)
-	}
-	return nil
-}
-
-const (
 	androidSubscriptionUnknown = iota
 	androidSubscriptionRecovered
 	androidSubscriptionRenewed
@@ -261,19 +188,18 @@ func (anm *AndroidNotificationMessage) Validate(ctx context.Context) error {
 
 // GetDeveloperNotification - Extract the developer notification from the android notification message
 func (anm *AndroidNotificationMessage) GetDeveloperNotification() (*DeveloperNotification, error) {
-
 	var devNotification = new(DeveloperNotification)
 	buf := make([]byte, base64.StdEncoding.DecodedLen(len([]byte(anm.Data))))
 
-	// base64 decode the bytes
 	n, err := base64.StdEncoding.Decode(buf, []byte(anm.Data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode input base64: %w", err)
 	}
-	// read the json values
+
 	if err := json.Unmarshal(buf[:n], devNotification); err != nil {
 		return nil, fmt.Errorf("failed to decode input json: %w", err)
 	}
+
 	return devNotification, nil
 }
 
@@ -302,190 +228,4 @@ func (an *AndroidNotification) Validate(ctx context.Context) error {
 		return fmt.Errorf("failed to validate android notification: %w", err)
 	}
 	return nil
-}
-
-// IOSNotification - wrapping structure of an android notification
-type IOSNotification struct {
-	payload       []byte                 `json:"-" valid:"-"`
-	payloadJWS    *jose.JSONWebSignature `json:"-" valid:"-"`
-	SignedPayload string                 `json:"signedPayload" valid:"-"`
-	// signed payload is a JWS the payload of which is a base64 encoded
-	// responseBodyV2DecodedPayload.  The data attribute of this payload is the JWSTransaction
-}
-
-// Decode - implement Decodable interface
-func (iosn *IOSNotification) Decode(ctx context.Context, data []byte) error {
-	logger := logging.Logger(ctx, "IOSNotification.Decode")
-	logger.Debug().Msg("starting IOSNotification.Decode")
-
-	// json unmarshal the notification
-	if err := json.Unmarshal(data, iosn); err != nil {
-		logger.Error().Msg("failed to json unmarshal body")
-		return errorutils.Wrap(err, "error unmarshalling body")
-	}
-
-	// parse the jws into payloadJWS from the signed payload
-	payload, err := jose.ParseSigned(iosn.SignedPayload)
-	if err != nil {
-		return fmt.Errorf("failed to parse ios notification: %w", err)
-	}
-
-	iosn.payloadJWS = payload
-
-	return nil
-}
-
-// Validate - implement Validable interface
-func (iosn *IOSNotification) Validate(ctx context.Context) error {
-	logger := logging.Logger(ctx, "IOSNotification.Validate")
-
-	// extract the public key from the jws
-	pk, err := extractPublicKey(iosn.SignedPayload)
-	if err != nil {
-		return fmt.Errorf("failed to extract public key in request: %w", err)
-	}
-	// validate the payloadJWS
-	payload, err := iosn.payloadJWS.Verify(pk)
-	if err != nil {
-		return fmt.Errorf("failed to verify jws payload in request: %w", err)
-	}
-	logger.Debug().Msg("validated ios notification")
-
-	iosn.payload = payload
-
-	return nil
-}
-
-// GetRenewalInfo - from request get renewal information
-func (iosn *IOSNotification) GetRenewalInfo(ctx context.Context) (*appstore.JWSRenewalInfoDecodedPayload, error) {
-	var (
-		resp   = new(appstore.JWSRenewalInfoDecodedPayload)
-		logger = logging.Logger(ctx, "IOSNotification.GetRenewalInfo")
-	)
-	// get the cert from jws header
-	rootCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 2)
-	if err != nil {
-		return nil, err
-	}
-
-	intermediaCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 1)
-	if err != nil {
-		return nil, err
-	}
-
-	// verify the cert and intermediates with known root
-	if err = verifyCert(rootCertStr, intermediaCertStr); err != nil {
-		return nil, err
-	}
-
-	// cert is good, extract the public key
-	pk, err := extractPublicKey(iosn.SignedPayload)
-	if err != nil {
-		return nil, err
-	}
-
-	// extract the payload from
-	payload, err := iosn.payloadJWS.Verify(pk)
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to verify the notification jws")
-		return nil, fmt.Errorf("failed to verify the notification JWS: %w", err)
-	}
-	logger.Debug().Msgf("raw payload: %s", string(payload))
-
-	// first get the subscription notification payload decoded
-	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
-	var snv2dp = new(appstore.SubscriptionNotificationV2DecodedPayload)
-	if err := json.Unmarshal(payload, snv2dp); err != nil {
-		logger.Warn().Err(err).Msg("failed to unmarshal notification")
-		return nil, fmt.Errorf("failed to unmarshal subscription notification v2 decoded: %w", err)
-	}
-
-	signedRenewalInfo, err := jose.ParseSigned(string(snv2dp.Data.SignedRenewalInfo))
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to parse jws")
-		return nil, fmt.Errorf("failed to parse the Signed Renewal Info JWS: %w", err)
-	}
-
-	// verify
-	signedRenewalBytes, err := signedRenewalInfo.Verify(pk)
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to verify renewal info")
-		return nil, fmt.Errorf("failed to verify the Signed Renewal Info JWS: %w", err)
-	}
-
-	// third json unmarshal the resulting output of the jws into a JWSRenewalInfoDecodedPayload (resp)
-	if err := json.Unmarshal(signedRenewalBytes, resp); err != nil {
-		logger.Warn().Err(err).Msg("failed to json parse renewal info")
-		return nil, fmt.Errorf("failed to json parse the Signed Renewal Info JWS: %w", err)
-	}
-
-	return resp, nil
-}
-
-// GetTransactionInfo - from request get renewal information
-func (iosn *IOSNotification) GetTransactionInfo(ctx context.Context) (*appstore.JWSTransactionDecodedPayload, error) {
-	var (
-		resp   = new(appstore.JWSTransactionDecodedPayload)
-		logger = logging.Logger(ctx, "IOSNotification.GetTransactionInfo")
-	)
-
-	// get the cert from jws header
-	rootCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 2)
-	if err != nil {
-		return nil, err
-	}
-
-	intermediaCertStr, err := extractHeaderByIndex(iosn.SignedPayload, 1)
-	if err != nil {
-		return nil, err
-	}
-
-	// verify the cert and intermediates with known root
-	if err = verifyCert(rootCertStr, intermediaCertStr); err != nil {
-		return nil, err
-	}
-
-	// cert is good, extract the public key
-	pk, err := extractPublicKey(iosn.SignedPayload)
-	if err != nil {
-		return nil, err
-	}
-
-	// extract the payload from
-	payload, err := iosn.payloadJWS.Verify(pk)
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to verify the notification jws")
-		return nil, fmt.Errorf("failed to verify the notification JWS: %w", err)
-	}
-	logger.Debug().Msgf("raw payload: %s", string(payload))
-
-	// first get the subscription notification payload decoded
-	// req.payload is json serialized appstore.SubscriptionNotificationV2DecodedPayload
-	var snv2dp = new(appstore.SubscriptionNotificationV2DecodedPayload)
-	if err := json.Unmarshal(iosn.payload, snv2dp); err != nil {
-		logger.Warn().Err(err).Msg("failed to unmarshal notification")
-		return nil, fmt.Errorf("failed to unmarshal subscription notification v2 decoded: %w", err)
-	}
-
-	// verify the signed transaction jws
-	signedTransactionInfo, err := jose.ParseSigned(string(snv2dp.Data.SignedTransactionInfo))
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to parse transaction jws")
-		return nil, fmt.Errorf("failed to parse the Signed Transaction Info JWS: %w", err)
-	}
-
-	// verify
-	signedTransactionBytes, err := signedTransactionInfo.Verify(pk)
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to verify transaction jws")
-		return nil, fmt.Errorf("failed to verify the Signed Transaction Info JWS: %w", err)
-	}
-
-	// third json unmarshal the resulting output of the jws into a JWSTransactionDecodedPayload (resp)
-	if err := json.Unmarshal(signedTransactionBytes, resp); err != nil {
-		logger.Warn().Err(err).Msg("failed to json parse the transaction")
-		return nil, fmt.Errorf("failed to json parse the Signed Transaction Info JWS: %w", err)
-	}
-
-	return resp, nil
 }

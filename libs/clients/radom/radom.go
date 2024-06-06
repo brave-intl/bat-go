@@ -150,7 +150,7 @@ func NewInstrumented(srvURL, secret, proxyAddr string) (*InstrumentedClient, err
 		return nil, err
 	}
 
-	return newInstrucmentedClient("radom_client", cl), nil
+	return newInstrumentedClient("radom_client", cl), nil
 }
 
 func newClient(srvURL, secret, proxyAddr string) (*Client, error) {

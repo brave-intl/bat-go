@@ -1,3 +1,5 @@
+//go:build integration
+
 package wallet_test
 
 import (
@@ -5,8 +7,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ed25519"
-	"crypto/sha256"
-	"database/sql"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -16,1046 +17,720 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	mockgemini "github.com/brave-intl/bat-go/libs/clients/gemini/mock"
-	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	mock_reputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/custodian"
-	datastoreutils "github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/middleware"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
+	"github.com/brave-intl/bat-go/services/wallet/model"
+	"github.com/brave-intl/bat-go/services/wallet/storage"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
-	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
+	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestCreateBraveWalletV3(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
+type WalletControllersTestSuite struct {
+	suite.Suite
+}
+
+func TestWalletControllersTestSuite(t *testing.T) {
+	suite.Run(t, new(WalletControllersTestSuite))
+}
+
+func (suite *WalletControllersTestSuite) SetupSuite() {
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	m, err := pg.NewMigrate()
+	suite.Require().NoError(err, "Failed to create migrate instance")
+
+	ver, dirty, _ := m.Version()
+	if dirty {
+		suite.Require().NoError(m.Force(int(ver)))
+	}
+	if ver > 0 {
+		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
+	}
+
+	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
+}
+
+func (suite *WalletControllersTestSuite) SetupTest() {
+	suite.CleanDB()
+}
+
+func (suite *WalletControllersTestSuite) TearDownTest() {
+	suite.CleanDB()
+}
+
+func (suite *WalletControllersTestSuite) CleanDB() {
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions", "wallet_custodian"}
+
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	for _, table := range tables {
+		_, err = pg.RawDB().Exec("delete from " + table)
+		suite.Require().NoError(err, "Failed to get clean table")
+	}
+}
+
+func (suite *WalletControllersTestSuite) FundWallet(w *uphold.Wallet, probi decimal.Decimal) decimal.Decimal {
+	ctx := context.Background()
+	balanceBefore, err := w.GetBalance(ctx, true)
+	total, err := uphold.FundWallet(ctx, w, probi)
+	suite.Require().NoError(err, "an error should not be generated from funding the wallet")
+	suite.Require().True(total.GreaterThan(balanceBefore.TotalProbi), "submit with confirm should result in an increased balance")
+	return total
+}
+
+func (suite *WalletControllersTestSuite) CheckBalance(w *uphold.Wallet, expect decimal.Decimal) {
+	balances, err := w.GetBalance(context.Background(), true)
+	suite.Require().NoError(err, "an error should not be generated from checking the wallet balance")
+	totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
+	errMessage := fmt.Sprintf("got an unexpected balance. expected: %s, got %s", expect.String(), totalProbi.String())
+	suite.Require().True(expect.Equal(totalProbi), errMessage)
+}
+
+func (suite *WalletControllersTestSuite) TestBalanceV3() {
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
-	var (
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		// add the datastore to the context
-		ctx     = context.Background()
-		handler = wallet.CreateBraveWalletV3
-		r       = httptest.NewRequest("POST", "/v3/wallet/brave", nil)
-	)
-	// no logger, setup
-	ctx, _ = logging.SetupLogger(ctx)
 
-	// setup sqlmock
-	mock.ExpectExec("^INSERT INTO wallets (.+)").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(result{})
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	w1 := suite.NewWallet(service, "uphold")
 
-	// setup keypair
+	bat1 := decimal.NewFromFloat(0.000000001)
+
+	suite.FundWallet(w1, bat1)
+
+	// check there is 1 bat in w1
+	suite.CheckBalance(w1, bat1)
+
+	// call the balance endpoint and check that you get back a total of 1
+	handler := wallet.GetUpholdWalletBalanceV3
+
+	req, err := http.NewRequest("GET", "/v3/wallet/uphold/{paymentID}", nil)
+	suite.Require().NoError(err, "wallet claim request could not be created")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", w1.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
+
+	rr := httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code, fmt.Sprintf("status is expected to match %d: %s", http.StatusOK, rr.Body.String()))
+
+	var balance wallet.BalanceResponseV3
+	err = json.Unmarshal(rr.Body.Bytes(), &balance)
+	suite.Require().NoError(err, "failed to unmarshal balance result")
+
+	suite.Require().Equal(balance.Total, float64(0.000000001), fmt.Sprintf("balance is expected to match %f: %f", balance.Total, float64(1)))
+
+	_, err = pg.RawDB().Exec(`update wallets set provider_id = '' where id = $1`, w1.ID)
+	suite.Require().NoError(err, "wallet provider_id could not be set as empty string")
+
+	req, err = http.NewRequest("GET", "/v3/wallet/uphold/{paymentID}", nil)
+	suite.Require().NoError(err, "wallet claim request could not be created")
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", w1.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
+
+	rr = httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	expectingForbidden := fmt.Sprintf("status is expected to match %d: %s", http.StatusForbidden, rr.Body.String())
+	suite.Require().Equal(http.StatusForbidden, rr.Code, expectingForbidden)
+}
+
+func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
+	ctx := context.Background()
+
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+
+	w1 := suite.NewWallet(service, "uphold")
+	w2 := suite.NewWallet(service, "uphold")
+	w3 := suite.NewWallet(service, "uphold")
+	w4 := suite.NewWallet(service, "uphold")
+	bat1 := decimal.NewFromFloat(0.000000001)
+	bat2 := decimal.NewFromFloat(0.000000002)
+
+	suite.FundWallet(w1, bat1)
+	suite.FundWallet(w2, bat1)
+	suite.FundWallet(w3, bat1)
+	suite.FundWallet(w4, bat1)
+
+	anonCard1ID, err := w1.CreateCardAddress(ctx, "anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard1UUID := uuid.Must(uuid.FromString(anonCard1ID))
+
+	anonCard2ID, err := w2.CreateCardAddress(ctx, "anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
+
+	anonCard3ID, err := w3.CreateCardAddress(ctx, "anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard3UUID := uuid.Must(uuid.FromString(anonCard3ID))
+
+	w1ProviderID := w1.GetWalletInfo().ProviderID
+	w2ProviderID := w2.GetWalletInfo().ProviderID
+	w3ProviderID := w3.GetWalletInfo().ProviderID
+
+	zero := decimal.NewFromFloat(0)
+
+	suite.CheckBalance(w1, bat1)
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.CheckBalance(w1, zero)
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.CheckBalance(w2, bat1)
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.CheckBalance(w2, zero)
+
+	suite.CheckBalance(w3, bat2)
+	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.CheckBalance(w3, bat1)
+
+	suite.CheckBalance(w3, bat1)
+	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
+	suite.CheckBalance(w3, bat1)
+}
+
+func (suite *WalletControllersTestSuite) claimCardV3(
+	service *wallet.Service,
+	w *uphold.Wallet,
+	destination string,
+	status int,
+	amount decimal.Decimal,
+	anonymousAddress *uuid.UUID,
+) (*walletutils.Info, string) {
+	signedCreationRequest, err := w.PrepareTransaction(*w.AltCurrency, altcurrency.BAT.ToProbi(amount), destination, "", "", nil)
+
+	suite.Require().NoError(err, "transaction must be signed client side")
+
+	// V3 Payload
+	reqBody := wallet.LinkUpholdDepositAccountRequest{
+		SignedLinkingRequest: signedCreationRequest,
+	}
+
+	if anonymousAddress != nil {
+		reqBody.AnonymousAddress = anonymousAddress.String()
+	}
+
+	body, err := json.Marshal(&reqBody)
+	suite.Require().NoError(err, "unable to marshal claim body")
+
+	info := w.GetWalletInfo()
+
+	// V3 Handler
+
+	handler := wallet.LinkUpholdDepositAccountV3(service)
+
+	req, err := http.NewRequest("POST", "/v3/wallet/{paymentID}/claim", bytes.NewBuffer(body))
+	suite.Require().NoError(err, "wallet claim request could not be created")
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	repClient := mock_reputation.NewMockClient(ctrl)
+	repClient.EXPECT().IsLinkingReputable(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", info.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.ReputationClientCTXKey, repClient))
+
+	rr := httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
+	linked, err := service.Datastore.GetWallet(req.Context(), uuid.Must(uuid.FromString(w.ID)))
+	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
+	return linked, rr.Body.String()
+}
+
+func (suite *WalletControllersTestSuite) createBody(tx string) string {
+	reqBody, _ := json.Marshal(wallet.UpholdCreationRequest{
+		SignedCreationRequest: tx,
+	})
+	return string(reqBody)
+}
+
+func (suite *WalletControllersTestSuite) NewWallet(service *wallet.Service, provider string) *uphold.Wallet {
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	must(t, "failed to generate keypair", err)
+	publicKeyString := hex.EncodeToString(publicKey)
 
-	err = signRequest(r, publicKey, privKey)
-	must(t, "failed to sign request", err)
-
-	r = r.WithContext(ctx)
-
-	var rw = httptest.NewRecorder()
-	handlers.AppHandler(handler).ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusCreated, rw.Code, string(b))
-}
-
-func TestCreateUpholdWalletV3(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-	var (
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		// add the datastore to the context
-		ctx     = context.Background()
-		handler = wallet.CreateUpholdWalletV3
-		r       = httptest.NewRequest("POST", "/v3/wallet/uphold", bytes.NewBufferString(`{
-				"signedCreationRequest": "eyJib2R5Ijp7ImRlbm9taW5hdGlvbiI6eyJhbW91bnQiOiIwIiwiY3VycmVuY3kiOiJCQVQifSwiZGVzdGluYXRpb24iOiJhNmRmZjJiYS1kMGQxLTQxYzQtOGU1Ni1hMjYwNWJjYWY0YWYifSwiaGVhZGVycyI6eyJkaWdlc3QiOiJTSEEtMjU2PWR2RTAzVHdpRmFSR0c0MUxLSkR4aUk2a3c5M0h0cTNsclB3VllldE5VY1E9Iiwic2lnbmF0dXJlIjoia2V5SWQ9XCJwcmltYXJ5XCIsYWxnb3JpdGhtPVwiZWQyNTUxOVwiLGhlYWRlcnM9XCJkaWdlc3RcIixzaWduYXR1cmU9XCJkcXBQdERESXE0djNiS1V5eHB6Q3Vyd01nSzRmTWk1MUJjakRLc2pTak90K1h1MElZZlBTMWxEZ01aRkhiaWJqcGh0MVd3V3l5enFad3lVNW0yN1FDUT09XCIifSwib2N0ZXRzIjoie1wiZGVub21pbmF0aW9uXCI6e1wiYW1vdW50XCI6XCIwXCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImE2ZGZmMmJhLWQwZDEtNDFjNC04ZTU2LWEyNjA1YmNhZjRhZlwifSJ9"}`))
-	)
-	// no logger, setup
-	ctx, _ = logging.SetupLogger(ctx)
-
-	// setup sqlmock
-	mock.ExpectExec("^INSERT INTO wallets (.+)").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(result{})
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
-	r = r.WithContext(ctx)
-
-	var rw = httptest.NewRecorder()
-	handlers.AppHandler(handler).ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusBadRequest, rw.Code, string(b))
-}
-
-func TestGetWalletV3(t *testing.T) {
-	var (
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		// add the datastore to the context
-		ctx     = context.Background()
-		id      = uuid.NewV4()
-		r       = httptest.NewRequest("GET", fmt.Sprintf("/v3/wallet/%s", id), nil)
-		handler = wallet.GetWalletV3
-		rw      = httptest.NewRecorder()
-		rows    = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
-			AddRow(id, "brave", "", "12345", id, id)
-	)
-
-	mock.ExpectQuery("^select (.+)").WithArgs(id).WillReturnRows(rows)
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Get("/v3/wallet/{paymentID}", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusOK, rw.Code, string(b))
-}
-
-func TestLinkBitFlyerWalletV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
-
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-	// setup jwt token for the test
-	var secret = []byte("a jwt secret")
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: secret}, (&jose.SignerOptions{}).WithType("JWT"))
-	if err != nil {
-		panic(err)
+	bat := altcurrency.BAT
+	info := walletutils.Info{
+		ID:          uuid.NewV4().String(),
+		PublicKey:   publicKeyString,
+		Provider:    provider,
+		AltCurrency: &bat,
+	}
+	w := &uphold.Wallet{
+		Info:    info,
+		PrivKey: privKey,
+		PubKey:  publicKey,
 	}
 
-	var (
-		idFrom      = uuid.NewV4()
-		idTo        = uuid.NewV4()
-		accountHash = uuid.NewV4()
-		timestamp   = time.Now()
-	)
+	reg, err := w.PrepareRegistration("Brave Browser Test Link")
+	suite.Require().NoError(err, "unable to prepare transaction")
 
-	h := sha256.New()
-	if _, err := h.Write([]byte(idFrom.String())); err != nil {
-		panic(err)
-	}
-
-	externalAccountID := hex.EncodeToString(h.Sum(nil))
-
-	linkingInfo := wallet.BitFlyerLinkingInfo{
-		DepositID:         idTo.String(),
-		RequestID:         "1",
-		AccountHash:       accountHash.String(),
-		ExternalAccountID: externalAccountID,
-		Timestamp:         timestamp,
-	}
-
-	tokenString, err := jwt.Signed(sig).Claims(linkingInfo).CompactSerialize()
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
-		// add the datastore to the context
-		ctx = middleware.AddKeyID(context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret)), idFrom.String())
-		r   = httptest.NewRequest(
-			"POST",
-			fmt.Sprintf("/v3/wallet/bitflyer/%s/claim", idFrom),
-			bytes.NewBufferString(fmt.Sprintf(`
-				{
-					"linkingInfo": "%s"
-				}`, tokenString)),
-		)
-		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		s, _           = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
-		handler        = wallet.LinkBitFlyerDepositAccountV3(s)
-		rw             = httptest.NewRecorder()
-	)
-
-	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mockSQLCustodianLink(mock, "bitflyer")
-
-	// begin linking tx
-	mock.ExpectBegin()
-
-	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, accountHash.String())
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// this wallet has been linked prior, with the same linking id that the request is with
-	// SHOULD SKIP THE linking limit checks
-	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "bitflyer").WillReturnRows(linkingIDRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
-		AddRow(time.Now(), time.Now())
-
-	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(wallet.ClaimNamespace, accountHash.String())).WillReturnRows(clRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "bitflyer", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction
-	mock.ExpectCommit()
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
-	mockReputation.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
+	createResp := suite.createUpholdWalletV3(
+		service,
+		suite.createBody(reg),
+		http.StatusCreated,
+		publicKey,
+		privKey,
 		true,
-		[]int{},
-		nil,
 	)
 
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/bitflyer/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusOK, rw.Code, string(b))
-
-	var l wallet.LinkDepositAccountResponse
-	err = json.Unmarshal(b, &l)
-	require.NoError(t, err)
-
-	assert.Equal(t, "JP", l.GeoCountry)
+	var returnedInfo wallet.ResponseV3
+	err = json.Unmarshal([]byte(createResp), &returnedInfo)
+	suite.Require().NoError(err, "unable to create wallet")
+	convertedInfo := wallet.ResponseV3ToInfo(returnedInfo)
+	w.Info = *convertedInfo
+	return w
 }
 
-func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
-	var (
-		// setup test variables
-		idFrom    = uuid.NewV4()
-		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
-		accountID = uuid.NewV4()
-		idTo      = accountID
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		linkingInfo = "this is the fake jwt for linking_info"
-
-		// setup mock clients
-		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
-		mockGeminiClient     = mockgemini.NewMockClient(mockCtrl)
-
-		// this is our main request
-		r = httptest.NewRequest(
-			"POST",
-			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
-			bytes.NewBufferString(fmt.Sprintf(`
-				{
-					"linking_info": "%s",
-					"recipient_id": "%s"
-				}`, linkingInfo, idTo)),
-		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
-		handler = wallet.LinkGeminiDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
+	// assume 400 is already covered
+	// fail because of lacking signature presence
+	notSignedResponse := suite.createUpholdWalletV3(
+		service,
+		`{}`,
+		http.StatusBadRequest,
+		publicKey,
+		privKey,
+		false,
 	)
 
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
+	suite.Assert().JSONEq(`{"code":400, "data":{"validationErrors":{"decoding":"failed decoding: failed to decode signed creation request: unexpected end of JSON input", "signedCreationRequest":"value is required", "validation":"failed validation: missing signed creation request"}}, "message":"Error validating uphold create wallet request validation errors"}`, notSignedResponse, "field is not valid")
+
+	createResp := suite.createBraveWalletV3(
+		service,
+		``,
+		http.StatusCreated,
+		publicKey,
+		privKey,
 		true,
-		[]int{},
-		nil,
 	)
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
-	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-	// turn on region check
-	ctx = context.WithValue(ctx, appctx.UseCustodianRegionsCTXKey, true)
-	// configure allow region
-	custodianRegions := custodian.Regions{
-		Gemini: custodian.GeoAllowBlockMap{
-			Allow: []string{"US"},
-		},
-	}
-	ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
+	var created wallet.ResponseV3
+	err = json.Unmarshal([]byte(createResp), &created)
+	suite.Require().NoError(err, "unable to unmarshal response")
 
-	mockGeminiClient.EXPECT().ValidateAccount(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).Return(
-		accountID.String(),
-		"US",
-		nil,
-	)
+	getResp := suite.getWallet(service, uuid.Must(uuid.FromString(created.PaymentID)), http.StatusOK)
 
-	mockSQLCustodianLink(mock, "gemini")
-
-	// begin linking tx
-	mock.ExpectBegin()
-
-	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// not before linked
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
-
-	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
-	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
-
-	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("gemini", linkingID.String())
-
-	// linking limit checks
-	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"wallet_id"}).AddRow(uuid.NewV4().String()))
-	// get last un linking
-	var lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
-	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
-		AddRow(time.Now(), time.Now())
-
-	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction
-	mock.ExpectCommit()
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusOK, rw.Code, string(b))
-
-	var l wallet.LinkDepositAccountResponse
-	err := json.Unmarshal(b, &l)
-	require.NoError(t, err)
-
-	assert.Equal(t, "US", l.GeoCountry)
-
-	// delete linking
-	r = httptest.NewRequest(
-		"DELETE",
-		fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
-
-	s, _ = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
-	handler = wallet.DisconnectCustodianLinkV3(s)
-	rw = httptest.NewRecorder()
-
-	// create transaction
-	mock.ExpectBegin()
-
-	// removes the link to the user_deposit_destination record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// updates the disconnected date on the record, and returns no error and one changed row
-	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction because we are done disconnecting
-	mock.ExpectCommit()
-
-	r = r.WithContext(ctx)
-
-	router = chi.NewRouter()
-	router.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	if resp := rw.Result(); resp.StatusCode != http.StatusOK {
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
-	}
-
-	// ban the country now
-	custodianRegions = custodian.Regions{
-		Gemini: custodian.GeoAllowBlockMap{
-			Allow: []string{},
-		},
-	}
-	ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
-
-	// begin linking tx
-	mock.ExpectBegin()
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// not before linked
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
-
-	// perform again, make sure we check haslinkedprio
-	hasPriorRows := sqlmock.NewRows([]string{"result"}).
-		AddRow(true)
-	mock.ExpectQuery("^select exists(select 1 from wallet_custodian (.+)").WithArgs(uuid.NewV5(wallet.ClaimNamespace, accountID.String()), idFrom).WillReturnRows(hasPriorRows)
-
-	max = sqlmock.NewRows([]string{"max"}).AddRow(4)
-	open = sqlmock.NewRows([]string{"used"}).AddRow(0)
-
-	custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("gemini", linkingID.String())
-
-	// linking limit checks
-	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"wallet_id"}).AddRow(uuid.NewV4().String()))
-	// get last un linking
-	lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
-	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	clRows = sqlmock.NewRows([]string{"created_at", "linked_at"}).
-		AddRow(time.Now(), time.Now())
-
-	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction
-	mock.ExpectCommit()
-
-	r = r.WithContext(ctx)
-
-	router = chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b = rw.Body.Bytes()
-	require.Equal(t, http.StatusOK, rw.Code, string(b))
+	var gotten wallet.ResponseV3
+	err = json.Unmarshal([]byte(getResp), &gotten)
+	suite.Require().NoError(err, "unable to unmarshal response")
+	// does not return wallet provider
+	suite.Require().Equal(created, gotten, "the get and create return the same structure")
 }
 
-func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
-	var (
-		// setup test variables
-		idFrom    = uuid.NewV4()
-		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
-		accountID = uuid.NewV4()
-		idTo      = accountID
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		linkingInfo = "this is the fake jwt for linking_info"
-
-		// setup mock clients
-		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
-		mockGeminiClient     = mockgemini.NewMockClient(mockCtrl)
-
-		// this is our main request
-		r = httptest.NewRequest(
-			"POST",
-			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
-			bytes.NewBufferString(fmt.Sprintf(`
-				{
-					"linking_info": "%s",
-					"recipient_id": "%s"
-				}`, linkingInfo, idTo)),
-		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
-		handler = wallet.LinkGeminiDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
-	)
-
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
+	badJSONBodyParse := suite.createUpholdWalletV3(
+		service,
+		``,
+		http.StatusBadRequest,
+		publicKey,
+		privKey,
 		true,
-		[]int{},
-		nil,
 	)
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
-	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
-	mockGeminiClient.EXPECT().ValidateAccount(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).Return(
-		accountID.String(),
-		"",
-		nil,
-	)
-
-	mockSQLCustodianLink(mock, "gemini")
-
-	// begin linking tx
-	mock.ExpectBegin()
-
-	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// not before linked
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
-
-	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
-	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
-
-	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("gemini", linkingID.String())
-
-	// linking limit checks
-	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"wallet_id"}).AddRow(uuid.NewV4().String()))
-	// get last un linking
-	var lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
-	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
-		AddRow(time.Now(), time.Now())
-
-	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction
-	mock.ExpectCommit()
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusOK, rw.Code, string(b))
-
-	var l wallet.LinkDepositAccountResponse
-	err := json.Unmarshal(b, &l)
-	require.NoError(t, err)
-}
-
-func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
-
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	// setup jwt token for the test
-	var secret = []byte("a jwt secret")
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: secret}, (&jose.SignerOptions{}).WithType("JWT"))
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		// setup test variables
-		idFrom    = uuid.NewV4()
-		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
-		accountID = uuid.NewV4()
-		idTo      = accountID
-
-		// setup db mocks
-		db, _, _  = sqlmock.New()
-		datastore = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
-		mtc = &mockMtc{
-			fnLinkFailureZP: func(cc string) {
-				assert.Equal(t, "IN", cc)
-			},
+	suite.Assert().JSONEq(`{
+	"code":400,
+	"data": {
+		"validationErrors":{
+			"decoding":"failed decoding: failed to decode json: EOF",
+			"signedCreationRequest":"value is required",
+			"validation":"failed validation: missing signed creation request"
 		}
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc)
-		handler = wallet.LinkZebPayDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
-	)
+	},
+	"message":"Error validating uphold create wallet request validation errors"
+	}`, badJSONBodyParse, "should fail when parsing json")
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
-
-	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
-		"accountId":   accountID,
-		"depositId":   idTo,
-		"countryCode": "IN",
-		"iat":         time.Now().Unix(),
-		"exp":         time.Now().Add(5 * time.Second).Unix(),
-	}).CompactSerialize()
-	if err != nil {
-		panic(err)
-	}
-
-	// this is our main request
-	r := httptest.NewRequest(
-		"POST",
-		fmt.Sprintf("/v3/wallet/zebpay/%s/claim", idFrom),
-		bytes.NewBufferString(fmt.Sprintf(
-			`{"linking_info": "%s"}`,
-			linkingInfo,
-		)),
-	)
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusForbidden, rw.Code, string(b))
-
-	var l wallet.LinkDepositAccountResponse
-	err = json.Unmarshal(b, &l)
-	require.NoError(t, err)
-}
-
-func TestLinkZebPayWalletV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
-
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	// setup jwt token for the test
-	var secret = []byte("a jwt secret")
-	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: secret}, (&jose.SignerOptions{}).WithType("JWT"))
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		// setup test variables
-		idFrom    = uuid.NewV4()
-		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
-		accountID = uuid.NewV4()
-		idTo      = accountID
-
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
-		// setup mock clients
-		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
-
-		mtc = &mockMtc{
-			fnLinkSuccessZP: func(cc string) {
-				assert.Equal(t, "IN", cc)
-			},
-		}
-
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, mtc)
-		handler = wallet.LinkZebPayDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
-	)
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
-
-	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
-		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
-		"isValid": true, "countryCode": "IN",
-	}).CompactSerialize()
-	if err != nil {
-		panic(err)
-	}
-
-	// this is our main request
-	r := httptest.NewRequest(
-		"POST",
-		fmt.Sprintf("/v3/wallet/zebpay/%s/claim", idFrom),
-		bytes.NewBufferString(fmt.Sprintf(
-			`{"linking_info": "%s"}`,
-			linkingInfo,
-		)),
-	)
-
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
+	badFieldResponse := suite.createUpholdWalletV3(
+		service,
+		`{"signedCreationRequest":""}`,
+		http.StatusBadRequest,
+		publicKey,
+		privKey,
 		true,
-		[]int{},
-		nil,
 	)
 
-	mockSQLCustodianLink(mock, "zebpay")
+	suite.Assert().JSONEq(`{
+	"code":400, "data":{"validationErrors":{"decoding":"failed decoding: failed to decode signed creation request: unexpected end of JSON input", "signedCreationRequest":"value is required", "validation":"failed validation: missing signed creation request"}}, "message":"Error validating uphold create wallet request validation errors"}`, badFieldResponse, "field is not valid")
 
-	// begin linking tx
-	mock.ExpectBegin()
+	// assume 403 is already covered
+	// fail because of lacking signature presence
+	notSignedResponse := suite.createUpholdWalletV3(
+		service,
+		`{}`,
+		http.StatusBadRequest,
+		publicKey,
+		privKey,
+		false,
+	)
 
-	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
-	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "zebpay").WillReturnRows(linkingIDRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// this wallet has been linked prior, with the same linking id that the request is with
-	// SHOULD SKIP THE linking limit checks
-	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
-		AddRow(time.Now(), time.Now())
-
-	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "zebpay", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "zebpay", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction
-	mock.ExpectCommit()
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusOK, rw.Code, string(b))
-
-	var l wallet.LinkDepositAccountResponse
-	err = json.Unmarshal(b, &l)
-	require.NoError(t, err)
-
-	assert.Equal(t, "IN", l.GeoCountry)
+	suite.Assert().JSONEq(`{
+"code":400, "data":{"validationErrors":{"decoding":"failed decoding: failed to decode signed creation request: unexpected end of JSON input", "signedCreationRequest":"value is required", "validation":"failed validation: missing signed creation request"}}, "message":"Error validating uphold create wallet request validation errors"
+	}`, notSignedResponse, "field is not valid")
 }
 
-func TestLinkGeminiWalletV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
+func (suite *WalletControllersTestSuite) TestChallenges_Success() {
+	paymentID := uuid.NewV4()
 
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
+	body := struct {
+		PaymentID uuid.UUID `json:"paymentId"`
+	}{
+		PaymentID: paymentID,
+	}
 
-	var (
-		// setup test variables
-		idFrom    = uuid.NewV4()
-		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
-		accountID = uuid.NewV4()
-		idTo      = accountID
+	b, err := json.Marshal(body)
+	suite.Require().NoError(err)
 
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		linkingInfo = "this is the fake jwt for linking_info"
+	r := httptest.NewRequest(http.MethodPost, "/v3/wallet/challenges", bytes.NewBuffer(b))
+	r.Header.Set("origin", "https://my-dapp.com")
 
-		// setup mock clients
-		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
-		mockGeminiClient     = mockgemini.NewMockClient(mockCtrl)
+	rw := httptest.NewRecorder()
 
-		// this is our main request
-		r = httptest.NewRequest(
-			"POST",
-			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
-			bytes.NewBufferString(fmt.Sprintf(`
-				{
-					"linking_info": "%s",
-					"recipient_id": "%s"
-				}`, linkingInfo, idTo)),
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	chlRep := storage.NewChallenge()
+
+	dac := wallet.DAppConfig{
+		AllowedOrigins: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
+	}
+
+	s, err := wallet.InitService(pg, nil, chlRep, nil, nil, nil, nil, nil, nil, nil, dac)
+	suite.Require().NoError(err)
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+	svr.Handler.ServeHTTP(rw, r)
+	suite.Require().Equal(http.StatusCreated, rw.Code)
+	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+
+	type chlResp struct {
+		Nonce string `json:"challengeId"`
+	}
+
+	var resp chlResp
+	err = json.Unmarshal(rw.Body.Bytes(), &resp)
+	suite.Require().NoError(err)
+
+	chlRepo := storage.NewChallenge()
+	chl, err := chlRepo.Get(context.TODO(), pg.RawDB(), paymentID)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(chl.Nonce, resp.Nonce)
+}
+
+func (suite *WalletControllersTestSuite) TestChallenges_Options() {
+	req := httptest.NewRequest(http.MethodOptions, "/v3/wallet/challenges", nil)
+	req.Header.Add("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Add("Access-Control-Request-Headers", "Content-Type")
+	req.Header.Set("origin", "https://my-dapp.com")
+
+	rw := httptest.NewRecorder()
+
+	s := wallet.Service{}
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(&s)}
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+	suite.Require().Equal(http.MethodPost, rw.Header().Get("Access-Control-Allow-Methods"))
+	suite.Require().Equal("Content-Type", rw.Header().Get("Access-Control-Allow-Headers"))
+}
+
+func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
+	viper.Set("enable-link-drain-flag", "true")
+
+	pg, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	chlRep := storage.NewChallenge()
+	allowList := storage.NewAllowList()
+
+	// create the wallet
+	pub, priv, err := ed25519.GenerateKey(nil)
+	suite.Require().NoError(err)
+
+	paymentID := uuid.NewV4()
+	w := &walletutils.Info{
+		ID:          paymentID.String(),
+		Provider:    "brave",
+		PublicKey:   hex.EncodeToString(pub),
+		AltCurrency: ptrTo(altcurrency.BAT),
+	}
+	err = pg.InsertWallet(context.TODO(), w)
+	suite.Require().NoError(err)
+
+	whitelistWallet(suite.T(), pg, w.ID)
+
+	// create nonce
+	chl := model.NewChallenge(paymentID)
+
+	err = chlRep.Upsert(context.TODO(), pg.RawDB(), chl)
+	suite.Require().NoError(err)
+
+	dac := wallet.DAppConfig{
+		AllowedOrigins: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
+	}
+
+	s, err := wallet.InitService(pg, nil, chlRep, allowList, nil, nil, nil, nil, nil, nil, dac)
+	suite.Require().NoError(err)
+
+	// create linking message
+	solPub, msg, solSig := createAndSignMessage(suite.T(), w.ID, priv, chl.Nonce)
+
+	// make request
+	body := struct {
+		SolanaPublicKey string `json:"solanaPublicKey"`
+		Message         string `json:"message"`
+		SolanaSignature string `json:"solanaSignature"`
+	}{
+		SolanaPublicKey: solPub,
+		Message:         msg,
+		SolanaSignature: solSig,
+	}
+
+	b, err := json.Marshal(body)
+	suite.Require().NoError(err)
+
+	r := httptest.NewRequest(http.MethodPost, "/v3/wallet/solana/"+w.ID+"/connect", bytes.NewBuffer(b))
+	r.Header.Set("origin", "https://my-dapp-2.com")
+
+	rw := httptest.NewRecorder()
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+	svr.Handler.ServeHTTP(rw, r)
+	suite.Require().Equal(http.StatusOK, rw.Code)
+	suite.Require().Equal("https://my-dapp-2.com", rw.Header().Get("Access-Control-Allow-Origin"))
+
+	// assert
+	actual, err := pg.GetWallet(context.TODO(), paymentID)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(solPub, actual.UserDepositDestination)
+
+	// after a successful linking the challenge should be removed from the database.
+	_, actualErr := chlRep.Get(context.TODO(), pg.RawDB(), paymentID)
+	suite.Assert().ErrorIs(actualErr, model.ErrChallengeNotFound)
+}
+
+func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Options() {
+	viper.Set("enable-link-drain-flag", "true")
+
+	req := httptest.NewRequest(http.MethodOptions, "/v3/wallet/solana/ae51dce3-08e9-4beb-8a70-c51d064bb7d1/connect", nil)
+	req.Header.Add("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Add("Access-Control-Request-Headers", "Content-Type")
+	req.Header.Set("origin", "https://my-dapp.com")
+
+	rw := httptest.NewRecorder()
+
+	s := wallet.Service{}
+
+	svr := &http.Server{Addr: ":8080", Handler: setupRouter(&s)}
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+	suite.Require().Equal("https://my-dapp.com", rw.Header().Get("Access-Control-Allow-Origin"))
+	suite.Require().Equal(http.MethodPost, rw.Header().Get("Access-Control-Allow-Methods"))
+	suite.Require().Equal("Content-Type", rw.Header().Get("Access-Control-Allow-Headers"))
+}
+
+func whitelistWallet(t *testing.T, pg wallet.Datastore, Id string) {
+	const q = `insert into allow_list (payment_id, created_at) values($1, $2)`
+	_, err := pg.RawDB().Exec(q, Id, time.Now())
+	require.NoError(t, err)
+}
+
+func createAndSignMessage(t *testing.T, paymentID string, rewardsPrivKey ed25519.PrivateKey, nonce string) (solPub, msg, solSig string) {
+	// Create and sign the rewards message.
+	// The message has the format <rewardsMessage> = <rewards-payment-id>.<nonce>
+	rewardsMsg := paymentID + "." + nonce
+	sig, err := rewardsPrivKey.Sign(rand.Reader, []byte(rewardsMsg), crypto.Hash(0))
+	require.NoError(t, err)
+
+	rewardsSig := base64.URLEncoding.EncodeToString(sig)
+	rewardsPart := rewardsMsg + "." + rewardsSig
+
+	// Create the linking message and sign with the Solana key.
+	pub, priv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+
+	solPub = base58.Encode(pub)
+
+	const msgTmpl = "<some-text>:%s\n<some-text>:%s\n<some-text>:%s"
+	msg = fmt.Sprintf(msgTmpl, paymentID, solPub, rewardsPart)
+
+	sig, err = priv.Sign(rand.Reader, []byte(msg), crypto.Hash(0))
+	require.NoError(t, err)
+
+	solSig = base64.URLEncoding.EncodeToString(sig)
+
+	return
+}
+
+func (suite *WalletControllersTestSuite) getWallet(service *wallet.Service, paymentId uuid.UUID, code int) string {
+	handler := handlers.AppHandler(wallet.GetWalletV3)
+
+	req, err := http.NewRequest("GET", "/v3/wallet/"+paymentId.String(), nil)
+	suite.Require().NoError(err, "a request should be created")
+
+	req = req.WithContext(context.WithValue(req.Context(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", paymentId.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(code, rr.Code, "known status code should be sent: "+rr.Body.String())
+
+	return rr.Body.String()
+}
+
+func (suite *WalletControllersTestSuite) createBraveWalletV3(
+	service *wallet.Service,
+	body string,
+	code int,
+	publicKey httpsignature.Ed25519PubKey,
+	privateKey ed25519.PrivateKey,
+	shouldSign bool,
+) string {
+
+	handler := handlers.AppHandler(wallet.CreateBraveWalletV3)
+
+	bodyBuffer := bytes.NewBuffer([]byte(body))
+	req, err := http.NewRequest("POST", "/v3/wallet/brave", bodyBuffer)
+	suite.Require().NoError(err, "a request should be created")
+
+	// setup context
+	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
+
+	if shouldSign {
+		suite.SignRequest(
+			req,
+			publicKey,
+			privateKey,
 		)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
-		handler = wallet.LinkGeminiDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
-	)
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
-	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
-	mockGeminiClient.EXPECT().ValidateAccount(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).Return(
-		accountID.String(),
-		"GB",
-		nil,
-	)
-
-	mockReputationClient.EXPECT().IsLinkingReputable(
-		gomock.Any(), // ctx
-		gomock.Any(), // wallet id
-		gomock.Any(), // country
-	).Return(
-		true,
-		[]int{},
-		nil,
-	)
-
-	mockSQLCustodianLink(mock, "gemini")
-
-	// begin linking tx
-	mock.ExpectBegin()
-
-	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
-	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallet_custodian (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// this wallet has been linked prior, with the same linking id that the request is with
-	// SHOULD SKIP THE linking limit checks
-	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
-		AddRow(time.Now(), time.Now())
-
-	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
-
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec("^insert into (.+)").WithArgs(idFrom, true).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction
-	mock.ExpectCommit()
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
-
-	b := rw.Body.Bytes()
-	require.Equal(t, http.StatusOK, rw.Code, string(b))
-
-	var l wallet.LinkDepositAccountResponse
-	err := json.Unmarshal(b, &l)
-	require.NoError(t, err)
-
-	assert.Equal(t, "GB", l.GeoCountry)
-}
-
-func TestDisconnectCustodianLinkV3(t *testing.T) {
-	wallet.VerifiedWalletEnable = true
-
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	var (
-		// setup test variables
-		idFrom = uuid.NewV4()
-		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
-
-		// setup db mocks
-		db, mock, _ = sqlmock.New()
-		datastore   = wallet.Datastore(
-			&wallet.Postgres{
-				Postgres: datastoreutils.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-
-		// this is our main request
-		r = httptest.NewRequest(
-			"DELETE",
-			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
-		s, _    = wallet.InitService(datastore, nil, nil, nil, nil, nil, nil)
-		handler = wallet.DisconnectCustodianLinkV3(s)
-		w       = httptest.NewRecorder()
-	)
-
-	// create transaction
-	mock.ExpectBegin()
-
-	// removes the link to the user_deposit_destination record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// updates the disconnected date on the record, and returns no error and one changed row
-	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// commit transaction because we are done disconnecting
-	mock.ExpectCommit()
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
-	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(w, r)
-
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
+
+	rctx := chi.NewRouteContext()
+	joined := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	req = req.WithContext(joined)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(code, rr.Code, "known status code should be sent: "+rr.Body.String())
+
+	return rr.Body.String()
 }
 
-func must(t *testing.T, msg string, err error) {
-	if err != nil {
-		t.Errorf("%s: %s\n", msg, err)
+func (suite *WalletControllersTestSuite) createUpholdWalletV3(
+	service *wallet.Service,
+	body string,
+	code int,
+	publicKey httpsignature.Ed25519PubKey,
+	privateKey ed25519.PrivateKey,
+	shouldSign bool,
+) string {
+
+	handler := handlers.AppHandler(wallet.CreateUpholdWalletV3)
+
+	bodyBuffer := bytes.NewBuffer([]byte(body))
+	req, err := http.NewRequest("POST", "/v3/wallet", bodyBuffer)
+	suite.Require().NoError(err, "a request should be created")
+
+	// setup context
+	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
+
+	if shouldSign {
+		suite.SignRequest(
+			req,
+			publicKey,
+			privateKey,
+		)
 	}
+
+	rctx := chi.NewRouteContext()
+	joined := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	req = req.WithContext(joined)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(code, rr.Code, "known status code should be sent: "+rr.Body.String())
+
+	return rr.Body.String()
 }
 
-func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
+func (suite *WalletControllersTestSuite) SignRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) {
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = hex.EncodeToString(publicKey)
 	s.Headers = []string{"digest", "(request-target)"}
-	return s.Sign(privateKey, crypto.Hash(0), req)
+
+	err := s.Sign(privateKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
 }
 
-type result struct{}
-
-func (r result) LastInsertId() (int64, error) { return 1, nil }
-func (r result) RowsAffected() (int64, error) { return 1, nil }
-
-func mockSQLCustodianLink(mock sqlmock.Sqlmock, custodian string) {
-	clRow := sqlmock.NewRows([]string{"wallet_id", "custodian", "linking_id", "created_at", "disconnected_at", "linked_at"}).
-		AddRow(uuid.NewV4().String(), custodian, uuid.NewV4().String(), time.Now(), time.Now(), time.Now())
-	mock.ExpectQuery("^select(.+) from wallet_custodian(.+)").
-		WillReturnRows(clRow)
-}
-
-type mockMtc struct {
-	fnLinkSuccessZP func(cc string)
-	fnLinkFailureZP func(cc string)
-}
-
-func (m *mockMtc) LinkSuccessZP(cc string) {
-	if m.fnLinkSuccessZP != nil {
-		m.fnLinkSuccessZP(cc)
+func setupRouter(service *wallet.Service) *chi.Mux {
+	mw := func(name string, h http.Handler) http.Handler {
+		return h
 	}
+	s := []string{"https://my-dapp.com", "https://my-dapp-2.com"}
+	r := chi.NewRouter()
+	r.Mount("/v3", wallet.RegisterRoutes(context.TODO(), service, r, mw, wallet.NewDAppCorsMw(s)))
+	return r
 }
 
-func (m *mockMtc) LinkFailureZP(cc string) {
-	if m.fnLinkFailureZP != nil {
-		m.fnLinkFailureZP(cc)
-	}
+func ptrTo[T any](v T) *T {
+	return &v
 }

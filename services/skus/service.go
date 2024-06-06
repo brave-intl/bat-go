@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/awa/go-iap/appstore"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -27,34 +27,30 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
-
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	srv "github.com/brave-intl/bat-go/libs/service"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
-	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+	"google.golang.org/api/idtoken"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/radom"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	"github.com/brave-intl/bat-go/libs/logging"
+	srv "github.com/brave-intl/bat-go/libs/service"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/wallet"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 var (
-	errSetRetryAfter             = errors.New("set retry-after")
-	errClosingResource           = errors.New("error closing resource")
-	errInvalidRadomURL           = model.Error("service: invalid radom url")
-	errGeminiClientNotConfigured = errors.New("service: gemini client not configured")
-
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
 	// TODO address in kafka refactor. Check topics are correct
@@ -78,20 +74,54 @@ const (
 	OrderStatusPending = model.OrderStatusPending
 )
 
-// Default issuer V3 config default values
 const (
+	// Default issuer V3 config default values
 	defaultBuffer  = 30
 	defaultOverlap = 5
+
+	singleUse     = "single-use"
+	timeLimited   = "time-limited"
+	timeLimitedV2 = "time-limited-v2"
+
+	errSetRetryAfter             = model.Error("set retry-after")
+	errClosingResource           = model.Error("error closing resource")
+	errInvalidRadomURL           = model.Error("service: invalid radom url")
+	errGeminiClientNotConfigured = model.Error("service: gemini client not configured")
+	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
+	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
+	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
 )
 
 type orderStoreSvc interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+}
+
+type tlv2Store interface {
+	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
+	UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
+	DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
+}
+
+type vendorReceiptValidator interface {
+	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
+	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
+}
+
+type gcpRequestValidator interface {
+	validate(ctx context.Context, r *http.Request) error
 }
 
 // Service contains datastore
 type Service struct {
-	orderRepo  orderStoreSvc
-	issuerRepo issuerStore
+	orderRepo     orderStoreSvc
+	orderItemRepo orderItemStore
+	issuerRepo    issuerStore
+	payHistRepo   orderPayHistoryStore
+	tlv2Repo      tlv2Store
 
 	// TODO: Eventually remove it.
 	Datastore Datastore
@@ -110,6 +140,13 @@ type Service struct {
 	retry              backoff.RetryFunc
 	radomClient        *radom.InstrumentedClient
 	radomSellerAddress string
+
+	vendorReceiptValid vendorReceiptValidator
+	gcpValidator       gcpRequestValidator
+	assnCertVrf        *assnCertVerifier
+
+	payProcCfg    *premiumPaymentProcConfig
+	newItemReqSet map[string]model.OrderItemRequestNew
 }
 
 // PauseWorker - pause worker until time specified
@@ -153,11 +190,18 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	return nil
 }
 
-// InitService creates a service using the passed datastore and clients configured from the environment.
-func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service, orderRepo orderStoreSvc, issuerRepo issuerStore) (*Service, error) {
+// InitService creates a Service using the passed datastore and clients configured from the environment.
+func InitService(
+	ctx context.Context,
+	datastore Datastore,
+	walletService *wallet.Service,
+	orderRepo orderStoreSvc,
+	orderItemRepo orderItemStore,
+	issuerRepo issuerStore,
+	payHistRepo orderPayHistoryStore,
+	tlv2repo tlv2Store,
+) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
-	// setup the in app purchase clients
-	initClients(ctx)
 
 	// setup stripe if exists in context and enabled
 	scClient := &client.API{}
@@ -230,10 +274,70 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		}
 	}
 
+	cl := &http.Client{
+		Transport: &dumpTransport{},
+		Timeout:   30 * time.Second,
+	}
+
+	asKey, _ := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
+	playKey, _ := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte)
+	rcptValidator, err := newReceiptVerifier(cl, asKey, playKey)
+	if err != nil {
+		return nil, err
+	}
+
+	assnCertVrf, err := newASSNCertVerifier()
+	if err != nil {
+		return nil, err
+	}
+
+	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
+	if err != nil {
+		return nil, err
+	}
+
+	idv, err := idtoken.NewValidator(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	disabled, _ := strconv.ParseBool(os.Getenv("GCP_PUSH_NOTIFICATION"))
+	if disabled {
+		sublogger.Warn().Msg("gcp push notification is disabled")
+	}
+
+	aud := os.Getenv("GCP_PUSH_SUBSCRIPTION_AUDIENCE")
+	if aud == "" {
+		sublogger.Warn().Msg("gcp push subscription audience is empty")
+	}
+
+	iss := os.Getenv("GCP_CERT_ISSUER")
+	if iss == "" {
+		sublogger.Warn().Msg("gcp cert issuer is empty")
+	}
+
+	sa := os.Getenv("GCP_PUSH_SUBSCRIPTION_SERVICE_ACCOUNT")
+	if sa == "" {
+		sublogger.Warn().Msg("gcp push subscription service account is empty")
+	}
+
+	conf := gcpValidatorConfig{
+		audience:       aud,
+		issuer:         iss,
+		serviceAccount: sa,
+		disabled:       disabled,
+	}
+
+	gcpValidator := newGcpPushNotificationValidator(idv, conf)
+
 	service := &Service{
-		orderRepo:  orderRepo,
-		issuerRepo: issuerRepo,
-		Datastore:  datastore,
+		orderRepo:     orderRepo,
+		orderItemRepo: orderItemRepo,
+		issuerRepo:    issuerRepo,
+		payHistRepo:   payHistRepo,
+		tlv2Repo:      tlv2repo,
+
+		Datastore: datastore,
 
 		wallet:             walletService,
 		geminiClient:       geminiClient,
@@ -244,6 +348,13 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		retry:              backoff.Retry,
 		radomClient:        radomClient,
 		radomSellerAddress: radomSellerAddress,
+
+		vendorReceiptValid: rcptValidator,
+		gcpValidator:       gcpValidator,
+		assnCertVrf:        assnCertVrf,
+
+		payProcCfg:    newPaymentProcessorConfig(env),
+		newItemReqSet: newOrderItemReqNewMobileSet(env),
 	}
 
 	// setup runnable jobs
@@ -275,11 +386,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	}
 
 	return service, nil
-}
-
-// ExternalIDExists checks if this external id has been used on any orders
-func (s *Service) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
-	return s.Datastore.ExternalIDExists(ctx, externalID)
 }
 
 // CreateOrderFromRequest creates an order from the request
@@ -510,7 +616,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 		}
 
 		checkoutSession, err := order.CreateStripeCheckoutSession(
-			getEmailFromCheckoutSession(stripeSession),
+			getCustEmailFromStripeCheckout(stripeSession),
 			stripeSession.SuccessURL, stripeSession.CancelURL,
 			order.GetTrialDays(),
 		)
@@ -545,7 +651,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 					return nil, fmt.Errorf("failed to update order to add the subscription id")
 				}
 
-				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, paymentProcessor, StripePaymentMethod); err != nil {
+				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
 					return nil, fmt.Errorf("failed to update order to add the payment processor")
 				}
 			}
@@ -562,43 +668,55 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
 // CancelOrder cancels an order, propagates to stripe if needed.
 //
-// TODO(pavelb): Refactor and make it precise.
-// Currently, this method does something weird for the case when the order was not found in the DB.
-// If we have an order id, but ended up without the order, that means either the id is wrong,
-// or we somehow lost data. The latter is less likely.
-// Yet we allow non-existing order ids to be searched for in Stripe, which is strange.
+// TODO(pavelb): Refactor this.
 func (s *Service) CancelOrder(orderID uuid.UUID) error {
-	// Check the order, do we have a stripe subscription?
-	ok, subID, err := s.Datastore.IsStripeSub(orderID)
-	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-		return fmt.Errorf("failed to check stripe subscription: %w", err)
+	// TODO: Refactor this later. Now here's a quick fix.
+	ord, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return err
 	}
 
+	if ord == nil {
+		return model.ErrOrderNotFound
+	}
+
+	subID, ok := ord.StripeSubID()
 	if ok && subID != "" {
 		// Cancel the stripe subscription.
 		if _, err := sub.Cancel(subID, nil); err != nil {
-			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+			// Error out if it's not 404.
+			if !isErrStripeNotFound(err) {
+				return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+			}
 		}
 
+		// Cancel even for 404.
 		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 	}
 
-	// Try to find order in Stripe.
+	if ord.IsIOS() || ord.IsAndroid() {
+		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+	}
+
+	// Try to find by order_id in Stripe.
 	params := &stripe.SubscriptionSearchParams{}
-	params.Query = *stripe.String(fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String()))
+	params.Query = fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String())
 
 	ctx := context.TODO()
 
 	iter := sub.Search(params)
 	for iter.Next() {
-		// we have a result, fix the stripe sub on the db record, and then cancel sub
-		subscription := iter.Subscription()
-		// cancel the stripe subscription
-		if _, err := sub.Cancel(subscription.ID, nil); err != nil {
+		sb := iter.Subscription()
+		if _, err := sub.Cancel(sb.ID, nil); err != nil {
+			// It seems that already canceled subscriptions might return 404.
+			if isErrStripeNotFound(err) {
+				continue
+			}
+
 			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
 		}
 
-		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", subscription.ID); err != nil {
+		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sb.ID); err != nil {
 			return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
 		}
 	}
@@ -606,40 +724,35 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
-// SetOrderTrialDays set the order's free trial days
 func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
-	// get the order
-	order, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
+	ord, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
 	if err != nil {
 		return fmt.Errorf("failed to set the order's trial days: %w", err)
 	}
 
-	// recreate the stripe checkout session now that we have set the trial days on this order
-	if !order.IsPaid() && order.IsStripePayable() {
-		// get old checkout session from stripe by id
-		csID, ok := order.Metadata["stripeCheckoutSessionId"].(string)
-		if !ok {
-			return fmt.Errorf("failed to get checkout session id from metadata: %w", err)
-		}
-		stripeSession, err := session.Get(csID, nil)
-		if err != nil {
-			return fmt.Errorf("failed to get stripe checkout session: %w", err)
-		}
+	if !ord.ShouldSetTrialDays() {
+		return nil
+	}
 
-		checkoutSession, err := order.CreateStripeCheckoutSession(
-			getEmailFromCheckoutSession(stripeSession),
-			stripeSession.SuccessURL, stripeSession.CancelURL,
-			order.GetTrialDays(),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create checkout session: %w", err)
-		}
+	// Recreate the stripe checkout session.
+	oldSessID, ok := ord.Metadata["stripeCheckoutSessionId"].(string)
+	if !ok {
+		return model.ErrNoStripeCheckoutSessID
+	}
 
-		// overwrite the old checkout session
-		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
-		if err != nil {
-			return fmt.Errorf("failed to update order metadata: %w", err)
-		}
+	sess, err := session.Get(oldSessID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get stripe checkout session: %w", err)
+	}
+
+	cs, err := ord.CreateStripeCheckoutSession(getCustEmailFromStripeCheckout(sess), sess.SuccessURL, sess.CancelURL, ord.GetTrialDays())
+	if err != nil {
+		return fmt.Errorf("failed to create checkout session: %w", err)
+	}
+
+	// Overwrite the old checkout session.
+	if err := s.Datastore.AppendOrderMetadata(ctx, &ord.ID, "stripeCheckoutSessionId", cs.SessionID); err != nil {
+		return fmt.Errorf("failed to update order metadata: %w", err)
 	}
 
 	return nil
@@ -978,34 +1091,51 @@ func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 	return u
 }
 
-const (
-	singleUse     = "single-use"
-	timeLimited   = "time-limited"
-	timeLimitedV2 = "time-limited-v2"
-)
+// UniqBatches returns the limit for active batches and the current number of active batches.
+func (s *Service) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
+	now := time.Now()
 
-var errInvalidCredentialType = errors.New("invalid credential type on order")
-
-// GetItemCredentials - based on the order, get the associated credentials
-func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID uuid.UUID) (interface{}, int, error) {
-	orderCreds, status, err := s.GetCredentials(ctx, orderID)
-	if err != nil {
-		return nil, status, err
-	}
-
-	for _, oc := range orderCreds.([]OrderCreds) {
-		if uuid.Equal(oc.ID, itemID) {
-			return oc, status, nil
-		}
-	}
-	// order creds are not available yet
-	return nil, status, nil
+	return s.uniqBatchesTxTime(ctx, s.Datastore.RawDB(), orderID, itemID, now, now)
 }
 
-// GetCredentials - based on the order, get the associated credentials
-func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
-	var credentialType string
+func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, int, error) {
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return 0, 0, err
+	}
 
+	if !ord.IsPaid() {
+		return 0, 0, model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return 0, 0, model.ErrInvalidOrderNoItems
+	}
+
+	// Legacy: the method can be called with no itemID.
+	item := &ord.Items[0]
+	if !uuid.Equal(itemID, uuid.Nil) {
+		var ok bool
+		item, ok = ord.HasItem(itemID)
+		if !ok {
+			return 0, 0, model.ErrOrderItemNotFound
+		}
+	}
+
+	if item.CredentialType != timeLimitedV2 {
+		return 0, 0, model.ErrUnsupportedCredType
+	}
+
+	nact, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return maxTLV2ActiveDailyItemCreds, nact, nil
+}
+
+// GetItemCredentials returns credentials based on the order, item and request id.
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -1015,104 +1145,125 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
 	}
 
-	// look through order, find out what all the order item's credential types are
-	for i, v := range order.Items {
-		if i > 0 {
-			if v.CredentialType != credentialType {
-				// all the order items on the order need the same credential type
-				return nil, http.StatusConflict, fmt.Errorf("all items must have the same credential type")
-			}
-		} else {
-			credentialType = v.CredentialType
-		}
+	item, ok := order.HasItem(itemID)
+	if !ok {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get item: %w", err)
 	}
 
-	switch credentialType {
+	switch item.CredentialType {
 	case singleUse:
-		return s.GetSingleUseCreds(ctx, order)
+		return s.GetSingleUseCreds(ctx, order.ID, itemID, reqID)
 	case timeLimited:
-		return s.GetTimeLimitedCreds(ctx, order)
+		return s.GetTimeLimitedCreds(ctx, order, itemID, reqID)
 	case timeLimitedV2:
-		return s.GetTimeLimitedV2Creds(ctx, order)
+		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, reqID)
+	default:
+		return nil, http.StatusConflict, model.ErrInvalidCredType
 	}
-	return nil, http.StatusConflict, errInvalidCredentialType
 }
 
-// GetSingleUseCreds returns all the single use credentials for a given order.
+// GetCredentials returns credentials on the order.
+//
+// This is a legacy method.
+// For backward compatibility, similar to creating credentials, it uses item id as request id.
+func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
+	order, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	if order == nil {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	if len(order.Items) != 1 {
+		return nil, http.StatusConflict, model.Error("order must only have one item")
+	}
+
+	itemID := order.Items[0].ID
+
+	switch order.Items[0].CredentialType {
+	case singleUse:
+		return s.GetSingleUseCreds(ctx, order.ID, itemID, itemID)
+	case timeLimited:
+		return s.GetTimeLimitedCreds(ctx, order, itemID, itemID)
+	case timeLimitedV2:
+		return s.GetTimeLimitedV2Creds(ctx, order.ID, itemID, itemID)
+	default:
+		return nil, http.StatusConflict, model.ErrInvalidCredType
+	}
+}
+
+// GetSingleUseCreds returns single use credentials for a given order, item and request.
+//
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the order credentials.
-func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderCreds, int, error) {
-	if order == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
-	}
-
-	creds, err := s.Datastore.GetOrderCreds(order.ID, false)
+func (s *Service) GetSingleUseCreds(ctx context.Context, orderID, itemID, reqID uuid.UUID) ([]OrderCreds, int, error) {
+	// Single use credentials retain the old semantics, only one request is ever allowed.
+	creds, err := s.Datastore.GetOrderCredsByItemID(orderID, itemID, false)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get single use creds: %w", err)
 	}
 
-	if len(creds) > 0 {
+	if creds != nil {
 		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
-		for i := 0; i < len(creds); i++ {
-			if creds[i].SignedCreds == nil {
-				return nil, http.StatusAccepted, nil
-			}
-		}
-		// TODO: End
-		return creds, http.StatusOK, nil
-	}
-
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
-	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
-	}
-
-	if len(outboxMessages) == 0 {
-		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
-	}
-
-	for _, m := range outboxMessages {
-		if m.CompletedAt == nil {
+		if creds.SignedCreds == nil {
 			return nil, http.StatusAccepted, nil
 		}
+
+		// TODO: End
+		return []OrderCreds{*creds}, http.StatusOK, nil
 	}
 
-	return creds, http.StatusOK, nil
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, http.StatusNotFound, errLegacySUCredsNotFound
+		}
+
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+	}
+
+	if outboxMessages.CompletedAt == nil {
+		return nil, http.StatusAccepted, nil
+	}
+
+	return nil, http.StatusInternalServerError, model.Error("unreachable condition")
 }
 
-// GetTimeLimitedV2Creds returns all the single use credentials for a given order.
+// GetTimeLimitedV2Creds returns all the tlv2 credentials for a given order, item and request id.
+//
 // If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
 // If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
-func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeAwareSubIssuedCreds, int, error) {
-	var resp = []TimeAwareSubIssuedCreds{} // browser api_request_helper does not understand "null" as json
-	if order == nil {
-		return resp, http.StatusBadRequest, fmt.Errorf("error order cannot be nil")
-	}
-
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByOrder(ctx, order.ID)
+//
+// Browser's api_request_helper does not understand Go's nil slices, hence explicit empty slice is returned.
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, reqID uuid.UUID) ([]TimeAwareSubIssuedCreds, int, error) {
+	obmsg, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
 	if err != nil {
-		return resp, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
-	}
-
-	if len(outboxMessages) == 0 {
-		return resp, http.StatusNotFound, errors.New("error no order credentials have been submitted for signing")
-	}
-
-	for _, m := range outboxMessages {
-		if m.CompletedAt == nil {
-			// get average of last 10 outbox messages duration as the retry after
-			return resp, http.StatusAccepted, errSetRetryAfter
+		if errors.Is(err, sql.ErrNoRows) {
+			return []TimeAwareSubIssuedCreds{}, http.StatusNotFound, errLegacyOutboxNotFound
 		}
+
+		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
-	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	if !uuid.Equal(obmsg.OrderID, orderID) {
+		return []TimeAwareSubIssuedCreds{}, http.StatusBadRequest, errWrongOrderIDForRequestID
+	}
+
+	if obmsg.CompletedAt == nil {
+		// Get average of last 10 outbox messages duration as the retry after.
+		return []TimeAwareSubIssuedCreds{}, http.StatusAccepted, errSetRetryAfter
+	}
+
+	creds, err := s.Datastore.GetTLV2Creds(ctx, s.Datastore.RawDB(), orderID, itemID, reqID)
 	if err != nil {
-		return resp, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
-	}
+		if errors.Is(err, errNoTLV2Creds) {
+			// Credentials could be signed, but nothing to return as they are all expired.
+			return []TimeAwareSubIssuedCreds{}, http.StatusOK, nil
+		}
 
-	// Potentially we can have all creds signed but nothing to return as they are all expired.
-	if creds == nil {
-		return resp, http.StatusOK, nil
+		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
 	return creds.Credentials, http.StatusOK, nil
@@ -1204,7 +1355,8 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 	if err != nil {
 		return nil, fmt.Errorf("unable to compute expiry")
 	}
-	// Add at least 5 days of grace period
+
+	// Add a grace period of 5 days.
 	*expiresAt = (*expiresAt).AddDate(0, 0, 5)
 
 	chunkingFn := credChunkFn(interval)
@@ -1234,69 +1386,66 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 	return credentials, nil
 }
 
-// GetTimeLimitedCreds get an order's time limited creds
-func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
-	if order == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
-	}
-
-	// is the order paid?
+// GetTimeLimitedCreds returns get an order's time limited creds.
+func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID, reqID uuid.UUID) ([]TimeLimitedCreds, int, error) {
 	if !order.IsPaid() || order.LastPaidAt == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("order is not paid, or invalid last paid at")
+		return nil, http.StatusBadRequest, model.Error("order is not paid, or invalid last paid at")
 	}
 
 	issuedAt := order.LastPaidAt
 
-	// if the order has an expiry, use that
 	if order.ExpiresAt != nil {
-		// check if we are past expiration, if so issue nothing
+		// Check if it's past expiration, if so issue nothing.
 		if time.Now().After(*order.ExpiresAt) {
-			return nil, http.StatusBadRequest, fmt.Errorf("order has expired")
+			return nil, http.StatusBadRequest, model.Error("order has expired")
 		}
 	}
 
-	var credentials []TimeLimitedCreds
 	secret, err := s.GetActiveCredentialSigningKey(ctx, order.MerchantID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get merchant signing key: %w", err)
 	}
+
 	timeLimitedSecret := cryptography.NewTimeLimitedSecret(secret)
 
-	for _, item := range order.Items {
-
-		if item.ValidForISO == nil {
-			return nil, http.StatusBadRequest, fmt.Errorf("order item has no valid for time")
-		}
-		duration, err := timeutils.ParseDuration(*(item.ValidForISO))
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse order duration for credentials")
-		}
-
-		if item.IssuanceIntervalISO == nil {
-			item.IssuanceIntervalISO = new(string)
-			*(item.IssuanceIntervalISO) = "P1D"
-		}
-		interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse issuance interval for credentials")
-		}
-
-		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
-		}
-
-		creds, err := timeChunking(ctx, issuerID, timeLimitedSecret, order.ID, item.ID, *issuedAt, *duration, *interval)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
-		}
-		credentials = append(credentials, creds...)
+	item, ok := order.HasItem(itemID)
+	if !ok {
+		return nil, http.StatusBadRequest, model.Error("could not find specified item")
 	}
 
-	if len(credentials) > 0 {
-		return credentials, http.StatusOK, nil
+	if item.ValidForISO == nil {
+		return nil, http.StatusBadRequest, model.Error("order item has no valid for time")
 	}
-	return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
+
+	duration, err := timeutils.ParseDuration(*item.ValidForISO)
+	if err != nil {
+		return nil, http.StatusInternalServerError, model.Error("unable to parse order duration for credentials")
+	}
+
+	if item.IssuanceIntervalISO == nil {
+		item.IssuanceIntervalISO = ptrTo("P1D")
+	}
+
+	interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
+	if err != nil {
+		return nil, http.StatusInternalServerError, model.Error("unable to parse issuance interval for credentials")
+	}
+
+	issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
+	}
+
+	credentials, err := timeChunking(ctx, issuerID, timeLimitedSecret, order.ID, item.ID, *issuedAt, *duration, *interval)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
+	}
+
+	if len(credentials) == 0 {
+		return nil, http.StatusBadRequest, model.Error("failed to issue credentials")
+	}
+
+	return credentials, http.StatusOK, nil
 }
 
 type credential interface {
@@ -1456,6 +1605,7 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	handler := &SignedOrderCredentialsHandler{
 		decoder:   decoder,
 		datastore: s.Datastore,
+		tlv2Repo:  s.tlv2Repo,
 	}
 
 	errorHandler := &SigningOrderResultErrorHandler{
@@ -1507,40 +1657,49 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	}
 }
 
-// verifyIOSNotification - verify the developer notification from appstore
-func (s *Service) verifyIOSNotification(ctx context.Context, txInfo *appstore.JWSTransactionDecodedPayload, renewalInfo *appstore.JWSRenewalInfoDecodedPayload) error {
-	if txInfo == nil || renewalInfo == nil {
-		return errors.New("notification has no tx or renewal")
+// processAppStoreNotification determines whether ntf is worth processing, and does it if it is.
+//
+// More on ntf types https://developer.apple.com/documentation/appstoreservernotifications/notificationtype#4304524.
+func (s *Service) processAppStoreNotification(ctx context.Context, ntf *appStoreSrvNotification) error {
+	if !ntf.shouldProcess() {
+		return nil
 	}
 
-	if !govalidator.IsAlphanumeric(txInfo.OriginalTransactionId) || len(txInfo.OriginalTransactionId) > 32 {
-		return errors.New("original transaction id should be alphanumeric and less than 32 chars")
-	}
-
-	// lookup the order based on the token as externalID
-	o, err := s.Datastore.GetOrderByExternalID(txInfo.OriginalTransactionId)
+	txn, err := parseTxnInfo(ntf.pubKey, ntf.val.Data.SignedTransactionInfo)
 	if err != nil {
-		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, err)
+		return err
 	}
 
-	if o == nil {
-		return fmt.Errorf("failed to get order from db (%s): %w", txInfo.OriginalTransactionId, errNotFound)
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processAppStoreNotificationTx(ctx, tx, ntf, txn); err != nil {
+		return err
 	}
 
-	// check if we are past the expiration date on transaction or the order was revoked
+	return tx.Commit()
+}
 
-	if time.Now().After(time.Unix(0, txInfo.ExpiresDate*int64(time.Millisecond))) ||
-		(txInfo.RevocationDate > 0 && time.Now().After(time.Unix(0, txInfo.RevocationDate*int64(time.Millisecond)))) {
-		// past our tx expires/renewal time
-		if err = s.CancelOrder(o.ID); err != nil {
-			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
-		}
-	} else {
-		if err = s.RenewOrder(ctx, o.ID); err != nil {
-			return fmt.Errorf("failed to renew subscription in skus: %w", err)
-		}
+func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *appStoreSrvNotification, txn *appstore.JWSTransactionDecodedPayload) error {
+	ord, err := s.orderRepo.GetByExternalID(ctx, dbi, txn.OriginalTransactionId)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	switch {
+	case ntf.shouldRenew():
+		expt := time.UnixMilli(txn.ExpiresDate)
+		paidt := time.Now()
+
+		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+	case ntf.shouldCancel():
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+	default:
+		return nil
+	}
 }
 
 // verifyDeveloperNotification - verify the developer notification from playstore
@@ -1556,13 +1715,12 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	}
 
 	// have order, now validate the receipt from the notification
-	_, err = s.validateReceipt(ctx, &o.ID, SubmitReceiptRequestV1{
-		Type:           "android",
+	if _, err := s.vendorReceiptValid.validateGoogle(ctx, model.ReceiptRequest{
+		Type:           model.VendorGoogle,
 		Blob:           dn.SubscriptionNotification.PurchaseToken,
 		Package:        dn.PackageName,
 		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("failed to validate purchase token: %w", err)
 	}
 
@@ -1594,17 +1752,16 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	return nil
 }
 
-// validateReceipt - perform receipt validation
-func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, receipt interface{}) (string, error) {
-	// based on the vendor call the vendor specific apis to check the status of the receipt,
-	if v, ok := receipt.(SubmitReceiptRequestV1); ok {
-		// and get back the external id
-		if fn, ok := receiptValidationFns[v.Type]; ok {
-			return fn(ctx, receipt)
-		}
+// validateReceipt validates receipt.
+func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	switch req.Type {
+	case model.VendorApple:
+		return s.vendorReceiptValid.validateApple(ctx, req)
+	case model.VendorGoogle:
+		return s.vendorReceiptValid.validateGoogle(ctx, req)
+	default:
+		return "", errorutils.ErrNotImplemented
 	}
-
-	return "", errorutils.ErrNotImplemented
 }
 
 // UpdateOrderStatusPaidWithMetadata - update the order status with metadata
@@ -1642,65 +1799,27 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	// Check for number of items to be above 0.
-	//
-	// Validation should already have taken care of this.
-	// This method does not know about it, hence the explicit check.
-	nitems := len(items)
-	if nitems == 0 {
-		return nil, model.ErrInvalidOrderRequest
+	ordNew, err := newOrderNewForReq(req, items, model.MerchID, model.OrderStatusPending)
+	if err != nil {
+		return nil, err
 	}
 
-	const merchID = "brave.com"
+	return s.createOrder(ctx, req, ordNew, items)
+}
 
+func (s *Service) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	numIntervals, err := s.createOrderIssuers(ctx, tx, merchID, items)
+	numIntervals, err := s.createOrderIssuers(ctx, tx, model.MerchID, items)
 	if err != nil {
 		return nil, err
 	}
 
-	oreq := &model.OrderNew{
-		MerchantID:            merchID,
-		Currency:              req.Currency,
-		Status:                model.OrderStatusPending,
-		TotalPrice:            model.OrderItemList(items).TotalCost(),
-		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
-	}
-
-	if oreq.TotalPrice.IsZero() {
-		oreq.Status = model.OrderStatusPaid
-	}
-
-	// Location on the order is only defined when there is only one item.
-	//
-	// Multi-item orders have NULL location.
-	if nitems == 1 && items[0].Location.Valid {
-		oreq.Location.Valid = true
-		oreq.Location.String = items[0].Location.String
-	}
-
-	{
-		// Use validFor from the first item.
-		//
-		// TODO: Deprecate the use of valid_for:
-		// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
-		//
-		// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
-		// It does not make any sense, but it's working because there is only one item normally.
-		var vf time.Duration
-		if items[0].ValidFor != nil {
-			vf = *items[0].ValidFor
-		}
-
-		oreq.ValidFor = &vf
-	}
-
-	order, err := s.Datastore.CreateOrder(ctx, tx, oreq, items)
+	order, err := s.Datastore.CreateOrder(ctx, tx, ordNew, items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
@@ -1734,25 +1853,33 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		}
 	}
 
-	if numIntervals > 0 {
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numIntervals", numIntervals); err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	if err := s.updateOrderIntvals(ctx, order.ID, items, numIntervals); err != nil {
+		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	}
+
+	return order, nil
+}
+
+func (s *Service) updateOrderIntvals(ctx context.Context, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
+	if nintvals > 0 {
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numIntervals", nintvals); err != nil {
+			return err
 		}
 	}
 
 	// Backporting changes from https://github.com/brave-intl/bat-go/pull/1998.
 	{
 		numPerInterval := 2
-		if nitems == 1 && items[0].IsLeo() {
+		if len(items) == 1 && items[0].IsLeo() {
 			numPerInterval = 192
 		}
 
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", numPerInterval); err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numPerInterval", numPerInterval); err != nil {
+			return err
 		}
 	}
 
-	return order, nil
+	return nil
 }
 
 // createOrderIssuers checks that the issuer exists for the item's product.
@@ -1850,6 +1977,181 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
 }
 
+// renewOrderWithExpPaidTime performs updates relevant to advancing a paid order forward after renewal.
+//
+// TODO: Add a repo method to update all three fields at once.
+func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expt, paidt time.Time) error {
+	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.SetExpiresAt(ctx, dbi, id, expt); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.SetLastPaidAt(ctx, dbi, id, paidt); err != nil {
+		return err
+	}
+
+	if err := s.payHistRepo.Insert(ctx, dbi, id, paidt); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) getOrderFull(ctx context.Context, id uuid.UUID) (*model.Order, error) {
+	return s.getOrderFullTx(ctx, s.Datastore.RawDB(), id)
+}
+
+func (s *Service) getOrderFullTx(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+	result, err := s.orderRepo.Get(ctx, dbi, id)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Items, err = s.orderItemRepo.FindByOrderID(ctx, dbi, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
+	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
+}
+
+func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extID string) error {
+	return checkOrderReceipt(ctx, s.Datastore.RawDB(), s.orderRepo, orderID, extID)
+}
+
+func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
+	ord, err := repo.GetByExternalID(ctx, dbi, extID)
+	if err != nil {
+		return err
+	}
+
+	if !uuid.Equal(orderID, ord.ID) {
+		return model.ErrNoMatchOrderReceipt
+	}
+
+	return nil
+}
+
+// paidOrderCreator creates an order and sets its status to paid.
+//
+// This interface exists because in its current form Service is hardly testable.
+type paidOrderCreator interface {
+	createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+}
+
+// createOrderWithReceipt creates a paid order with the supplied inputs.
+//
+// The function does not re-fetch the order after the final update to metadata.
+// This might change if there is such a need.
+func createOrderWithReceipt(
+	ctx context.Context,
+	svc paidOrderCreator,
+	itemReqSet map[string]model.OrderItemRequestNew,
+	ppcfg *premiumPaymentProcConfig,
+	req model.ReceiptRequest,
+	extID string,
+) (*model.Order, error) {
+	// 1. Find out what's being purchased from SubscriptionID.
+	/*
+		Android:
+		- brave.leo.monthly -> brave-leo-premium
+		- brave.leo.yearly -> brave-leo-premium-year
+	*/
+	itemNew, err := newOrderItemReqForSubID(itemReqSet, req.SubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	oreq := newCreateOrderReqNewMobile(ppcfg, itemNew)
+
+	// 2. Craft a request for creating an order.
+	items, err := createOrderItems(&oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use status paid as it's been already paid in-app.
+	ordNew, err := newOrderNewForReq(&oreq, items, model.MerchID, model.OrderStatusPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Create an order.
+	order, err := svc.createOrder(ctx, &oreq, ordNew, items)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Save mobile metadata.
+	mdata := newMobileOrderMdata(req, extID)
+	if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
+		return nil, err
+	}
+
+	// Not re-fetching the order after updating metadata.
+	// At the moment, the only caller of this code is only interested
+	// in the order id.
+
+	return order, nil
+}
+
+func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem, merchID, status string) (*model.OrderNew, error) {
+	// Check for number of items to be above 0.
+	//
+	// Validation should already have taken care of this.
+	// This function does not know about it, hence the explicit check.
+	nitems := len(items)
+	if nitems == 0 {
+		return nil, model.ErrInvalidOrderRequest
+	}
+
+	result := &model.OrderNew{
+		MerchantID:            merchID,
+		Currency:              req.Currency,
+		Status:                status,
+		TotalPrice:            model.OrderItemList(items).TotalCost(),
+		AllowedPaymentMethods: pq.StringArray(req.PaymentMethods),
+	}
+
+	if result.TotalPrice.IsZero() {
+		result.Status = model.OrderStatusPaid
+	}
+
+	// Location on the order is only defined when there is only one item.
+	//
+	// Multi-item orders have NULL location.
+	if nitems == 1 && items[0].Location.Valid {
+		result.Location.Valid = true
+		result.Location.String = items[0].Location.String
+	}
+
+	{
+		// Use validFor from the first item.
+		//
+		// TODO: Deprecate the use of valid_for:
+		// valid_for_iso is now used instead of valid_for for calculating order's expiration time.
+		//
+		// The old code in CreateOrderFromRequest does a contradictory thing – it takes validFor from last item.
+		// It does not make any sense, but it's working because there is only one item normally.
+		var vf time.Duration
+		if items[0].ValidFor != nil {
+			vf = *items[0].ValidFor
+		}
+
+		result.ValidFor = &vf
+	}
+
+	return result, nil
+}
+
 func createOrderItems(req *model.CreateOrderRequestNew) ([]model.OrderItem, error) {
 	result := make([]model.OrderItem, 0)
 
@@ -1913,6 +2215,16 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 	return result, nil
 }
 
+func newMobileOrderMdata(req model.ReceiptRequest, extID string) datastore.Metadata {
+	result := datastore.Metadata{
+		"externalID":       extID,
+		"paymentProcessor": req.Type.String(),
+		"vendor":           req.Type.String(),
+	}
+
+	return result
+}
+
 func durationFromISO(v string) (time.Duration, error) {
 	dur, err := timeutils.ParseDuration(v)
 	if err != nil {
@@ -1936,4 +2248,41 @@ type tlv1CredPresentation struct {
 	Token     string `json:"token"`
 	IssuedAt  string `json:"issuedAt"`
 	ExpiresAt string `json:"expiresAt"`
+}
+
+func ptrTo[T any](v T) *T {
+	return &v
+}
+
+func shouldCancelOrderIOS(info *appstore.JWSTransactionDecodedPayload, now time.Time) bool {
+	tx := (*appStoreTransaction)(info)
+
+	return tx.hasExpired(now) || tx.isRevoked(now)
+}
+
+type appStoreTransaction appstore.JWSTransactionDecodedPayload
+
+func (x *appStoreTransaction) hasExpired(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.ExpiresDate > 0 && now.After(time.UnixMilli(x.ExpiresDate))
+}
+
+func (x *appStoreTransaction) isRevoked(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
+}
+
+func isErrStripeNotFound(err error) bool {
+	var serr *stripe.Error
+	if !errors.As(err, &serr) {
+		return false
+	}
+
+	return serr.HTTPStatusCode == http.StatusNotFound && serr.Code == stripe.ErrorCodeResourceMissing
 }

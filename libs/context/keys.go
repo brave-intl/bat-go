@@ -130,6 +130,8 @@ const (
 	DisableGeminiLinkingCTXKey CTXKey = "disable_gemini_linking"
 	// DisableBitflyerLinkingCTXKey - this informs if bitflyer linking is enabled
 	DisableBitflyerLinkingCTXKey CTXKey = "disable_bitflyer_linking"
+	// DisableSolanaLinkingCTXKey - this informs if solana linking is enabled
+	DisableSolanaLinkingCTXKey CTXKey = "disable_solana_linking"
 
 	// RadomWebhookSecretCTXKey - the webhook secret key for radom integration
 	RadomWebhookSecretCTXKey CTXKey = "radom_webhook_secret"

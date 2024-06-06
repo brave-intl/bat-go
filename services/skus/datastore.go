@@ -21,7 +21,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -29,7 +28,8 @@ import (
 const (
 	signingRequestBatchSize = 10
 
-	errNotFound = model.Error("not found")
+	errNotFound    = model.Error("not found")
+	errNoTLV2Creds = model.Error("no unexpired time-limited-v2 credentials found")
 )
 
 // Datastore abstracts over the underlying datastore.
@@ -79,13 +79,13 @@ type Datastore interface {
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error
-	AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error)
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
+	GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error)
 	DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx *sqlx.Tx, tlv2 TimeAwareSubIssuedCreds) error
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
-	GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error)
+	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
@@ -95,7 +95,6 @@ type Datastore interface {
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
 	AppendOrderMetadataInt64(context.Context, *uuid.UUID, string, int64) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
-	ExternalIDExists(context.Context, string) (bool, error)
 }
 
 type orderStore interface {
@@ -361,6 +360,8 @@ func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 }
 
 // GetOrder returns an order from the database.
+//
+// Deprecated: Use s.orderRepo.Get for order only or s.getOrderFull for order with items.
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	ctx := context.TODO()
 	dbi := pg.RawDB()
@@ -526,10 +527,6 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 	}
 
 	return true, sessID, nil
-}
-
-func (pg *Postgres) ExternalIDExists(ctx context.Context, externalID string) (bool, error) {
-	return pg.orderRepo.HasExternalID(ctx, pg.RawDB(), externalID)
 }
 
 // IsStripeSub reports whether the order is associated with a stripe subscription, if true, subscription id is returned.
@@ -792,8 +789,13 @@ func (pg *Postgres) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, tx *
 	return nil
 }
 
-// DeleteTimeLimitedV2OrderCredsByOrderTx performs a hard delete for all time limited v2 order
-// credentials for a given OrderID.
+// DeleteTimeLimitedV2OrderCredsByOrderTx deletes all tlv2 creds for a given orderID.
+//
+// Deprecated: Use s.tlv2Repo.DeleteLegacy instead.
+//
+// TODO(pavelb): Remove this once MDR has been deployed because it's not used and needed anymore.
+//
+//nolint:unused
 func (pg *Postgres) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
 	_, err := tx.ExecContext(ctx, `delete from time_limited_v2_order_creds where order_id = $1`, orderID)
 	if err != nil {
@@ -948,26 +950,6 @@ type TimeAwareSubIssuedCreds struct {
 	RequestID    string                    `json:"-" db:"request_id"`
 }
 
-func (pg *Postgres) AreTimeLimitedV2CredsSubmitted(ctx context.Context, blindedCreds ...string) (bool, error) {
-	if len(blindedCreds) < 1 {
-		return false, errors.New("invalid parameter to tlv2 creds signed")
-	}
-
-	query := `
-		select exists(
-			select 1 from time_limited_v2_order_creds where blinded_creds->>0 = $1
-		)
-	`
-
-	var alreadySubmitted bool
-	err := pg.RawDB().Get(&alreadySubmitted, query, blindedCreds[0])
-	if err != nil {
-		return false, err
-	}
-
-	return alreadySubmitted, nil
-}
-
 // GetTimeLimitedV2OrderCredsByOrder returns all the non expired time limited v2 order credentials for a given order.
 func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
@@ -994,6 +976,34 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeL
 	}
 
 	return &timeLimitedV2Creds, nil
+}
+
+// GetTLV2Creds returns all the non expired tlv2 credentials for a given order, item and request ids.
+//
+// If no credentials have been found, the method returns errNoTLV2Creds.
+func (pg *Postgres) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, ordID, itemID, reqID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	const q = `SELECT
+		order_id, item_id, issuer_id, blinded_creds, signed_creds,
+		batch_proof, public_key, valid_from, valid_to
+	FROM time_limited_v2_order_creds
+	WHERE order_id = $1 AND item_id = $2 AND request_id = $3 AND valid_to > now()`
+
+	creds := make([]TimeAwareSubIssuedCreds, 0)
+	if err := sqlx.SelectContext(ctx, dbi, &creds, q, ordID, itemID, reqID); err != nil {
+		return nil, err
+	}
+
+	if len(creds) == 0 {
+		return nil, errNoTLV2Creds
+	}
+
+	result := &TimeLimitedV2Creds{
+		OrderID:     creds[0].OrderID,
+		IssuerID:    creds[0].IssuerID,
+		Credentials: creds,
+	}
+
+	return result, nil
 }
 
 // GetTimeLimitedV2OrderCredsByOrderItem returns all the order credentials for a single order item.
@@ -1083,29 +1093,19 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context,
 }
 
 // GetSigningOrderRequestOutboxByRequestID retrieves the SigningOrderRequestOutbox by requestID.
+//
 // An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := pg.RawDB().GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1`, requestID)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
-	}
-	return &signingRequestOutbox, nil
-}
+func (pg *Postgres) GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error) {
+	const q = `SELECT request_id, order_id, item_id, completed_at, message_data
+	FROM signing_order_request_outbox
+	WHERE request_id = $1 FOR UPDATE`
 
-// GetSigningOrderRequestOutboxByRequestIDTx retrieves the SigningOrderRequestOutbox by requestID.
-// An error is returned if the result set is empty.
-func (pg *Postgres) GetSigningOrderRequestOutboxByRequestIDTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID) (*SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox SigningOrderRequestOutbox
-	err := tx.GetContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where request_id = $1 for update`, requestID)
-	if err != nil {
+	result := &SigningOrderRequestOutbox{}
+	if err := sqlx.GetContext(ctx, dbi, result, q, reqID); err != nil {
 		return nil, fmt.Errorf("error retrieving signing request from outbox: %w", err)
 	}
-	return &signingRequestOutbox, nil
+
+	return result, nil
 }
 
 // UpdateSigningOrderRequestOutboxTx updates a signing order request outbox message for the given requestID.
@@ -1221,91 +1221,79 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	return nil
 }
 
-// InsertSignedOrderCredentialsTx inserts a signed order request. It handles both TimeLimitedV2Creds and
-// SingleUse credentials. All SigningOrder's in the SigningOrderResult must be successful to persist the overall result.
-func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, signedOrderResult *SigningOrderResult) error {
-	var requestID = signedOrderResult.RequestID
-	if len(signedOrderResult.Data) == 0 {
-		return fmt.Errorf("error no signing order result is empty for requestID %s",
-			signedOrderResult.RequestID)
+// InsertSignedOrderCredentialsTx inserts a signed order request.
+//
+// It handles both TimeLimitedV2Creds and SingleUse credentials. All SigningOrder's in the SigningOrderResult must be successful to persist the overall result.
+func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, soResult *SigningOrderResult) error {
+	if len(soResult.Data) == 0 {
+		return fmt.Errorf("error no signing order result is empty for requestID %s", soResult.RequestID)
 	}
 
-	for _, so := range signedOrderResult.Data {
-
+	for i := range soResult.Data {
 		var metadata Metadata
-		err := json.Unmarshal(so.AssociatedData, &metadata)
-		if err != nil {
-			return fmt.Errorf("error desearializing associated data for requestID %s: %w",
-				signedOrderResult.RequestID, err)
+		if err := json.Unmarshal(soResult.Data[i].AssociatedData, &metadata); err != nil {
+			return fmt.Errorf("error desearializing associated data for requestID %s: %w", soResult.RequestID, err)
 		}
 
-		if so.Status != SignedOrderStatusOk {
-			return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
-				metadata.OrderID, metadata.ItemID, metadata.IssuerID, so.Status.String())
+		if soResult.Data[i].Status != SignedOrderStatusOk {
+			return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s", metadata.OrderID, metadata.ItemID, metadata.IssuerID, soResult.Data[i].Status.String())
 		}
 
-		blindedCreds := jsonutils.JSONStringArray(so.BlindedTokens)
+		blindedCreds := jsonutils.JSONStringArray(soResult.Data[i].BlindedTokens)
 		if len(blindedCreds) == 0 {
-			return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s: %w",
-				metadata.OrderID, metadata.ItemID, err)
+			return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s", metadata.OrderID, metadata.ItemID)
 		}
 
-		signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
+		signedTokens := jsonutils.JSONStringArray(soResult.Data[i].SignedTokens)
 		if len(signedTokens) == 0 {
-			return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s: %w",
-				metadata.OrderID, metadata.ItemID, err)
+			return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s", metadata.OrderID, metadata.ItemID)
 		}
 
 		switch metadata.CredentialType {
-
 		case singleUse:
-
 			cred := &OrderCreds{
 				ID:           metadata.ItemID,
 				OrderID:      metadata.OrderID,
 				IssuerID:     metadata.IssuerID,
 				BlindedCreds: blindedCreds,
 				SignedCreds:  &signedTokens,
-				BatchProof:   ptr.FromString(so.Proof),
-				PublicKey:    ptr.FromString(so.PublicKey),
+				BatchProof:   ptrTo(soResult.Data[i].Proof),
+				PublicKey:    ptrTo(soResult.Data[i].PublicKey),
 			}
 
-			err = pg.InsertOrderCredsTx(ctx, tx, cred)
-			if err != nil {
-				return fmt.Errorf("error inserting single use order credential orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			if err := pg.InsertOrderCredsTx(ctx, tx, cred); err != nil {
+				return fmt.Errorf("error inserting single use order credential orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
 		case timeLimitedV2:
-
-			if so.ValidTo.Value() == nil {
-				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			validToRaw := soResult.Data[i].ValidTo.Value()
+			if validToRaw == nil {
+				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null", metadata.OrderID, metadata.ItemID)
 			}
 
-			validTo, err := time.Parse(time.RFC3339, *so.ValidTo.Value())
+			validTo, err := time.Parse(time.RFC3339, *validToRaw)
 			if err != nil {
-				return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+				return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			if so.ValidFrom.Value() == nil {
-				return fmt.Errorf("error validFrom for order creds orderID %s itemID %s is null: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			validToFromRaw := soResult.Data[i].ValidFrom.Value()
+			if validToFromRaw == nil {
+				return fmt.Errorf("error validFrom for order creds orderID %s itemID %s is null: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			validFrom, err := time.Parse(time.RFC3339, *so.ValidFrom.Value())
+			validFrom, err := time.Parse(time.RFC3339, *validToFromRaw)
 			if err != nil {
-				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
-			o, err := pg.GetOrder(metadata.OrderID)
+			ord, err := pg.orderRepo.Get(ctx, tx, metadata.OrderID)
 			if err != nil {
 				return fmt.Errorf("failed to get the order %s: %w", metadata.OrderID, err)
 			}
-			if o.ExpiresAt == nil || validFrom.After(*o.ExpiresAt) {
-				// filter out creds after the order expires
+
+			// Filter out credentials for order with no or after the expiry date.
+			// It accounts for the grace period set in timeChunking (5 days).
+			if ord.ExpiresAt == nil || validFrom.After((*ord.ExpiresAt).AddDate(0, 0, 5)) {
 				continue
 			}
 
@@ -1315,22 +1303,19 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				IssuerID:     metadata.IssuerID,
 				BlindedCreds: blindedCreds,
 				SignedCreds:  signedTokens,
-				BatchProof:   so.Proof,
-				PublicKey:    so.PublicKey,
+				BatchProof:   soResult.Data[i].Proof,
+				PublicKey:    soResult.Data[i].PublicKey,
 				ValidTo:      validTo,
 				ValidFrom:    validFrom,
-				RequestID:    requestID,
+				RequestID:    soResult.RequestID,
 			}
 
-			err = pg.InsertTimeLimitedV2OrderCredsTx(ctx, tx, cred)
-			if err != nil {
-				return fmt.Errorf("error inserting time limited order credential orderID %s itemID %s: %w",
-					metadata.OrderID, metadata.ItemID, err)
+			if err := pg.InsertTimeLimitedV2OrderCredsTx(ctx, tx, cred); err != nil {
+				return fmt.Errorf("error inserting time limited order credential orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
 		default:
-			return fmt.Errorf("error unknown credential type %s for order credential orderID %s itemID %s",
-				metadata.CredentialType, metadata.OrderID, metadata.ItemID)
+			return fmt.Errorf("error unknown credential type %s for order credential orderID %s itemID %s", metadata.CredentialType, metadata.OrderID, metadata.ItemID)
 		}
 	}
 

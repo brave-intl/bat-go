@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/shopspring/decimal"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
@@ -122,4 +126,220 @@ func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 	}
 	valid, ok := skuMap[env][sku]
 	return valid && ok, nil
+}
+
+func newOrderItemReqForSubID(set map[string]model.OrderItemRequestNew, subID string) (model.OrderItemRequestNew, error) {
+	key, err := skuNameByMobileName(subID)
+	if err != nil {
+		return model.OrderItemRequestNew{}, model.ErrInvalidMobileProduct
+	}
+
+	result, ok := set[key]
+	if !ok {
+		return model.OrderItemRequestNew{}, model.ErrInvalidMobileProduct
+	}
+
+	return result, nil
+}
+
+func skuNameByMobileName(subID string) (string, error) {
+	switch subID {
+	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly", "braveleo.monthly":
+		return "brave-leo-premium", nil
+
+	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly", "braveleo.yearly":
+		return "brave-leo-premium-year", nil
+
+	case "brave.vpn.monthly", "beta.bravevpn.monthly", "nightly.bravevpn.monthly", "bravevpn.monthly":
+		return "brave-vpn-premium", nil
+
+	case "brave.vpn.yearly", "beta.bravevpn.yearly", "nightly.bravevpn.yearly", "bravevpn.yearly":
+		// Temporary: use the same sku as for monthly.
+		return "brave-vpn-premium", nil
+
+	// Legacy.
+	// Older iOS clients might still send this as subscription_id along with a receipt.
+	case "brave-firewall-vpn-premium", "brave-firewall-vpn-premium-year":
+		return "brave-vpn-premium", nil
+
+	default:
+		return "", model.ErrInvalidMobileProduct
+	}
+}
+
+func newCreateOrderReqNewMobile(ppcfg *premiumPaymentProcConfig, item model.OrderItemRequestNew) model.CreateOrderRequestNew {
+	result := model.CreateOrderRequestNew{
+		// No email.
+		Currency: "USD",
+
+		StripeMetadata: &model.OrderStripeMetadata{
+			SuccessURI: ppcfg.successURI,
+			CancelURI:  ppcfg.cancelURI,
+		},
+
+		Items: []model.OrderItemRequestNew{item},
+	}
+
+	return result
+}
+
+type premiumPaymentProcConfig struct {
+	successURI string
+	cancelURI  string
+}
+
+func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
+	result := &premiumPaymentProcConfig{}
+
+	switch env {
+	case "prod", "production":
+		result.successURI = "https://account.brave.com/account/?intent=provision"
+		result.cancelURI = "https://account.brave.com/plans/?intent=checkout"
+
+	case "sandbox", "staging":
+		result.successURI = "https://account.bravesoftware.com/account/?intent=provision"
+		result.cancelURI = "https://account.bravesoftware.com/plans/?intent=checkout"
+
+	case "dev", "development":
+		result.successURI = "https://account.brave.software/account/?intent=provision"
+		result.cancelURI = "https://account.brave.software/plans/?intent=checkout"
+
+	default:
+		// "local", "test", etc use the same settings as development.
+		result.successURI = "https://account.brave.software/account/?intent=provision"
+		result.cancelURI = "https://account.brave.software/plans/?intent=checkout"
+	}
+
+	return result
+}
+
+func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNew {
+	leom := model.OrderItemRequestNew{
+		Quantity:          1,
+		IssuerTokenBuffer: 3,
+		SKU:               "brave-leo-premium",
+		// Location depends on env.
+		Description:                 "Premium access to Leo",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("14.99"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		IssuanceInterval:            ptrTo("P1D"),
+		// StripeMetadata depends on env.
+	}
+
+	leoa := model.OrderItemRequestNew{
+		Quantity:          1,
+		IssuerTokenBuffer: 3,
+		SKU:               "brave-leo-premium-year",
+		// Location depends on env.
+		Description:                 "Premium access to Leo Yearly",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1Y",
+		Price:                       decimal.RequireFromString("150.00"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		IssuanceInterval:            ptrTo("P1D"),
+		// StripeMetadata depends on env.
+	}
+
+	vpnm := model.OrderItemRequestNew{
+		Quantity:           1,
+		IssuerTokenBuffer:  31,
+		IssuerTokenOverlap: 2,
+		SKU:                "brave-vpn-premium",
+		// Location depends on env.
+		Description:                 "brave-vpn-premium",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("9.99"),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		// StripeMetadata depends on env.
+	}
+
+	switch env {
+	case "prod", "production":
+		leom.Location = "leo.brave.com"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_O9uKDYsRPXNgfB",
+			ItemID:    "price_1OoS8YBSm1mtrN9nB5gKoYwh",
+		}
+
+		leoa.Location = "leo.brave.com"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_O9uKDYsRPXNgfB",
+			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+		}
+
+		vpnm.Location = "vpn.brave.com"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_Lhv8qsPsn6WHrx",
+			ItemID:    "price_1L0VHmBSm1mtrN9nT5DPmUZb",
+		}
+
+	case "sandbox", "staging":
+		leom.Location = "leo.bravesoftware.com"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OKRYJ77wYOk771",
+			ItemID:    "price_1OuRuUBSm1mtrN9nWFtJYSML",
+		}
+
+		leoa.Location = "leo.bravesoftware.com"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OKRYJ77wYOk771",
+			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+		}
+
+		vpnm.Location = "vpn.bravesoftware.com"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_Lhv4OM1aAPxflY",
+			ItemID:    "price_1L0VEhBSm1mtrN9nGB4kZkfh",
+		}
+
+	case "dev", "development":
+		leom.Location = "leo.brave.software"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
+		}
+
+		leoa.Location = "leo.brave.software"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
+		}
+
+		vpnm.Location = "vpn.brave.software"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_K1c8W3oM4mUsGw",
+			ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+		}
+
+	default:
+		// "local", "test", etc use the same settings as development.
+		leom.Location = "leo.brave.software"
+		leom.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
+		}
+
+		leoa.Location = "leo.brave.software"
+		leoa.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_OtZCXOCIO3AJE6",
+			ItemID:    "price_1O6re8Hof20bphG6tqdNEEAp",
+		}
+
+		vpnm.Location = "vpn.brave.software"
+		vpnm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_K1c8W3oM4mUsGw",
+			ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+		}
+	}
+
+	result := map[string]model.OrderItemRequestNew{
+		leom.SKU: leom,
+		leoa.SKU: leoa,
+		vpnm.SKU: vpnm,
+	}
+
+	return result
 }
