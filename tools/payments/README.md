@@ -269,7 +269,7 @@ docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the loc
 ### CLI
 
 1. - [ ] Build the tooling in `bat-go/tools/payments`: `make clean && make`
-2. - [ ] Set all of the environment variables used in production, including `$PASS_ENV` and `$EIF_COMMAND`. Find others in the `payment-ops` repo
+2. - [ ] Set all of the environment variables used in production, including `PASS_ENV` and `EIF_COMMAND`. Find others in the `payment-ops` repo
 3. - [ ] Generate PCR values from the version of code and environment variables used in production in bat-go/services/payments. This PCR will be used in subsequent commands:
    ```
    make docker-reproducible
