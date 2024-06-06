@@ -285,4 +285,13 @@ docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the loc
 
 ### Shell
 
-1. - [ ]
+1. - [ ] Trigger AWS MFA before starting the shell, as it currently does not work as part of shell initialization: `kubectl --context bsg-production --namespace antifraud-prod get pods`
+2. - [ ] Set `$REDIS_USERNAME` and `$REDIS_PASSWORD` before starting the shell
+3. - [ ] Start the shell: `aws-vault exec settlements-stg-developer-role -- ipython --profile-dir=ipython-profile`
+4. - [ ] Run the payout in the shell
+   1. - [ ] If bootstrap is needed due to a recent release, run bootstrap: `bootstrap PATH_TO_OPERATOR_KEY`
+   2. - [ ] Initialize the payout from the file: `payout PATH_TO_FILE`
+   3. - [ ] Set the expected PCR to use: `pcr2="PCR_VALUE"`
+   4. - [ ] Prepare the payments: `prepare`
+   5. - [ ] Authorize the payments: `authorize`
+   6. - [ ] Monitor the status of the payments: `status`
