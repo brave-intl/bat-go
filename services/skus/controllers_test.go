@@ -653,14 +653,11 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 	ctx := context.Background()
 	// setup debug for client
 	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, true)
-	// setup debug log level
-	ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, "debug")
 
 	// setup a new logger, add to context as well
-	_, logger := logutils.SetupLogger(ctx)
+	ctx, _ = logutils.SetupLogger(ctx)
 
 	w := uphold.Wallet{
-		Logger:  logger,
 		Info:    info,
 		PrivKey: privKey,
 		PubKey:  publicKey,
@@ -827,7 +824,11 @@ func generateWallet(ctx context.Context, t *testing.T) *uphold.Wallet {
 		t.Fatal(err)
 	}
 	info.PublicKey = hex.EncodeToString(publicKey)
-	newWallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+	newWallet := &uphold.Wallet{
+		Info:    info,
+		PrivKey: privateKey,
+		PubKey:  publicKey,
+	}
 	err = newWallet.Register(ctx, "bat-go test card")
 	if err != nil {
 		t.Fatal(err)
