@@ -321,14 +321,12 @@ func InitService(
 		sublogger.Warn().Msg("gcp push subscription service account is empty")
 	}
 
-	conf := gcpValidatorConfig{
-		audience:       aud,
-		issuer:         iss,
-		serviceAccount: sa,
-		disabled:       disabled,
+	gpsCfg := gpsValidatorConfig{
+		aud:      aud,
+		iss:      iss,
+		svcAcct:  sa,
+		disabled: disabled,
 	}
-
-	gcpValidator := newGcpPushNotificationValidator(idv, conf)
 
 	service := &Service{
 		orderRepo:     orderRepo,
@@ -350,7 +348,7 @@ func InitService(
 		radomSellerAddress: radomSellerAddress,
 
 		vendorReceiptValid: rcptValidator,
-		gcpValidator:       gcpValidator,
+		gcpValidator:       newGPSNotificationValidator(gpsCfg, idv),
 		assnCertVrf:        assnCertVrf,
 
 		payProcCfg:    newPaymentProcessorConfig(env),

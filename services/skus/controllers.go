@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
@@ -20,7 +19,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
-	"google.golang.org/api/idtoken"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -985,144 +983,77 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 	}
 }
 
-// WebhookRouter - handles calls from various payment method webhooks informing payments of completion
 func WebhookRouter(svc *Service) chi.Router {
 	r := chi.NewRouter()
 
 	r.Method(http.MethodPost, "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(svc)))
 	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(svc)))
-	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(svc)))
+	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("handleWebhookPlayStore", handleWebhookPlayStore(svc)))
 	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
 
 	return r
 }
 
-func HandleAndroidWebhook(service *Service) handlers.AppHandler {
+func handleWebhookPlayStore(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-
-		l := logging.Logger(ctx, "payments").With().Str("func", "HandleAndroidWebhook").Logger()
-
-		if err := service.gcpValidator.validate(ctx, r); err != nil {
-			l.Error().Err(err).Msg("invalid request")
-			return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
-		}
-
-		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
-		if err != nil {
-			l.Error().Err(err).Msg("failed to read payload")
-			return handlers.WrapValidationError(err)
-		}
-
-		l.Info().Str("payload", string(payload)).Msg("")
-
-		var validationErrMap = map[string]interface{}{}
-
-		var req AndroidNotification
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			validationErrMap["request-body-decode"] = err.Error()
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Interface("req", req).Msg("")
-
-		dn, err := req.Message.GetDeveloperNotification()
-		if err != nil {
-			validationErrMap["invalid-developer-notification"] = err.Error()
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Interface("developer_notification", dn).Msg("")
-
-		if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-			validationErrMap["invalid-developer-notification-token"] = "notification has no purchase token"
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Msg("verify_developer_notification")
-
-		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
-			l.Error().Err(err).Msg("failed to verify subscription notification")
-
-			switch {
-			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
-				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-			default:
-				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
-			}
-		}
-
-		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+		return handleWebhookPlayStoreH(w, r, svc)
 	}
 }
 
-const (
-	errAuthHeaderEmpty  model.Error = "skus: gcp authorization header is empty"
-	errAuthHeaderFormat model.Error = "skus: gcp authorization header invalid format"
-	errInvalidIssuer    model.Error = "skus: gcp invalid issuer"
-	errInvalidEmail     model.Error = "skus: gcp invalid email"
-	errEmailNotVerified model.Error = "skus: gcp email not verified"
-)
+func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
+	ctx := r.Context()
 
-type gcpTokenValidator interface {
-	Validate(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error)
-}
+	l := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookPlayStore").Logger()
 
-type gcpValidatorConfig struct {
-	audience       string
-	issuer         string
-	serviceAccount string
-	disabled       bool
-}
+	if err := svc.gcpValidator.validate(ctx, r); err != nil {
+		l.Err(err).Msg("invalid request")
 
-type gcpPushNotificationValidator struct {
-	validator gcpTokenValidator
-	cfg       gcpValidatorConfig
-}
-
-func newGcpPushNotificationValidator(gcpTokenValidator gcpTokenValidator, cfg gcpValidatorConfig) *gcpPushNotificationValidator {
-	return &gcpPushNotificationValidator{
-		validator: gcpTokenValidator,
-		cfg:       cfg,
-	}
-}
-
-func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Request) error {
-	if g.cfg.disabled {
-		return nil
+		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
 	}
 
-	ah := r.Header.Get("Authorization")
-	if ah == "" {
-		return errAuthHeaderEmpty
-	}
-
-	token := strings.Split(ah, " ")
-	if len(token) != 2 {
-		return errAuthHeaderFormat
-	}
-
-	p, err := g.validator.Validate(ctx, token[1], g.cfg.audience)
+	payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 	if err != nil {
-		return fmt.Errorf("invalid authentication token: %w", err)
+		l.Err(err).Msg("failed to read payload")
+
+		return handlers.WrapValidationError(err)
 	}
 
-	if p.Issuer == "" || p.Issuer != g.cfg.issuer {
-		return errInvalidIssuer
+	// TODO: This nonsense has to go.
+	var req AndroidNotification
+	if err := inputs.DecodeAndValidate(ctx, &req, payload); err != nil {
+		l.Err(err).Str("data", string(payload)).Msg("failed to parse play store notification")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
 	}
 
-	if p.Claims["email"] != g.cfg.serviceAccount {
-		return errInvalidEmail
+	// TODO: This nonsense has to go.
+	dn, err := req.Message.GetDeveloperNotification()
+	if err != nil {
+		l.Err(err).Msg("failed to get developer notification")
+
+		return handlers.ValidationError("request", map[string]interface{}{"developer-notification": err.Error()})
 	}
 
-	if p.Claims["email_verified"] != true {
-		return errEmailNotVerified
+	// TODO: This nonsense has to go.
+	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
+		l.Error().Msg("developer notification has no purchase token")
+
+		return handlers.ValidationError("request", map[string]interface{}{"developer-notification": "no purchase token"})
 	}
 
-	return nil
+	if err := svc.verifyDeveloperNotification(ctx, dn); err != nil {
+		l.Err(err).Msg("failed to verify subscription notification")
+
+		switch {
+		case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+		default:
+			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func handleWebhookAppStore(svc *Service) handlers.AppHandler {
@@ -1666,10 +1597,10 @@ func handleReceiptErr(err error) *handlers.AppError {
 	case errors.Is(err, errIOSPurchaseNotFound):
 		result.ErrorCode = "purchase_not_found"
 
-	case errors.Is(err, errExpiredGPSSubPurchase):
+	case errors.Is(err, errGPSSubPurchaseExpired):
 		result.ErrorCode = "purchase_expired"
 
-	case errors.Is(err, errPendingGPSSubPurchase):
+	case errors.Is(err, errGPSSubPurchasePending):
 		result.ErrorCode = "purchase_pending"
 
 	default:

@@ -174,26 +174,26 @@ func TestHandleReceiptErr(t *testing.T) {
 
 		{
 			name:  "errExpiredGPSSubPurchase",
-			given: errExpiredGPSSubPurchase,
+			given: errGPSSubPurchaseExpired,
 			exp: &handlers.AppError{
-				Message:   "Error " + errExpiredGPSSubPurchase.Error(),
+				Message:   "Error " + errGPSSubPurchaseExpired.Error(),
 				Code:      http.StatusBadRequest,
 				ErrorCode: "purchase_expired",
 				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errExpiredGPSSubPurchase.Error()},
+					"validationErrors": map[string]interface{}{"receiptErrors": errGPSSubPurchaseExpired.Error()},
 				},
 			},
 		},
 
 		{
 			name:  "errPendingGPSSubPurchase",
-			given: errPendingGPSSubPurchase,
+			given: errGPSSubPurchasePending,
 			exp: &handlers.AppError{
-				Message:   "Error " + errPendingGPSSubPurchase.Error(),
+				Message:   "Error " + errGPSSubPurchasePending.Error(),
 				Code:      http.StatusBadRequest,
 				ErrorCode: "purchase_pending",
 				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPendingGPSSubPurchase.Error()},
+					"validationErrors": map[string]interface{}{"receiptErrors": errGPSSubPurchasePending.Error()},
 				},
 			},
 		},

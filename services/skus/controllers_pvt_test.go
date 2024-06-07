@@ -14,7 +14,7 @@ import (
 func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 	type tcGiven struct {
 		req            *http.Request
-		cfg            gcpValidatorConfig
+		cfg            gpsValidatorConfig
 		tokenValidator gcpTokenValidator
 	}
 
@@ -28,7 +28,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 		{
 			name: "disabled",
 			given: tcGiven{
-				cfg: gcpValidatorConfig{disabled: true},
+				cfg: gpsValidatorConfig{disabled: true},
 			},
 			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.NoError(t, err)
@@ -40,7 +40,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 				req: newRequest(""),
 			},
 			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorIs(t, err, errAuthHeaderEmpty)
+				return assert.ErrorIs(t, err, errGPSAuthHeaderEmpty)
 			},
 		},
 		{
@@ -49,7 +49,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 				req: newRequest("some-random-header-value"),
 			},
 			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorIs(t, err, errAuthHeaderFormat)
+				return assert.ErrorIs(t, err, errGPSAuthHeaderFmt)
 			},
 		},
 		{
@@ -73,31 +73,31 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 				}},
 			},
 			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorIs(t, err, errInvalidIssuer)
+				return assert.ErrorIs(t, err, errGPSInvalidIssuer)
 			},
 		},
 		{
 			name: "invalid_issuer_not_equal",
 			given: tcGiven{
 				req: newRequest("Bearer: some-token"),
-				cfg: gcpValidatorConfig{
-					issuer: "issuer-1",
+				cfg: gpsValidatorConfig{
+					iss: "issuer-1",
 				},
 				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					return &idtoken.Payload{Issuer: "issuer-2"}, nil
 				}},
 			},
 			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorIs(t, err, errInvalidIssuer)
+				return assert.ErrorIs(t, err, errGPSInvalidIssuer)
 			},
 		},
 		{
 			name: "invalid_email",
 			given: tcGiven{
 				req: newRequest("Bearer: some-token"),
-				cfg: gcpValidatorConfig{
-					issuer:         "issuer-1",
-					serviceAccount: "service-account-1",
+				cfg: gpsValidatorConfig{
+					iss:     "issuer-1",
+					svcAcct: "service-account-1",
 				},
 				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					issuer := "issuer-1"
@@ -106,16 +106,16 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 				}},
 			},
 			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorIs(t, err, errInvalidEmail)
+				return assert.ErrorIs(t, err, errGPSInvalidEmail)
 			},
 		},
 		{
 			name: "invalid_email_not_verified",
 			given: tcGiven{
 				req: newRequest("Bearer: some-token"),
-				cfg: gcpValidatorConfig{
-					issuer:         "issuer-1",
-					serviceAccount: "service-account-1",
+				cfg: gpsValidatorConfig{
+					iss:     "issuer-1",
+					svcAcct: "service-account-1",
 				},
 				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					issuer := "issuer-1"
@@ -124,16 +124,16 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 				}},
 			},
 			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.ErrorIs(t, err, errEmailNotVerified)
+				return assert.ErrorIs(t, err, errGPSEmailNotVerified)
 			},
 		},
 		{
 			name: "valid_request",
 			given: tcGiven{
 				req: newRequest("Bearer: some-token"),
-				cfg: gcpValidatorConfig{
-					issuer:         "issuer-1",
-					serviceAccount: "service-account-1",
+				cfg: gpsValidatorConfig{
+					iss:     "issuer-1",
+					svcAcct: "service-account-1",
 				},
 				tokenValidator: mockGcpTokenValidator{fnValidate: func(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error) {
 					issuer := "issuer-1"
@@ -151,7 +151,7 @@ func TestNewGogglePushNotificationValidator_IsValid(t *testing.T) {
 		tc := testCases[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			v := newGcpPushNotificationValidator(tc.given.tokenValidator, tc.given.cfg)
+			v := newGPSNotificationValidator(tc.given.cfg, tc.given.tokenValidator)
 			actual := v.validate(context.TODO(), tc.given.req)
 			tc.assertErr(t, actual)
 		})

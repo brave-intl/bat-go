@@ -145,11 +145,11 @@ func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.Rece
 
 	psub := (*playStoreSubPurchase)(sub)
 	if psub.hasExpired(now) {
-		return "", errExpiredGPSSubPurchase
+		return "", errGPSSubPurchaseExpired
 	}
 
 	if psub.isPending() {
-		return "", errPendingGPSSubPurchase
+		return "", errGPSSubPurchasePending
 	}
 
 	return req.Blob, nil

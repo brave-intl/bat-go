@@ -359,7 +359,7 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 
 	suite.service.gcpValidator = &mockGcpRequestValidator{}
 
-	handler := HandleAndroidWebhook(suite.service)
+	handler := handleWebhookPlayStore(suite.service)
 
 	// notification message
 	devNotify := DeveloperNotification{
