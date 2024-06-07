@@ -1,9 +1,9 @@
 .PHONY: build clean tidy
 .DEFAULT: build
 
-build: dist/vault dist/prepare dist/authorize dist/configure dist/bootstrap dist/validate dist/status dist/chain-account dist/disaster
-tidy: tidy-vault tidy-prepare tidy-authorize tidy-configure tidy-bootstrap tidy-validate tidy-status tidy-chain-account tidy-disaster
-clean: clean-vault clean-prepare clean-authorize clean-configure clean-bootstrap clean-validate clean-status clean-chain-account clean-disaster
+build: dist/vault dist/prepare dist/authorize dist/configure dist/bootstrap dist/validate dist/status dist/chain-account dist/disaster dist/report
+tidy: tidy-vault tidy-prepare tidy-authorize tidy-configure tidy-bootstrap tidy-validate tidy-status tidy-chain-account tidy-disaster tidy-report
+clean: clean-vault clean-prepare clean-authorize clean-configure clean-bootstrap clean-validate clean-status clean-chain-account clean-disaster clean-report
 
 dist/vault:
 	cd cmd/vault && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -o ../../dist/vault main.go
