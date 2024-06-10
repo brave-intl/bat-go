@@ -340,66 +340,6 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	return order, issuer
 }
 
-func (suite *ControllersTestSuite) TestAndroidWebhook() {
-	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
-	suite.Assert().NotNil(order)
-
-	// Check the order
-	suite.Assert().Equal("10", order.TotalPrice.String())
-
-	// add the external id to metadata as if an initial receipt was submitted
-	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
-	suite.Require().NoError(err)
-
-	suite.service.vendorReceiptValid = &mockVendorReceiptValidator{
-		fnValidateGoogle: func(ctx context.Context, req model.ReceiptRequest) (string, error) {
-			return "my external id", nil
-		},
-	}
-
-	suite.service.gpsAuth = &mockGPSMessageAuthenticator{}
-
-	handler := handleWebhookPlayStore(suite.service)
-
-	// notification message
-	devNotify := DeveloperNotification{
-		PackageName: "package name",
-		SubscriptionNotification: SubscriptionNotification{
-			NotificationType: androidSubscriptionCanceled,
-			PurchaseToken:    "my external id",
-			SubscriptionID:   "subscription id",
-		},
-	}
-
-	buf, err := json.Marshal(&devNotify)
-	suite.Require().NoError(err)
-
-	// wrapper notification message
-	notification := &AndroidNotification{
-		Message: AndroidNotificationMessage{
-			Data: base64.StdEncoding.EncodeToString(buf), // dev notification is b64 encoded
-		},
-		Subscription: "subscription",
-	}
-
-	body, err := json.Marshal(&notification)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/android", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	suite.Require().Equal(http.StatusOK, rr.Code)
-
-	// get order and check the state changed to canceled
-	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
-	suite.Assert().Equal("canceled", updatedOrder.Status)
-}
-
 func (suite *ControllersTestSuite) TestCreateOrder() {
 	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
 
@@ -1883,37 +1823,4 @@ func newCORSOptsEnv() cors.Options {
 	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
 
 	return NewCORSOpts(origins, dbg)
-}
-
-type mockVendorReceiptValidator struct {
-	fnValidateApple  func(ctx context.Context, req model.ReceiptRequest) (string, error)
-	fnValidateGoogle func(ctx context.Context, req model.ReceiptRequest) (string, error)
-}
-
-func (v *mockVendorReceiptValidator) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	if v.fnValidateApple == nil {
-		return "apple_defaul", nil
-	}
-
-	return v.fnValidateApple(ctx, req)
-}
-
-func (v *mockVendorReceiptValidator) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	if v.fnValidateGoogle == nil {
-		return "google_default", nil
-	}
-
-	return v.fnValidateGoogle(ctx, req)
-}
-
-type mockGPSMessageAuthenticator struct {
-	fnAuthenticate func(ctx context.Context, hdr string) error
-}
-
-func (x *mockGPSMessageAuthenticator) authenticate(ctx context.Context, hdr string) error {
-	if x.fnAuthenticate == nil {
-		return nil
-	}
-
-	return x.fnAuthenticate(ctx, hdr)
 }

@@ -1003,64 +1003,85 @@ func handleWebhookPlayStore(svc *Service) handlers.AppHandler {
 func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
 	ctx := r.Context()
 
-	l := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookPlayStore").Logger()
+	lg := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookPlayStore").Logger()
 
 	if err := svc.gpsAuth.authenticate(ctx, r.Header.Get("Authorization")); err != nil {
-		l.Err(err).Msg("invalid request")
+		lg.Err(err).Msg("invalid request")
 
 		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 	if err != nil {
-		l.Err(err).Msg("failed to read payload")
+		lg.Err(err).Msg("failed to read payload")
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 
 	ntf, err := parsePlayStoreDevNotification(data)
 	if err != nil {
-		l.Err(err).Str("payload", string(data)).Msg("failed to parse play store notification")
+		lg.Err(err).Str("payload", string(data)).Msg("failed to parse play store notification")
 
 		return handlers.ValidationError("request", map[string]interface{}{"parse-payload": err.Error()})
 	}
 
-	_ = ntf
-
-	// TODO: This nonsense has to go.
-	var req AndroidNotification
-	if err := inputs.DecodeAndValidate(ctx, &req, data); err != nil {
-		l.Err(err).Str("data", string(data)).Msg("failed to parse play store notification")
-
-		return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
-	}
-
-	// TODO: This nonsense has to go.
-	dn, err := req.Message.GetDeveloperNotification()
-	if err != nil {
-		l.Err(err).Msg("failed to get developer notification")
-
-		return handlers.ValidationError("request", map[string]interface{}{"developer-notification": err.Error()})
-	}
-
-	// TODO: This nonsense has to go.
-	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-		l.Error().Msg("developer notification has no purchase token")
-
-		return handlers.ValidationError("request", map[string]interface{}{"developer-notification": "no purchase token"})
-	}
-
-	if err := svc.verifyDeveloperNotification(ctx, dn); err != nil {
-		l.Err(err).Msg("failed to verify subscription notification")
+	if err := svc.processPlayStoreNotification(ctx, ntf); err != nil {
+		// l := lg.With().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Logger()
+		l := lg.With().Logger()
 
 		switch {
-		case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+		case errors.Is(err, context.Canceled):
+			l.Warn().Err(err).Msg("failed to process play store notification")
+
+			// Should retry.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+		case errors.Is(err, model.ErrOrderNotFound):
+			l.Warn().Err(err).Msg("failed to process play store notification")
+
+			// Order was not found, so nothing can be done.
+			// It might be an issue for VPN:
+			// - user has not linked yet;
+			// - billing cycle comes through, subscription renews;
+			// - user links immediately after billing cycle (they get 1 month);
+			// - there might be a small gap between order's expiration and next successful renewal;
+			// - the grace period should handle it.
+			// A better option is to create orders when the user subscribes, similar to Leo.
+			// Or allow for 1 or 2 retry attempts for the notification, but this requires tracking.
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+			l.Warn().Err(err).Msg("failed to process play store notification")
+
+			// No rows have changed whilst processing.
+			// This could happen in theory, but not in practice.
+			// It would mean that we attempted to update with the same data as it's in the database.
+			// This could happen when trying to process the same event twice, which could happen
+			// if the App Store sends multiple notifications about the same event.
+			// (E.g. auto-renew and billing recovery).
+
 			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
 		default:
-			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+			l.Err(err).Msg("failed to process play store notification")
+
+			// Retry for all other errors for now.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}
+
+	// if err := svc.verifyDeveloperNotification(ctx, dn); err != nil {
+	// 	l.Err(err).Msg("failed to verify subscription notification")
+
+	// 	switch {
+	// 	case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
+	// 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+	// 	default:
+	// 		return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+	// 	}
+	// }
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }

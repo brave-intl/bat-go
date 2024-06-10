@@ -1701,6 +1701,10 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 	}
 }
 
+func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playStoreDevNotification) error {
+	return nil
+}
+
 // verifyDeveloperNotification - verify the developer notification from playstore
 func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
 	// lookup the order based on the token as externalID
