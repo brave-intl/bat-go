@@ -2,6 +2,8 @@ package skus
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -98,4 +100,58 @@ func (x *gpsNtfAuthenticator) authenticate(ctx context.Context, hdr string) erro
 	}
 
 	return nil
+}
+
+// playStoreDevNotification represents a notification from Play Store.
+//
+// For details, see https://developer.android.com/google/play/billing/rtdn-reference.
+type playStoreDevNotification struct {
+	PackageName       string                      `json:"packageName"`
+	EventTimeMilli    json.Number                 `json:"eventTimeMillis"`
+	SubscriptionNtf   *playStoreSubscriptionNtf   `json:"subscriptionNotification"`
+	VoidedPurchaseNtf *playStoreVoidedPurchaseNtf `json:"voidedPurchaseNotification"`
+
+	// Only presense of these matters. The content is ignored.
+	OneTimeProductNtf *struct{} `json:"oneTimeProductNotification"`
+	TestNtf           *struct{} `json:"testNotification"`
+}
+
+func parsePlayStoreDevNotification(raw []byte) (*playStoreDevNotification, error) {
+	wrap := &struct {
+		// This might be useful in the futuere for determining environment/channel.
+		Sub string `json:"subscription"`
+
+		Message struct {
+			Data      string `json:"data"`
+			MessageID string `json:"messageId"`
+		} `json:"message"`
+	}{}
+
+	if err := json.Unmarshal(raw, wrap); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal message: %w", err)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(wrap.Message.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode message data: %w", err)
+	}
+
+	result := &playStoreDevNotification{}
+	if err := json.Unmarshal(data, result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal notification: %w", err)
+	}
+
+	return result, nil
+}
+
+type playStoreSubscriptionNtf struct {
+	Type          int    `json:"notificationType"`
+	PurchaseToken string `json:"purchaseToken"`
+	SubID         string `json:"subscriptionId"`
+}
+
+type playStoreVoidedPurchaseNtf struct {
+	ProductType   int    `json:"productType"`
+	RefundType    int    `json:"refundType"`
+	PurchaseToken string `json:"purchaseToken"`
 }

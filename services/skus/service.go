@@ -143,7 +143,7 @@ type Service struct {
 	radomSellerAddress string
 
 	vendorReceiptValid vendorReceiptValidator
-	gpsAuthenticator   gpsMessageAuthenticator
+	gpsAuth            gpsMessageAuthenticator
 	assnCertVrf        *assnCertVerifier
 
 	payProcCfg    *premiumPaymentProcConfig
@@ -349,7 +349,7 @@ func InitService(
 		radomSellerAddress: radomSellerAddress,
 
 		vendorReceiptValid: rcptValidator,
-		gpsAuthenticator:   newGPSNtfAuthenticator(gpsCfg, idv),
+		gpsAuth:            newGPSNtfAuthenticator(gpsCfg, idv),
 		assnCertVrf:        assnCertVrf,
 
 		payProcCfg:    newPaymentProcessorConfig(env),

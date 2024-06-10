@@ -1005,23 +1005,32 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 
 	l := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookPlayStore").Logger()
 
-	if err := svc.gpsAuthenticator.authenticate(ctx, r.Header.Get("Authorization")); err != nil {
+	if err := svc.gpsAuth.authenticate(ctx, r.Header.Get("Authorization")); err != nil {
 		l.Err(err).Msg("invalid request")
 
 		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
 	}
 
-	payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 	if err != nil {
 		l.Err(err).Msg("failed to read payload")
 
-		return handlers.WrapValidationError(err)
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
+
+	ntf, err := parsePlayStoreDevNotification(data)
+	if err != nil {
+		l.Err(err).Str("payload", string(data)).Msg("failed to parse play store notification")
+
+		return handlers.ValidationError("request", map[string]interface{}{"parse-payload": err.Error()})
+	}
+
+	_ = ntf
 
 	// TODO: This nonsense has to go.
 	var req AndroidNotification
-	if err := inputs.DecodeAndValidate(ctx, &req, payload); err != nil {
-		l.Err(err).Str("data", string(payload)).Msg("failed to parse play store notification")
+	if err := inputs.DecodeAndValidate(ctx, &req, data); err != nil {
+		l.Err(err).Str("data", string(data)).Msg("failed to parse play store notification")
 
 		return handlers.ValidationError("request", map[string]interface{}{"request-body-decode": err.Error()})
 	}

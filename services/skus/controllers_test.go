@@ -357,7 +357,7 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 		},
 	}
 
-	suite.service.gpsAuthenticator = &mockGPSMessageAuthenticator{}
+	suite.service.gpsAuth = &mockGPSMessageAuthenticator{}
 
 	handler := handleWebhookPlayStore(suite.service)
 
