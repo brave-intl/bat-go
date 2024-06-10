@@ -1705,7 +1705,7 @@ func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playSto
 	return nil
 }
 
-// verifyDeveloperNotification - verify the developer notification from playstore
+//nolint:unused
 func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
 	// lookup the order based on the token as externalID
 	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
