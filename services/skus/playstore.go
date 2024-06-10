@@ -66,8 +66,8 @@ func newGPSNtfAuthenticator(cfg gpsValidatorConfig, valid gpsTokenValidator) *gp
 	return result
 }
 
-func (g *gpsNtfAuthenticator) authenticate(ctx context.Context, hdr string) error {
-	if g.cfg.disabled {
+func (x *gpsNtfAuthenticator) authenticate(ctx context.Context, hdr string) error {
+	if x.cfg.disabled {
 		return nil
 	}
 
@@ -80,16 +80,16 @@ func (g *gpsNtfAuthenticator) authenticate(ctx context.Context, hdr string) erro
 		return errGPSAuthHeaderFmt
 	}
 
-	p, err := g.valid.Validate(ctx, token[1], g.cfg.aud)
+	p, err := x.valid.Validate(ctx, token[1], x.cfg.aud)
 	if err != nil {
 		return fmt.Errorf("invalid authentication token: %w", err)
 	}
 
-	if p.Issuer == "" || p.Issuer != g.cfg.iss {
+	if p.Issuer == "" || p.Issuer != x.cfg.iss {
 		return errGPSInvalidIssuer
 	}
 
-	if p.Claims["email"] != g.cfg.svcAcct {
+	if p.Claims["email"] != x.cfg.svcAcct {
 		return errGPSInvalidEmail
 	}
 
