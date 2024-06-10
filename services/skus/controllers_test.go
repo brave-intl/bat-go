@@ -357,7 +357,7 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 		},
 	}
 
-	suite.service.gcpValidator = &mockGcpRequestValidator{}
+	suite.service.gpsAuthenticator = &mockGPSMessageAuthenticator{}
 
 	handler := handleWebhookPlayStore(suite.service)
 
@@ -1906,13 +1906,14 @@ func (v *mockVendorReceiptValidator) validateGoogle(ctx context.Context, req mod
 	return v.fnValidateGoogle(ctx, req)
 }
 
-type mockGcpRequestValidator struct {
-	fnValidate func(ctx context.Context, r *http.Request) error
+type mockGPSMessageAuthenticator struct {
+	fnAuthenticate func(ctx context.Context, hdr string) error
 }
 
-func (m *mockGcpRequestValidator) validate(ctx context.Context, r *http.Request) error {
-	if m.fnValidate == nil {
+func (x *mockGPSMessageAuthenticator) authenticate(ctx context.Context, hdr string) error {
+	if x.fnAuthenticate == nil {
 		return nil
 	}
-	return m.fnValidate(ctx, r)
+
+	return x.fnAuthenticate(ctx, hdr)
 }

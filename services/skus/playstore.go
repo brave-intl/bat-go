@@ -3,7 +3,6 @@ package skus
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -49,17 +48,17 @@ type gpsValidatorConfig struct {
 	disabled bool
 }
 
-type gcpTokenValidator interface {
-	Validate(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error)
+type gpsTokenValidator interface {
+	Validate(ctx context.Context, token, aud string) (*idtoken.Payload, error)
 }
 
-type gpsNotificationValidator struct {
+type gpsNtfAuthenticator struct {
 	cfg   gpsValidatorConfig
-	valid gcpTokenValidator
+	valid gpsTokenValidator
 }
 
-func newGPSNotificationValidator(cfg gpsValidatorConfig, valid gcpTokenValidator) *gpsNotificationValidator {
-	result := &gpsNotificationValidator{
+func newGPSNtfAuthenticator(cfg gpsValidatorConfig, valid gpsTokenValidator) *gpsNtfAuthenticator {
+	result := &gpsNtfAuthenticator{
 		cfg:   cfg,
 		valid: valid,
 	}
@@ -67,17 +66,16 @@ func newGPSNotificationValidator(cfg gpsValidatorConfig, valid gcpTokenValidator
 	return result
 }
 
-func (g *gpsNotificationValidator) validate(ctx context.Context, r *http.Request) error {
+func (g *gpsNtfAuthenticator) authenticate(ctx context.Context, hdr string) error {
 	if g.cfg.disabled {
 		return nil
 	}
 
-	ah := r.Header.Get("Authorization")
-	if ah == "" {
+	if hdr == "" {
 		return errGPSAuthHeaderEmpty
 	}
 
-	token := strings.Split(ah, " ")
+	token := strings.Split(hdr, " ")
 	if len(token) != 2 {
 		return errGPSAuthHeaderFmt
 	}

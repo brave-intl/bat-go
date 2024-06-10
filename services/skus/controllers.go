@@ -1005,7 +1005,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 
 	l := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookPlayStore").Logger()
 
-	if err := svc.gcpValidator.validate(ctx, r); err != nil {
+	if err := svc.gpsAuthenticator.authenticate(ctx, r.Header.Get("Authorization")); err != nil {
 		l.Err(err).Msg("invalid request")
 
 		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)

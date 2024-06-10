@@ -28,6 +28,7 @@ import (
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
 	"google.golang.org/api/idtoken"
+	"google.golang.org/api/option"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -111,8 +112,8 @@ type vendorReceiptValidator interface {
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
 }
 
-type gcpRequestValidator interface {
-	validate(ctx context.Context, r *http.Request) error
+type gpsMessageAuthenticator interface {
+	authenticate(ctx context.Context, token string) error
 }
 
 // Service contains datastore
@@ -142,7 +143,7 @@ type Service struct {
 	radomSellerAddress string
 
 	vendorReceiptValid vendorReceiptValidator
-	gcpValidator       gcpRequestValidator
+	gpsAuthenticator   gpsMessageAuthenticator
 	assnCertVrf        *assnCertVerifier
 
 	payProcCfg    *premiumPaymentProcConfig
@@ -296,7 +297,7 @@ func InitService(
 		return nil, err
 	}
 
-	idv, err := idtoken.NewValidator(ctx)
+	idv, err := idtoken.NewValidator(ctx, option.WithTelemetryDisabled())
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +349,7 @@ func InitService(
 		radomSellerAddress: radomSellerAddress,
 
 		vendorReceiptValid: rcptValidator,
-		gcpValidator:       newGPSNotificationValidator(gpsCfg, idv),
+		gpsAuthenticator:   newGPSNtfAuthenticator(gpsCfg, idv),
 		assnCertVrf:        assnCertVrf,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
