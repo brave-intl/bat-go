@@ -399,3 +399,263 @@ func TestParseRealtimeDevNotification(t *testing.T) {
 		})
 	}
 }
+
+func TestPlayStoreDevNotification_shouldProcess(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreDevNotification
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "sub_true",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{Type: 1},
+			},
+			exp: true,
+		},
+
+		{
+			name: "sub_false",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{Type: 20},
+			},
+		},
+
+		{
+			name: "voided_purchase_true",
+			given: &playStoreDevNotification{
+				VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 1},
+			},
+			exp: true,
+		},
+
+		{
+			name: "voided_purchase_false",
+			given: &playStoreDevNotification{
+				VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 2},
+			},
+		},
+
+		{
+			name: "one_time_product_false",
+			given: &playStoreDevNotification{
+				OneTimeProductNtf: &struct{}{},
+			},
+		},
+
+		{
+			name: "test_false",
+			given: &playStoreDevNotification{
+				TestNtf: &struct{}{},
+			},
+		},
+
+		{
+			name:  "invalid_false",
+			given: &playStoreDevNotification{},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldProcess()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestPlayStoreDevNotification_ntfType(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreDevNotification
+		exp   string
+	}
+
+	tests := []testCase{
+		{
+			name: "subscription",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{Type: 1},
+			},
+			exp: "subscription",
+		},
+
+		{
+			name: "voided_purchase",
+			given: &playStoreDevNotification{
+				VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 1},
+			},
+			exp: "voided_purchase",
+		},
+
+		{
+			name: "one_time_product",
+			given: &playStoreDevNotification{
+				OneTimeProductNtf: &struct{}{},
+			},
+			exp: "one_time_product",
+		},
+
+		{
+			name: "test",
+			given: &playStoreDevNotification{
+				TestNtf: &struct{}{},
+			},
+			exp: "test",
+		},
+
+		{
+			name:  "invalid",
+			given: &playStoreDevNotification{},
+			exp:   "unknown",
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.ntfType()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestPlayStoreDevNotification_ntfSubType(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreDevNotification
+		exp   int
+	}
+
+	tests := []testCase{
+		{
+			name: "subscription_1",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{Type: 1},
+			},
+			exp: 1,
+		},
+
+		{
+			name: "voided_purchase_1",
+			given: &playStoreDevNotification{
+				VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 1},
+			},
+			exp: 1,
+		},
+
+		{
+			name: "one_time_product_0",
+			given: &playStoreDevNotification{
+				OneTimeProductNtf: &struct{}{},
+			},
+		},
+
+		{
+			name: "test_0",
+			given: &playStoreDevNotification{
+				TestNtf: &struct{}{},
+			},
+		},
+
+		{
+			name:  "invalid",
+			given: &playStoreDevNotification{},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.ntfSubType()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestPlayStoreDevNotification_effect(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreDevNotification
+		exp   string
+	}
+
+	tests := []testCase{
+		{
+			name: "subscription_renew",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{Type: 1},
+			},
+			exp: "renew",
+		},
+
+		{
+			name: "subscription_cancel",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{Type: 3},
+			},
+			exp: "cancel",
+		},
+
+		{
+			name: "subscription_skip",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{Type: 20},
+			},
+			exp: "skip",
+		},
+
+		{
+			name: "voided_purchase_cancel",
+			given: &playStoreDevNotification{
+				VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 1},
+			},
+			exp: "cancel",
+		},
+
+		{
+			name: "voided_purchase_skip",
+			given: &playStoreDevNotification{
+				VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 2},
+			},
+			exp: "skip",
+		},
+
+		{
+			name: "one_time_product_skip",
+			given: &playStoreDevNotification{
+				OneTimeProductNtf: &struct{}{},
+			},
+			exp: "skip",
+		},
+
+		{
+			name: "test",
+			given: &playStoreDevNotification{
+				TestNtf: &struct{}{},
+			},
+			exp: "skip",
+		},
+
+		{
+			name:  "invalid",
+			given: &playStoreDevNotification{},
+			exp:   "skip",
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.effect()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}

@@ -180,7 +180,11 @@ func (x *playStoreDevNotification) effect() string {
 			return "renew"
 		}
 
-		return "cancel"
+		if x.SubscriptionNtf.shouldCancel() {
+			return "cancel"
+		}
+
+		return "skip"
 
 	case x.VoidedPurchaseNtf != nil:
 		if x.VoidedPurchaseNtf.shouldProcess() {
