@@ -283,7 +283,7 @@ func TestGPSNtfAuthenticator_authenticate(t *testing.T) {
 	}
 }
 
-func TestParseRealtimeDevNotification(t *testing.T) {
+func TestParsePlayStoreDevNotification(t *testing.T) {
 	type tcExpected struct {
 		val   *playStoreDevNotification
 		fnErr must.ErrorAssertionFunc
@@ -655,6 +655,161 @@ func TestPlayStoreDevNotification_effect(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := tc.given.effect()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestPlayStoreSubscriptionNtf_shouldProcess(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreSubscriptionNtf
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name:  "renew",
+			given: &playStoreSubscriptionNtf{Type: 1},
+			exp:   true,
+		},
+
+		{
+			name:  "cancel",
+			given: &playStoreSubscriptionNtf{Type: 3},
+			exp:   true,
+		},
+
+		{
+			name:  "skip",
+			given: &playStoreSubscriptionNtf{Type: 20},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldProcess()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestPlayStoreSubscriptionNtf_shouldRenew(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreSubscriptionNtf
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name:  "recovered",
+			given: &playStoreSubscriptionNtf{Type: 1},
+			exp:   true,
+		},
+
+		{
+			name:  "renewed",
+			given: &playStoreSubscriptionNtf{Type: 2},
+			exp:   true,
+		},
+
+		{
+			name:  "restarted",
+			given: &playStoreSubscriptionNtf{Type: 7},
+			exp:   true,
+		},
+
+		{
+			name:  "cancelled",
+			given: &playStoreSubscriptionNtf{Type: 3},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldRenew()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestPlayStoreSubscriptionNtf_shouldCancel(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreSubscriptionNtf
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name:  "cancelled",
+			given: &playStoreSubscriptionNtf{Type: 3},
+			exp:   true,
+		},
+
+		{
+			name:  "revoked",
+			given: &playStoreSubscriptionNtf{Type: 12},
+			exp:   true,
+		},
+
+		{
+			name:  "expired",
+			given: &playStoreSubscriptionNtf{Type: 13},
+			exp:   true,
+		},
+
+		{
+			name:  "recovered",
+			given: &playStoreSubscriptionNtf{Type: 1},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldCancel()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestPlayStoreVoidedPurchaseNtf_shouldProcess(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreVoidedPurchaseNtf
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name:  "subscription",
+			given: &playStoreVoidedPurchaseNtf{ProductType: 1},
+			exp:   true,
+		},
+
+		{
+			name:  "one_time",
+			given: &playStoreVoidedPurchaseNtf{ProductType: 2},
+		},
+
+		{
+			name:  "unknown",
+			given: &playStoreVoidedPurchaseNtf{},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldProcess()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
