@@ -1702,6 +1702,10 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 }
 
 func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playStoreDevNotification) error {
+	if !ntf.shouldProcess() {
+		return nil
+	}
+
 	return nil
 }
 

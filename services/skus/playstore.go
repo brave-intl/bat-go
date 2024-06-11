@@ -116,6 +116,84 @@ type playStoreDevNotification struct {
 	TestNtf           *struct{} `json:"testNotification"`
 }
 
+func (x *playStoreDevNotification) shouldProcess() bool {
+	switch {
+	case x.SubscriptionNtf != nil:
+		return x.SubscriptionNtf.shouldProcess()
+
+	case x.VoidedPurchaseNtf != nil:
+		return x.VoidedPurchaseNtf.shouldProcess()
+
+	case x.OneTimeProductNtf != nil:
+		return false
+
+	case x.TestNtf != nil:
+		return false
+
+	default:
+		return false
+	}
+}
+
+func (x *playStoreDevNotification) ntfType() string {
+	switch {
+	case x.SubscriptionNtf != nil:
+		return "subscription"
+
+	case x.VoidedPurchaseNtf != nil:
+		return "voided_purchase"
+
+	case x.OneTimeProductNtf != nil:
+		return "one_time_product"
+
+	case x.TestNtf != nil:
+		return "test"
+
+	default:
+		return "unknown"
+	}
+}
+
+func (x playStoreDevNotification) ntfSubType() int {
+	switch {
+	case x.SubscriptionNtf != nil:
+		return x.SubscriptionNtf.Type
+
+	case x.VoidedPurchaseNtf != nil:
+		return x.VoidedPurchaseNtf.ProductType
+
+	case x.OneTimeProductNtf != nil:
+		return 0
+
+	case x.TestNtf != nil:
+		return 0
+
+	default:
+		return 0
+	}
+}
+
+func (x *playStoreDevNotification) effect() string {
+	switch {
+	case x.SubscriptionNtf != nil:
+		if x.SubscriptionNtf.shouldRenew() {
+			return "renew"
+		}
+
+		return "cancel"
+
+	case x.VoidedPurchaseNtf != nil:
+		if x.VoidedPurchaseNtf.shouldProcess() {
+			return "cancel"
+		}
+
+		return "skip"
+
+	default:
+		return "skip"
+	}
+}
+
 func parsePlayStoreDevNotification(raw []byte) (*playStoreDevNotification, error) {
 	wrap := &struct {
 		// This might be useful in the futuere for determining environment/channel.
@@ -150,8 +228,80 @@ type playStoreSubscriptionNtf struct {
 	SubID         string `json:"subscriptionId"`
 }
 
+// shouldProcess determines whether x should be processed.
+//
+// More details https://developer.android.com/google/play/billing/rtdn-reference#sub.
+func (x *playStoreSubscriptionNtf) shouldProcess() bool {
+	// Other interesting types.
+	//
+	// - 4 == purchased:
+	//     - can be used to create a new order or prepare to working in multi-device mode;
+	// - 5 == on hold;
+	// - 6 == in grace period;
+	// - 10 == paused;
+	// - 20 == pending purchase cancelled.
+
+	return x.shouldRenew() || x.shouldCancel()
+}
+
+// shouldRenew reports whether the ntf is about renewal.
+func (x *playStoreSubscriptionNtf) shouldRenew() bool {
+	switch x.Type {
+	// Recovered.
+	case 1:
+		return true
+
+	// Renewed.
+	case 2:
+		return true
+
+	// Restarted.
+	case 7:
+		return true
+
+	default:
+		return false
+	}
+}
+
+// shouldCancel reports whether the ntf is about cancellation.
+func (x *playStoreSubscriptionNtf) shouldCancel() bool {
+	switch x.Type {
+	// Cancelled.
+	case 3:
+		return true
+
+	// Revoked.
+	case 12:
+		return true
+
+	// Expired.
+	case 13:
+		return true
+
+	default:
+		return false
+	}
+}
+
 type playStoreVoidedPurchaseNtf struct {
 	ProductType   int    `json:"productType"`
 	RefundType    int    `json:"refundType"`
 	PurchaseToken string `json:"purchaseToken"`
+}
+
+// shouldProcess determines whether x should be processed.
+func (x *playStoreVoidedPurchaseNtf) shouldProcess() bool {
+	switch x.ProductType {
+	// Sub.
+	case 1:
+		return true
+
+	// One-time.
+	case 2:
+		return false
+
+	default:
+		return false
+	}
 }

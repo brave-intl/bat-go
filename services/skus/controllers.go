@@ -1026,8 +1026,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 	}
 
 	if err := svc.processPlayStoreNotification(ctx, ntf); err != nil {
-		// l := lg.With().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Logger()
-		l := lg.With().Logger()
+		l := lg.With().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Logger()
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -1036,7 +1035,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 			// Should retry.
 			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
 
-		case errors.Is(err, model.ErrOrderNotFound):
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, errNotFound):
 			l.Warn().Err(err).Msg("failed to process play store notification")
 
 			// Order was not found, so nothing can be done.
@@ -1071,17 +1070,12 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 		}
 	}
 
-	// if err := svc.verifyDeveloperNotification(ctx, dn); err != nil {
-	// 	l.Err(err).Msg("failed to verify subscription notification")
+	msg := "skipped play store notification"
+	if ntf.shouldProcess() {
+		msg = "processed play store notification"
+	}
 
-	// 	switch {
-	// 	case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
-	// 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-
-	// 	default:
-	// 		return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
-	// 	}
-	// }
+	lg.Info().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Msg(msg)
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
