@@ -1710,31 +1710,25 @@ func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playSto
 		return nil
 	}
 
+	extID, ok := ntf.purchaseToken()
+	if !ok {
+		return nil
+	}
+
 	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.processPlayStoreNotificationTx(ctx, tx, ntf); err != nil {
-		// Should not happen due to the check above.
-		// Still good to be careful.
-		if errors.Is(err, errGPSNoPurchaseToken) {
-			return nil
-		}
-
+	if err := s.processPlayStoreNotificationTx(ctx, tx, ntf, extID); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *playStoreDevNotification) error {
-	extID, ok := ntf.purchaseToken()
-	if !ok {
-		return errGPSNoPurchaseToken
-	}
-
+func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *playStoreDevNotification, extID string) error {
 	ord, err := s.orderRepo.GetByExternalID(ctx, dbi, extID)
 	if err != nil {
 		return err
@@ -1770,56 +1764,6 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 	}
 }
 
-//nolint:unused
-func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
-	// lookup the order based on the token as externalID
-	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
-	if err != nil {
-		return fmt.Errorf("failed to get order from db: %w", err)
-	}
-
-	if o == nil {
-		return fmt.Errorf("failed to get order from db: %w", errNotFound)
-	}
-
-	// have order, now validate the receipt from the notification
-	if _, err := s.vendorReceiptValid.validateGoogle(ctx, model.ReceiptRequest{
-		Type:           model.VendorGoogle,
-		Blob:           dn.SubscriptionNotification.PurchaseToken,
-		Package:        dn.PackageName,
-		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
-	}); err != nil {
-		return fmt.Errorf("failed to validate purchase token: %w", err)
-	}
-
-	switch dn.SubscriptionNotification.NotificationType {
-	case androidSubscriptionRenewed,
-		androidSubscriptionRecovered,
-		androidSubscriptionPurchased,
-		androidSubscriptionRestarted,
-		androidSubscriptionInGracePeriod,
-		androidSubscriptionPriceChangeConfirmed:
-		if err = s.RenewOrder(ctx, o.ID); err != nil {
-			return fmt.Errorf("failed to renew subscription in skus: %w", err)
-		}
-	case androidSubscriptionExpired,
-		androidSubscriptionRevoked,
-		androidSubscriptionPausedScheduleChanged,
-		androidSubscriptionPaused,
-		androidSubscriptionDeferred,
-		androidSubscriptionOnHold,
-		androidSubscriptionCanceled,
-		androidSubscriptionUnknown:
-		if err = s.CancelOrder(o.ID); err != nil {
-			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
-		}
-	default:
-		return errors.New("failed to act on subscription notification")
-	}
-
-	return nil
-}
-
 // validateReceipt validates receipt.
 func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest) (string, error) {
 	switch req.Type {
@@ -1828,7 +1772,7 @@ func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest)
 	case model.VendorGoogle:
 		return s.vendorReceiptValid.validateGoogle(ctx, req)
 	default:
-		return "", errorutils.ErrNotImplemented
+		return "", model.ErrInvalidVendor
 	}
 }
 
@@ -2320,30 +2264,6 @@ type tlv1CredPresentation struct {
 
 func ptrTo[T any](v T) *T {
 	return &v
-}
-
-func shouldCancelOrderIOS(info *appstore.JWSTransactionDecodedPayload, now time.Time) bool {
-	tx := (*appStoreTransaction)(info)
-
-	return tx.hasExpired(now) || tx.isRevoked(now)
-}
-
-type appStoreTransaction appstore.JWSTransactionDecodedPayload
-
-func (x *appStoreTransaction) hasExpired(now time.Time) bool {
-	if x == nil {
-		return false
-	}
-
-	return x.ExpiresDate > 0 && now.After(time.UnixMilli(x.ExpiresDate))
-}
-
-func (x *appStoreTransaction) isRevoked(now time.Time) bool {
-	if x == nil {
-		return false
-	}
-
-	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
 }
 
 func isErrStripeNotFound(err error) bool {
