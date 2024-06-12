@@ -660,6 +660,47 @@ func TestPlayStoreDevNotification_effect(t *testing.T) {
 	}
 }
 
+func TestPlayStoreDevNotification_isBeforeCutoff(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *playStoreDevNotification
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name:  "invalid_time",
+			given: &playStoreDevNotification{EventTimeMilli: "garbage"},
+			exp:   true,
+		},
+
+		{
+			name:  "before",
+			given: &playStoreDevNotification{EventTimeMilli: "1717199999000"},
+			exp:   true,
+		},
+
+		{
+			name:  "exact",
+			given: &playStoreDevNotification{EventTimeMilli: "1717200000000"},
+		},
+
+		{
+			name:  "after",
+			given: &playStoreDevNotification{EventTimeMilli: "1717200001000"},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			acutal := tc.given.isBeforeCutoff()
+			should.Equal(t, tc.exp, acutal)
+		})
+	}
+}
+
 func TestPlayStoreDevNotification_purchaseToken(t *testing.T) {
 	type tcExpected struct {
 		val string

@@ -3,8 +3,10 @@ package skus
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v72"
+	"google.golang.org/api/androidpublisher/v3"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 
@@ -340,6 +343,176 @@ func TestService_uniqBatchesTxTime(t *testing.T) {
 
 			should.Equal(t, tc.exp.lim, lim)
 			should.Equal(t, tc.exp.val, nact)
+		})
+	}
+}
+
+func TestService_processPlayStoreNotificationTx(t *testing.T) {
+	type tcGiven struct {
+		extID string
+		ntf   *playStoreDevNotification
+		orepo *repository.MockOrder
+		prepo *repository.MockOrderPayHistory
+		pscl  *mockPSClient
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "get_order_error",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: "1717200001000", // 2024-06-01 00:00:01
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          2,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "sub_should_renew_fetch_error",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: "1717200001000", // 2024-06-01 00:00:01
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          2,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "sub_should_renew",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          2,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+
+		{
+			name: "sub_should_cancel",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          3,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+
+		{
+			name: "void_should_cancel",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:       "com.brave.browser_nightly",
+					EventTimeMilli:    json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 1},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+
+		{
+			name: "skip_sub",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          20,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+
+		{
+			name: "skip_void",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:       "com.brave.browser_nightly",
+					EventTimeMilli:    json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 2},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:          tc.given.orepo,
+				payHistRepo:        tc.given.prepo,
+				vendorReceiptValid: &receiptVerifier{playStoreCl: tc.given.pscl},
+			}
+
+			ctx := context.Background()
+
+			err := svc.processPlayStoreNotificationTx(ctx, nil, tc.given.ntf, tc.given.extID)
+			should.Equal(t, true, errors.Is(err, tc.exp))
 		})
 	}
 }

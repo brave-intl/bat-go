@@ -199,6 +199,20 @@ func (x *playStoreDevNotification) effect() string {
 	}
 }
 
+func (x *playStoreDevNotification) isBeforeCutoff() bool {
+	ems, err := x.EventTimeMilli.Int64()
+	if err != nil {
+		return true
+	}
+
+	cot := time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC)
+
+	// Assumption: server time is UTC.
+	event := time.UnixMilli(ems)
+
+	return event.Before(cot)
+}
+
 func (x *playStoreDevNotification) purchaseToken() (string, bool) {
 	switch {
 	case x.SubscriptionNtf != nil:

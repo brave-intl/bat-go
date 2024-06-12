@@ -1715,6 +1715,15 @@ func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playSto
 		return nil
 	}
 
+	// Temporary. Clean up after the initial rollout.
+	//
+	// Refuse to handle any events issued prior to 2024-06-01.
+	// This is to avoid unexpected effects from past events (in case we get them),
+	// and to avoid complicating the downstream logic.
+	if ntf.isBeforeCutoff() {
+		return nil
+	}
+
 	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -1735,6 +1744,7 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 	}
 
 	switch {
+	// Renewal.
 	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldRenew():
 		sub, err := s.vendorReceiptValid.fetchSubPlayStore(ctx, ntf.PackageName, ntf.SubscriptionNtf.SubID, ntf.SubscriptionNtf.PurchaseToken)
 		if err != nil {
@@ -1746,9 +1756,11 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 
 		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
 
+	// Sub cancellation.
 	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldCancel():
 		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
 
+	// Voiding.
 	case ntf.VoidedPurchaseNtf != nil && ntf.VoidedPurchaseNtf.shouldProcess():
 		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
 
