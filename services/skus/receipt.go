@@ -138,7 +138,7 @@ func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptR
 }
 
 func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (string, error) {
-	sub, err := v.playStoreCl.VerifySubscription(ctx, req.Package, req.SubscriptionID, req.Blob)
+	sub, err := v.fetchSubPlayStore(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch subscription purchase: %w", err)
 	}
@@ -153,6 +153,10 @@ func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.Rece
 	}
 
 	return req.Blob, nil
+}
+
+func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, req model.ReceiptRequest) (*androidpublisher.SubscriptionPurchase, error) {
+	return v.playStoreCl.VerifySubscription(ctx, req.Package, req.SubscriptionID, req.Blob)
 }
 
 func findInAppBySubID(iap []appstore.InApp, subID string) (*appstore.InApp, bool) {

@@ -27,6 +27,7 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
+	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 
@@ -110,6 +111,7 @@ type tlv2Store interface {
 type vendorReceiptValidator interface {
 	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
+	fetchSubPlayStore(ctx context.Context, req model.ReceiptRequest) (*androidpublisher.SubscriptionPurchase, error)
 }
 
 type gpsMessageAuthenticator interface {
@@ -1694,8 +1696,10 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+
 	case ntf.shouldCancel():
 		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
 	default:
 		return nil
 	}
@@ -1706,7 +1710,64 @@ func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playSto
 		return nil
 	}
 
-	return nil
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processPlayStoreNotificationTx(ctx, tx, ntf); err != nil {
+		// Should not happen due to the check above.
+		// Still good to be careful.
+		if errors.Is(err, errGPSNoPurchaseToken) {
+			return nil
+		}
+
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *playStoreDevNotification) error {
+	extID, ok := ntf.purchaseToken()
+	if !ok {
+		return errGPSNoPurchaseToken
+	}
+
+	ord, err := s.orderRepo.GetByExternalID(ctx, dbi, extID)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldRenew():
+		req := model.ReceiptRequest{
+			Type:           model.VendorGoogle,
+			Package:        ntf.PackageName,
+			Blob:           ntf.SubscriptionNtf.PurchaseToken,
+			SubscriptionID: ntf.SubscriptionNtf.SubID,
+		}
+
+		sub, err := s.vendorReceiptValid.fetchSubPlayStore(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		expt := time.UnixMilli(sub.ExpiryTimeMillis)
+		paidt := time.Now()
+
+		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+
+	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldCancel():
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
+	case ntf.VoidedPurchaseNtf != nil && ntf.VoidedPurchaseNtf.shouldProcess():
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
+	default:
+		return nil
+	}
 }
 
 //nolint:unused

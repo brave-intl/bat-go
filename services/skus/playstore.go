@@ -22,6 +22,7 @@ const (
 	errGPSInvalidIssuer      = model.Error("playstore: gcp invalid issuer")
 	errGPSInvalidEmail       = model.Error("playstore: gcp invalid email")
 	errGPSEmailNotVerified   = model.Error("playstore: gcp email not verified")
+	errGPSNoPurchaseToken    = model.Error("playstore: notification has no purchase")
 )
 
 type playStoreSubPurchase androidpublisher.SubscriptionPurchase
@@ -195,6 +196,19 @@ func (x *playStoreDevNotification) effect() string {
 
 	default:
 		return "skip"
+	}
+}
+
+func (x *playStoreDevNotification) purchaseToken() (string, bool) {
+	switch {
+	case x.SubscriptionNtf != nil:
+		return x.SubscriptionNtf.PurchaseToken, true
+
+	case x.VoidedPurchaseNtf != nil:
+		return x.VoidedPurchaseNtf.PurchaseToken, true
+
+	default:
+		return "", false
 	}
 }
 
