@@ -660,6 +660,73 @@ func TestPlayStoreDevNotification_effect(t *testing.T) {
 	}
 }
 
+func TestPlayStoreDevNotification_purchaseToken(t *testing.T) {
+	type tcExpected struct {
+		val string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given *playStoreDevNotification
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "subscription",
+			given: &playStoreDevNotification{
+				SubscriptionNtf: &playStoreSubscriptionNtf{PurchaseToken: "PURCHASE_TOKEN"},
+			},
+			exp: tcExpected{
+				val: "PURCHASE_TOKEN",
+				ok:  true,
+			},
+		},
+
+		{
+			name: "voided_purchase",
+			given: &playStoreDevNotification{
+				VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{PurchaseToken: "PURCHASE_TOKEN"},
+			},
+			exp: tcExpected{
+				val: "PURCHASE_TOKEN",
+				ok:  true,
+			},
+		},
+
+		{
+			name: "one_time_product",
+			given: &playStoreDevNotification{
+				OneTimeProductNtf: &struct{}{},
+			},
+		},
+
+		{
+			name: "test",
+			given: &playStoreDevNotification{
+				TestNtf: &struct{}{},
+			},
+		},
+
+		{
+			name:  "invalid",
+			given: &playStoreDevNotification{},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.purchaseToken()
+			should.Equal(t, tc.exp.ok, ok)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
 func TestPlayStoreSubscriptionNtf_shouldProcess(t *testing.T) {
 	type testCase struct {
 		name  string
