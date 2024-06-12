@@ -16,6 +16,7 @@ import (
 	"github.com/blocto/solana-go-sdk/program/token"
 	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/blocto/solana-go-sdk/types"
+	"github.com/brave-intl/bat-go/libs/logging"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/mr-tron/base58"
 	"github.com/shopspring/decimal"
@@ -171,6 +172,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	if errors.Is(err, context.DeadlineExceeded) {
 		return sm.transaction, err
 	}
+	logger := logging.Logger(ctx, "SolanaStateMachinePay")
 
 	// Skip if the state is already final
 	if sm.transaction.Status == paymentLib.Paid || sm.transaction.Status == paymentLib.Failed {
@@ -202,6 +204,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			idempotencyData.Transaction.Signatures,
 		)
 	}
+	logger.Debug().Str("documentID", sm.transaction.DocumentID).Msg("loaded external idempotency data for transaction")
 
 	b58Signature := base58.Encode(idempotencyData.Transaction.Signatures[0])
 	// solanaError stores temporary errors that need to be recorded as the LastError in QLDB but
@@ -220,6 +223,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)
 		}
 	}
+	logger.Debug().Str("status", string(status)).Str("documentID", sm.transaction.DocumentID).Msg("checked transaction status")
 	if status == TxnConfirmed || status == TxnFinalized {
 		entry, err := sm.SetNextState(ctx, paymentLib.Paid)
 		if err != nil {
@@ -243,6 +247,16 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		// Failing to get the block height is a recoverable error, so return without state change
 		return sm.transaction, fmt.Errorf("failed to get block height: %w", err)
 	}
+	logger.Debug().Uint64(
+		"current block height",
+		blockHeightResponse.Result,
+	).Uint64(
+		"slot target",
+		idempotencyData.SlotTarget,
+	).Str(
+		"documentID",
+		sm.transaction.DocumentID,
+	).Msg("retrieved current block height")
 	if blockHeightResponse.Result > idempotencyData.SlotTarget {
 		_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
 		if setStateErr != nil {
@@ -265,6 +279,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		},
 	)
 	if err != nil {
+		logger.Debug().Err(err).Str("documentID", sm.transaction.DocumentID).Msg("error submitting transaction")
 		// Introspect the RPC error looking for specific error codes
 		var mapErr map[string]interface{}
 		unmarshalErr := json.Unmarshal([]byte(err.Error()), &mapErr)
@@ -284,6 +299,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		}
 		return sm.transaction, fmt.Errorf("failed to submit transaction: %w", err)
 	}
+	logger.Debug().Str("signature", signature).Str("documentID", sm.transaction.DocumentID).Msg("submitted transaction")
 
 	if signature != b58Signature {
 		_, setStateErr := sm.SetNextState(ctx, paymentLib.Failed)
@@ -302,6 +318,7 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 	if err != nil {
 		return sm.transaction, fmt.Errorf("failed to write next state: %w entry: %v", err, entry)
 	}
+	logger.Debug().Str("documentID", sm.transaction.DocumentID).Msg("transitioned to pending status")
 
 	return sm.transaction, solanaError
 }

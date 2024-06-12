@@ -20,7 +20,6 @@ import (
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
@@ -28,6 +27,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	solTypes "github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
