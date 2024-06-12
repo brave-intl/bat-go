@@ -213,8 +213,8 @@ func (sm *SolanaMachine) Pay(ctx context.Context) (*paymentLib.AuthenticatedPaym
 		// Some errors are expected and we just want to record them. Check if the status check
 		// returned such an error and prepare to return it after we attempt to make progress.
 		if errors.Is(err, SolanaTransactionNotConfirmedError) ||
-			errors.As(err, SolanaTransactionNotFoundError) ||
-			errors.As(err, SolanaTransactionUnknownError) {
+			errors.Is(err, SolanaTransactionNotFoundError) ||
+			errors.Is(err, SolanaTransactionUnknownError) {
 			solanaError = paymentLib.ProcessingErrorFromError(err, true)
 		} else {
 			return sm.transaction, fmt.Errorf("failed to check transaction status: %w", err)

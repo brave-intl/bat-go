@@ -353,7 +353,7 @@ func setupState(
 	[]byte,
 ) {
 	solMachine := SolanaMachine{
-		signingKey:      os.Getenv("SOLANA_SIGNING_KEY"),
+		signingKey:      []byte(os.Getenv("SOLANA_SIGNING_KEY")),
 		solanaRpcClient: *client.NewClient(os.Getenv("SOLANA_RPC_ENDPOINT")),
 		splMintAddress:  mint, // SPL mint address on devnet
 		splMintDecimals: 8,    // SPL mint decimals on devnet

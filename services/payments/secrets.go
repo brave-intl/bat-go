@@ -191,7 +191,7 @@ func encryptShares(shares [][]byte, operatorKeys []string) ([]paymentLib.Operato
 	for i, share := range shares {
 		recipient, err := agessh.ParseRecipient(operatorKeys[i])
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse public key", err)
+			return nil, fmt.Errorf("failed to parse public key: %w", err)
 		}
 		buf := new(bytes.Buffer)
 		// encrypt each with an operator recipient
@@ -201,7 +201,7 @@ func encryptShares(shares [][]byte, operatorKeys []string) ([]paymentLib.Operato
 		}
 
 		if _, err = io.WriteString(w, base64.StdEncoding.EncodeToString(share)); err != nil {
-			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer", err)
+			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer: %w", err)
 		}
 
 		// Cannot defer this close because we are writing and using this writer in a loop. If this

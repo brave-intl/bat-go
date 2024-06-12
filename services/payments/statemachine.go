@@ -220,14 +220,14 @@ func (s *Service) DriveTransaction(
 		// current persisted state
 		history, err := s.datastore.GetPaymentStateHistory(ctx, state.DocumentID)
 		if err != nil {
-			return fmt.Errorf("failed to get history from document id", err)
+			return fmt.Errorf("failed to get history from document id: %w", err)
 		}
 		persistedState, err := history.GetAuthenticatedPaymentState(
 			s.verifierStore,
 			state.DocumentID,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to validate payment state history", err)
+			return fmt.Errorf("failed to validate payment state history: %w", err)
 		}
 		// If there is idempotency data in qldb and in our generated state and
 		// it is different from the idempotency data in the current state it
