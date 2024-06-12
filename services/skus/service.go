@@ -111,7 +111,7 @@ type tlv2Store interface {
 type vendorReceiptValidator interface {
 	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
-	fetchSubPlayStore(ctx context.Context, req model.ReceiptRequest) (*androidpublisher.SubscriptionPurchase, error)
+	fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
 }
 
 type gpsMessageAuthenticator interface {
@@ -1736,14 +1736,7 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 
 	switch {
 	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldRenew():
-		req := model.ReceiptRequest{
-			Type:           model.VendorGoogle,
-			Package:        ntf.PackageName,
-			Blob:           ntf.SubscriptionNtf.PurchaseToken,
-			SubscriptionID: ntf.SubscriptionNtf.SubID,
-		}
-
-		sub, err := s.vendorReceiptValid.fetchSubPlayStore(ctx, req)
+		sub, err := s.vendorReceiptValid.fetchSubPlayStore(ctx, ntf.PackageName, ntf.SubscriptionNtf.SubID, ntf.SubscriptionNtf.PurchaseToken)
 		if err != nil {
 			return err
 		}
