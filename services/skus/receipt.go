@@ -4,14 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/httputil"
 	"time"
 
 	"github.com/awa/go-iap/appstore"
 	"github.com/awa/go-iap/playstore"
 	"google.golang.org/api/androidpublisher/v3"
-
-	"github.com/brave-intl/bat-go/libs/logging"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -20,28 +17,6 @@ const (
 	errNoInAppTx           model.Error = "no in app info in response"
 	errIOSPurchaseNotFound model.Error = "ios: purchase not found"
 )
-
-type dumpTransport struct{}
-
-func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	logger := logging.Logger(r.Context(), "skus").With().Str("func", "RoundTrip").Logger()
-
-	dump, err := httputil.DumpRequestOut(r, true)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to dump request")
-	}
-	logger.Debug().Msgf("****REQUEST****\n%q\n", dump)
-
-	resp, rtErr := http.DefaultTransport.RoundTrip(r)
-
-	dump, err = httputil.DumpResponse(resp, true)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to dump response")
-	}
-	logger.Debug().Msgf("****RESPONSE****\n%q\n****************\n\n", dump)
-
-	return resp, rtErr
-}
 
 type appStoreVerifier interface {
 	Verify(ctx context.Context, req appstore.IAPRequest, result interface{}) error

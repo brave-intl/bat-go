@@ -277,10 +277,7 @@ func InitService(
 		}
 	}
 
-	cl := &http.Client{
-		Transport: &dumpTransport{},
-		Timeout:   30 * time.Second,
-	}
+	cl := &http.Client{Timeout: 30 * time.Second}
 
 	asKey, _ := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
 	playKey, _ := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte)
