@@ -229,11 +229,15 @@ func (s *Service) DriveTransaction(
 		if err != nil {
 			return fmt.Errorf("failed to validate payment state history", err)
 		}
-		// If there is idempotency data in qldb and it is different from the idempotency data in the
-		// current state it means that there was a race between two calls to Authenticate and we are
-		// operating on the loser. There is no risk to proceeding as long as we retain the winner
-		// idempotency.
-		if persistedState != nil && !bytes.Equal(state.ExternalIdempotency, persistedState.ExternalIdempotency) {
+		// If there is idempotency data in qldb and in our generated state and
+		// it is different from the idempotency data in the current state it
+		// means that there was a race between two calls to Authenticate and we
+		// are operating on the loser. There is no risk to proceeding as long as
+		// we retain the winner idempotency.
+		if persistedState != nil &&
+			persistedState.ExternalIdempotency != nil &&
+			state.ExternalIdempotency != nil &&
+			!bytes.Equal(state.ExternalIdempotency, persistedState.ExternalIdempotency) {
 			state.ExternalIdempotency = persistedState.ExternalIdempotency
 		}
 

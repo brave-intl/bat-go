@@ -119,6 +119,9 @@ func main() {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 
+			if len(report) < 1 {
+				log.Fatalf("report is empty: %s after reading file data: %s\n", report, f)
+			}
 			if report[0].PayoutID != *payoutID {
 				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
 			}
