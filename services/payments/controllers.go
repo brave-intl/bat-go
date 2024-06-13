@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/hlog"
 	"github.com/shopspring/decimal"
 
+	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -171,7 +172,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		}
 
 		// Implement a simple maximum payout amount
-		if req.Amount.GreaterThan(decimal.NewFromInt(50)) {
+		if req.Amount.GreaterThan(clients.TransferLimit) {
 			logger.Error().Err(err).Str("amount", req.Amount.String()).Str("to", req.To).Msg("requested payment amount exceeds maximum")
 			return handlers.WrapError(err, "requested payment amount exceeds maximum", http.StatusBadRequest)
 		}
