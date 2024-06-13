@@ -164,7 +164,7 @@ func (s *Service) configureKMSEncryptionKey(ctx context.Context) error {
 			return nil
 		}
 		logger.Info().Msgf("policy does not match: \n\n %s \n\n %s!", *getKeyPolicyResult.Policy, policy)
-		return fmt.Errorf("failed to match policy text")
+		panic("failed to match policy text")
 	}
 
 	input := &kms.CreateKeyInput{
