@@ -20,7 +20,6 @@ import (
 
 	"filippo.io/age"
 	"filippo.io/age/agessh"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
@@ -28,6 +27,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	solTypes "github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	nitroawsutils "github.com/brave-intl/bat-go/libs/nitro/aws"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
@@ -191,7 +191,7 @@ func encryptShares(shares [][]byte, operatorKeys []string) ([]paymentLib.Operato
 	for i, share := range shares {
 		recipient, err := agessh.ParseRecipient(operatorKeys[i])
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse public key", err)
+			return nil, fmt.Errorf("failed to parse public key: %w", err)
 		}
 		buf := new(bytes.Buffer)
 		// encrypt each with an operator recipient
@@ -201,7 +201,7 @@ func encryptShares(shares [][]byte, operatorKeys []string) ([]paymentLib.Operato
 		}
 
 		if _, err = io.WriteString(w, base64.StdEncoding.EncodeToString(share)); err != nil {
-			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer", err)
+			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer: %w", err)
 		}
 
 		// Cannot defer this close because we are writing and using this writer in a loop. If this

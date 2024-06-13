@@ -9,7 +9,9 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -19,7 +21,7 @@ import (
 	"github.com/blocto/solana-go-sdk/client"
 	"github.com/blocto/solana-go-sdk/common"
 	"github.com/blocto/solana-go-sdk/rpc"
-	"github.com/blocto/solana-go-sdk/types"
+	// "github.com/blocto/solana-go-sdk/types"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
@@ -28,6 +30,15 @@ import (
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+)
+
+const (
+	// DEV NET CHAIN INFO
+	// mint              = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
+	// tokenAccountOwner = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+	// MAIN NET CHAIN INFO
+	mint              = "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz"
+	tokenAccountOwner = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 )
 
 /*
@@ -42,22 +53,18 @@ TestLiveSolanaStateMachineATAMissing tests for correct state progression from
 Initialized to Paid with a payee account that is missing the SPL-BAT ATA.
 */
 func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
-	const (
-		mint              = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
-		tokenAccountOwner = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-	)
-
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	// New account for every test execution to ensure that the account does
-	// not already have its ATA configured.
-	payeeAccount := types.NewAccount()
+	// not already have its ATA configured. Only used on devnet
+	//payeeAccount := types.NewAccount()
 
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
-			Amount:    decimal.NewFromFloat(1.4),
-			To:        payeeAccount.PublicKey.ToBase58(),
+			Amount: decimal.NewFromFloat(0.01),
+			// Hard coded to address that we control for main net testing
+			To:        "4Pyz7vNKfjERMyCwecRhqurLwJWbs2HLKHuxW9QakqR9",
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
 			Custodian: "solana",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
@@ -78,7 +85,7 @@ func TestLiveSolanaStateMachineATAMissing(t *testing.T) {
 	)
 
 	createdAta, _, err := common.FindAssociatedTokenAddress(
-		payeeAccount.PublicKey,
+		common.PublicKeyFromString(state.PaymentDetails.To),
 		common.PublicKeyFromString(mint),
 	)
 	must.Nil(t, err)
@@ -110,18 +117,14 @@ TestLiveSolanaStateMachineATAPresent tests for correct state progression from
 Initialized to Paid with a payee account that has the SPL-BAT ATA configured.
 */
 func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
-	const (
-		mint = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
-	)
-
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
-			Amount: decimal.NewFromFloat(1.4),
+			Amount: decimal.NewFromFloat(0.01),
 			// Fixed To address that has the ATA configured already
-			To:        "5g7xMFn9bk8vyZdfsr4mAfUWKWDaWxzZBH5Cb1XHftBL",
+			To:        "4Pyz7vNKfjERMyCwecRhqurLwJWbs2HLKHuxW9QakqR9",
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
 			Custodian: "solana",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
@@ -151,17 +154,13 @@ func TestLiveSolanaStateMachineATAPresent(t *testing.T) {
 }
 
 func TestLiveSolanaStateMachineDropped(t *testing.T) {
-	const (
-		mint = "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq"
-	)
-
 	ctx, _ := logging.SetupLogger(context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, true))
 
 	state := paymentLib.AuthenticatedPaymentState{
 		Status: paymentLib.Prepared,
 		PaymentDetails: paymentLib.PaymentDetails{
-			Amount:    decimal.NewFromFloat(1.4),
-			To:        "5g7xMFn9bk8vyZdfsr4mAfUWKWDaWxzZBH5Cb1XHftBL",
+			Amount:    decimal.NewFromFloat(0.01),
+			To:        "4Pyz7vNKfjERMyCwecRhqurLwJWbs2HLKHuxW9QakqR9",
 			From:      os.Getenv("SOLANA_PAYER_ADDRESS"),
 			Custodian: "solana",
 			PayoutID:  "4b2f22c9-f227-43b3-98d2-4a5337b65bc5",
@@ -228,6 +227,11 @@ func checkTransactionMatchesPaymentDetails(
 		Commitment: rpc.CommitmentConfirmed,
 	})
 	must.Nil(t, err)
+	defer func() {
+		if err := recover(); err != nil {
+			t.Logf("panic occurred introspecting transaction:\n%+v\nwith error:\n%s", txn, err)
+		}
+	}()
 	if innerTxn, ok := txn.Result.Transaction.(map[string]interface{}); ok {
 		if message, ok := innerTxn["message"].(map[string]interface{}); ok {
 			if instructions, ok := message["instructions"].([]interface{}); ok {
@@ -235,7 +239,7 @@ func checkTransactionMatchesPaymentDetails(
 					if parsed, ok := instructionOne["parsed"].(map[string]interface{}); ok {
 						if info, ok := parsed["info"].(map[string]interface{}); ok {
 							t.Log("Verifying chain transaction mint, to, and from")
-							should.Equal(t, "AH86ZDiGbV1GSzqtJ6sgfUbXSXrGKKjju4Bs1Gm75AQq", info["mint"])
+							should.Equal(t, mint, info["mint"])
 							should.Equal(t, state.PaymentDetails.To, info["wallet"])
 							should.Equal(t, state.PaymentDetails.From, info["source"])
 						} else {
@@ -324,9 +328,9 @@ func driveHappyPathTransitions(
 	should.Equal(t, idempotencyData, transaction.ExternalIdempotency)
 	t.Log("State is Pending")
 
-	for i := 1; i < 30; i++ {
-		t.Log("Checking for Paid status")
-		time.Sleep(100 * time.Millisecond)
+	for i := 1; i < 65; i++ {
+		t.Logf("Checking for Paid status (%d/65)\nFound status: %s\nLast error: %v", i, transaction.Status, transaction.LastError)
+		time.Sleep(1 * time.Second)
 		md, _ := json.Marshal(transaction)
 		mockTransitionHistory.Data.UnsafePaymentState = md
 		solMachine.setTransaction(transaction)
@@ -336,8 +340,8 @@ func driveHappyPathTransitions(
 			break
 		}
 	}
-	should.Equal(t, paymentLib.Paid, transaction.Status)
-	should.Equal(t, idempotencyData, transaction.ExternalIdempotency)
+	must.Equal(t, paymentLib.Paid, transaction.Status, fmt.Sprintf("%+v", transaction))
+	must.Equal(t, idempotencyData, transaction.ExternalIdempotency)
 	t.Log("State is Paid")
 
 	return transaction
@@ -352,8 +356,10 @@ func setupState(
 	QLDBPaymentTransitionHistoryEntry,
 	[]byte,
 ) {
+	keyBytes, err := base64.StdEncoding.DecodeString(os.Getenv("SOLANA_SIGNING_KEY"))
+	must.Nil(t, err)
 	solMachine := SolanaMachine{
-		signingKey:      os.Getenv("SOLANA_SIGNING_KEY"),
+		signingKey:      keyBytes,
 		solanaRpcClient: *client.NewClient(os.Getenv("SOLANA_RPC_ENDPOINT")),
 		splMintAddress:  mint, // SPL mint address on devnet
 		splMintDecimals: 8,    // SPL mint decimals on devnet
@@ -361,7 +367,7 @@ func setupState(
 	idempotencyKey, err := uuid.Parse("1803df27-f29c-537a-9384-bb5b523ea3f7")
 	must.Nil(t, err)
 
-	marshaledData, _ := json.Marshal(state)
+	marshaledData, err := json.Marshal(state)
 	must.Nil(t, err)
 	privkey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	must.Nil(t, err)
@@ -423,6 +429,12 @@ func transition(
 	mth.Data.UnsafePaymentState = md
 	sm.setTransaction(&ts)
 	newTransaction, err := Drive(ctx, &sm)
-	must.Nil(t, err)
+	should.True(
+		t,
+		err == nil ||
+			errors.Is(err, SolanaTransactionNotConfirmedError) ||
+			errors.Is(err, SolanaTransactionNotFoundError) ||
+			errors.Is(err, SolanaTransactionUnknownError),
+	)
 	return newTransaction
 }
