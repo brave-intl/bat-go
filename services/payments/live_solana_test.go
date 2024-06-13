@@ -432,9 +432,9 @@ func transition(
 	should.True(
 		t,
 		err == nil ||
-			errors.Is(err, SolanaTransactionNotConfirmedError) ||
-			errors.Is(err, SolanaTransactionNotFoundError) ||
-			errors.Is(err, SolanaTransactionUnknownError),
+			errors.Is(err, ErrSolanaTransactionNotConfirmed) ||
+			errors.Is(err, ErrSolanaTransactionNotFound) ||
+			errors.Is(err, ErrSolanaTransactionUnknown),
 	)
 	return newTransaction
 }
