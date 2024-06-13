@@ -30,9 +30,9 @@ func (e *InsufficientAuthorizationsError) Error() string {
 }
 
 const (
-	SolanaTransactionUnknownError Error = "transaction status unknown"
-	SolanaTransactionNotFoundError Error = "transaction not found"
-	SolanaTransactionNotConfirmedError Error = "transaction not confirmed"
+	ErrSolanaTransactionUnknown Error = "transaction status unknown"
+	ErrSolanaTransactionNotFound Error = "transaction not found"
+	ErrSolanaTransactionNotConfirmed Error = "transaction not confirmed"
 )
 
 type Error string
