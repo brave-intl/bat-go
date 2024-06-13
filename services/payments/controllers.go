@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
-	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
