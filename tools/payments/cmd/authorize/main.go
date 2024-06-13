@@ -79,10 +79,6 @@ func main() {
 		"p", "",
 		"payout id")
 
-	batchSize := flag.Int64(
-		"bsize", 10,
-		"batch size for worker authorize processing")
-
 	flag.Parse()
 
 	// get the list of report files for prepare
@@ -108,6 +104,7 @@ func main() {
 
 	for _, name := range files {
 		func() {
+			var batchSize int64
 			f, err := os.Open(name)
 			if err != nil {
 				log.Fatalf("failed to open report file: %v\n", err)
@@ -124,6 +121,13 @@ func main() {
 			}
 			if report[0].PayoutID != *payoutID {
 				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
+			}
+
+			if report[0].Custodian == "solana" {
+				batchSize = 100
+			}
+			if report[0].Custodian == "zebpay" {
+				batchSize = 50
 			}
 
 			preparedReportFile, err := os.Open(*preparedReportFilename)
@@ -170,7 +174,7 @@ func main() {
 				ConsumerGroup: payments.SubmitPrefix + *payoutID + "-cg",
 				Stream:        payments.SubmitPrefix + *payoutID,
 				Count:         len(report),
-				BatchSize:     *batchSize,
+				BatchSize:     batchSize,
 			}
 
 			err = client.ConfigureWorker(ctx, payments.SubmitConfigStream, wc)
