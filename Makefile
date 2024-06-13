@@ -16,7 +16,7 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test create-json-schema lint clean download-mod pcrs nitro-shim/tools/eifbuild/eifbuild
+.PHONY: all buildcmd docker test create-json-schema lint clean download-mod pcrs pcrs-only nitro-shim/tools/eifbuild/eifbuild
 
 all: test create-json-schema buildcmd
 
@@ -114,8 +114,12 @@ docker-reproducible:
 		--oci-layout-path /linuxkit \
 		--destination bat-go-repro:latest --context dir:///workspace/ || (rm -rf $(TMP_CHECKOUT) && false)
 	cat $(TMP_CHECKOUT)/bat-go-repro.tar | docker load
+	cp $(TMP_CHECKOUT)/bat-go-repro.tar .
 	rm -rf $(TMP_CHECKOUT)
 	sudo chown -R $(USER):$(USER) $(HOME)/.linuxkit/cache
+
+bat-go-repro.tar:
+	make docker-reproducible
 
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
@@ -234,13 +238,20 @@ ensure-shared-net:
 install-eifbuild:
 	cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
 
+install-hooks:
+	cp tools/payments/git-hooks/post-merge .git/hooks/post-merge
+	chmod +x .git/hooks/post-merge
+
 nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli:
 	mkdir -p nitro-shim/tools/eifbuild/third_party && git clone https://github.com/aws/aws-nitro-enclaves-cli --depth 1 nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli
 
 nitro-shim/tools/eifbuild/eifbuild:
 	cd nitro-shim/tools/eifbuild && make
 
-pcrs: nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli nitro-shim/tools/eifbuild/eifbuild docker-reproducible
+pcrs: nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli nitro-shim/tools/eifbuild/eifbuild bat-go-repro.tar
+	make pcrs-only
+
+pcrs-only: nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli nitro-shim/tools/eifbuild/eifbuild
 	@which eifbuild || echo "Missing eifbuild, ensure that you've run `make install-eifbuild`"
 	@echo
 	@echo './nitro-shim/tools/eifbuild/eifbuild -pass-env "$$(EIF_PASS_ENV)" -output-file nitro-image.eif -blobs-path nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli/blobs/x86_64 -- "$$(EIF_COMMAND)"'
