@@ -40,11 +40,13 @@ func (w *Worker) HandlePrepareMessage(ctx context.Context, stream, id string, da
 	if err != nil {
 		return err
 	}
-	return w.requestHandler(ctx, client, "POST", "/v1/prepare", stream, id, data)
+	_, err = w.requestHandler(ctx, client, "POST", "/v1/prepare", stream, id, data)
+	return err
 }
 
 // HandleSubmitMessage by sending it to the payments service
 func (w *Worker) HandleSubmitMessage(ctx context.Context, stream, id string, data []byte) error {
+	logger, err := appctx.GetLogger(ctx)
 	baseURI := os.Getenv("NITRO_API_BASE")
 
 	client, err := client.NewWithHTTPClient(baseURI, "", &http.Client{
@@ -53,22 +55,42 @@ func (w *Worker) HandleSubmitMessage(ctx context.Context, stream, id string, dat
 	if err != nil {
 		return err
 	}
-	return w.requestHandler(ctx, client, "POST", "/v1/submit", stream, id, data)
+	sr, err := w.requestHandler(ctx, client, "POST", "/v1/submit", stream, id, data)
+	if err != nil {
+		return err
+	}
+	// requestHandler will only succeed if status is 200, in which case data is populated
+	type submitResponse struct {
+		Data payments.SubmitResponse `json:"data"`
+	}
+	// NOTE: we are not verifying the http signature
+	resp := submitResponse{}
+	err = json.Unmarshal([]byte(sr.Body), &resp)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Failed to introspect submit response")
+		return nil
+	}
+
+	err = w.rc.IncrementSetScore(ctx, stream+payments.StatusSuffix, string(resp.Data.Status))
+	if err != nil {
+		logger.Warn().Err(err).Msg("Failed to increment settlement status count")
+	}
+	return nil
 }
 
 // requestHandler is a generic handler for sending encapsulated http requests and storing the results
-func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, stream, id string, data []byte) error {
+func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPClient, method, path string, stream, id string, data []byte) (*httpsignature.HTTPSignedResponse, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	isRetryBlocked, err := w.rc.GetMessageRetryAfter(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if isRetryBlocked {
-		return errors.New("waiting for retry-after")
+		return nil, errors.New("waiting for retry-after")
 	}
 
 	delay := 1 * time.Second
@@ -89,18 +111,18 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 	}
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp == nil {
-		return errors.New("response was nil")
+		return nil, errors.New("response was nil")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("response was not 200 OK")
+		return nil, errors.New("response was not 200 OK")
 	}
 
 	sr, err := httpsignature.EncapsulateResponse(ctx, resp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	respWrapper := &payments.ResponseWrapper{
@@ -109,7 +131,8 @@ func (w *Worker) requestHandler(ctx context.Context, client *client.SimpleHTTPCl
 		Response:  sr,
 	}
 
-	return w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, respWrapper)
+	err = w.rc.AddMessages(ctx, stream+payments.ResponseSuffix, respWrapper)
+	return sr, err
 }
 
 func httpDoWhileRetryZero(
