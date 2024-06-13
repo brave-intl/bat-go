@@ -12,7 +12,9 @@ import (
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
+	"github.com/shopspring/decimal"
 
+	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -167,6 +169,12 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		if err != nil {
 			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
 			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
+		}
+
+		// Implement a simple maximum payout amount
+		if req.Amount.GreaterThan(clients.TransferLimit) {
+			logger.Error().Err(err).Str("amount", req.Amount.String()).Str("to", req.To).Msg("requested payment amount exceeds maximum")
+			return handlers.WrapError(err, "requested payment amount exceeds maximum", http.StatusBadRequest)
 		}
 
 		authenticatedState := req.ToAuthenticatedPaymentState()

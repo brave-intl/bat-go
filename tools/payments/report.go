@@ -12,6 +12,7 @@ import (
 	"io"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/payments"
@@ -235,6 +236,10 @@ func (r PreparedReport) Prepare(ctx context.Context, key ed25519.PrivateKey, cli
 
 	reqs := make([]payments.PrepareRequest, len(r))
 	for i, paymentDetails := range r {
+		// Implement basic maximum payout amount protection
+		if paymentDetails.Amount.GreaterThan(clients.TransferLimit) {
+			return fmt.Errorf("request payment amount %d exceeds maximum for payee %s", paymentDetails.Amount, paymentDetails.To)
+		}
 		reqs[i].PaymentDetails = *paymentDetails
 	}
 
