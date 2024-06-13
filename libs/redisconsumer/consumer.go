@@ -48,6 +48,8 @@ type StreamClient interface {
 	GetMessageRetryAfter(ctx context.Context, id string) (bool, error)
 	// SetMessageRetryAfter for message id, expiring after delay
 	SetMessageRetryAfter(ctx context.Context, id string, delay time.Duration) error
+	// IncrementSetScore increments the score of an element in a redis sorted set by 1
+	IncrementSetScore(ctx context.Context, set, element string) error
 }
 
 // RedisClient is an implementation of StreamClient using an actual redis connection
@@ -259,6 +261,11 @@ func (redisClient *RedisClient) GetMessageRetryAfter(ctx context.Context, id str
 // SetMessageRetryAfter for message id, expiring after delay
 func (redisClient *RedisClient) SetMessageRetryAfter(ctx context.Context, id string, delay time.Duration) error {
 	return redisClient.Set(ctx, RetryAfterPrefix+id, "", delay).Err()
+}
+
+// IncrementSetScore increments the score of an element in a redis sorted set by 1
+func (redisClient *RedisClient) IncrementSetScore(ctx context.Context, set, element string) error {
+	return redisClient.ZIncrBy(ctx, set, 1, element).Err()
 }
 
 // StartConsumer using a generic stream client

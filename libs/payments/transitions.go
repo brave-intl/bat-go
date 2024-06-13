@@ -1,6 +1,6 @@
 package payments
 
-// PaymentStatus is an integer representing transaction status.
+// PaymentStatus is a string representing transaction status.
 type PaymentStatus string
 
 const (
