@@ -235,6 +235,10 @@ func (r PreparedReport) Prepare(ctx context.Context, key ed25519.PrivateKey, cli
 
 	reqs := make([]payments.PrepareRequest, len(r))
 	for i, paymentDetails := range r {
+		// Implement basic maximum payout amount protection
+		if paymentDetails.Amount.GreaterThan(decimal.NewFromInt32(50)) {
+			return fmt.Errorf("request payment amount %d exceeds maximum for payee %s", paymentDetails.Amount, paymentDetails.To)
+		}
 		reqs[i].PaymentDetails = *paymentDetails
 	}
 
