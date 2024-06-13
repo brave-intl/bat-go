@@ -111,7 +111,7 @@ def _get_pcr2():
         print(line, end='', flush=True)
         lines.append(line)
 
-    measurement = json.loads(lines[-1].split(":", 2)[-1])
+    measurement = json.loads(lines[-2].split(":", 2)[-1])
     return measurement["PCR2"]
 
 if environment != "local":

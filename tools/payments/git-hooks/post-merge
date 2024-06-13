@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Removing reproducible docker build target cache"
+rm $(git rev-parse --show-toplevel)/bat-go-repro.tar
