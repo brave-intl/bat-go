@@ -1006,6 +1006,12 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 	lg := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookPlayStore").Logger()
 
 	if err := svc.gpsAuth.authenticate(ctx, r.Header.Get("Authorization")); err != nil {
+		if errors.Is(err, errGPSDisabled) {
+			lg.Warn().Msg("play store notifications disabled")
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+		}
+
 		lg.Err(err).Msg("invalid request")
 
 		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)

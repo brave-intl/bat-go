@@ -143,6 +143,7 @@ func TestGPSNtfAuthenticator_authenticate(t *testing.T) {
 				cfg:   gpsValidatorConfig{disabled: true},
 				valid: &mockGPSTokenValidator{},
 			},
+			exp: errGPSDisabled,
 		},
 
 		{

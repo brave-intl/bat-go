@@ -17,6 +17,7 @@ import (
 const (
 	errGPSSubPurchaseExpired = model.Error("playstore: subscription purchase expired")
 	errGPSSubPurchasePending = model.Error("playstore: subscription purchase pending")
+	errGPSDisabled           = model.Error("playstore: notifications disabled")
 	errGPSAuthHeaderEmpty    = model.Error("playsotre: gcp authorization header is empty")
 	errGPSAuthHeaderFmt      = model.Error("playstore: gcp authorization header invalid format")
 	errGPSInvalidIssuer      = model.Error("playstore: gcp invalid issuer")
@@ -71,7 +72,7 @@ func newGPSNtfAuthenticator(cfg gpsValidatorConfig, valid gpsTokenValidator) *gp
 
 func (x *gpsNtfAuthenticator) authenticate(ctx context.Context, hdr string) error {
 	if x.cfg.disabled {
-		return nil
+		return errGPSDisabled
 	}
 
 	if hdr == "" {
