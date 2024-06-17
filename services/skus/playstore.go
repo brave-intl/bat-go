@@ -18,7 +18,7 @@ const (
 	errGPSSubPurchaseExpired = model.Error("playstore: subscription purchase expired")
 	errGPSSubPurchasePending = model.Error("playstore: subscription purchase pending")
 	errGPSDisabled           = model.Error("playstore: notifications disabled")
-	errGPSAuthHeaderEmpty    = model.Error("playsotre: gcp authorization header is empty")
+	errGPSAuthHeaderEmpty    = model.Error("playstore: gcp authorization header is empty")
 	errGPSAuthHeaderFmt      = model.Error("playstore: gcp authorization header invalid format")
 	errGPSInvalidIssuer      = model.Error("playstore: gcp invalid issuer")
 	errGPSInvalidEmail       = model.Error("playstore: gcp invalid email")
