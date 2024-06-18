@@ -241,6 +241,15 @@ func (s *Service) DriveTransaction(
 			state.ExternalIdempotency = persistedState.ExternalIdempotency
 		}
 
+		// If there is a persisted LastError and the current LastError on the state is
+		// nil, indicating no new error, retain the already-persisted LastError in the
+		// record.
+		if persistedState != nil &&
+			persistedState.LastError != nil &&
+			state.LastError == nil {
+			state.LastError = persistedState.LastError
+		}
+
 		marshaledState, err := json.Marshal(state)
 		if err != nil {
 			return fmt.Errorf("failed to marshal state: %w", err)
