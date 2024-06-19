@@ -49,15 +49,11 @@ type ChainAddress struct {
 // Vault represents a key which has been broken into shamir shares and is used for encrypting
 // secrets.
 type Vault struct {
-	PublicKey        string   `ion:"publicKey"`
-	Threshold        int      `ion:"threshold"`
-	OperatorKeys     []string `ion:"operatorKeys"`
-	IdempotencyKey   string   `ion:"idempotencyKey"`
-	Signature        []byte   `ion:"signature"`
-	SigningPublicKey string   `ion:"signingPublicKey"`
-	SignedData       []byte   `ion:"signedData"`
-	// must be unexported. these values should never be presisted to QLDB
-	shares paymentLib.CreateVaultResponse
+	paymentLib.Vault
+	// Omit from ion but include in json because we need to include shares in the signed data that
+	// gets sent to the tooling. However, we don't need to store it in QLDB here. It will already be
+	// in QLDB in the SignedData if we really need it again (which we shouldn't).
+	Shares []paymentLib.OperatorShareData `ion:"-" json:"shares"`
 }
 
 // createAttestationDocument will create an attestation document and return the private key and
@@ -142,14 +138,12 @@ func (s *Service) createVault(
 	}
 
 	vault := Vault{
-		PublicKey:    vaultPubkey,
-		Threshold:    threshold,
-		OperatorKeys: managerKeys,
-		shares: paymentLib.CreateVaultResponse{
-			PublicKey: vaultPubkey,
-			Threshold: threshold,
-			Shares:    operatorShareData,
+		Vault: paymentLib.Vault{
+			PublicKey:    vaultPubkey,
+			Threshold:    threshold,
+			OperatorKeys: managerKeys,
 		},
+		Shares: operatorShareData,
 	}
 
 	marshaled, err := json.Marshal(vault)
@@ -170,20 +164,24 @@ func (s *Service) createVault(
 		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
 	}
 
-	return &vault.shares, nil
+	return &paymentLib.CreateVaultResponse{
+		PublicKey: vault.PublicKey,
+		Threshold: threshold,
+		Shares:    operatorShareData,
+	}, nil
 }
 
 func (s *Service) verifyVault(
 	ctx context.Context,
 	request paymentLib.VerifyVaultRequest,
-) (*paymentLib.VerifyVaultResponse, error) {
+) (*paymentLib.Vault, error) {
 	fetchedVault, err := s.datastore.GetVault(ctx, request.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vault from QLDB: %w", err)
 	}
 
-	return &paymentLib.VerifyVaultResponse{
-		Operators:        fetchedVault.OperatorKeys,
+	return &paymentLib.Vault{
+		OperatorKeys:     fetchedVault.OperatorKeys,
 		Threshold:        fetchedVault.Threshold,
 		PublicKey:        fetchedVault.PublicKey,
 		Signature:        fetchedVault.Signature,
