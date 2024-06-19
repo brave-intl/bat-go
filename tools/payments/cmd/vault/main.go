@@ -47,7 +47,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/payments"
 	paymentscli "github.com/brave-intl/bat-go/tools/payments"
-	paymentssrv "github.com/brave-intl/bat-go/services/payments"
 )
 
 func main() {
@@ -173,7 +172,7 @@ func main() {
 			)
 		}
 
-		vaultRespSigned := paymentssrv.Vault{}
+		vaultRespSigned := payments.Vault{}
 		err = ion.Unmarshal(vaultResp.Data.SignedData, &vaultRespSigned)
 
 		if vaultRespSigned.SigningPublicKey != *vaultPublicKey {
@@ -197,7 +196,13 @@ func main() {
 			},
 			Now: time.Now().UTC,
 		}
-		verifier.Verify(vaultResp.Data.SignedData, vaultResp.Data.Signature, crypto.Hash(0))
+		verified, err := verifier.Verify(vaultResp.Data.SignedData, vaultResp.Data.Signature, crypto.Hash(0))
+		if err != nil {
+			log.Fatalf("vault verification failed with error: %w", err)
+		}
+		if !verified {
+			log.Fatal("vault verification failed")
+		}
 
 		log.Printf("Result: %s", body)
 		log.Print("Results match expected data. Verification complete.")

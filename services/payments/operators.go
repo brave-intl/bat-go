@@ -17,6 +17,8 @@ func vaultManagerKeys() []string {
 		return []string{jegan, evq}
 	case "development":
 		return []string{jegan, evq, jeganDev}
+	case "test":
+		return []string{jegan, evq, jeganDev}
 	default:
 		return nil
 	}

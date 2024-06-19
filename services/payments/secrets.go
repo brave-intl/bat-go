@@ -56,6 +56,22 @@ type Vault struct {
 	Shares []paymentLib.OperatorShareData `ion:"-" json:"shares"`
 }
 
+func (v *Vault) sign(pubKey string, signer paymentLib.Signator) error {
+	marshaled, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("failed to marshal chain address: %w", err)
+	}
+
+	v.Signature, err = signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
+	if err != nil {
+		return fmt.Errorf("failed to sign chain address: %w", err)
+	}
+
+	v.SigningPublicKey = pubKey
+	v.SignedData = marshaled
+	return nil
+}
+
 // createAttestationDocument will create an attestation document and return the private key and
 // attestation document which is attesting over the userData supplied
 func createAttestationDocument(ctx context.Context, userData []byte) (crypto.PrivateKey, []byte, error) {
@@ -145,19 +161,7 @@ func (s *Service) createVault(
 		},
 		Shares: operatorShareData,
 	}
-
-	marshaled, err := json.Marshal(vault)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal chain address: %w", err)
-	}
-
-	vault.Signature, err = s.signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign chain address: %w", err)
-	}
-
-	vault.SigningPublicKey = s.publicKey
-	vault.SignedData = marshaled
+	vault.sign(s.publicKey, s.signer)
 
 	err = s.datastore.InsertVault(ctx, vault)
 	if err != nil {
