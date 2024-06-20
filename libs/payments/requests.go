@@ -48,24 +48,16 @@ type CreateVaultRequest struct {
 	Threshold int `json:"threshold" valid:"required"`
 }
 
-// CreateVaultResponse provides shares, associated with names provided in CreateVaultRequest, as
-// well as the public key resulting from creation and the threshold specified in the request.
-type CreateVaultResponse struct {
-	Shares    []OperatorShareData `json:"operatorData" valid:"required"`
-	PublicKey string              `json:"publicKey" valid:"required"`
-	Threshold int                 `json:"threshold" valid:"required"`
-}
-
 // CreateVaultResponseWrapper is a data wrapper that exposes the service's response object to the
 // client
 type CreateVaultResponseWrapper struct {
-	Data CreateVaultResponse `json:"data"`
+	Data VaultResponse `json:"data"`
 }
 
 // VerifyVaultResponseWrapper is a data wrapper that exposes the service's response object to the
 // client
 type VerifyVaultResponseWrapper struct {
-	Data Vault `json:"data"`
+	Data VaultResponse `json:"data"`
 }
 
 // VerifyVaultRequest is provided to request vault approval for a given configuration and public
@@ -75,13 +67,14 @@ type VerifyVaultRequest struct {
 	PublicKey string `json:"publicKey" valid:"required"`
 }
 
-// Vault represents a key which has been broken into shamir shares and is used for encrypting
-// secrets. It's shared between the service and the tooling and is tagged accordingly.
-type Vault struct {
-	PublicKey        string   `ion:"publicKey" json:"publicKey" valid:"required"`
-	Threshold        int      `ion:"threshold" json:"threshold" valid:"required"`
-	OperatorKeys     []string `ion:"operatorKeys" json:"operatorKeys" valid:"required"`
-	Signature        []byte   `ion:"signature" json:"signature" valid:"required"`
-	SigningPublicKey string   `ion:"signingPublicKey" json:"signingPublicKey" valid:"required"`
-	SignedData       []byte   `ion:"signedData" json:"signedData" valid:"required"`
+// VerifyVaultResponse returns the number of approvals, whether a vault is fully approved, and the
+// public key of the approved vault.
+type VaultResponse struct {
+	PublicKey        string              `json:"publicKey" valid:"required"`
+	Threshold        int                 `json:"threshold" valid:"required"`
+	OperatorKeys     []string            `json:"operatorKeys" valid:"required"`
+	Shares           []OperatorShareData `json:"shares" valid:"required"`
+	SigningPublicKey string              `json:"signingPublicKey" valid:"required"`
+	Signature        []byte              `json:"signature" valid:"required"`
+	SigningData      []byte              `json:"signingData" valid:"required"`
 }

@@ -46,3 +46,20 @@ func (b *QLDBPaymentTransitionHistoryEntryBlockAddress) ValueHolder() *qldbTypes
 		IonText: &stringValue,
 	}
 }
+
+// SignableQLDBRecord is an interface that requires the ability for type to be turned into a
+// SerializedQLDBRecord
+type SignableQLDBRecord interface {
+	ToSerializedQLDBRecord(pubkey string, signer paymentLib.Signator) (*SerializedQLDBRecord, error)
+	GetID() string
+}
+
+// SerializedQLDBRecord is a generic representation of signed data for the service. It should only
+// be used going into and out of QLDB and the data it contains should be otherwise dealt with in a
+// structured format.
+type SerializedQLDBRecord struct {
+	Data      []byte `ion:"data"`
+	ID        string `ion:"idempotencyKey"`
+	PublicKey string `ion:"signingPublicKey"`
+	Signature []byte `ion:"signature"`
+}

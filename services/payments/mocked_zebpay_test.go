@@ -110,9 +110,11 @@ func TestMockedZebpayStateMachineHappyPathTransitions(t *testing.T) {
 		Hash: []byte("test"),
 		Data: paymentLib.PaymentState{
 			UnsafePaymentState: marshaledData,
-			Signature:          []byte{},
 			ID:                 idempotencyKey,
-			PublicKey:          string(marshalledPubkey),
+			SigningData: paymentLib.SigningData{
+				Signature:        []byte{},
+				SigningPublicKey: string(marshalledPubkey),
+			},
 		},
 		Metadata: QLDBPaymentTransitionHistoryEntryMetadata{
 			ID:      "test",

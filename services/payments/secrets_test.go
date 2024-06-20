@@ -4,10 +4,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
-	paymentLib "github.com/brave-intl/bat-go/libs/payments"
+	"github.com/brave-intl/bat-go/libs/payments"
 	must "github.com/stretchr/testify/require"
 )
 
@@ -23,27 +24,28 @@ func TestVaultSigning(t *testing.T) {
 	must.Nil(t, err)
 	operatorShareData, err := encryptShares(shares, managerKeys)
 	must.Nil(t, err)
-	vault := Vault{
-		Vault: paymentLib.Vault{
-			PublicKey:    vaultPubkey,
-			Threshold:    threshold,
-			OperatorKeys: managerKeys,
-		},
-		Shares: operatorShareData,
+	vault := payments.Vault{
+		PublicKey:    vaultPubkey,
+		Threshold:    threshold,
+		OperatorKeys: managerKeys,
+		Shares:       operatorShareData,
 	}
 	pubkey, privkey, err := ed25519.GenerateKey(rand.Reader)
-	err = vault.sign(string(pubkey), privkey)
 	must.Nil(t, err)
-	must.True(t, ed25519.Verify(pubkey, vault.SignedData, vault.Signature))
+	err = generateAndStoreSigningData(&vault, string(pubkey), privkey)
+	must.Nil(t, err)
+
+	marshaled, err := json.Marshal(vault)
+	must.Nil(t, err)
+	must.True(t, ed25519.Verify(pubkey, marshaled, vault.Signature), fmt.Sprintf("got error: %v", err))
 
 	// Confirm that the serialized, signed values match expectations
-	var signedVault Vault
-	json.Unmarshal(vault.SignedData, &signedVault)
+	var signedVault payments.Vault
+	json.Unmarshal(marshaled, &signedVault)
 	must.Equal(t, signedVault.OperatorKeys, vault.OperatorKeys)
 	must.Equal(t, signedVault.Threshold, vault.Threshold)
 	must.Equal(t, signedVault.PublicKey, vault.PublicKey)
 	must.Equal(t, signedVault.Shares, vault.Shares)
 	must.Equal(t, len(signedVault.Signature), 0)
 	must.Equal(t, signedVault.SigningPublicKey, "")
-	must.Nil(t, signedVault.SignedData)
 }
