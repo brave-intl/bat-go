@@ -1,4 +1,4 @@
-module github.com/brave-intl/bat-go/tools/payments/cmd/prepare
+module github.com/brave-intl/bat-go/tools/payments/cmd/report
 
 replace github.com/brave-intl/bat-go/tools/payments => ../../
 
