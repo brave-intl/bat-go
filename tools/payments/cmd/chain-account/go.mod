@@ -1,4 +1,4 @@
-module github.com/brave-intl/bat-go/tools/payments/cmd/bootstrap
+module github.com/brave-intl/bat-go/tools/payments/cmd/chain-account
 
 replace github.com/brave-intl/bat-go/tools/payments => ../../
 
