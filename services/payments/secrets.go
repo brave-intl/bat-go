@@ -43,64 +43,6 @@ type ChainAddress struct {
 	Approvals []string `ion:"approvals"`
 }
 
-// ToSerializedQLDBRecord implements SignableQLDBRecord for ChainAddress
-func (c *ChainAddress) ToSerializedQLDBRecord(
-	pubkey string,
-	signer paymentLib.Signator,
-) (*SerializedQLDBRecord, error) {
-	return toSerializedQLDBRecord(c, pubkey, signer)
-}
-
-// GetID implements SignableQLDBRecord for ChainAddress
-func (c *ChainAddress) GetID() string {
-	return c.PublicKey
-}
-
-// Vault represents a key which has been broken into shamir shares and is used for encrypting
-// secrets. It's shared between the service and the tooling and is tagged accordingly.
-type Vault struct {
-	PublicKey    string                         `ion:"publicKey" json:"publicKey" valid:"required"`
-	Threshold    int                            `ion:"threshold" json:"threshold" valid:"required"`
-	OperatorKeys []string                       `ion:"operatorKeys" json:"operatorKeys" valid:"required"`
-	Shares       []paymentLib.OperatorShareData `ion:"shares" json:"shares"`
-}
-
-// ToSerializedQLDBRecord implements SignableQLDBRecord for Vault
-func (v *Vault) ToSerializedQLDBRecord(
-	pubkey string,
-	signer paymentLib.Signator,
-) (*SerializedQLDBRecord, error) {
-	return toSerializedQLDBRecord(v, pubkey, signer)
-}
-
-// GetID implements SignableQLDBRecord for Vault
-func (v *Vault) GetID() string {
-	return v.PublicKey
-}
-
-// toSerializedQLDBRecord is a shared implementation converting a struct into a
-// signed SerializedQLDBRecord
-func toSerializedQLDBRecord(
-	record SignableQLDBRecord,
-	pubKey string,
-	signer paymentLib.Signator,
-) (*SerializedQLDBRecord, error) {
-	marshaled, err := json.Marshal(record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal record: %w", err)
-	}
-	signature, err := signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign record: %w", err)
-	}
-	return &SerializedQLDBRecord{
-		Data:      marshaled,
-		ID:        record.GetID(),
-		PublicKey: pubKey,
-		Signature: signature,
-	}, nil
-}
-
 // createAttestationDocument will create an attestation document and return the private key and
 // attestation document which is attesting over the userData supplied
 func createAttestationDocument(ctx context.Context, userData []byte) (crypto.PrivateKey, []byte, error) {
@@ -183,58 +125,27 @@ func (s *Service) createVault(
 		return vaultResponse, fmt.Errorf("failed to encrypt shares to operator keys: %w", err)
 	}
 
-	vault := Vault{
+	vault := paymentLib.Vault{
 		PublicKey:    vaultPubkey,
 		Threshold:    threshold,
 		OperatorKeys: managerKeys,
 		Shares:       operatorShareData,
 	}
-	serialized, err := vault.ToSerializedQLDBRecord(s.publicKey, s.signer)
+	marshaled, err := json.Marshal(vault)
 	if err != nil {
-		return vaultResponse, fmt.Errorf("failed to serialize and sign vault: %w", err)
+		return vaultResponse, fmt.Errorf("failed to marshal record: %w", err)
 	}
-
-	_, err = s.datastore.InsertSerializedQLDBRecord(ctx, *serialized, "vaults")
+	signature, err := s.signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
 	if err != nil {
-		return vaultResponse, fmt.Errorf("failed to insert vault into QLDB: %w", err)
-	}
-	vaultResponse = paymentLib.VaultResponse{
-		OperatorKeys:     vault.OperatorKeys,
-		Threshold:        vault.Threshold,
-		PublicKey:        vault.PublicKey,
-		Shares:           vault.Shares,
-		Signature:        serialized.Signature,
-		SigningPublicKey: serialized.PublicKey,
-		SigningData:      serialized.Data,
-	}
-
-	return vaultResponse, nil
-}
-
-func (s *Service) verifyVault(
-	ctx context.Context,
-	request paymentLib.VerifyVaultRequest,
-) (paymentLib.VaultResponse, error) {
-	var vaultResponse paymentLib.VaultResponse
-	record, err := s.datastore.GetSerializedQLDBRecord(ctx, request.PublicKey, "vaults")
-	if err != nil {
-		return vaultResponse, fmt.Errorf("failed to get vault from QLDB: %w", err)
-	}
-	var fetchedVault Vault
-	err = json.Unmarshal(record.Data, fetchedVault)
-	if err != nil {
-		return vaultResponse, err
+		return vaultResponse, fmt.Errorf("failed to sign record: %w", err)
 	}
 
 	vaultResponse = paymentLib.VaultResponse{
-		OperatorKeys:     fetchedVault.OperatorKeys,
-		Threshold:        fetchedVault.Threshold,
-		PublicKey:        fetchedVault.PublicKey,
-		Shares:           fetchedVault.Shares,
-		Signature:        record.Signature,
-		SigningPublicKey: record.PublicKey,
-		SigningData:      record.Data,
+		Signature:        signature,
+		SigningPublicKey: s.publicKey,
+		SigningData:      marshaled,
 	}
+
 	return vaultResponse, nil
 }
 
@@ -293,7 +204,11 @@ func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
 	return false
 }
 
-func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey string) (*ChainAddress, error) {
+func (s *Service) createSolanaAddress(
+	ctx context.Context,
+	bucket,
+	creatorKey string,
+) (*ChainAddress, error) {
 	solAccount := solTypes.NewAccount()
 	b58PubKey := solAccount.PublicKey.ToBase58()
 	encSeed, err := s.encryptWithShares(ctx, solAccount.PrivateKey.Seed())
@@ -327,59 +242,11 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 		return nil, fmt.Errorf("failed to put key to s3: %w", err)
 	}
 
-	chainAddress := ChainAddress{
+	return &ChainAddress{
 		PublicKey: b58PubKey,
 		Creator:   creatorKey,
 		Chain:     "solana",
-	}
-
-	serialized, err := chainAddress.ToSerializedQLDBRecord(s.publicKey, s.signer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign chain address: %w", err)
-	}
-
-	_, err = s.datastore.InsertSerializedQLDBRecord(ctx, *serialized, "chainaddresses")
-	if err != nil {
-		return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
-	}
-
-	return &chainAddress, nil
-}
-
-// NOTE: This function assumes that the http signature has been
-// verified before running. This is achieved in the SubmitHandler middleware.
-func (s *Service) approveSolanaAddress(ctx context.Context, address, approverKey string) (*ChainAddress, error) {
-	serialized, err := s.datastore.GetSerializedQLDBRecord(ctx, address, "chainaddresses")
-	if err != nil {
-		return nil, fmt.Errorf("failed get address from QLDB: %w", err)
-	}
-	var chainAddress ChainAddress
-	err = json.Unmarshal(serialized.Data, chainAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal into chain address: %w", err)
-	}
-
-	keyHasNotYetApproved := true
-	for _, approval := range chainAddress.Approvals {
-		if approval == approverKey {
-			keyHasNotYetApproved = false
-		}
-	}
-	if keyHasNotYetApproved {
-		chainAddress.Approvals = append(chainAddress.Approvals, approverKey)
-
-		serialized, err := chainAddress.ToSerializedQLDBRecord(s.publicKey, s.signer)
-		if err != nil {
-			return nil, fmt.Errorf("failed to serialize and sign chain address: %w", err)
-		}
-
-		err = s.datastore.UpdateSerializedQLDBRecord(ctx, *serialized, "chainaddresses")
-		if err != nil {
-			return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
-		}
-	}
-
-	return &chainAddress, nil
+	}, nil
 }
 
 // fetchSecrets will take an s3 bucket/object and fetch the configuration and store the
@@ -407,33 +274,19 @@ func (s *Service) fetchSecrets(ctx context.Context, bucket, secretsObject string
 	}
 
 	if solanaPubAddr != "" {
-		logger.Debug().Str("solana public key", string(solanaPubAddr)).Msg("fetching solana key from s3")
-		serialized, err := s.datastore.GetSerializedQLDBRecord(ctx, solanaPubAddr, "chainaddresses")
+		solanaAddressResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String("solana-address-" + solanaPubAddr),
+		})
 		if err != nil {
-			return fmt.Errorf("failed to get solana address from QLDB: %w", err)
+			return fmt.Errorf("failed to get solana address from s3: %w", err)
 		}
-		var chainAddress ChainAddress
-		err = json.Unmarshal(serialized.Data, &chainAddress)
-
-		if len(chainAddress.Approvals) >= 2 {
-			logger.Debug().Str("solana approvers", strings.Join(chainAddress.Approvals, ",")).Msg("fetching solana key from s3")
-			// get the solana address from s3
-			solanaAddressResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
-				Bucket: aws.String(bucket),
-				Key:    aws.String("solana-address-" + solanaPubAddr),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to get solana address from s3: %w", err)
-			}
-			logger.Debug().Msg("no error reading solana key from s3")
-			s.solanaPrivCiphertext, err = io.ReadAll(solanaAddressResponse.Body)
-			if err != nil {
-				return fmt.Errorf("failed to read solana address bytes: %w", err)
-			}
-			logger.Debug().Int("solana ciphertext length", len(s.solanaPrivCiphertext)).Msg("setting solana ciphertext to service")
-		} else {
-			return fmt.Errorf("provided solana address has insufficient approvals")
+		logger.Debug().Msg("no error reading solana key from s3")
+		s.solanaPrivCiphertext, err = io.ReadAll(solanaAddressResponse.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read solana address bytes: %w", err)
 		}
+		logger.Debug().Int("solana ciphertext length", len(s.solanaPrivCiphertext)).Msg("setting solana ciphertext to service")
 	}
 
 	return nil

@@ -23,6 +23,8 @@ The flags are:
 		The vault public key. Only needed for verify subcommand
 	-k
 		Location on file system of the operators private ED25519 signing key in PEM format. Only needed for verify subcommand
+	-r
+		Location on file system of the response object shared by the vault administrator who created the vault. Only needed for verify subcommand
 */
 package main
 
@@ -62,6 +64,7 @@ func main() {
 		"test/private.pem",
 		"the operator's key file location (ed25519 private key) in PEM format. only needed for verify subcommand",
 	)
+	responseFile := flag.String("r", "", "the response object for vault verification. only needed for verify subcommand")
 	verbose := flag.Bool("v", false, "view verbose logging")
 
 	flag.Parse()
@@ -86,7 +89,7 @@ func main() {
 		)
 		defer resp.Body.Close()
 
-		vaultResp := payments.CreateVaultResponseWrapper{}
+		vaultResp := payments.VaultResponseWrapper{}
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalf("failed to read response json: %w", err)
@@ -96,15 +99,35 @@ func main() {
 			log.Fatalf("failed to unmarshal response json: %w", err)
 		}
 
-		for _, share := range vaultResp.Data.Shares {
-			fname := fmt.Sprintf("share-%s-%s.enc", share.Name, vaultResp.Data.PublicKey)
+		// Unmarshal SigningData into a Vault object so that we can access its internal
+		// values.
+		vault := payments.Vault{}
+		err = json.Unmarshal(vaultResp.Data.SigningData, vault)
+		if err != nil {
+			log.Fatalf("failed to unmarshal signing data into vault: %w", err)
+		}
+
+		// Write a file intended to be shared with other vault administrators for verification
+		// purposes.
+		rfname := fmt.Sprintf("valut-creation-response-%s", vault.PublicKey)
+		marshaledResp, err := json.Marshal(*resp)
+		err = os.WriteFile(rfname, marshaledResp, 0644)
+		if err != nil {
+			log.Fatalf("failed to write share file: %w", err)
+		}
+		log.Printf("Wrote file for vault verification to %s", rfname)
+
+		// Write encrypted shares to files intended to be shared with other vault administrators
+		// for bootstrapping purposes.
+		for _, share := range vault.Shares {
+			fname := fmt.Sprintf("share-%s-%s.enc", share.Name, vault.PublicKey)
 			err = os.WriteFile(fname, share.Material, 0644)
 			if err != nil {
 				log.Fatalf("failed to write share file: %w", err)
 			}
 			log.Printf("Wrote file for %s to %s", share.Name, fname)
 		}
-		log.Printf("Generated Public Key: %s", vaultResp.Data.PublicKey)
+		log.Printf("Generated Public Key: %s", vault.PublicKey)
 	case "verify":
 		priv, err := paymentscli.GetOperatorPrivateKey(*operatorKeyFile)
 		if err != nil {
@@ -138,56 +161,29 @@ func main() {
 			log.Fatal("share is empty")
 		}
 
-		resp := doRequest(
-			ctx,
-			"/v1/payments/vault/verify",
-			pcr2,
-			payments.VerifyVaultRequest{
-				Threshold: *threshold,
-				PublicKey: *vaultPublicKey,
-			},
-		)
-		vaultResp := payments.VerifyVaultResponseWrapper{}
+		resp := http.Response{}
+		rFileContents, err := os.ReadFile(*responseFile)
+		if err != nil {
+			log.Fatalf("failed to read response file: %w", err)
+		}
+		err = json.Unmarshal(rFileContents, &resp)
+		vaultResp := payments.VaultResponseWrapper{}
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalf("failed to read response json: %w", err)
 		}
+
 		err = json.Unmarshal(body, &vaultResp)
 		if err != nil {
 			log.Fatalf("failed to unmarshal response json: %w", err)
 		}
 
-		if vaultResp.Data.PublicKey != *vaultPublicKey {
-			log.Fatalf(
-				"public key mismatch between what was provided and what is stored in the service. ours: %s theirs: %s",
-				*vaultPublicKey,
-				vaultResp.Data.PublicKey,
-			)
-		}
-		if vaultResp.Data.Threshold != *threshold {
-			log.Fatalf(
-				"threshold mismatch between what was provided and what is stored in the service. ours: %s theirs: %s",
-				*threshold,
-				vaultResp.Data.Threshold,
-			)
-		}
-
-		vaultRespSigned := payments.Vault{}
-		err = ion.Unmarshal(vaultResp.Data.SignedData, &vaultRespSigned)
-
-		if vaultRespSigned.SigningPublicKey != *vaultPublicKey {
-			log.Fatalf(
-				"public key mismatch between what was provided and what was signed. ours: %s theirs: %s",
-				*vaultPublicKey,
-				vaultRespSigned.SigningPublicKey,
-			)
-		}
-		if vaultRespSigned.Threshold != *threshold {
-			log.Fatalf(
-				"threshold mismatch between what was provided and what was signed. ours: %s theirs: %s",
-				*threshold,
-				vaultRespSigned.Threshold,
-			)
+		// Unmarshal SigningData into a Vault object so that we can access its internal
+		// values.
+		vault := payments.Vault{}
+		err = json.Unmarshal(vaultResp.Data.SigningData, vault)
+		if err != nil {
+			log.Fatalf("failed to unmarshal signing data into vault: %w", err)
 		}
 
 		verifier := nitro.Verifier{
@@ -196,7 +192,7 @@ func main() {
 			},
 			Now: time.Now().UTC,
 		}
-		verified, err := verifier.Verify(vaultResp.Data.SignedData, vaultResp.Data.Signature, crypto.Hash(0))
+		verified, err := verifier.Verify(vaultResp.Data.SigningData, vaultResp.Data.Signature, crypto.Hash(0))
 		if err != nil {
 			log.Fatalf("vault verification failed with error: %w", err)
 		}
@@ -243,6 +239,14 @@ func doRequest(
 		log.Fatalf("failed to submit http request: %w", err)
 	}
 
+	if !responseValid(resp, pcr2) {
+		log.Fatalln("http signature was not valid, nitro attestation failed")
+	}
+
+	return resp
+}
+
+func responseValid(resp *http.Response, pcr2 *string) bool {
 	sp, verifier, err := paymentscli.NewNitroVerifier(pcr2)
 	if err != nil {
 		log.Fatalln(err)
@@ -252,8 +256,5 @@ func doRequest(
 	if err != nil {
 		log.Fatalln(err)
 	}
-	if !valid {
-		log.Fatalln("http signature was not valid, nitro attestation failed")
-	}
-	return resp
+	return valid
 }
