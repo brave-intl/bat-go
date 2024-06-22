@@ -17,7 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/services/payments"
 
 	"github.com/go-chi/chi"
-	"github.com/mdlayher/vsock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -81,6 +80,8 @@ func init() {
 	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
 	viper.BindEnv("enclave-decrypt-key-template-secret", "ENCLAVE_DECRYPT_KEY_TEMPLATE_SECRET")
 
+	rootcmd.Must(viper.BindEnv("enclave-mocking", "ENCLAVE_MOCKING"))
+
 	NitroServeCmd.AddCommand(OutsideNitroServeCmd)
 	NitroServeCmd.AddCommand(InsideNitroServeCmd)
 	srvcmd.ServeCmd.AddCommand(NitroServeCmd)
@@ -110,10 +111,14 @@ var NitroServeCmd = &cobra.Command{
 func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	logaddr := viper.GetString("log-address")
-	writer := nitro.NewVsockWriter(logaddr)
+	if viper.GetString("enclave-mocking") != "" {
+		nitro.MockEnclave()
+	}
 
-	ctx = context.WithValue(ctx, appctx.LogWriterCTXKey, writer)
+	logaddr := viper.GetString("log-address")
+	logWriter := nitro.NewVsockWriter(logaddr)
+
+	ctx = context.WithValue(ctx, appctx.LogWriterCTXKey, logWriter)
 	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
 	ctx = context.WithValue(ctx, appctx.AWSRegionCTXKey, viper.GetString("aws-region"))
 	ctx = context.WithValue(ctx, appctx.PaymentsQLDBRoleArnCTXKey, viper.GetString("qldb-role-arn"))
@@ -152,19 +157,15 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	logger.Info().Msg("payments routes setup")
 
 	// setup listener
-	addr := viper.GetString("address")
-	port, err := strconv.ParseUint(strings.Split(addr, ":")[1], 10, 32)
-	if err != nil || port == 0 {
-		// panic if there is an error, or if the port is too large to fit in uint32
-		logger.Panic().Err(err).Msg("invalid --address")
-	}
+	listenAddress := viper.GetString("address")
 
 	// setup vsock listener
-	l, err := vsock.Listen(uint32(port), &vsock.Config{})
+	httpListener, err := nitro.Listen(ctx, listenAddress)
 	if err != nil {
 		logger.Panic().Err(err).Msg("listening on vsock port failed")
 	}
 	logger.Info().Msg("vsock listener setup")
+
 	// setup server
 	srv := http.Server{
 		Handler:      chi.ServerBaseContext(ctx, r),
@@ -173,7 +174,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	}
 	logger.Info().Msg("starting server")
 	// run the server in another routine
-	logger.Fatal().Err(srv.Serve(l)).Msg("server shutdown")
+	logger.Fatal().Err(srv.Serve(httpListener)).Msg("server shutdown")
 	return nil
 }
 

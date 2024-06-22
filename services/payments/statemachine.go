@@ -98,7 +98,7 @@ func (s *Service) StateMachineFromTransaction(
 	var machine TxStateMachine
 
 	client := http.Client{
-		Transport: nitro.NewProxyRoundTripper(ctx, s.egressAddr).(*http.Transport),
+		Transport: nitro.NewProxyTransport(ctx, s.egressAddr),
 	}
 
 	switch authenticatedState.PaymentDetails.Custodian {

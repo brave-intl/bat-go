@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -56,7 +55,7 @@ type Vault struct {
 
 // createAttestationDocument will create an attestation document and return the private key and
 // attestation document which is attesting over the userData supplied
-func createAttestationDocument(ctx context.Context, userData []byte) (crypto.PrivateKey, []byte, error) {
+func createAttestationDocument(ctx context.Context) (crypto.PrivateKey, []byte, error) {
 	// create a one time use nonce
 	nonce, err := createAttestationNonce(ctx)
 	if err != nil {
@@ -75,7 +74,7 @@ func createAttestationDocument(ctx context.Context, userData []byte) (crypto.Pri
 	}
 
 	// attest to the document with passed in user data
-	document, err := nitro.Attest(ctx, nonce, userData, publicKeyMarshaled)
+	document, err := nitro.Attest(ctx, nonce, nil, publicKeyMarshaled)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create attestation document: %w", err)
 	}
@@ -439,12 +438,12 @@ func (s *Service) fetchOperatorShares(ctx context.Context, bucket string) error 
 			return fmt.Errorf("failed to get operator share from s3: %w", err)
 		}
 
-		data, err := ioutil.ReadAll(shareResponse.Body)
+		data, err := io.ReadAll(shareResponse.Body)
 		if err != nil {
 			return fmt.Errorf("failed to read operator share from s3 response: %w", err)
 		}
 
-		privateKey, document, err := createAttestationDocument(ctx, nil)
+		privateKey, document, err := createAttestationDocument(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create attestation document: %w", err)
 		}
