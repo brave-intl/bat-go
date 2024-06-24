@@ -74,12 +74,6 @@ var (
 	CohortNil int
 	// CohortOK - ok cohort
 	CohortOK = 1
-	// CohortTooYoung - too young cohort
-	CohortTooYoung = 2
-	// CohortWithdrawalLimits - limited cohort
-	CohortWithdrawalLimits = 4
-	// CohortGeoResetDifferent - different geo than orig
-	CohortGeoResetDifferent = 7
 )
 
 // IsLinkingReputableRequestQSB - query string "body" for is linking reputable requests
@@ -117,9 +111,6 @@ func (c *HTTPClient) IsLinkingReputable(
 	if err != nil {
 		return false, []int{CohortNil}, err
 	}
-
-	// okay to be too young for drain reputable
-	// must also be ok
 
 	for _, v := range resp.Cohorts {
 		if v == CohortOK {
