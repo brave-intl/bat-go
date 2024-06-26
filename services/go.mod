@@ -44,7 +44,6 @@ require (
 	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.8.3
 	github.com/stripe/stripe-go/v72 v72.122.0
-	golang.org/x/crypto v0.17.0
 	golang.org/x/exp v0.0.0-20230223210539-50820d90acfd
 	google.golang.org/api v0.134.0
 	gopkg.in/macaroon.v2 v2.1.0
@@ -127,6 +126,7 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
+	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/oauth2 v0.11.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
