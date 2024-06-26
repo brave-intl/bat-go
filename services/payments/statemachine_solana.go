@@ -69,7 +69,12 @@ func (sm *SolanaMachine) IsAuthorized(ctx context.Context) bool {
 }
 
 func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
-	var err error
+	var (
+		err        error
+		blockHash  string
+		slotTarget uint64
+	)
+
 	if !sm.IsAuthorized(ctx) {
 		return sm.transaction, &InsufficientAuthorizationsError{}
 	}
@@ -79,21 +84,38 @@ func (sm *SolanaMachine) Authorize(ctx context.Context) (*paymentLib.Authenticat
 	if sm.transaction.ExternalIdempotency != nil {
 		return sm.transaction, nil
 	}
-
-	// If the base Authorize method indicates we can proceed, generate, sign, and persist the
-	// transaction
-	latestBlockhashResult, err := sm.solanaRpcClient.GetLatestBlockhashAndContextWithConfig(
-		ctx,
-		// Defaults to Finalized, which decreases our available time to retry. Prefer Confirmed
-		solanaClient.GetLatestBlockhashConfig{
-			Commitment: rpc.CommitmentProcessed,
-		},
-	)
-	if err != nil {
-		return sm.transaction, fmt.Errorf("get recent block hash error, err: %w with result: %#v", err, latestBlockhashResult)
+	// Only get the latest block from the RPC if the one we cached in the context is older than 10
+	// seconds
+	cachedBlockTime, ok := ctx.Value("solanaSlotTargetTime").(time.Time)
+	// If the cache is bad or more than 10 seconds old, refresh it
+	if !ok || time.Now().Add(-10*time.Second).After(cachedBlockTime) {
+		// If the base Authorize method indicates we can proceed, generate, sign, and persist the
+		// transaction
+		latestBlockhashResult, err := sm.solanaRpcClient.GetLatestBlockhashAndContextWithConfig(
+			ctx,
+			// Defaults to Finalized, which decreases our available time to retry. Prefer Confirmed
+			solanaClient.GetLatestBlockhashConfig{
+				Commitment: rpc.CommitmentProcessed,
+			},
+		)
+		if err != nil {
+			return sm.transaction, fmt.Errorf("get recent block hash error, err: %w with result: %#v", err, latestBlockhashResult)
+		}
+		blockHash = latestBlockhashResult.Value.Blockhash
+		slotTarget = latestBlockhashResult.Value.LatestValidBlockHeight + 150
+		ctx = context.WithValue(ctx, "solanaSlotTarget", slotTarget)
+		ctx = context.WithValue(ctx, "solanaBlockHash", blockHash)
+		ctx = context.WithValue(ctx, "solanaSlotTargetTime", time.Now())
+	} else {
+		blockHash, ok = ctx.Value("solanaBlockHash").(string)
+		if !ok {
+			return sm.transaction, fmt.Errorf("cached solana blockHash was of the wrong type", err)
+		}
+		slotTarget, ok = ctx.Value("solanaSlotTarget").(uint64)
+		if !ok {
+			return sm.transaction, fmt.Errorf("cached solana slotTarget was of the wrong type", err)
+		}
 	}
-	blockHash := latestBlockhashResult.Value.Blockhash
-	slotTarget := latestBlockhashResult.Value.LatestValidBlockHeight + 150
 
 	var signer types.Account
 	signer, err = types.AccountFromSeed(sm.signingKey)
