@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	smithy "github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -416,8 +417,12 @@ func (s *Service) configureDatastore(ctx context.Context) error {
 
 func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
 	logger := logging.Logger(ctx, "payments.setupLedger")
+
+	fmt.Printf("# X Y %s %s", os.Getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN"), os.Getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI"))
+
 	// create the tables needed in the ledger
 	_, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		logger.Debug().Msg("ensuring QLDB ledger tables exists")
 		var (
 			ae smithy.APIError
 			ok bool
@@ -562,6 +567,12 @@ func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 	// assume correct role for qldb access
 	creds := stscreds.NewAssumeRoleProvider(sts.NewFromConfig(awsCfg), qldbRoleArn)
 	awsCfg.Credentials = aws.NewCredentialsCache(creds)
+
+	credentials, err := awsCfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve credentials for QLDB: %w", err)
+	}
+	logger.Debug().Msg(fmt.Sprintf("got credentials %v", credentials))
 
 	client := qldbsession.NewFromConfig(awsCfg)
 	// create our qldb driver

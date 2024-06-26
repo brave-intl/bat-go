@@ -28,9 +28,12 @@ func init() {
 
 	// address - sets the address of the server to be started
 	ServeCmd.PersistentFlags().String("address", ":8080",
-		"the default address to bind to")
+		"the address to bind to the HTTP server")
+	ServeCmd.PersistentFlags().String("address2", ":8443",
+		"the address to bind the HTTPS server")
 	cmdutils.Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
 	cmdutils.Must(viper.BindEnv("address", "ADDR"))
+	cmdutils.Must(viper.BindEnv("address2", "ADDR2"))
 
 	ServeCmd.PersistentFlags().Bool("enable-job-workers", true,
 		"enable job workers (defaults true)")
@@ -81,6 +84,7 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 			Str("build_time", ctx.Value(appctx.BuildTimeCTXKey).(string)).
 			Str("ratios_service", viper.GetString("ratios-service")).
 			Str("address", viper.GetString("address")).
+			Str("address2", viper.GetString("address2")).
 			Str("environment", viper.GetString("environment")).
 			Msg("server starting")
 	}

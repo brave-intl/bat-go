@@ -2,7 +2,13 @@ package nitro
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
+	"math/big"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -157,14 +163,25 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	logger.Info().Msg("payments routes setup")
 
 	// setup listener
-	listenAddress := viper.GetString("address")
+	httpListenAddress := viper.GetString("address")
+
+	httpsListenAddress := viper.GetString("address2")
 
 	// setup vsock listener
-	httpListener, err := nitro.Listen(ctx, listenAddress)
+	httpListener, err := nitro.Listen(ctx, httpListenAddress)
+	if err != nil {
+		logger.Panic().Err(err).Msg("listening on vsock port failed")
+	}
+	httpsListener, err := nitro.Listen(ctx, httpsListenAddress)
 	if err != nil {
 		logger.Panic().Err(err).Msg("listening on vsock port failed")
 	}
 	logger.Info().Msg("vsock listener setup")
+
+	tlsCertificate, err := createSelfSignedCertificate()
+	if err != nil {
+		logger.Panic().Err(err).Msg("failed to create a self-signed certoificate")
+	}
 
 	// setup server
 	srv := http.Server{
@@ -172,10 +189,55 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
+	srv.TLSConfig.Certificates = []tls.Certificate{tlsCertificate}
+
 	logger.Info().Msg("starting server")
-	// run the server in another routine
-	logger.Fatal().Err(srv.Serve(httpListener)).Msg("server shutdown")
+
+	errChan := make(chan error, 2)
+	go func() {
+		errChan <- srv.Serve(httpListener)
+	}()
+	go func() {
+		errChan <- srv.ServeTLS(httpsListener, "", "")
+	}()
+	err = <-errChan
+	logger.Fatal().Err(err).Msg("server shutdown")
 	return nil
+}
+
+func createSelfSignedCertificate() (tls.Certificate, error) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	keyUsage := x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
+	timeNow := time.Now()
+
+	// Allow the client clock to be off by 1 min
+	notBefore := timeNow.Add(-time.Minute)
+	notAfter := timeNow.AddDate(10, 0, 0)
+	serialNumber := big.NewInt(1)
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Brave Software"},
+		},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+
+		KeyUsage:              keyUsage,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	template.DNSNames = []string{"nitro.localdomain"}
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, privateKey.PublicKey, privateKey)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  privateKey,
+	}, nil
 }
 
 // RunNitroServerOutsideEnclave - start up all the services which are outside

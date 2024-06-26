@@ -1,0 +1,65 @@
+services:
+  redis:
+    image: redis:7.0
+    restart: always
+    #ports:
+    #  - '6379:6379'
+    command: redis-server --save 20 1 --loglevel verbose --requirepass idBocFijvo --user redis
+    #volumes:
+    #  - redis-cache:/data
+
+# Access to localstack:
+# export AWS_DEFAULT_REGION=us-east-1
+# export AWS_SECRET_ACCESS_KEY=test
+# export AWS_ACCESS_KEY_ID=test
+# export AWS_ENDPOINT_URL=http://localhost:4566
+
+  localstack:
+    container_name: localstack
+    image: localstack/localstack
+    ports:
+      - "127.0.0.1:4566:4566"            # LocalStack Gateway
+      - "127.0.0.1:4510-4559:4510-4559"  # external services port range
+    environment:
+      # LocalStack configuration: https://docs.localstack.cloud/references/configuration/
+      - DEBUG=0
+    #volumes:
+      #- "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+      # Access to Docker is not necessary with S3.
+      # - "/var/run/docker.sock:/var/run/docker.sock"
+
+  worker:
+    image: bat-go-repro:latest
+    command: bat-go serve payments worker
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_USER=user
+      - REDIS_PASS=idBocFijvo
+      - DEBUG=1
+      - ENVIRONMENT=development
+      - NITRO_API_BASE=http://web.payment-dev.svc.cluster.local
+
+  service:
+    image: bat-go:latest
+    command: bat-go serve nitro inside-enclave --egress-address none --log-address none --upstream-url http://0.0.0.0:8080
+    environment:
+      - ENCLAVE_MOCKING=1
+      - AWS_REGION="us-west-2"
+      - DEBUG=1
+      - QLDB_LEDGER_ARN=arn:aws:qldb:us-west-2:239563960694:ledger/testing-igor-payment
+      - QLDB_LEDGER_NAME=testing-igor-payment
+      - QLDB_ROLE_ARN=arn:aws:iam::239563960694:role/aws-reserved/sso.amazonaws.com/us-west-2/AWSReservedSSO_BraveStlMetaSbxPaytSrvcsAccess_db468d5f79a737ee
+      - AWS_REGION=${AWS_REGION-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN-}
+      - AWS_CONTAINER_CREDENTIALS_FULL_URI=${AWS_CONTAINER_CREDENTIALS_FULL_URI-}
+      - AWS_CONTAINER_AUTHORIZATION_TOKEN=${AWS_CONTAINER_AUTHORIZATION_TOKEN-}
+
+    ports:
+      - "18080:8080"
+      - "18443:8443"
+
+volumes:
+  redis-cache:
+    driver: local
