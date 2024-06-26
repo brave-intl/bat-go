@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	reputation "github.com/brave-intl/bat-go/libs/clients/reputation"
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	decimal "github.com/shopspring/decimal"
@@ -34,6 +35,21 @@ func NewMockClient(ctrl *gomock.Controller) *MockClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
+}
+
+// GetReputationSummary mocks base method.
+func (m *MockClient) GetReputationSummary(ctx context.Context, paymentID uuid.UUID) (reputation.RepSummaryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReputationSummary", ctx, paymentID)
+	ret0, _ := ret[0].(reputation.RepSummaryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReputationSummary indicates an expected call of GetReputationSummary.
+func (mr *MockClientMockRecorder) GetReputationSummary(ctx, paymentID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReputationSummary", reflect.TypeOf((*MockClient)(nil).GetReputationSummary), ctx, paymentID)
 }
 
 // IsDrainReputable mocks base method.

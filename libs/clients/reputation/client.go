@@ -24,6 +24,7 @@ type Client interface {
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	UpsertReputationSummary(ctx context.Context, paymentID, geoCountry string) error
 	UpdateReputationSummary(ctx context.Context, paymentID string, verifiedWallet bool) error
+	GetReputationSummary(ctx context.Context, paymentID uuid.UUID) (RepSummaryResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -346,4 +347,22 @@ func (c *HTTPClient) UpdateReputationSummary(ctx context.Context, paymentID stri
 	}
 
 	return nil
+}
+
+type RepSummaryResponse struct {
+	GeoCountry string `json:"geoCountry"`
+}
+
+func (c *HTTPClient) GetReputationSummary(ctx context.Context, paymentID uuid.UUID) (RepSummaryResponse, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "v1/reputation-summary/"+paymentID.String(), nil, nil)
+	if err != nil {
+		return RepSummaryResponse{}, err
+	}
+
+	var resp RepSummaryResponse
+	if _, err := c.client.Do(ctx, req, &resp); err != nil {
+		return RepSummaryResponse{}, err
+	}
+
+	return resp, nil
 }
