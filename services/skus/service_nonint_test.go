@@ -1518,7 +1518,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "error_in_createOrder",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnProcessCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						return nil, model.Error("something went wrong")
 					},
 				},
@@ -1538,7 +1538,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "error_in_UpdateOrderStatusPaidWithMetadata",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnProcessCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						return &model.Order{}, nil
 					},
 
@@ -1562,7 +1562,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "successful_case_android_leo_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnProcessCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						result := &model.Order{
 							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
 							Items: []model.OrderItem{
@@ -1596,7 +1596,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "successful_case_android_vpn_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnProcessCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						result := &model.Order{
 							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
 							Items: []model.OrderItem{
@@ -1960,19 +1960,19 @@ func TestIsErrStripeNotFound(t *testing.T) {
 }
 
 type mockPaidOrderCreator struct {
-	fnCreateOrder                       func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	fnProcessCreateOrder                func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
 	fnUpdateOrderStatusPaidWithMetadata func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
 }
 
-func (s *mockPaidOrderCreator) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
-	if s.fnCreateOrder == nil {
+func (s *mockPaidOrderCreator) processCreateOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	if s.fnProcessCreateOrder == nil {
 		return &model.Order{}, nil
 	}
 
-	return s.fnCreateOrder(ctx, req, ordNew, items)
+	return s.fnProcessCreateOrder(ctx, req, ordNew, items)
 }
 
-func (s *mockPaidOrderCreator) UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
+func (s *mockPaidOrderCreator) updateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
 	if s.fnUpdateOrderStatusPaidWithMetadata == nil {
 		return nil
 	}

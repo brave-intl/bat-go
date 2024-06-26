@@ -7,12 +7,14 @@ import (
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 
+	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 type MockOrder struct {
 	FnGet             func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	FnGetByExternalID func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnCreate          func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	FnSetStatus       func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	FnSetExpiresAt    func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	FnSetLastPaidAt   func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -40,6 +42,25 @@ func (r *MockOrder) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return r.FnGetByExternalID(ctx, dbi, extID)
+}
+
+func (r *MockOrder) Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error) {
+	if r.FnCreate == nil {
+		result := &model.Order{
+			ID:                    uuid.NewV4(),
+			MerchantID:            oreq.MerchantID,
+			Currency:              oreq.Currency,
+			Status:                oreq.Status,
+			Location:              datastore.NullString{NullString: oreq.Location},
+			TotalPrice:            oreq.TotalPrice,
+			AllowedPaymentMethods: oreq.AllowedPaymentMethods,
+			ValidFor:              oreq.ValidFor,
+		}
+
+		return result, nil
+	}
+
+	return r.FnCreate(ctx, dbi, oreq)
 }
 
 func (r *MockOrder) SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {

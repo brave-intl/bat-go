@@ -102,6 +102,9 @@ func Router(
 	{
 		valid := validator.New()
 
+		// /submit-receipt is deprecated.
+		// Use /receipt instead.
+		// It received 0 requests in June 2024.
 		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(handleSubmitReceipt(svc, valid))))
 		r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(handleCreateOrderFromReceipt(svc, valid))))
 		r.Method(http.MethodPost, "/{orderID}/receipt", metricsMwr("checkOrderReceipt", authMwr(handleCheckOrderReceipt(svc, valid))))
@@ -1374,84 +1377,85 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 	}
 }
 
+// handleSubmitReceipt was used for linking IAP subscriptions.
+//
+// Deprecated: This endpoint is deprecated, and will be shut down soon.
+// It received 0 requests in 2024.
 func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-
-		l := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
-
-		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to decode orderID")
-
-			// Preserve the legacy error in case anything depends on it.
-			return handlers.ValidationError("request", map[string]interface{}{"orderID": inputs.ErrIDDecodeNotUUID})
-		}
-
-		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to read body")
-
-			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
-		}
-
-		// TODO(clD11): remove when no longer needed.
-		payloadS := string(payload)
-		l.Info().Interface("payload_byte", payload).Str("payload_str", payloadS).Msg("payload")
-
-		req, err := parseSubmitReceiptRequest(payload)
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to deserialize request")
-
-			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
-		}
-
-		if err := valid.StructCtx(ctx, &req); err != nil {
-			verrs, ok := collectValidationErrors(err)
-			if !ok {
-				return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
-			}
-
-			return handlers.ValidationError("request", verrs)
-		}
-
-		// TODO(clD11): remove when no longer needed.
-		l.Info().Interface("req_decoded", req).Msg("req decoded")
-
-		extID, err := svc.validateReceipt(ctx, req)
-		if err != nil {
-			l.Warn().Err(err).Msg("failed to validate receipt with vendor")
-
-			return handleReceiptErr(err)
-		}
-
-		{
-			_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
-			if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-				l.Warn().Err(err).Msg("failed to lookup external id")
-
-				return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
-			}
-
-			if err == nil {
-				return handlers.WrapError(model.ErrReceiptAlreadyLinked, "receipt has already been submitted", http.StatusConflict)
-			}
-		}
-
-		mdata := newMobileOrderMdata(req, extID)
-
-		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
-			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
-			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
-		}
-
-		result := struct {
-			ExternalID string `json:"externalId"`
-			Vendor     string `json:"vendor"`
-		}{ExternalID: extID, Vendor: req.Type.String()}
-
-		return handlers.RenderContent(ctx, result, w, http.StatusOK)
+		return handleSubmitReceiptH(w, r, svc, valid)
 	}
+}
+
+func handleSubmitReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, valid *validator.Validate) *handlers.AppError {
+	ctx := r.Context()
+
+	l := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		l.Warn().Err(err).Msg("failed to decode orderID")
+
+		// Preserve the legacy error in case anything depends on it.
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": inputs.ErrIDDecodeNotUUID})
+	}
+
+	payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		l.Warn().Err(err).Msg("failed to read body")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	req, err := parseSubmitReceiptRequest(payload)
+	if err != nil {
+		l.Warn().Err(err).Msg("failed to deserialize request")
+
+		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+	}
+
+	if err := valid.StructCtx(ctx, &req); err != nil {
+		verrs, ok := collectValidationErrors(err)
+		if !ok {
+			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		}
+
+		return handlers.ValidationError("request", verrs)
+	}
+
+	extID, err := svc.validateReceipt(ctx, req)
+	if err != nil {
+		l.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+		return handleReceiptErr(err)
+	}
+
+	{
+		_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
+		if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+			l.Warn().Err(err).Msg("failed to lookup external id")
+
+			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+		}
+
+		if err == nil {
+			return handlers.WrapError(model.ErrReceiptAlreadyLinked, "receipt has already been submitted", http.StatusConflict)
+		}
+	}
+
+	mdata := newMobileOrderMdata(req, extID)
+
+	if err := svc.updateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
+		l.Warn().Err(err).Msg("failed to update order with vendor metadata")
+		return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
+	}
+
+	result := struct {
+		ExternalID string `json:"externalId"`
+		Vendor     string `json:"vendor"`
+	}{ExternalID: extID, Vendor: req.Type.String()}
+
+	return handlers.RenderContent(ctx, result, w, http.StatusOK)
 }
 
 func handleCreateOrderFromReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {

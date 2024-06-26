@@ -95,6 +95,7 @@ const (
 )
 
 type orderStoreSvc interface {
+	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
@@ -1778,8 +1779,10 @@ func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest)
 	}
 }
 
-// UpdateOrderStatusPaidWithMetadata - update the order status with metadata
-func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
+// updateOrderStatusPaidWithMetadata is legacy code that was used to save metadata and save information about order payment.
+//
+// Deprecated: Store metadata independently, and use s.renewOrderWithExpPaidTime.
+func (s *Service) updateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
 	// create a tx for use in all datastore calls
 	ctx, _, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
 	defer rollback() // doesnt hurt to rollback incase we panic
@@ -1818,10 +1821,10 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	return s.createOrder(ctx, req, ordNew, items)
+	return s.processCreateOrder(ctx, req, ordNew, items)
 }
 
-func (s *Service) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+func (s *Service) processCreateOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
@@ -1991,6 +1994,26 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
 }
 
+func (s *Service) createOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	result, err := s.orderRepo.Create(ctx, dbi, oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	if oreq.Status == model.OrderStatusPaid {
+
+	}
+
+	model.OrderItemList(items).SetOrderID(result.ID)
+
+	result.Items, err = s.orderItemRepo.InsertMany(ctx, dbi, items...)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 // renewOrderWithExpPaidTime performs updates relevant to advancing a paid order forward after renewal.
 //
 // TODO: Add a repo method to update all three fields at once.
@@ -2057,8 +2080,8 @@ func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderS
 //
 // This interface exists because in its current form Service is hardly testable.
 type paidOrderCreator interface {
-	createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
-	UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+	processCreateOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	updateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
 }
 
 // createOrderWithReceipt creates a paid order with the supplied inputs.
@@ -2099,14 +2122,14 @@ func createOrderWithReceipt(
 	}
 
 	// 3. Create an order.
-	order, err := svc.createOrder(ctx, &oreq, ordNew, items)
+	order, err := svc.processCreateOrder(ctx, &oreq, ordNew, items)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Save mobile metadata.
 	mdata := newMobileOrderMdata(req, extID)
-	if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
+	if err := svc.updateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
 		return nil, err
 	}
 
