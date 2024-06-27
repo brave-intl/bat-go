@@ -122,6 +122,11 @@ type metricSvc interface {
 	LinkFailureZP(cc string)
 	LinkFailureGemini(cc string)
 	LinkSuccessGemini(cc string)
+	LinkFailureSolanaWhitelist(cc string)
+	LinkFailureSolanaRegion(cc string)
+	LinkFailureSolanaChl(cc string)
+	LinkFailureSolanaMsg(cc string)
+	LinkSuccessSolana(cc string)
 	CountDocTypeByIssuingCntry(validDocs []gemini.ValidDocument)
 }
 
@@ -737,17 +742,19 @@ func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wall
 const errDisabledRegion model.Error = "disabled region"
 
 func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UUID, req linkSolanaAddrRequest) error {
-	if err := isWalletWhitelisted(ctx, service.Datastore.RawDB(), service.allowListRepo, paymentID); err != nil {
-		return err
-	}
-
 	repSum, err := service.repClient.GetReputationSummary(ctx, paymentID)
 	if err != nil {
 		return err
 	}
 
 	if !service.custodianRegions.Solana.Verdict(repSum.GeoCountry) {
+		service.metric.LinkFailureSolanaRegion(repSum.GeoCountry)
 		return errDisabledRegion
+	}
+
+	if err := isWalletWhitelisted(ctx, service.Datastore.RawDB(), service.allowListRepo, paymentID); err != nil {
+		service.metric.LinkFailureSolanaWhitelist(repSum.GeoCountry)
+		return err
 	}
 
 	ctx, txn, rollback, commit, err := getTx(ctx, service.Datastore)
@@ -762,6 +769,7 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 	}
 
 	if err := chl.IsValid(time.Now()); err != nil {
+		service.metric.LinkFailureSolanaChl(repSum.GeoCountry)
 		return err
 	}
 
@@ -780,6 +788,7 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 		Msg:   req.Message,
 		Nonce: chl.Nonce,
 	}); err != nil {
+		service.metric.LinkFailureSolanaMsg(repSum.GeoCountry)
 		return err
 	}
 
@@ -796,6 +805,8 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 	if err := commit(); err != nil {
 		return err
 	}
+
+	service.metric.LinkSuccessSolana(repSum.GeoCountry)
 
 	return nil
 }
@@ -827,7 +838,7 @@ func (service *Service) CreateChallenge(ctx context.Context, paymentID uuid.UUID
 }
 
 // DisconnectCustodianLink - removes the link to the custodian wallet that is active
-func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian string, walletID uuid.UUID) error {
+func (service *Service) DisconnectCustodianLink(ctx context.Context, _ string, walletID uuid.UUID) error {
 	if err := service.Datastore.DisconnectCustodialWallet(ctx, walletID); err != nil {
 		return handlers.WrapError(err, "unable to disconnect custodian wallet", http.StatusInternalServerError)
 	}
