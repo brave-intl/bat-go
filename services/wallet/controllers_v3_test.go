@@ -27,6 +27,7 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
+	"github.com/brave-intl/bat-go/services/wallet/metric"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/brave-intl/bat-go/services/wallet/storage"
 	"github.com/btcsuite/btcutil/base58"
@@ -528,7 +529,9 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	repClient := mock_reputation.NewMockClient(ctrl)
 	repClient.EXPECT().GetReputationSummary(gomock.Any(), paymentID).Return(reputation.RepSummaryResponse{GeoCountry: "US"}, nil)
 
-	s, err := wallet.InitService(pg, nil, chlRep, allowList, repClient, nil, nil, nil, nil, nil, dac)
+	mtc := metric.New()
+
+	s, err := wallet.InitService(pg, nil, chlRep, allowList, repClient, nil, nil, nil, mtc, nil, dac)
 	suite.Require().NoError(err)
 
 	cr := custodian.Regions{Solana: custodian.GeoAllowBlockMap{
