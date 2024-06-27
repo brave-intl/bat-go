@@ -43,17 +43,6 @@ type ChainAddress struct {
 	Approvals []string `ion:"approvals"`
 }
 
-// Vault represents a key which has been broken into shamir shares and is used for encrypting
-// secrets.
-type Vault struct {
-	PublicKey      string   `ion:"publicKey"`
-	Threshold      int      `ion:"threshold"`
-	OperatorKeys   []string `ion:"operatorKeys"`
-	IdempotencyKey string   `ion:"idempotencyKey"`
-	// must be unexported. these values should never be presisted to QLDB
-	shares paymentLib.CreateVaultResponse
-}
-
 // createAttestationDocument will create an attestation document and return the private key and
 // attestation document which is attesting over the userData supplied
 func createAttestationDocument(ctx context.Context, userData []byte) (crypto.PrivateKey, []byte, error) {
@@ -124,50 +113,40 @@ var errSecretsNotLoaded = errors.New("secrets are not yet loaded")
 func (s *Service) createVault(
 	ctx context.Context,
 	threshold int,
-) (*paymentLib.CreateVaultResponse, error) {
+) (paymentLib.VaultResponse, error) {
+	var vaultResponse paymentLib.VaultResponse
 	managerKeys := vaultManagerKeys()
 	shares, vaultPubkey, err := generateShares(managerKeys, threshold)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate new key with shares: %w", err)
+		return vaultResponse, fmt.Errorf("failed to generate new key with shares: %w", err)
 	}
 	operatorShareData, err := encryptShares(shares, managerKeys)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt shares to operator keys: %w", err)
+		return vaultResponse, fmt.Errorf("failed to encrypt shares to operator keys: %w", err)
 	}
 
-	vault := Vault{
+	vault := paymentLib.Vault{
 		PublicKey:    vaultPubkey,
 		Threshold:    threshold,
 		OperatorKeys: managerKeys,
-		shares: paymentLib.CreateVaultResponse{
-			PublicKey: vaultPubkey,
-			Threshold: threshold,
-			Shares:    operatorShareData,
-		},
+		Shares:       operatorShareData,
 	}
-
-	err = s.datastore.InsertVault(ctx, vault)
+	marshaled, err := json.Marshal(vault)
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert vault into QLDB: %w", err)
+		return vaultResponse, fmt.Errorf("failed to marshal record: %w", err)
 	}
-
-	return &vault.shares, nil
-}
-
-func (s *Service) verifyVault(
-	ctx context.Context,
-	request paymentLib.VerifyVaultRequest,
-) (*paymentLib.VerifyVaultResponse, error) {
-	fetchedVault, err := s.datastore.GetVault(ctx, request.PublicKey)
+	signature, err := s.signer.Sign(rand.Reader, marshaled, crypto.Hash(0))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get vault from QLDB: %w", err)
+		return vaultResponse, fmt.Errorf("failed to sign record: %w", err)
 	}
 
-	return &paymentLib.VerifyVaultResponse{
-		Operators: fetchedVault.OperatorKeys,
-		Threshold: fetchedVault.Threshold,
-		PublicKey: fetchedVault.PublicKey,
-	}, nil
+	vaultResponse = paymentLib.VaultResponse{
+		Signature:        signature,
+		SigningPublicKey: s.publicKey,
+		SigningData:      marshaled,
+	}
+
+	return vaultResponse, nil
 }
 
 // generateShares generates a new ed25519 key and splits it into shares, returning the shares and
@@ -225,7 +204,11 @@ func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
 	return false
 }
 
-func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey string) (*ChainAddress, error) {
+func (s *Service) createSolanaAddress(
+	ctx context.Context,
+	bucket,
+	creatorKey string,
+) (*ChainAddress, error) {
 	solAccount := solTypes.NewAccount()
 	b58PubKey := solAccount.PublicKey.ToBase58()
 	encSeed, err := s.encryptWithShares(ctx, solAccount.PrivateKey.Seed())
@@ -259,42 +242,11 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 		return nil, fmt.Errorf("failed to put key to s3: %w", err)
 	}
 
-	chainAdrress := ChainAddress{
+	return &ChainAddress{
 		PublicKey: b58PubKey,
 		Creator:   creatorKey,
 		Chain:     "solana",
-	}
-	_, err = s.datastore.InsertChainAddress(ctx, chainAdrress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
-	}
-
-	return &chainAdrress, nil
-}
-
-// NOTE: This function assumes that the http signature has been
-// verified before running. This is achieved in the SubmitHandler middleware.
-func (s *Service) approveSolanaAddress(ctx context.Context, address, approverKey string) (*ChainAddress, error) {
-	chainAddress, err := s.datastore.GetChainAddress(ctx, address)
-	if err != nil {
-		return nil, fmt.Errorf("failed get address from QLDB: %w", err)
-	}
-
-	keyHasNotYetApproved := true
-	for _, approval := range chainAddress.Approvals {
-		if approval == approverKey {
-			keyHasNotYetApproved = false
-		}
-	}
-	if keyHasNotYetApproved {
-		chainAddress.Approvals = append(chainAddress.Approvals, approverKey)
-		err = s.datastore.UpdateChainAddress(ctx, *chainAddress)
-		if err != nil {
-			return nil, fmt.Errorf("failed to save address to QLDB: %w", err)
-		}
-	}
-
-	return chainAddress, nil
+	}, nil
 }
 
 // fetchSecrets will take an s3 bucket/object and fetch the configuration and store the
@@ -322,30 +274,19 @@ func (s *Service) fetchSecrets(ctx context.Context, bucket, secretsObject string
 	}
 
 	if solanaPubAddr != "" {
-		logger.Debug().Str("solana public key", string(solanaPubAddr)).Msg("fetching solana key from s3")
-		chainAddress, err := s.datastore.GetChainAddress(ctx, solanaPubAddr)
+		solanaAddressResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String("solana-address-" + solanaPubAddr),
+		})
 		if err != nil {
-			return fmt.Errorf("failed to get solana address from QLDB: %w", err)
+			return fmt.Errorf("failed to get solana address from s3: %w", err)
 		}
-		if len(chainAddress.Approvals) >= 2 {
-			logger.Debug().Str("solana approvers", strings.Join(chainAddress.Approvals, ",")).Msg("fetching solana key from s3")
-			// get the solana address from s3
-			solanaAddressResponse, err := s3.NewFromConfig(awsCfg).GetObject(ctx, &s3.GetObjectInput{
-				Bucket: aws.String(bucket),
-				Key:    aws.String("solana-address-" + solanaPubAddr),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to get solana address from s3: %w", err)
-			}
-			logger.Debug().Msg("no error reading solana key from s3")
-			s.solanaPrivCiphertext, err = io.ReadAll(solanaAddressResponse.Body)
-			if err != nil {
-				return fmt.Errorf("failed to read solana address bytes: %w", err)
-			}
-			logger.Debug().Int("solana ciphertext length", len(s.solanaPrivCiphertext)).Msg("setting solana ciphertext to service")
-		} else {
-			return fmt.Errorf("provided solana address has insufficient approvals")
+		logger.Debug().Msg("no error reading solana key from s3")
+		s.solanaPrivCiphertext, err = io.ReadAll(solanaAddressResponse.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read solana address bytes: %w", err)
 		}
+		logger.Debug().Int("solana ciphertext length", len(s.solanaPrivCiphertext)).Msg("setting solana ciphertext to service")
 	}
 
 	return nil

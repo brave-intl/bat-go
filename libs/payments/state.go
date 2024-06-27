@@ -34,15 +34,15 @@ type PaymentAuthorization struct {
 // within an enclave.
 type AuthenticatedPaymentState struct {
 	PaymentDetails
-	Status              PaymentStatus          `json:"status"`
-	Authorizations      []PaymentAuthorization `json:"authorizations"`
-	LastError           *PaymentError          `json:"lastError"`
-	DocumentID          string                 `json:"documentID"`
+	Status         PaymentStatus          `json:"status"`
+	Authorizations []PaymentAuthorization `json:"authorizations"`
+	LastError      *PaymentError          `json:"lastError"`
+	DocumentID     string                 `json:"documentID"`
 	// ExternalIdempotency is for state machines which have third party idempotency values that are
 	// not derministically generated from data that we control but that need to be retained between
 	// calls to Pay(). For example, Solana requires the block hash and transaction signature to
 	// guarantee idempotency.
-	ExternalIdempotency []byte                 `json:"externalIdempotency"`
+	ExternalIdempotency []byte `json:"externalIdempotency"`
 }
 
 // PaymentState is the high level structure which is stored in a datastore.
@@ -121,12 +121,13 @@ func statusListContainsStatus(s []PaymentStatus, e PaymentStatus) bool {
 	return false
 }
 
-// Sign this payment state, authenticating the contents of UnsafePaymentState
+// Sign this payment state, authenticating the contents of UnsafePaymentState and setting the
+// signature and key used to the PaymentState
 func (p *PaymentState) Sign(signer Signator, publicKey string) error {
 	var err error
 	p.Signature, err = signer.Sign(rand.Reader, p.UnsafePaymentState, crypto.Hash(0))
 	if err != nil {
-		return fmt.Errorf("Failed to sign payment state: %w", err)
+		return err
 	}
 	p.PublicKey = publicKey
 	return nil
