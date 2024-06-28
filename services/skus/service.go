@@ -101,6 +101,9 @@ type orderStoreSvc interface {
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
+	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
+	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 }
 
 type tlv2Store interface {
@@ -387,7 +390,9 @@ func InitService(
 	return service, nil
 }
 
-// CreateOrderFromRequest creates an order from the request
+// CreateOrderFromRequest creates orders for Auto Contribute and Search Captcha.
+//
+// Deprecated: This method MUST NOT be used for Premium orders.
 func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*Order, error) {
 	const merchantID = "brave.com"
 
@@ -1693,7 +1698,7 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 		expt := time.UnixMilli(txn.ExpiresDate)
 		paidt := time.Now()
 
-		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
 
 	case ntf.shouldCancel():
 		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
@@ -1752,7 +1757,7 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 		expt := time.UnixMilli(sub.ExpiryTimeMillis)
 		paidt := time.Now()
 
-		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
 
 	// Sub cancellation.
 	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldCancel():
@@ -1810,6 +1815,9 @@ func (s *Service) updateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	return commit()
 }
 
+// CreateOrder creates a Premium order for the given req.
+//
+// For AC and Search Captcha, see s.CreateOrderFromRequest.
 func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*Order, error) {
 	items, err := createOrderItems(req)
 	if err != nil {
@@ -1821,10 +1829,10 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
-	return s.processCreateOrder(ctx, req, ordNew, items)
+	return s.createOrderPremium(ctx, req, ordNew, items)
 }
 
-func (s *Service) processCreateOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
@@ -1836,7 +1844,7 @@ func (s *Service) processCreateOrder(ctx context.Context, req *model.CreateOrder
 		return nil, err
 	}
 
-	order, err := s.Datastore.CreateOrder(ctx, tx, ordNew, items)
+	order, err := s.createOrderTx(ctx, tx, ordNew, items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
@@ -1994,14 +2002,10 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
 }
 
-func (s *Service) createOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+func (s *Service) createOrderTx(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	result, err := s.orderRepo.Create(ctx, dbi, oreq)
 	if err != nil {
 		return nil, err
-	}
-
-	if oreq.Status == model.OrderStatusPaid {
-
 	}
 
 	model.OrderItemList(items).SetOrderID(result.ID)
@@ -2014,10 +2018,24 @@ func (s *Service) createOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *mo
 	return result, nil
 }
 
-// renewOrderWithExpPaidTime performs updates relevant to advancing a paid order forward after renewal.
+func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.renewOrderWithExpPaidTimeTx(ctx, tx, id, expt, paidt); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// renewOrderWithExpPaidTimeTx performs updates relevant to advancing a paid order forward after renewal.
 //
 // TODO: Add a repo method to update all three fields at once.
-func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expt, paidt time.Time) error {
+func (s *Service) renewOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expt, paidt time.Time) error {
 	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
 		return err
 	}
@@ -2055,6 +2073,51 @@ func (s *Service) getOrderFullTx(ctx context.Context, dbi sqlx.QueryerContext, i
 	return result, nil
 }
 
+func (s *Service) appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.appendOrderMetadataTx(ctx, tx, oid, mdata); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) appendOrderMetadataTx(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, mdata datastore.Metadata) error {
+	for k, v := range mdata {
+		switch val := v.(type) {
+		case string:
+			if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, k, val); err != nil {
+				return err
+			}
+
+		case int:
+			if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, k, val); err != nil {
+				return err
+			}
+
+		case int64:
+			if err := s.orderRepo.AppendMetadataInt64(ctx, dbi, oid, k, val); err != nil {
+				return err
+			}
+
+		case float64:
+			if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, k, int(val)); err != nil {
+				return err
+			}
+
+		default:
+			return model.ErrInvalidOrderMetadataType
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
 	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
 }
@@ -2080,7 +2143,9 @@ func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderS
 //
 // This interface exists because in its current form Service is hardly testable.
 type paidOrderCreator interface {
-	processCreateOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
+	appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
 	updateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
 }
 
@@ -2088,6 +2153,9 @@ type paidOrderCreator interface {
 //
 // The function does not re-fetch the order after the final update to metadata.
 // This might change if there is such a need.
+//
+// NOTE: This is expressed as a function and not a method on Service due to the ugly dependency on Datastore inside s.createOrderPremium.
+// That will eventually be refactored, and this will be promoted to a method once testing is possible without Datastore.
 func createOrderWithReceipt(
 	ctx context.Context,
 	svc paidOrderCreator,
@@ -2122,14 +2190,22 @@ func createOrderWithReceipt(
 	}
 
 	// 3. Create an order.
-	order, err := svc.processCreateOrder(ctx, &oreq, ordNew, items)
+	order, err := svc.createOrderPremium(ctx, &oreq, ordNew, items)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Save mobile metadata.
+	// 4. Mark order as paid with proper expiration.
+	expt := time.Time{}
+	paidt := time.Now()
+
+	if err := svc.renewOrderWithExpPaidTime(ctx, order.ID, expt, paidt); err != nil {
+		return nil, err
+	}
+
+	// 5. Save mobile metadata.
 	mdata := newMobileOrderMdata(req, extID)
-	if err := svc.updateOrderStatusPaidWithMetadata(ctx, &order.ID, mdata); err != nil {
+	if err := svc.appendOrderMetadata(ctx, order.ID, mdata); err != nil {
 		return nil, err
 	}
 

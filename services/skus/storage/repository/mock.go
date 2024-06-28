@@ -8,16 +8,20 @@ import (
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 type MockOrder struct {
-	FnGet             func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
-	FnGetByExternalID func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
-	FnCreate          func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
-	FnSetStatus       func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
-	FnSetExpiresAt    func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
-	FnSetLastPaidAt   func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnGet                 func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	FnGetByExternalID     func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnCreate              func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
+	FnSetStatus           func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	FnSetExpiresAt        func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnSetLastPaidAt       func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnAppendMetadata      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
+	FnAppendMetadataInt   func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
+	FnAppendMetadataInt64 func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 }
 
 func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -85,6 +89,30 @@ func (r *MockOrder) SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, i
 	}
 
 	return r.FnSetLastPaidAt(ctx, dbi, id, when)
+}
+
+func (r *MockOrder) AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+	if r.FnAppendMetadata == nil {
+		return nil
+	}
+
+	return r.FnAppendMetadata(ctx, dbi, id, key, val)
+}
+
+func (r *MockOrder) AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+	if r.FnAppendMetadataInt == nil {
+		return nil
+	}
+
+	return r.FnAppendMetadataInt(ctx, dbi, id, key, val)
+}
+
+func (r *MockOrder) AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error {
+	if r.FnAppendMetadataInt64 == nil {
+		return nil
+	}
+
+	return r.FnAppendMetadataInt64(ctx, dbi, id, key, val)
 }
 
 type MockOrderItem struct {

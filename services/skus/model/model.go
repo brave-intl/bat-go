@@ -35,6 +35,7 @@ const (
 	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
 	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
 	ErrNoStripeCheckoutSessID                 Error = "model: order: no stripe checkout session id"
+	ErrInvalidOrderMetadataType               Error = "model: order: invalid metadata type"
 
 	ErrNumPerIntervalNotSet  Error = "model: invalid order: numPerInterval must be set"
 	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"

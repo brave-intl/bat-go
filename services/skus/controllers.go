@@ -1380,7 +1380,7 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 // handleSubmitReceipt was used for linking IAP subscriptions.
 //
 // Deprecated: This endpoint is deprecated, and will be shut down soon.
-// It received 0 requests in 2024.
+// It received 0 requests in June 2024.
 func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		return handleSubmitReceiptH(w, r, svc, valid)
