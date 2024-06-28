@@ -54,6 +54,10 @@ func newReceiptVerifier(cl *http.Client, asKey string, playKey []byte) (*receipt
 //
 // TODO(pavelb): Propagate expiry time for properly updating the order.
 func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
+	return v.validateAppleTime(ctx, req, time.Now())
+}
+
+func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (string, error) {
 	asreq := appstore.IAPRequest{
 		Password:               v.asKey,
 		ReceiptData:            req.Blob,
@@ -70,13 +74,13 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 	// By doing so we:
 	// - find the purchase that is being verified (i.e. to disambiguate VPN from Leo);
 	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
-	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID)
+	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID, now)
 	if ok {
 		return item.OriginalTransactionID, nil
 	}
 
 	// Try finding in latest_receipt_info.
-	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID)
+	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID, now)
 	if ok {
 		return item.OriginalTransactionID, nil
 	}
@@ -84,12 +88,12 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 	// Special case for VPN.
 	// The client may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
 	if req.SubscriptionID == "bravevpn.monthly" {
-		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly")
+		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly", now)
 		if ok {
 			return item.OriginalTransactionID, nil
 		}
 
-		item, ok = findInAppBySubID(resp.LatestReceiptInfo, "bravevpn.yearly")
+		item, ok = findInAppBySubID(resp.LatestReceiptInfo, "bravevpn.yearly", now)
 		if ok {
 			return item.OriginalTransactionID, nil
 		}
@@ -97,7 +101,7 @@ func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRe
 
 	// Handle legacy iOS versions predating the release that started using proper values for subscription_id.
 	// This only applies to VPN.
-	item, ok = findInAppBySubIDLegacy(resp, req.SubscriptionID)
+	item, ok = findInAppBySubIDLegacy(resp, req.SubscriptionID, now)
 	if !ok {
 		return "", errIOSPurchaseNotFound
 	}
@@ -134,31 +138,35 @@ func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, pkgName, subID,
 	return v.playStoreCl.VerifySubscription(ctx, pkgName, subID, token)
 }
 
-func findInAppBySubID(iap []appstore.InApp, subID string) (*appstore.InApp, bool) {
+func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*appstore.InApp, bool) {
 	for i := range iap {
 		if iap[i].ProductID == subID {
-			return &iap[i], true
+			item := &iap[i]
+
+			if !(*appStoreInApp)(item).hasExpired(now) {
+				return item, true
+			}
 		}
 	}
 
 	return nil, false
 }
 
-func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string) (*appstore.InApp, bool) {
-	item, ok := findInAppVPNLegacy(resp.Receipt.InApp, subID)
+func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.Time) (*appstore.InApp, bool) {
+	item, ok := findInAppVPNLegacy(resp.Receipt.InApp, subID, now)
 	if ok {
 		return item, true
 	}
 
-	return findInAppVPNLegacy(resp.LatestReceiptInfo, subID)
+	return findInAppVPNLegacy(resp.LatestReceiptInfo, subID, now)
 }
 
-func findInAppVPNLegacy(iap []appstore.InApp, subID string) (*appstore.InApp, bool) {
+func findInAppVPNLegacy(iap []appstore.InApp, subID string, now time.Time) (*appstore.InApp, bool) {
 	switch subID {
 	case "brave-firewall-vpn-premium":
-		return findInAppBySubID(iap, "bravevpn.monthly")
+		return findInAppBySubID(iap, "bravevpn.monthly", now)
 	case "brave-firewall-vpn-premium-year":
-		return findInAppBySubID(iap, "bravevpn.yearly")
+		return findInAppBySubID(iap, "bravevpn.yearly", now)
 	default:
 		return nil, false
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -330,4 +331,12 @@ func (x *appStoreTransaction) isRevoked(now time.Time) bool {
 	}
 
 	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
+}
+
+type appStoreInApp appstore.InApp
+
+func (x *appStoreInApp) hasExpired(now time.Time) bool {
+	expms, _ := strconv.ParseInt(x.ExpiresDate.ExpiresDateMS, 10, 64)
+
+	return now.After(time.UnixMilli(expms))
 }

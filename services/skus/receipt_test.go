@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -30,6 +31,9 @@ func (c *mockASClient) Verify(ctx context.Context, req appstore.IAPRequest, resu
 			{
 				OriginalTransactionID: "720000000000000",
 				ProductID:             "braveleo.monthly",
+				ExpiresDate: appstore.ExpiresDate{
+					ExpiresDateMS: strconv.FormatInt(time.Now().Add(15*24*time.Hour).UnixMilli(), 10),
+				},
 			},
 		}
 
@@ -180,11 +184,12 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 	}
 }
 
-func TestReceiptVerifier_validateApple(t *testing.T) {
+func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 	type tcGiven struct {
 		key string
 		cl  *mockASClient
 		req model.ReceiptRequest
+		now time.Time
 	}
 
 	type tcExpected struct {
@@ -225,7 +230,8 @@ func TestReceiptVerifier_validateApple(t *testing.T) {
 					SubscriptionID: "bravevpn.monthly",
 				},
 
-				cl: &mockASClient{},
+				cl:  &mockASClient{},
+				now: time.Now(),
 			},
 			exp: tcExpected{err: errIOSPurchaseNotFound},
 		},
@@ -504,7 +510,7 @@ func TestReceiptVerifier_validateApple(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			vrf := &receiptVerifier{asKey: tc.given.key, appStoreCl: tc.given.cl}
 
-			actual, err := vrf.validateApple(context.Background(), tc.given.req)
+			actual, err := vrf.validateAppleTime(context.Background(), tc.given.req, tc.given.now)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
 			should.Equal(t, tc.exp.val, actual)
@@ -516,6 +522,7 @@ func TestFindInAppBySubID(t *testing.T) {
 	type tcGiven struct {
 		iap   []appstore.InApp
 		subID string
+		now   time.Time
 	}
 
 	type tcExpected struct {
@@ -600,7 +607,7 @@ func TestFindInAppBySubID(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, ok := findInAppBySubID(tc.given.iap, tc.given.subID)
+			actual, ok := findInAppBySubID(tc.given.iap, tc.given.subID, tc.given.now)
 			must.Equal(t, tc.exp.ok, ok)
 
 			if !tc.exp.ok {
@@ -616,6 +623,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 	type tcGiven struct {
 		resp  *appstore.IAPResponse
 		subID string
+		now   time.Time
 	}
 
 	type tcExpected struct {
@@ -691,7 +699,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, ok := findInAppBySubIDLegacy(tc.given.resp, tc.given.subID)
+			actual, ok := findInAppBySubIDLegacy(tc.given.resp, tc.given.subID, tc.given.now)
 			must.Equal(t, tc.exp.ok, ok)
 
 			if !tc.exp.ok {
@@ -707,6 +715,7 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 	type tcGiven struct {
 		iap   []appstore.InApp
 		subID string
+		now   time.Time
 	}
 
 	type tcExpected struct {
@@ -765,7 +774,7 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, ok := findInAppVPNLegacy(tc.given.iap, tc.given.subID)
+			actual, ok := findInAppVPNLegacy(tc.given.iap, tc.given.subID, tc.given.now)
 			must.Equal(t, tc.exp.ok, ok)
 
 			if !tc.exp.ok {
