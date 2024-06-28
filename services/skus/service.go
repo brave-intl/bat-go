@@ -535,7 +535,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 	defer func() { _ = tx2.Rollback() }()
 
 	if !order.IsPaid() {
-		// TODO: Remove this after confirming no calls is made to this for Premium orders.
+		// TODO: Remove this after confirming no calls are made to this for Premium orders.
 		if order.IsStripePayable() {
 			session, err := order.CreateStripeCheckoutSession(
 				req.Email,
