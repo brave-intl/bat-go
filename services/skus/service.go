@@ -565,7 +565,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx2.Commit(); err != nil {
 		return nil, err
 	}
 
