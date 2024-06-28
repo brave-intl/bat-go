@@ -1488,7 +1488,7 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 		return handlers.ValidationError("request", verrs)
 	}
 
-	ord, err := svc.createOrderWithReceiptX(ctx, req)
+	ord, err := svc.createOrderWithReceipt(ctx, req)
 	if err != nil {
 		// Found an existing order, respond with the id (ord guaranteed not to be nil).
 		if errors.Is(err, model.ErrOrderExistsForReceipt) {

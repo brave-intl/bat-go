@@ -2119,15 +2119,11 @@ func (s *Service) appendOrderMetadataTx(ctx context.Context, dbi sqlx.ExecerCont
 	return nil
 }
 
-func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest, extID string) (*model.Order, error) {
-	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
-}
-
 func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extID string) error {
 	return checkOrderReceipt(ctx, s.Datastore.RawDB(), s.orderRepo, orderID, extID)
 }
 
-func (s *Service) createOrderWithReceiptX(ctx context.Context, req model.ReceiptRequest) (*model.Order, error) {
+func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest) (*model.Order, error) {
 	// 1. Fetch receipt.
 	extID, err := s.validateReceipt(ctx, req)
 	if err != nil {

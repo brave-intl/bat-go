@@ -1974,10 +1974,9 @@ func TestIsErrStripeNotFound(t *testing.T) {
 }
 
 type mockPaidOrderCreator struct {
-	fnCreateOrderPremium                func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
-	fnRenewOrderWithExpPaidTime         func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
-	fnAppendOrderMetadata               func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
-	fnUpdateOrderStatusPaidWithMetadata func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+	fnCreateOrderPremium        func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	fnRenewOrderWithExpPaidTime func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
+	fnAppendOrderMetadata       func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
 }
 
 func (s *mockPaidOrderCreator) createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
