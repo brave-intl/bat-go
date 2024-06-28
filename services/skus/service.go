@@ -2169,7 +2169,6 @@ type paidOrderCreator interface {
 	createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
 	renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
 	appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
-	updateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
 }
 
 // createOrderWithReceipt creates a paid order with the supplied inputs.

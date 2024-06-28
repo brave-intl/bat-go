@@ -1505,11 +1505,11 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "error_in_createOrder",
+			name: "error_in_createOrderPremium",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
 					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
-						return nil, model.Error("something went wrong")
+						return nil, model.Error("something_went_wrong")
 					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
@@ -1521,19 +1521,19 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 					SubscriptionID: "brave.leo.monthly",
 				},
 			},
-			exp: tcExpected{err: model.Error("something went wrong")},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
 
 		{
-			name: "error_in_UpdateOrderStatusPaidWithMetadata",
+			name: "error_in_renewOrderWithExpPaidTime",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
 					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						return &model.Order{}, nil
 					},
 
-					fnUpdateOrderStatusPaidWithMetadata: func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
-						return model.Error("something went wrong")
+					fnRenewOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						return model.Error("something_went_wrong")
 					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
@@ -1545,7 +1545,31 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 					SubscriptionID: "brave.leo.monthly",
 				},
 			},
-			exp: tcExpected{err: model.Error("something went wrong")},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
+		},
+
+		{
+			name: "error_in_appendOrderMetadata",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return &model.Order{}, nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				set:   newOrderItemReqNewMobileSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.leo.monthly",
+				},
+			},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
 
 		{
@@ -1978,12 +2002,4 @@ func (s *mockPaidOrderCreator) appendOrderMetadata(ctx context.Context, oid uuid
 	}
 
 	return s.fnAppendOrderMetadata(ctx, oid, mdata)
-}
-
-func (s *mockPaidOrderCreator) updateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
-	if s.fnUpdateOrderStatusPaidWithMetadata == nil {
-		return nil
-	}
-
-	return s.fnUpdateOrderStatusPaidWithMetadata(ctx, oid, mdata)
 }
