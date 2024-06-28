@@ -43,6 +43,7 @@ const (
 	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
 	ErrInvalidMobileProduct  Error = "model: invalid mobile product"
 	ErrNoMatchOrderReceipt   Error = "model: order_id does not match receipt order"
+	ErrOrderExistsForReceipt Error = "model: order already exists for receipt"
 
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
@@ -714,6 +715,12 @@ type ReceiptRequest struct {
 	Blob           string `json:"raw_receipt" validate:"required"`
 	Package        string `json:"package" validate:"-"`
 	SubscriptionID string `json:"subscription_id" validate:"-"`
+}
+
+type ReceiptData struct {
+	ExtID     string
+	Type      Vendor
+	ExpiresAt *time.Time
 }
 
 type CreateOrderWithReceiptResponse struct {

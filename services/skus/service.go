@@ -503,7 +503,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 		ValidFor:              validFor,
 	}
 
-	// Consider the order paid if it consists entirely of zero cost items (e.g. trials).
+	// Consider the order paid if it consists entirely of zero cost items.
 	if oreq.TotalPrice.IsZero() {
 		oreq.Status = OrderStatusPaid
 	}
@@ -528,10 +528,15 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 		return nil, err
 	}
 
+	tx2, err := s.Datastore.BeginTx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx2.Rollback() }()
+
 	if !order.IsPaid() {
-		switch {
-		case order.IsStripePayable():
-			// brand-new order, contains an email in the request
+		// TODO: Remove this after confirming no calls is made to this for Premium orders.
+		if order.IsStripePayable() {
 			session, err := order.CreateStripeCheckoutSession(
 				req.Email,
 				parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
@@ -542,43 +547,29 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
 			}
 
-			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", session.SessionID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update order metadata: %w", err)
-			}
-
-		case order.IsRadomPayable():
-			session, err := order.CreateRadomCheckoutSession(
-				ctx,
-				s.radomClient,
-				s.radomSellerAddress, //TODO: fill in
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create checkout session: %w", err)
-			}
-
-			err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "radomCheckoutSessionId", session.SessionID)
-			if err != nil {
+			if err := s.orderRepo.AppendMetadata(ctx, tx2, order.ID, "stripeCheckoutSessionId", session.SessionID); err != nil {
 				return nil, fmt.Errorf("failed to update order metadata: %w", err)
 			}
 		}
 	}
 
 	if numIntervals > 0 {
-		err = s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numIntervals", numIntervals)
-		if err != nil {
+		if err := s.orderRepo.AppendMetadataInt(ctx, tx2, order.ID, "numIntervals", numIntervals); err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
 	}
 
 	if numPerInterval > 0 {
-		err = s.Datastore.AppendOrderMetadataInt(ctx, &order.ID, "numPerInterval", numPerInterval)
-		if err != nil {
+		if err := s.orderRepo.AppendMetadataInt(ctx, tx2, order.ID, "numPerInterval", numPerInterval); err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
 		}
 	}
 
-	return order, err
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return order, nil
 }
 
 // GetOrder - business logic for getting an order, needs to validate the checkout session is not expired
@@ -1853,6 +1844,12 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 		return nil, err
 	}
 
+	tx2, err := s.Datastore.RawDB().Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx2.Rollback() }()
+
 	if !order.IsPaid() {
 		switch {
 		case order.IsStripePayable():
@@ -1861,7 +1858,7 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 				return nil, err
 			}
 
-			if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", ssid); err != nil {
+			if err := s.orderRepo.AppendMetadata(ctx, tx2, order.ID, "stripeCheckoutSessionId", ssid); err != nil {
 				return nil, fmt.Errorf("failed to update order metadata: %w", err)
 			}
 
@@ -1872,22 +1869,26 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
 			}
 
-			if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "radomCheckoutSessionId", ssid); err != nil {
+			if err := s.orderRepo.AppendMetadata(ctx, tx2, order.ID, "radomCheckoutSessionId", ssid); err != nil {
 				return nil, fmt.Errorf("failed to update order metadata: %w", err)
 			}
 		}
 	}
 
-	if err := s.updateOrderIntvals(ctx, order.ID, items, numIntervals); err != nil {
+	if err := s.updateOrderIntvals(ctx, tx2, order.ID, items, numIntervals); err != nil {
 		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	}
+
+	if err := tx2.Commit(); err != nil {
+		return nil, err
 	}
 
 	return order, nil
 }
 
-func (s *Service) updateOrderIntvals(ctx context.Context, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
+func (s *Service) updateOrderIntvals(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
 	if nintvals > 0 {
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numIntervals", nintvals); err != nil {
+		if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, "numIntervals", nintvals); err != nil {
 			return err
 		}
 	}
@@ -1899,7 +1900,7 @@ func (s *Service) updateOrderIntvals(ctx context.Context, oid uuid.UUID, items [
 			numPerInterval = 192
 		}
 
-		if err := s.Datastore.AppendOrderMetadataInt(ctx, &oid, "numPerInterval", numPerInterval); err != nil {
+		if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, "numPerInterval", numPerInterval); err != nil {
 			return err
 		}
 	}
@@ -2126,6 +2127,28 @@ func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extI
 	return checkOrderReceipt(ctx, s.Datastore.RawDB(), s.orderRepo, orderID, extID)
 }
 
+func (s *Service) createOrderWithReceiptX(ctx context.Context, req model.ReceiptRequest) (*model.Order, error) {
+	// 1. Fetch receipt.
+	extID, err := s.validateReceipt(ctx, req)
+	if err != nil {
+		return nil, &receiptValidError{err: err}
+	}
+
+	// 2. Validate it.
+	ord, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), extID)
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+		return nil, err
+	}
+
+	// 3. Check for existence.
+	if err == nil {
+		return ord, model.ErrOrderExistsForReceipt
+	}
+
+	// 4. Create if missing.
+	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
+}
+
 func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
 	ord, err := repo.GetByExternalID(ctx, dbi, extID)
 	if err != nil {
@@ -2204,7 +2227,7 @@ func createOrderWithReceipt(
 	}
 
 	// 5. Save mobile metadata.
-	mdata := newMobileOrderMdata(req, extID)
+	mdata := newMobileOrderMdata(req.Type, extID)
 	if err := svc.appendOrderMetadata(ctx, order.ID, mdata); err != nil {
 		return nil, err
 	}
@@ -2328,11 +2351,11 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 	return result, nil
 }
 
-func newMobileOrderMdata(req model.ReceiptRequest, extID string) datastore.Metadata {
+func newMobileOrderMdata(vnd model.Vendor, extID string) datastore.Metadata {
 	result := datastore.Metadata{
 		"externalID":       extID,
-		"paymentProcessor": req.Type.String(),
-		"vendor":           req.Type.String(),
+		"paymentProcessor": vnd.String(),
+		"vendor":           vnd.String(),
 	}
 
 	return result
@@ -2374,4 +2397,16 @@ func isErrStripeNotFound(err error) bool {
 	}
 
 	return serr.HTTPStatusCode == http.StatusNotFound && serr.Code == stripe.ErrorCodeResourceMissing
+}
+
+type receiptValidError struct {
+	err error
+}
+
+func (x *receiptValidError) Error() string {
+	if x == nil || x.err == nil {
+		return "nil"
+	}
+
+	return x.err.Error()
 }

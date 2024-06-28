@@ -93,7 +93,6 @@ type Datastore interface {
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
-	AppendOrderMetadataInt64(context.Context, *uuid.UUID, string, int64) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
 }
 
@@ -1320,21 +1319,6 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 	}
 
 	return nil
-}
-
-// AppendOrderMetadataInt64 appends the key and int64 value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadataInt64(ctx context.Context, orderID *uuid.UUID, key string, value int64) error {
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	if err != nil {
-		return err
-	}
-	defer rollback()
-
-	if err := pg.orderRepo.AppendMetadataInt64(ctx, tx, *orderID, key, value); err != nil {
-		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	return commit()
 }
 
 // AppendOrderMetadataInt appends the key and int value to an order's metadata.

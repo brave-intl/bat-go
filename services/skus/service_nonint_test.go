@@ -1147,8 +1147,8 @@ func TestDoItemsHaveSUOrTlv2(t *testing.T) {
 
 func TestNewMobileOrderMdata(t *testing.T) {
 	type tcGiven struct {
+		vnd   model.Vendor
 		extID string
-		req   model.ReceiptRequest
 	}
 
 	type testCase struct {
@@ -1162,12 +1162,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 			name: "android",
 			given: tcGiven{
 				extID: "extID",
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "subID",
-				},
+				vnd:   model.VendorGoogle,
 			},
 			exp: datastore.Metadata{
 				"externalID":       "extID",
@@ -1180,12 +1175,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 			name: "ios",
 			given: tcGiven{
 				extID: "extID",
-				req: model.ReceiptRequest{
-					Type:           model.VendorApple,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "subID",
-				},
+				vnd:   model.VendorApple,
 			},
 			exp: datastore.Metadata{
 				"externalID":       "extID",
@@ -1199,7 +1189,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newMobileOrderMdata(tc.given.req, tc.given.extID)
+			actual := newMobileOrderMdata(tc.given.vnd, tc.given.extID)
 			should.Equal(t, tc.exp, actual)
 		})
 	}

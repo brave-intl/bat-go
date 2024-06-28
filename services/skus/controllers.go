@@ -1443,7 +1443,7 @@ func handleSubmitReceiptH(w http.ResponseWriter, r *http.Request, svc *Service, 
 		}
 	}
 
-	mdata := newMobileOrderMdata(req, extID)
+	mdata := newMobileOrderMdata(req.Type, extID)
 
 	if err := svc.updateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
 		l.Warn().Err(err).Msg("failed to update order with vendor metadata")
@@ -1492,30 +1492,23 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 		return handlers.ValidationError("request", verrs)
 	}
 
-	extID, err := svc.validateReceipt(ctx, req)
+	ord, err := svc.createOrderWithReceiptX(ctx, req)
 	if err != nil {
-		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
-
-		return handleReceiptErr(err)
-	}
-
-	{
-		ord, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
-		if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-			lg.Warn().Err(err).Msg("failed to lookup external id")
-
-			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
-		}
-
-		if err == nil {
+		// Found an existing order, respond with the id (ord guaranteed not to be nil).
+		if errors.Is(err, model.ErrOrderExistsForReceipt) {
 			result := model.CreateOrderWithReceiptResponse{ID: ord.ID.String()}
 
 			return handlers.RenderContent(ctx, result, w, http.StatusConflict)
 		}
-	}
 
-	ord, err := svc.createOrderWithReceipt(ctx, req, extID)
-	if err != nil {
+		// Use new so that the shorter IF and narrow scope are possible (via if := ...; {}).
+		// It's an example of one of the few legit uses for 'new'.
+		if rverr := new(receiptValidError); errors.As(err, &rverr) {
+			lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+			return handleReceiptErr(rverr.err)
+		}
+
 		lg.Warn().Err(err).Msg("failed to create order")
 
 		return handlers.WrapError(err, "failed to create order", http.StatusInternalServerError)
