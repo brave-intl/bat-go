@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/awa/go-iap/appstore"
 	"github.com/square/go-jose"
@@ -305,4 +306,28 @@ func extractPubKey(raw *x509.Certificate) (*ecdsa.PublicKey, error) {
 	default:
 		return nil, errInvalidASSNPubKeyType
 	}
+}
+
+func shouldCancelOrderIOS(info *appstore.JWSTransactionDecodedPayload, now time.Time) bool {
+	tx := (*appStoreTransaction)(info)
+
+	return tx.hasExpired(now) || tx.isRevoked(now)
+}
+
+type appStoreTransaction appstore.JWSTransactionDecodedPayload
+
+func (x *appStoreTransaction) hasExpired(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.ExpiresDate > 0 && now.After(time.UnixMilli(x.ExpiresDate))
+}
+
+func (x *appStoreTransaction) isRevoked(now time.Time) bool {
+	if x == nil {
+		return false
+	}
+
+	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
 }
