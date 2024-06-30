@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
-	smithy "github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
+	"github.com/rs/zerolog"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -32,10 +31,6 @@ type QLDBDatastore struct {
 
 // ErrNotConfiguredYet - service not fully configured.
 var ErrNotConfiguredYet = errors.New("not yet configured")
-
-const (
-	tableAlreadyCreatedCode = "412"
-)
 
 type Datastore interface {
 	InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error)
@@ -415,88 +410,77 @@ func (s *Service) configureDatastore(ctx context.Context) error {
 	return driver.setupLedger(ctx)
 }
 
+func ensureQLDBTable(
+	txn qldbdriver.Transaction,
+	tableName string,
+	logger *zerolog.Logger,
+) (bool, error) {
+	// Check for table existence. Note that in QLDB DROP TABLE does not delete
+	// the table but merely marks it as inactive and it is still reachable by
+	// its id.
+	//
+	// NOTE: previously the code relied on CREATE TABLE reporting an error when
+	// table did not exist and then checked for a particular error code to
+	// distinguish between non-existing table and other errors. But error codes
+	// are not stable with QLDB, so explicit query against the
+	// information_schema should be more robust.
+	r, err := txn.Execute("SELECT tableId FROM information_schema.user_tables WHERE name = ? AND status = 'ACTIVE'", tableName)
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to query user_tables for %s: %w", tableName, err)
+	}
+	if r.Next(txn) {
+		// We have an entry for the table so it exists.
+		return false, nil
+	}
+
+	logger.Warn().Err(err).Msgf("Failed to locate %s table, creating one", tableName)
+	_, err = txn.Execute(fmt.Sprintf("CREATE TABLE %s", tableName))
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to create %s table due to: %w", tableName, err)
+	}
+	return true, nil
+}
+
 func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
 	logger := logging.Logger(ctx, "payments.setupLedger")
 
-	fmt.Printf("# X Y %s %s", os.Getenv("AWS_CONTAINER_AUTHORIZATION_TOKEN"), os.Getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI"))
-
 	// create the tables needed in the ledger
 	_, err := q.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		logger.Debug().Msg("ensuring QLDB ledger tables exists")
-		var (
-			ae smithy.APIError
-			ok bool
-		)
-		_, err := txn.Execute("CREATE TABLE transactions")
+		logger.Debug().Msg("ensuring QLDB ledger tables exist")
+		created, err := ensureQLDBTable(txn, "transactions", logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("error creating transactions table")
-			if errors.As(err, &ae) {
-				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating transactions table")
-				if ae.ErrorCode() == tableAlreadyCreatedCode {
-					// table has already been created
-					ok = true
-				}
-			}
-			if !ok {
-				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
-			}
-		} else {
+			return nil, err
+		}
+		if created {
 			_, err = txn.Execute("CREATE INDEX ON transactions (idempotencyKey)")
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		ok = false
-		_, err = txn.Execute("CREATE TABLE authorizations")
+		_, err = ensureQLDBTable(txn, "authorizations", logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("error creating authorizationss table")
-			if errors.As(err, &ae) {
-				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating authorizations table")
-				if ae.ErrorCode() == tableAlreadyCreatedCode {
-					// table has already been created
-					ok = true
-				}
-			}
-			if !ok {
-				return nil, fmt.Errorf("failed to create authorizations table due to: %w", err)
-			}
+			return nil, err
 		}
-		ok = false
-		_, err = txn.Execute("CREATE TABLE chainaddresses")
+
+		created, err = ensureQLDBTable(txn, "chainaddresses", logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("error creating chainaddresses table")
-			if errors.As(err, &ae) {
-				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating chainaddresses table")
-				if ae.ErrorCode() == tableAlreadyCreatedCode {
-					// table has already been created
-					ok = true
-				}
-			}
-			if !ok {
-				return nil, fmt.Errorf("failed to create chainaddresses table due to: %w", err)
-			}
-		} else {
+			return nil, err
+		}
+		if created {
 			_, err = txn.Execute("CREATE INDEX ON chainaddresses (publicKey)")
 			if err != nil {
 				return nil, err
 			}
 		}
-		ok = false
-		_, err = txn.Execute("CREATE TABLE vaults")
+
+		created, err = ensureQLDBTable(txn, "vaults", logger)
 		if err != nil {
-			logger.Warn().Err(err).Msg("error creating vaults table")
-			if errors.As(err, &ae) {
-				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating vaults table")
-				if ae.ErrorCode() == tableAlreadyCreatedCode {
-					// table has already been created
-					ok = true
-				}
-			}
-			if !ok {
-				return nil, fmt.Errorf("failed to create vaults table due to: %w", err)
-			}
-		} else {
+			return nil, err
+		}
+		if created {
 			_, err = txn.Execute("CREATE INDEX ON vaults (publicKey)")
 			if err != nil {
 				return nil, err
@@ -509,7 +493,7 @@ func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
 		return nil, nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create tables: %w", err)
+		return fmt.Errorf("failed to create QLDB ledge tables: %w", err)
 	}
 	return nil
 }

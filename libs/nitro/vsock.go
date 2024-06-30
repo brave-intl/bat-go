@@ -247,14 +247,22 @@ func syncCopy(wg *sync.WaitGroup, dst io.WriteCloser, src io.ReadCloser) {
 
 func Listen(ctx context.Context, address string) (net.Listener, error) {
 	if enclaveMocking {
-		return net.Listen("tcp", "address")
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			return nil, fmt.Errorf("failed to listen to tcp address %v - %w", address, err)
+		}
+		return l, nil
 	}
 
 	// TODO: share with parseVsockAddr
 	port, err := strconv.ParseUint(strings.Split(address, ":")[1], 10, 32)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse vsock address - %w", err)
+		return nil, fmt.Errorf("failed to parse vsock address - %w", err)
 	}
 
-	return vsock.Listen(uint32(port), &vsock.Config{})
+	l, err := vsock.Listen(uint32(port), &vsock.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen to vsock %v - %w", address, err)
+	}
+	return l, nil
 }

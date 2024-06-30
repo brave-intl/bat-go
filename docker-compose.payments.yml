@@ -17,6 +17,7 @@ services:
   localstack:
     container_name: localstack
     image: localstack/localstack
+    stop_grace_period: 1s
     ports:
       - "127.0.0.1:4566:4566"            # LocalStack Gateway
       - "127.0.0.1:4510-4559:4510-4559"  # external services port range
@@ -44,11 +45,13 @@ services:
     command: bat-go serve nitro inside-enclave --egress-address none --log-address none --upstream-url http://0.0.0.0:8080
     environment:
       - ENCLAVE_MOCKING=1
-      - AWS_REGION="us-west-2"
       - DEBUG=1
+      - ADDR=0.0.0.0:18080
+      - ADDR2=0.0.0.0:18443
+      - AWS_REGION="us-west-2"
       - QLDB_LEDGER_ARN=arn:aws:qldb:us-west-2:239563960694:ledger/testing-igor-payment
       - QLDB_LEDGER_NAME=testing-igor-payment
-      - QLDB_ROLE_ARN=arn:aws:iam::239563960694:role/aws-reserved/sso.amazonaws.com/us-west-2/AWSReservedSSO_BraveStlMetaSbxPaytSrvcsAccess_db468d5f79a737ee
+      - QLDB_ROLE_ARN=arn:aws:iam::239563960694:role/settlements-dev-sso-qldb-20240628161845683100000001
       - AWS_REGION=${AWS_REGION-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}

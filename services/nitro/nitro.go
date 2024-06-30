@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -147,6 +148,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 				Str("panic", fmt.Sprintf("%+v", rec)).
 				Str("stacktrace", string(debug.Stack())).
 				Msg("panic recovered")
+			os.Exit(2)
 		}
 	}()
 
@@ -170,17 +172,17 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// setup vsock listener
 	httpListener, err := nitro.Listen(ctx, httpListenAddress)
 	if err != nil {
-		logger.Panic().Err(err).Msg("listening on vsock port failed")
+		logger.Fatal().Err(err).Msg("failed to listen to HTTP port")
 	}
 	httpsListener, err := nitro.Listen(ctx, httpsListenAddress)
 	if err != nil {
-		logger.Panic().Err(err).Msg("listening on vsock port failed")
+		logger.Fatal().Err(err).Msg("failed to listen to HTTPS port")
 	}
 	logger.Info().Msg("vsock listener setup")
 
 	tlsCertificate, err := createSelfSignedCertificate()
 	if err != nil {
-		logger.Panic().Err(err).Msg("failed to create a self-signed certoificate")
+		logger.Fatal().Err(err).Msg("failed to create a self-signed certificate")
 	}
 
 	// setup server
@@ -188,6 +190,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 		Handler:      chi.ServerBaseContext(ctx, r),
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 20 * time.Second,
+		TLSConfig:    &tls.Config{},
 	}
 	srv.TLSConfig.Certificates = []tls.Certificate{tlsCertificate}
 
@@ -230,7 +233,7 @@ func createSelfSignedCertificate() (tls.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 	template.DNSNames = []string{"nitro.localdomain"}
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, privateKey.PublicKey, privateKey)
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, privateKey.Public(), privateKey)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
