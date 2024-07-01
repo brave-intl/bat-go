@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"time"
@@ -253,6 +254,11 @@ func IterateRequest(
 		return submittedTransactions, fmt.Errorf("failed to get gemini api key: %w", err)
 	}
 
+	maxAmount, ok := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey).(decimal.Decimal)
+	if !ok {
+		return nil, errors.New("provided max amount is not an integer")
+	}
+
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
@@ -285,15 +291,19 @@ func IterateRequest(
 				}
 
 				requiredCurrency := map[string]decimal.Decimal{}
-				for _, pay := range bulkPayoutRequestRequirements.Base.Payouts {
-					requiredCurrency[pay.Currency] = requiredCurrency[pay.Currency].Add(pay.Amount)
-				}
-
 				for key, amount := range requiredCurrency {
 					if availableCurrency[key].LessThan(amount) {
 						logger.Error().Str("required", amount.String()).Str("available", availableCurrency[key].String()).Str("currency", key).Err(err).Msg("failed to meet required balance")
 						return submittedTransactions, fmt.Errorf("failed to meet required balance: %w", err)
 					}
+				}
+
+				for _, pay := range bulkPayoutRequestRequirements.Base.Payouts {
+					if pay.Amount.GreaterThan(maxAmount) {
+						logger.Error().Str("amount", pay.Amount.String()).Str("max", maxAmount.String())
+						return submittedTransactions, fmt.Errorf("transaction amount %s exceeded max %s", pay.Amount, maxAmount)
+					}
+					requiredCurrency[pay.Currency] = requiredCurrency[pay.Currency].Add(pay.Amount)
 				}
 
 				submittedTransactions, err = SubmitBulkPayoutTransactions(

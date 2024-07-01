@@ -14,6 +14,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	bitflyersettlement "github.com/brave-intl/bat-go/tools/settlement/bitflyer"
+	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -112,8 +113,18 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	maxPayoutAmountString, err := cmd.Flags().GetString("max")
+	if err != nil {
+		return err
+	}
+	maxPayoutAmount, err := decimal.NewFromString(maxPayoutAmountString)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.WithValue(cmd.Context(), appctx.PayoutTxnMaxAmountCTXKey, maxPayoutAmount)
 	return BitflyerUploadSettlement(
-		cmd.Context(),
+		ctx,
 		"upload",
 		input,
 		out,
@@ -190,6 +201,11 @@ func init() {
 	uploadCheckStatusBuilder := cmdutils.NewFlagBuilder(UploadBitflyerSettlementCmd).
 		AddCommand(CheckStatusBitflyerSettlementCmd)
 	allBuilder := tokenBuilder.Concat(uploadCheckStatusBuilder)
+
+	uploadCheckStatusBuilder.Flag().String("max", "",
+		"the maximum BAT value permitted to be sent in a single transaction").
+		Require().
+		Bind("max")
 
 	uploadCheckStatusBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized. both referrals and contributions should be done in one command in order to group the transactions appropriately").
