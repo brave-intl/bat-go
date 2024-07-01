@@ -68,7 +68,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		val string
+		val model.ReceiptData
 		err error
 	}
 
@@ -155,17 +155,31 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 		{
 			name: "success",
 			given: tcGiven{
-				cl: &mockPSClient{},
+				cl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						result := &androidpublisher.SubscriptionPurchase{
+							PaymentState:     ptrTo[int64](1),
+							ExpiryTimeMillis: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(),
+						}
+
+						return result, nil
+					},
+				},
 				req: model.ReceiptRequest{
 					Type:           model.VendorGoogle,
 					Blob:           "blob",
 					Package:        "package",
 					SubscriptionID: "sub_id",
 				},
-				now: time.Now(),
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: "blob",
+				val: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "sub_id",
+					ExtID:     "blob",
+					ExpiresAt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
+				},
 			},
 		},
 	}

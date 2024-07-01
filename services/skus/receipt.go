@@ -114,25 +114,30 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 
 // validateGoogle validates a Play Store receipt.
 func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	return v.validateGoogleTime(ctx, req, time.Now())
+	data, err := v.validateGoogleTime(ctx, req, time.Now())
+	if err != nil {
+		return "", err
+	}
+
+	return data.ExtID, nil
 }
 
-func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (string, error) {
+func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (model.ReceiptData, error) {
 	sub, err := v.fetchSubPlayStore(ctx, req.Package, req.SubscriptionID, req.Blob)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch subscription purchase: %w", err)
+		return model.ReceiptData{}, fmt.Errorf("failed to fetch subscription purchase: %w", err)
 	}
 
 	psub := (*playStoreSubPurchase)(sub)
 	if psub.hasExpired(now) {
-		return "", errGPSSubPurchaseExpired
+		return model.ReceiptData{}, errGPSSubPurchaseExpired
 	}
 
 	if psub.isPending() {
-		return "", errGPSSubPurchasePending
+		return model.ReceiptData{}, errGPSSubPurchasePending
 	}
 
-	return req.Blob, nil
+	return newReceiptDataGoogle(req, psub), nil
 }
 
 func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
