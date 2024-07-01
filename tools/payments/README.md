@@ -264,4 +264,62 @@ The flags are:
 docker-compose -f redistest/docker-compose.redis.yml up -d # to start up the local redis cluster
 ```
 
+## Payout Execution Steps
 
+### Shell
+
+#### Lead Operator
+
+Before taking the below steps, SET_UP_ENVIRONMENT using instructions below
+
+##### Bootstrapping (if needed)
+
+1. From a running shell, run `bootstrap PATH_TO_OPERATOR_KEY`
+
+##### Payout Execution
+
+1. - [ ] Initialize the payout from the file: `payout PATH_TO_FILE`
+   1. - [ ] Confirm that the total amount and number of payments printed here
+      match those in the Payout Summary in #payouts-private for this payout ID.
+  2. Ensure that the custodian listed in the output of this step matches your expectation.
+  3. Sanity check the other values printed, such as maximum payment value
+  4. Verify that there are sufficient balances in the custodial accounts and
+     on-chain addresses to fulfill the payments.
+2. - [ ] Prepare the payments: `prepare`
+3. - [ ] Authorize the payments: `authorize`
+4. - [ ] Monitor the status of the payments: `status`
+5. - [ ] Check the results of the payout with: `report`. Note that this will be
+   long-running if executed before the payout is complete
+
+#### Support Operator
+
+##### Bootstrapping (if needed)
+
+1. From a running shell, run `bootstrap PATH_TO_OPERATOR_KEY`
+
+##### Payout Execution
+
+1. - [ ] Initialize the payout from the file: `payout PATH_TO_FILE`
+   1. - [ ] Confirm that the total amount and number of payments printed here
+      match those in the Payout Summary in #payouts-private for this payout ID.
+  2. Ensure that the custodian listed in the output of this step matches your expectation.
+  3. Sanity check the other values printed, such as maximum payment value
+  4. Verify that there are sufficient balances in the custodial accounts and
+     on-chain addresses to fulfill the payments.
+2. - [ ] Prepare the payments: `await_prepare`
+3. - [ ] Authorize the payments: `authorize`
+4. - [ ] Monitor the status of the payments: `status`
+5. - [ ] Check the results of the payout with: `report`. Note that this will be
+   long-running if executed before the payout is complete
+
+#### Preparing the Evnironment
+
+1. - [ ] Trigger AWS MFA before starting the shell, as it currently does not
+   work as part of shell initialization: `kubectl --context bsg-production
+   --namespace antifraud-prod get pods`
+2. - [ ] Check out the current production revision in you local git repo
+3. - [ ] `cd tools/payments`
+3. - [ ] Build the tooling: `make clean && make`
+4. - [ ] Start the shell: `aws-vault exec settlements-stg-developer-role --
+   ipython --profile-dir=ipython-profile`
+5. - [ ] `set_pcr2` to build and use the correct PCR for this revision
