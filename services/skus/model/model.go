@@ -718,9 +718,10 @@ type ReceiptRequest struct {
 }
 
 type ReceiptData struct {
-	ExtID     string
 	Type      Vendor
-	ExpiresAt *time.Time
+	ProductID string
+	ExtID     string
+	ExpiresAt time.Time
 }
 
 type CreateOrderWithReceiptResponse struct {

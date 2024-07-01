@@ -51,13 +51,16 @@ func newReceiptVerifier(cl *http.Client, asKey string, playKey []byte) (*receipt
 }
 
 // validateApple validates Apple App Store receipt.
-//
-// TODO(pavelb): Propagate expiry time for properly updating the order.
 func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	return v.validateAppleTime(ctx, req, time.Now())
+	data, err := v.validateAppleTime(ctx, req, time.Now())
+	if err != nil {
+		return "", err
+	}
+
+	return data.ExtID, nil
 }
 
-func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (string, error) {
+func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (model.ReceiptData, error) {
 	asreq := appstore.IAPRequest{
 		Password:               v.asKey,
 		ReceiptData:            req.Blob,
@@ -66,7 +69,7 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 
 	resp := &appstore.IAPResponse{}
 	if err := v.appStoreCl.Verify(ctx, asreq, resp); err != nil {
-		return "", fmt.Errorf("failed to verify receipt: %w", err)
+		return model.ReceiptData{}, fmt.Errorf("failed to verify receipt: %w", err)
 	}
 
 	// ProductID on an InApp object must match the SubscriptionID.
@@ -76,13 +79,13 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
 	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID, now)
 	if ok {
-		return item.OriginalTransactionID, nil
+		return newReceiptDataApple(req.Type, item), nil
 	}
 
 	// Try finding in latest_receipt_info.
 	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID, now)
 	if ok {
-		return item.OriginalTransactionID, nil
+		return newReceiptDataApple(req.Type, item), nil
 	}
 
 	// Special case for VPN.
@@ -90,12 +93,12 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 	if req.SubscriptionID == "bravevpn.monthly" {
 		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly", now)
 		if ok {
-			return item.OriginalTransactionID, nil
+			return newReceiptDataApple(req.Type, item), nil
 		}
 
 		item, ok = findInAppBySubID(resp.LatestReceiptInfo, "bravevpn.yearly", now)
 		if ok {
-			return item.OriginalTransactionID, nil
+			return newReceiptDataApple(req.Type, item), nil
 		}
 	}
 
@@ -103,15 +106,13 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 	// This only applies to VPN.
 	item, ok = findInAppBySubIDLegacy(resp, req.SubscriptionID, now)
 	if !ok {
-		return "", errIOSPurchaseNotFound
+		return model.ReceiptData{}, errIOSPurchaseNotFound
 	}
 
-	return item.OriginalTransactionID, nil
+	return newReceiptDataApple(req.Type, item), nil
 }
 
 // validateGoogle validates a Play Store receipt.
-//
-// TODO(pavelb): Propagate expiry time for properly updating the order.
 func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
 	return v.validateGoogleTime(ctx, req, time.Now())
 }

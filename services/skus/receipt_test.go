@@ -29,8 +29,8 @@ func (c *mockASClient) Verify(ctx context.Context, req appstore.IAPRequest, resu
 		resp.Receipt.BundleID = "com.brave.ios.browser"
 		resp.Receipt.InApp = []appstore.InApp{
 			{
-				OriginalTransactionID: "720000000000000",
 				ProductID:             "braveleo.monthly",
+				OriginalTransactionID: "720000000000000",
 				ExpiresDate: appstore.ExpiresDate{
 					ExpiresDateMS: strconv.FormatInt(time.Now().Add(15*24*time.Hour).UnixMilli(), 10),
 				},
@@ -193,7 +193,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		val string
+		val model.ReceiptData
 		err error
 	}
 
@@ -226,6 +226,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 			name: "single_purchase_not_found",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -241,6 +242,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 			name: "multiple_purchases_not_found",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -256,16 +258,16 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "braveleo.monthly",
+								OriginalTransactionID: "720000000000001",
 								ExpiresDate: appstore.ExpiresDate{
 									ExpiresDateMS: strconv.FormatInt(time.Now().Add(15*24*time.Hour).UnixMilli(), 10),
 								},
 							},
 
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.yearly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
 									ExpiresDateMS: strconv.FormatInt(time.Now().Add(-1*time.Hour).UnixMilli(), 10),
 								},
@@ -285,21 +287,50 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 			name: "single_purchase_found",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "braveleo.monthly",
 				},
 
-				cl:  &mockASClient{},
-				now: time.Now(),
+				cl: &mockASClient{
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+						resp, ok := result.(*appstore.IAPResponse)
+						if !ok {
+							return model.Error("invalid response type")
+						}
+
+						resp.Receipt.BundleID = "com.brave.ios.browser"
+						resp.Receipt.InApp = []appstore.InApp{
+							{
+								ProductID:             "braveleo.monthly",
+								OriginalTransactionID: "720000000000000",
+								ExpiresDate: appstore.ExpiresDate{
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+								},
+							},
+						}
+
+						return nil
+					},
+				},
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000000"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "braveleo.monthly",
+					ExtID:     "720000000000000",
+					ExpiresAt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 
 		{
 			name: "single_purchase_expired",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -315,8 +346,8 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.yearly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
 									ExpiresDateMS: strconv.FormatInt(time.Now().Add(-1*time.Hour).UnixMilli(), 10),
 								},
@@ -336,6 +367,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 			name: "multiple_purchases_found",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -351,18 +383,18 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "braveleo.monthly",
+								OriginalTransactionID: "720000000000001",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.monthly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
@@ -373,13 +405,21 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000002"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "bravevpn.monthly",
+					ExtID:     "720000000000002",
+					ExpiresAt: time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 
 		{
 			name: "multiple_purchases_found_latest_receipt_info",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -395,15 +435,18 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.LatestReceiptInfo = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "braveleo.monthly",
+								OriginalTransactionID: "720000000000001",
+								ExpiresDate: appstore.ExpiresDate{
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+								},
 							},
 
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.monthly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
@@ -414,13 +457,21 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000002"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "bravevpn.monthly",
+					ExtID:     "720000000000002",
+					ExpiresAt: time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 
 		{
 			name: "multiple_purchases_mixed_found_latest_receipt_info",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -436,20 +487,20 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "braveleo.monthly",
+								OriginalTransactionID: "720000000000001",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
 
 						resp.LatestReceiptInfo = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.monthly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
@@ -460,13 +511,21 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000002"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "bravevpn.monthly",
+					ExtID:     "720000000000002",
+					ExpiresAt: time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 
 		{
 			name: "legacy_multiple_purchases_mixed_found_receipt",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "brave-firewall-vpn-premium",
@@ -482,20 +541,20 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "bravevpn.monthly",
+								OriginalTransactionID: "720000000000001",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
 
 						resp.LatestReceiptInfo = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "braveleo.monthly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
@@ -506,13 +565,21 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000001"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "bravevpn.monthly",
+					ExtID:     "720000000000001",
+					ExpiresAt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 
 		{
 			name: "legacy_multiple_purchases_mixed_found_latest_receipt_info",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "brave-firewall-vpn-premium-year",
@@ -528,20 +595,20 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "braveleo.monthly",
+								OriginalTransactionID: "720000000000001",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
 
 						resp.LatestReceiptInfo = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.yearly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
@@ -552,13 +619,21 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000002"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "bravevpn.yearly",
+					ExtID:     "720000000000002",
+					ExpiresAt: time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 
 		{
 			name: "ios_vpn_bug_monthly_yearly",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -574,10 +649,10 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "bravevpn.yearly",
+								OriginalTransactionID: "720000000000001",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
@@ -588,13 +663,21 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000001"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "bravevpn.yearly",
+					ExtID:     "720000000000001",
+					ExpiresAt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 
 		{
 			name: "ios_vpn_bug_monthly_yearly_latest_receipt_info",
 			given: tcGiven{
 				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
 					Package:        "com.brave.ios.browser",
 					Blob:           "blob",
 					SubscriptionID: "bravevpn.monthly",
@@ -610,20 +693,20 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 						resp.Receipt.BundleID = "com.brave.ios.browser"
 						resp.Receipt.InApp = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000001",
 								ProductID:             "braveleo.yearly",
+								OriginalTransactionID: "720000000000001",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
 
 						resp.LatestReceiptInfo = []appstore.InApp{
 							{
-								OriginalTransactionID: "720000000000002",
 								ProductID:             "bravevpn.yearly",
+								OriginalTransactionID: "720000000000002",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						}
@@ -634,7 +717,14 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
-			exp: tcExpected{val: "720000000000002"},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "bravevpn.yearly",
+					ExtID:     "720000000000002",
+					ExpiresAt: time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC),
+				},
+			},
 		},
 	}
 
@@ -749,7 +839,7 @@ func TestFindInAppBySubID(t *testing.T) {
 					{
 						ProductID: "braveleo.monthly",
 						ExpiresDate: appstore.ExpiresDate{
-							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 						},
 					},
 				},
@@ -761,7 +851,7 @@ func TestFindInAppBySubID(t *testing.T) {
 				val: &appstore.InApp{
 					ProductID: "braveleo.monthly",
 					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 					},
 				},
 				ok: true,
@@ -775,14 +865,14 @@ func TestFindInAppBySubID(t *testing.T) {
 					{
 						ProductID: "bravevpn.monthly",
 						ExpiresDate: appstore.ExpiresDate{
-							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 						},
 					},
 
 					{
 						ProductID: "braveleo.monthly",
 						ExpiresDate: appstore.ExpiresDate{
-							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 						},
 					},
 				},
@@ -794,7 +884,7 @@ func TestFindInAppBySubID(t *testing.T) {
 				val: &appstore.InApp{
 					ProductID: "braveleo.monthly",
 					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 					},
 				},
 				ok: true,
@@ -868,7 +958,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 							{
 								ProductID: "bravevpn.monthly",
 								ExpiresDate: appstore.ExpiresDate{
-									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 								},
 							},
 						},
@@ -881,7 +971,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 				val: &appstore.InApp{
 					ProductID: "bravevpn.monthly",
 					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 					},
 				},
 				ok: true,
@@ -896,7 +986,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 						{
 							ProductID: "bravevpn.yearly",
 							ExpiresDate: appstore.ExpiresDate{
-								ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+								ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 							},
 						},
 					},
@@ -908,7 +998,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 				val: &appstore.InApp{
 					ProductID: "bravevpn.yearly",
 					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 					},
 				},
 				ok: true,
@@ -969,7 +1059,7 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 					{
 						ProductID: "bravevpn.monthly",
 						ExpiresDate: appstore.ExpiresDate{
-							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 						},
 					},
 				},
@@ -980,7 +1070,7 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 				val: &appstore.InApp{
 					ProductID: "bravevpn.monthly",
 					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 					},
 				},
 				ok: true,
@@ -994,7 +1084,7 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 					{
 						ProductID: "bravevpn.yearly",
 						ExpiresDate: appstore.ExpiresDate{
-							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 						},
 					},
 				},
@@ -1005,7 +1095,7 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 				val: &appstore.InApp{
 					ProductID: "bravevpn.yearly",
 					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.January, 31, 23, 59, 59, 0, time.UTC).UnixMilli(), 10),
+						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
 					},
 				},
 				ok: true,

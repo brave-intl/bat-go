@@ -336,7 +336,22 @@ func (x *appStoreTransaction) isRevoked(now time.Time) bool {
 type appStoreInApp appstore.InApp
 
 func (x *appStoreInApp) hasExpired(now time.Time) bool {
+	return now.After(x.expiresTime())
+}
+
+func (x *appStoreInApp) expiresTime() time.Time {
 	expms, _ := strconv.ParseInt(x.ExpiresDate.ExpiresDateMS, 10, 64)
 
-	return now.After(time.UnixMilli(expms))
+	return time.UnixMilli(expms).UTC()
+}
+
+func newReceiptDataApple(kind model.Vendor, item *appstore.InApp) model.ReceiptData {
+	result := model.ReceiptData{
+		Type:      kind,
+		ProductID: item.ProductID,
+		ExtID:     item.OriginalTransactionID,
+		ExpiresAt: (*appStoreInApp)(item).expiresTime(),
+	}
+
+	return result
 }
