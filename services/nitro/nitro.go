@@ -194,7 +194,8 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	}
 	srv.TLSConfig.Certificates = []tls.Certificate{tlsCertificate}
 
-	logger.Info().Msg("starting server")
+	logger.Info().Msgf(
+		"starting server on %s and %s", httpListenAddress, httpsListenAddress)
 
 	errChan := make(chan error, 2)
 	go func() {

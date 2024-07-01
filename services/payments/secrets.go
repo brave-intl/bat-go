@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -559,6 +560,22 @@ func (u *Unsealing) decryptSecrets(ctx context.Context) error {
 		logger.Debug().Int("solana key length", len(output["solanaPrivateKey"])).Msg("set decrypted key to secret map")
 	}
 
+	u.secrets = output
+	return nil
+}
+
+func (u *Unsealing) readTestSecretes() error {
+	testPath := "/etc/bat-test-secretes.json"
+	f, err := os.Open(testPath)
+	if err != nil {
+		return err
+	}
+
+	output := map[string]string{}
+	if err := json.NewDecoder(f).Decode(&output); err != nil {
+		return fmt.Errorf(
+			"failed to json decode the test secretes %s: %w", testPath, err)
+	}
 	u.secrets = output
 	return nil
 }

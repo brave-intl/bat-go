@@ -275,20 +275,26 @@ func (s *Service) unsealConfig(
 		getChainAddress:  s.datastore.GetChainAddress,
 	}
 
-	operatorErrorCh := make(chan error, 1)
-	go func() {
-		operatorErrorCh <- unsealing.fetchOperatorShares(ctx, logger)
-	}()
+	if nitro.EnclaveMocking() {
+		if err := unsealing.readTestSecretes(); err != nil {
+			return err
+		}
+	} else {
+		operatorErrorCh := make(chan error, 1)
+		go func() {
+			operatorErrorCh <- unsealing.fetchOperatorShares(ctx, logger)
+		}()
 
-	err := unsealing.fetchSecretes(ctx, logger)
-	err2 := <-operatorErrorCh
-	if err != nil || err2 != nil {
-		return errors.Join(err, err2)
-	}
+		err := unsealing.fetchSecretes(ctx, logger)
+		err2 := <-operatorErrorCh
+		if err != nil || err2 != nil {
+			return errors.Join(err, err2)
+		}
 
-	err = unsealing.decryptSecrets(ctx)
-	if err != nil {
-		return err
+		err = unsealing.decryptSecrets(ctx)
+		if err != nil {
+			return err
+		}
 	}
 
 	logger.Debug().Msg("decrypted secrets without error")

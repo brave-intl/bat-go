@@ -43,3 +43,6 @@ prepare-*response.log
 nitro-shim/tools/eifbuild/third_party/**
 nitro-image.eif
 bat-go-repro.tar
+
+# File with test keys
+/payments-test-secretes.json

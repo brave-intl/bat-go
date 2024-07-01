@@ -64,8 +64,10 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 	r.Route("/v1/payments", func(r chi.Router) {
 		// Set date header with current date
 		r.Use(middleware.SetResponseDate())
-		// Sign all payments responses
-		r.Use(middleware.SignResponse(ps))
+		if !nitro.EnclaveMocking() {
+			// Sign all payments responses
+			r.Use(middleware.SignResponse(ps))
+		}
 		// Log all payments requests
 		r.Use(middleware.RequestLogger(logger))
 

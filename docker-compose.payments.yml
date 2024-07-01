@@ -43,6 +43,8 @@ services:
   service:
     image: bat-go:latest
     command: bat-go serve nitro inside-enclave --egress-address none --log-address none --upstream-url http://0.0.0.0:8080
+    volumes:
+      - ./payments-test-secretes.json:/etc/bat-test-secretes.json:ro
     environment:
       - ENCLAVE_MOCKING=1
       - DEBUG=1
@@ -60,8 +62,8 @@ services:
       - AWS_CONTAINER_AUTHORIZATION_TOKEN=${AWS_CONTAINER_AUTHORIZATION_TOKEN-}
 
     ports:
-      - "18080:8080"
-      - "18443:8443"
+      - "18080:18080"
+      - "18443:18443"
 
 volumes:
   redis-cache:
