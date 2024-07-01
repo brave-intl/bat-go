@@ -8,6 +8,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"github.com/brave-intl/bat-go/libs/logging"
 	appaws "github.com/brave-intl/bat-go/libs/nitro/aws"
+	"github.com/rs/zerolog"
 
 	"github.com/amazon-ion/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -28,13 +29,6 @@ type QLDBDatastore struct {
 	*qldbdriver.QLDBDriver
 	sdkClient *qldb.Client
 }
-
-// ErrNotConfiguredYet - service not fully configured.
-var ErrNotConfiguredYet = errors.New("not yet configured")
-
-const (
-	tableAlreadyCreatedCode = "412"
-)
 
 type Datastore interface {
 	InsertPaymentState(ctx context.Context, state *paymentLib.PaymentState) (string, error)
@@ -401,17 +395,48 @@ func (q *QLDBDatastore) UpdateChainAddress(ctx context.Context, address ChainAdd
 	return nil
 }
 
-func (s *Service) configureDatastore(ctx context.Context) error {
+func configureDatastore(ctx context.Context) (Datastore, error) {
 	driver, err := newQLDBDatastore(ctx)
 	if err != nil {
-		if errors.Is(err, ErrNotConfiguredYet) {
-			// will eventually get configured
-			return nil
-		}
-		return fmt.Errorf("failed to create new qldb datastore: %w", err)
+		return nil, fmt.Errorf("failed to create new qldb datastore: %w", err)
 	}
-	s.datastore = driver
-	return driver.setupLedger(ctx)
+	err = driver.setupLedger(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return driver, nil
+}
+
+func ensureQLDBTable(
+	txn qldbdriver.Transaction,
+	tableName string,
+	logger *zerolog.Logger,
+) (bool, error) {
+	// Check for table existence. In QLDB DROP TABLE does not delete the table
+	// but merely marks it as inactive and it is still reachable by its id.
+	//
+	// NOTE: previously the code relied on CREATE TABLE reporting an error when
+	// table did not exist and then checked for a particular error code to
+	// distinguish between non-existing table and other errors. But error codes
+	// are not stable with QLDB client, so explicit query against the
+	// information_schema should be more robust.
+	r, err := txn.Execute("SELECT tableId FROM information_schema.user_tables WHERE name = ? AND status = 'ACTIVE'", tableName)
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to query user_tables for %s: %w", tableName, err)
+	}
+	if r.Next(txn) {
+		// We have an entry for the table so it exists.
+		return false, nil
+	}
+
+	logger.Warn().Err(err).Msgf("Failed to locate %s table, creating one", tableName)
+	_, err = txn.Execute(fmt.Sprintf("CREATE TABLE %s", tableName))
+	if err != nil {
+		return false, fmt.Errorf(
+			"failed to create %s table due to: %w", tableName, err)
+	}
+	return true, nil
 }
 
 func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
@@ -512,10 +537,6 @@ func (q *QLDBDatastore) setupLedger(ctx context.Context) error {
 // newQLDBDatastore - create a new qldbDatastore.
 func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 	logger := logging.Logger(ctx, "payments.newQLDBDatastore")
-
-	if !isQLDBReady(ctx) {
-		return nil, ErrNotConfiguredYet
-	}
 
 	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
 	if !ok {

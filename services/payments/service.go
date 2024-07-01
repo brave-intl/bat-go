@@ -8,8 +8,8 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"text/template"
-	"time"
 
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/brave-intl/bat-go/libs/nitro"
+	"github.com/rs/zerolog"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -32,12 +33,10 @@ type Service struct {
 	awsCfg     aws.Config
 	egressAddr string
 
-	baseCtx              context.Context
-	keyShares            [][]byte
-	secretsCiphertext    []byte
-	solanaPrivCiphertext []byte
-	secrets              map[string]string
-	kmsDecryptKeyArn     string
+	baseCtx          context.Context
+	kmsDecryptKeyArn string
+	operatorKey      OperatorKey
+	secretsLoaded    atomic.Bool
 
 	publicKey     string
 	signer        paymentLib.Signator
@@ -247,96 +246,79 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, fmt.Errorf("could not create kms secret encryption key: %w", err)
 	}
 
+	service.datastore, err = configureDatastore(ctx)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("could not configure datastore")
+		return nil, nil, errors.New("could not configure datastore")
+	}
+
+	// Start Vault unseal in the background.
 	go func() {
-		_, _, err := func() (interface{}, interface{}, error) {
-			// get the secrets object key and bucket name from environment
-			secretsBucketName, ok := ctx.Value(appctx.EnclaveSecretsBucketNameCTXKey).(string)
-			if !ok {
-				return nil, nil, errNoSecretsBucketConfigured
-			}
-
-			// download the configuration file, kms decrypt the file
-			secretsObjectName, ok := ctx.Value(appctx.EnclaveSecretsObjectNameCTXKey).(string)
-			if !ok {
-				return nil, nil, errNoSecretsObjectConfigured
-			}
-			solanaAddress, ok := ctx.Value(appctx.EnclaveSolanaAddressCTXKey).(string)
-			if !ok {
-				return nil, nil, errNoSolanaAddressConfigured
-			}
-			logger.Debug().Str("solana address:", solanaAddress).Msg("solana address configured")
-
-			for {
-				// fetch the secrets, result will store the secrets (age ciphertext) on the service instance
-				if err := service.fetchSecrets(ctx, secretsBucketName, secretsObjectName, solanaAddress); err != nil {
-					// log the error, we will retry again
-					logger.Error().Err(err).Msg("failed to fetch secrets, will retry shortly")
-					<-time.After(30 * time.Second)
-					continue
-				}
-				break
-			}
-
-			// operator shares files
-			operatorSharesBucketName, ok := ctx.Value(appctx.EnclaveOperatorSharesBucketNameCTXKey).(string)
-			if !ok {
-				return nil, nil, errNoOperatorSharesBucketConfigured
-			}
-
-			for {
-				// do we have enough shares to attempt to reconstitute the key?
-				if err := service.fetchOperatorShares(ctx, operatorSharesBucketName); err != nil {
-					logger.Error().Err(err).Msg("failed to fetch operator shares, will retry shortly")
-					<-time.After(60 * time.Second)
-					continue
-				}
-				if ok := service.enoughOperatorShares(ctx, 1); ok { // 2 is the number of shares required
-					// yes - attempt to decrypt the file
-					if err := service.configureSecrets(ctx); err != nil {
-						// fail to decrypt?  panic loudly
-						return nil, nil, fmt.Errorf("failed to configure payments service secrets: %w", err)
-					}
-					break
-				}
-				logger.Error().Err(err).Msg("need more operator shares to decrypt secrets")
-				// no - poll for operator shares until we can attempt to decrypt the file
-				<-time.After(60 * time.Second) // wait a minute before attempting again to get operator shares
-			}
-			// at this point we should have our config loaded, lets print out the keys
-			for k := range service.secrets {
-				logger.Info().Msgf("%s is loaded in secrets!", k)
-			}
-
-			return nil, nil, nil
-		}()
+		err := service.unsealConfig(ctx, logger)
 		if err != nil {
 			logger.Error().Err(err).Msg("something went wrong during vault unseal")
 		}
 	}()
 
-	if err := service.configureDatastore(ctx); err != nil {
-		logger.Fatal().Err(err).Msg("could not configure datastore")
-		return nil, nil, errors.New("could not configure datastore")
-	}
-
 	return ctx, service, nil
 }
 
-func isQLDBReady(ctx context.Context) bool {
-	logger := logging.Logger(ctx, "payments.isQLDBReady")
-	// decrypt the aws region
-	qldbArn, qldbArnOK := ctx.Value(appctx.PaymentsQLDBRoleArnCTXKey).(string)
-	// decrypt the aws region
-	region, regionOK := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	// get proxy address for outbound
-	egressAddr, egressOK := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
-	if regionOK && egressOK && qldbArnOK {
-		return true
+func (s *Service) unsealConfig(
+	ctx context.Context,
+	logger *zerolog.Logger,
+) error {
+	unsealing := &Unsealing{
+		kmsDecryptKeyArn: s.kmsDecryptKeyArn,
+		getChainAddress:  s.datastore.GetChainAddress,
 	}
-	logger.Warn().
-		Str("region", region).
-		Str("egressAddr", egressAddr).
-		Str("qldbArn", qldbArn).
-		Msg("service is not configured to access qldb")
-	return false
+
+	operatorErrorCh := make(chan error, 1)
+	go func() {
+		operatorErrorCh <- unsealing.fetchOperatorShares(ctx, logger)
+	}()
+
+	err := unsealing.fetchSecretes(ctx, logger)
+	err2 := <-operatorErrorCh
+	if err != nil || err2 != nil {
+		return errors.Join(err, err2)
+	}
+
+	err = unsealing.decryptSecrets(ctx)
+	if err != nil {
+		return err
+	}
+
+	logger.Debug().Msg("decrypted secrets without error")
+
+	// at this point we should have our config loaded, lets print out what keys
+	// we got
+	for k := range unsealing.secrets {
+		logger.Info().Msgf("%s is loaded in secrets!", k)
+	}
+
+	s.setEnvFromSecrets(ctx, unsealing.secrets)
+	logger.Debug().Msg("set env from secrets")
+
+	s.operatorKey = unsealing.operatorKey
+	s.secretsLoaded.Store(true)
+	return nil
+}
+
+// AreSecretsLoaded will tell you if we have successfully loaded secrets on the service
+func (s *Service) AreSecretsLoaded(ctx context.Context) bool {
+	return s.secretsLoaded.Load()
+}
+
+// setEnvFromSecrets takes a secrets map and loads the secrets as environment variables
+func (s *Service) setEnvFromSecrets(ctx context.Context, secrets map[string]string) {
+	logger := logging.Logger(ctx, "payments.secrets")
+	os.Setenv("ZEBPAY_API_KEY", secrets["zebpayApiKey"])
+	os.Setenv("ZEBPAY_SIGNING_KEY", secrets["zebpayPrivateKey"])
+	os.Setenv("SOLANA_RPC_ENDPOINT", secrets["solanaRpcEndpoint"])
+
+	if solKey, ok := secrets["solanaPrivateKey"]; ok {
+		logger.Debug().Int("solana key length", len(secrets["solanaPrivateKey"])).Msg("setting solana key environment varialbe")
+		os.Setenv("SOLANA_SIGNING_KEY", solKey)
+		logger.Debug().Int("solana env var key length", len(os.Getenv("SOLANA_SIGNING_KEY"))).Msg("set solana key environment varialbe")
+	}
 }
