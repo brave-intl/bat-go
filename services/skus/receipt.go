@@ -170,7 +170,15 @@ func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.T
 func findInAppVPNLegacy(iap []appstore.InApp, subID string, now time.Time) (*appstore.InApp, bool) {
 	switch subID {
 	case "brave-firewall-vpn-premium":
-		return findInAppBySubID(iap, "bravevpn.monthly", now)
+		item, ok := findInAppBySubID(iap, "bravevpn.monthly", now)
+		if ok {
+			return item, true
+		}
+
+		// Quick fix for linking coming from iOS v1.61.1 and below.
+		// The old clients might send brave-firewall-vpn-premium for bravevpn.yearly.
+		return findInAppBySubID(iap, "bravevpn.yearly", now)
+
 	case "brave-firewall-vpn-premium-year":
 		return findInAppBySubID(iap, "bravevpn.yearly", now)
 	default:

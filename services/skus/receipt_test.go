@@ -1092,6 +1092,31 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 		},
 
 		{
+			name: "vpn_annual_bug_v1.61.1",
+			given: tcGiven{
+				iap: []appstore.InApp{
+					{
+						ProductID: "bravevpn.yearly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
+					},
+				},
+				subID: "brave-firewall-vpn-premium",
+				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: tcExpected{
+				val: &appstore.InApp{
+					ProductID: "bravevpn.yearly",
+					ExpiresDate: appstore.ExpiresDate{
+						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+					},
+				},
+				ok: true,
+			},
+		},
+
+		{
 			name: "vpn_annual",
 			given: tcGiven{
 				iap: []appstore.InApp{
