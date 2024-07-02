@@ -382,7 +382,7 @@ func TestShouldCancelOrderIOS(t *testing.T) {
 
 func TestNewReceiptDataApple(t *testing.T) {
 	type tcGiven struct {
-		kind model.Vendor
+		req  model.ReceiptRequest
 		item *appstore.InApp
 	}
 
@@ -396,7 +396,12 @@ func TestNewReceiptDataApple(t *testing.T) {
 		{
 			name: "valid",
 			given: tcGiven{
-				kind: model.VendorApple,
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "braveleo.monthly",
+				},
 				item: &appstore.InApp{
 					ProductID:             "braveleo.monthly",
 					OriginalTransactionID: "720000000000001",
@@ -418,7 +423,7 @@ func TestNewReceiptDataApple(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newReceiptDataApple(tc.given.kind, tc.given.item)
+			actual := newReceiptDataApple(tc.given.req, tc.given.item)
 
 			should.Equal(t, tc.exp, actual)
 		})

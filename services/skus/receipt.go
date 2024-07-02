@@ -74,13 +74,13 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
 	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID, now)
 	if ok {
-		return newReceiptDataApple(req.Type, item), nil
+		return newReceiptDataApple(req, item), nil
 	}
 
 	// Try finding in latest_receipt_info.
 	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID, now)
 	if ok {
-		return newReceiptDataApple(req.Type, item), nil
+		return newReceiptDataApple(req, item), nil
 	}
 
 	// Special case for VPN.
@@ -88,12 +88,12 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 	if req.SubscriptionID == "bravevpn.monthly" {
 		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly", now)
 		if ok {
-			return newReceiptDataApple(req.Type, item), nil
+			return newReceiptDataApple(req, item), nil
 		}
 
 		item, ok = findInAppBySubID(resp.LatestReceiptInfo, "bravevpn.yearly", now)
 		if ok {
-			return newReceiptDataApple(req.Type, item), nil
+			return newReceiptDataApple(req, item), nil
 		}
 	}
 
@@ -104,7 +104,7 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 		return model.ReceiptData{}, errIOSPurchaseNotFound
 	}
 
-	return newReceiptDataApple(req.Type, item), nil
+	return newReceiptDataApple(req, item), nil
 }
 
 // validateGoogle validates a Play Store receipt.

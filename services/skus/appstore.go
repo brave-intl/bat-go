@@ -345,9 +345,9 @@ func (x *appStoreInApp) expiresTime() time.Time {
 	return time.UnixMilli(expms).UTC()
 }
 
-func newReceiptDataApple(kind model.Vendor, item *appstore.InApp) model.ReceiptData {
+func newReceiptDataApple(req model.ReceiptRequest, item *appstore.InApp) model.ReceiptData {
 	result := model.ReceiptData{
-		Type:      kind,
+		Type:      req.Type,
 		ProductID: item.ProductID,
 		ExtID:     item.OriginalTransactionID,
 		ExpiresAt: (*appStoreInApp)(item).expiresTime(),
