@@ -16,7 +16,7 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test create-json-schema lint clean download-mod pcrs pcrs-only nitro-shim/tools/eifbuild/eifbuild
+.PHONY: all buildcmd docker docker-local test create-json-schema lint clean download-mod pcrs pcrs-only nitro-shim/tools/eifbuild/eifbuild
 
 all: test create-json-schema buildcmd
 
@@ -100,6 +100,9 @@ docker:
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go:$(GIT_VERSION)$(BUILD_TIME) .
 	docker tag bat-go:$(GIT_VERSION)$(BUILD_TIME) bat-go:latest
+
+docker-local:
+	docker build -t bat-go-local -f local-dev/local.dockerfile --target image .
 
 docker-reproducible:
 	$(eval TMP_CHECKOUT = $(shell mktemp -d 2>/dev/null || mktemp -d -t 'bat-go-tmp'))

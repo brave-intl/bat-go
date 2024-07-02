@@ -87,8 +87,6 @@ func init() {
 	viper.BindPFlag("enclave-decrypt-key-template-secret", NitroServeCmd.PersistentFlags().Lookup("enclave-decrypt-key-template-secret"))
 	viper.BindEnv("enclave-decrypt-key-template-secret", "ENCLAVE_DECRYPT_KEY_TEMPLATE_SECRET")
 
-	rootcmd.Must(viper.BindEnv("enclave-mocking", "ENCLAVE_MOCKING"))
-
 	NitroServeCmd.AddCommand(OutsideNitroServeCmd)
 	NitroServeCmd.AddCommand(InsideNitroServeCmd)
 	srvcmd.ServeCmd.AddCommand(NitroServeCmd)
@@ -117,10 +115,6 @@ var NitroServeCmd = &cobra.Command{
 // RunNitroServerInEnclave - start up the nitro server living inside the enclave
 func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-
-	if viper.GetString("enclave-mocking") != "" {
-		nitro.MockEnclave()
-	}
 
 	logaddr := viper.GetString("log-address")
 	logWriter := nitro.NewVsockWriter(logaddr)

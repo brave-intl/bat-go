@@ -1,10 +1,8 @@
 package nitro
 
-var enclaveMocking bool
+import "os"
 
-func MockEnclave() {
-	enclaveMocking = true
-}
+var enclaveMocking = os.Getenv("NITRO_ENCLAVE_MOCKING") != ""
 
 func EnclaveMocking() bool {
 	return enclaveMocking

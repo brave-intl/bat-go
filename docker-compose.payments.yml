@@ -4,7 +4,7 @@ services:
     restart: always
     #ports:
     #  - '6379:6379'
-    command: redis-server --save 20 1 --loglevel verbose --requirepass idBocFijvo --user redis
+    command: redis-server --save 20 1 --loglevel verbose --requirepass testpass --user redis
     #volumes:
     #  - redis-cache:/data
 
@@ -30,23 +30,27 @@ services:
       # - "/var/run/docker.sock:/var/run/docker.sock"
 
   worker:
-    image: bat-go-repro:latest
-    command: bat-go serve payments worker
+    image: bat-go-local
+    command: /build/bat-go serve payments worker
+    depends_on:
+      - redis
+      - localstack
     environment:
+      - NITRO_ENCLAVE_MOCKING=1
       - REDIS_ADDR=redis:6379
-      - REDIS_USER=user
-      - REDIS_PASS=idBocFijvo
+      - REDIS_USER=default
+      - REDIS_PASS=testpass
       - DEBUG=1
       - ENVIRONMENT=development
-      - NITRO_API_BASE=http://web.payment-dev.svc.cluster.local
+      - NITRO_API_BASE=http://service:18080
 
   service:
-    image: bat-go:latest
-    command: bat-go serve nitro inside-enclave --egress-address none --log-address none --upstream-url http://0.0.0.0:8080
+    image: bat-go-local
+    command: /build/bat-go serve nitro inside-enclave --egress-address none --log-address none --upstream-url http://0.0.0.0:8080
     volumes:
       - ./payments-test-secretes.json:/etc/bat-test-secretes.json:ro
     environment:
-      - ENCLAVE_MOCKING=1
+      - NITRO_ENCLAVE_MOCKING=1
       - DEBUG=1
       - ADDR=0.0.0.0:18080
       - ADDR2=0.0.0.0:18443
@@ -62,8 +66,8 @@ services:
       - AWS_CONTAINER_AUTHORIZATION_TOKEN=${AWS_CONTAINER_AUTHORIZATION_TOKEN-}
 
     ports:
-      - "18080:18080"
-      - "18443:18443"
+      - "127.0.0.1:18080:18080"
+      - "127.0.0.1:18443:18443"
 
 volumes:
   redis-cache:
