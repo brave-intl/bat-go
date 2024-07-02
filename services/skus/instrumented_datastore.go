@@ -72,20 +72,6 @@ func (_d DatastoreWithPrometheus) AppendOrderMetadataInt(ctx context.Context, up
 	return _d.base.AppendOrderMetadataInt(ctx, up1, s1, i1)
 }
 
-// AppendOrderMetadataInt64 implements Datastore
-func (_d DatastoreWithPrometheus) AppendOrderMetadataInt64(ctx context.Context, up1 *uuid.UUID, s1 string, i1 int64) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AppendOrderMetadataInt64", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.AppendOrderMetadataInt64(ctx, up1, s1, i1)
-}
-
 // BeginTx implements Datastore
 func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
 	_since := time.Now()

@@ -35,6 +35,7 @@ const (
 	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
 	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
 	ErrNoStripeCheckoutSessID                 Error = "model: order: no stripe checkout session id"
+	ErrInvalidOrderMetadataType               Error = "model: order: invalid metadata type"
 
 	ErrNumPerIntervalNotSet  Error = "model: invalid order: numPerInterval must be set"
 	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"
@@ -42,6 +43,7 @@ const (
 	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
 	ErrInvalidMobileProduct  Error = "model: invalid mobile product"
 	ErrNoMatchOrderReceipt   Error = "model: order_id does not match receipt order"
+	ErrOrderExistsForReceipt Error = "model: order already exists for receipt"
 
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"
@@ -713,6 +715,13 @@ type ReceiptRequest struct {
 	Blob           string `json:"raw_receipt" validate:"required"`
 	Package        string `json:"package" validate:"-"`
 	SubscriptionID string `json:"subscription_id" validate:"-"`
+}
+
+type ReceiptData struct {
+	Type      Vendor
+	ProductID string
+	ExtID     string
+	ExpiresAt time.Time
 }
 
 type CreateOrderWithReceiptResponse struct {

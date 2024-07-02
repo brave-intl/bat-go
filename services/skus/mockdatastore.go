@@ -70,20 +70,6 @@ func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt(arg0, arg1, arg2, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt), arg0, arg1, arg2, arg3)
 }
 
-// AppendOrderMetadataInt64 mocks base method.
-func (m *MockDatastore) AppendOrderMetadataInt64(arg0 context.Context, arg1 *go_uuid.UUID, arg2 string, arg3 int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendOrderMetadataInt64", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AppendOrderMetadataInt64 indicates an expected call of AppendOrderMetadataInt64.
-func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt64(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt64", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt64), arg0, arg1, arg2, arg3)
-}
-
 // BeginTx mocks base method.
 func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
 	m.ctrl.T.Helper()

@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -330,4 +331,27 @@ func (x *appStoreTransaction) isRevoked(now time.Time) bool {
 	}
 
 	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
+}
+
+type appStoreInApp appstore.InApp
+
+func (x *appStoreInApp) hasExpired(now time.Time) bool {
+	return now.After(x.expiresTime())
+}
+
+func (x *appStoreInApp) expiresTime() time.Time {
+	expms, _ := strconv.ParseInt(x.ExpiresDate.ExpiresDateMS, 10, 64)
+
+	return time.UnixMilli(expms).UTC()
+}
+
+func newReceiptDataApple(req model.ReceiptRequest, item *appstore.InApp) model.ReceiptData {
+	result := model.ReceiptData{
+		Type:      req.Type,
+		ProductID: item.ProductID,
+		ExtID:     item.OriginalTransactionID,
+		ExpiresAt: (*appStoreInApp)(item).expiresTime(),
+	}
+
+	return result
 }

@@ -622,7 +622,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 	}
 }
 
-func TestService_renewOrderWithExpPaidTime(t *testing.T) {
+func TestService_renewOrderWithExpPaidTimeTx(t *testing.T) {
 	type tcGiven struct {
 		id    uuid.UUID
 		expt  time.Time
@@ -770,7 +770,7 @@ func TestService_renewOrderWithExpPaidTime(t *testing.T) {
 
 			ctx := context.Background()
 
-			err := svc.renewOrderWithExpPaidTime(ctx, nil, tc.given.id, tc.given.expt, tc.given.paidt)
+			err := svc.renewOrderWithExpPaidTimeTx(ctx, nil, tc.given.id, tc.given.expt, tc.given.paidt)
 			should.Equal(t, true, errors.Is(err, tc.exp))
 		})
 	}
@@ -1147,8 +1147,8 @@ func TestDoItemsHaveSUOrTlv2(t *testing.T) {
 
 func TestNewMobileOrderMdata(t *testing.T) {
 	type tcGiven struct {
+		vnd   model.Vendor
 		extID string
-		req   model.ReceiptRequest
 	}
 
 	type testCase struct {
@@ -1162,12 +1162,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 			name: "android",
 			given: tcGiven{
 				extID: "extID",
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "subID",
-				},
+				vnd:   model.VendorGoogle,
 			},
 			exp: datastore.Metadata{
 				"externalID":       "extID",
@@ -1180,12 +1175,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 			name: "ios",
 			given: tcGiven{
 				extID: "extID",
-				req: model.ReceiptRequest{
-					Type:           model.VendorApple,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "subID",
-				},
+				vnd:   model.VendorApple,
 			},
 			exp: datastore.Metadata{
 				"externalID":       "extID",
@@ -1199,7 +1189,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newMobileOrderMdata(tc.given.req, tc.given.extID)
+			actual := newMobileOrderMdata(tc.given.vnd, tc.given.extID)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -1515,11 +1505,11 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "error_in_createOrder",
+			name: "error_in_createOrderPremium",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
-						return nil, model.Error("something went wrong")
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
 					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
@@ -1531,19 +1521,19 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 					SubscriptionID: "brave.leo.monthly",
 				},
 			},
-			exp: tcExpected{err: model.Error("something went wrong")},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
 
 		{
-			name: "error_in_UpdateOrderStatusPaidWithMetadata",
+			name: "error_in_renewOrderWithExpPaidTime",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						return &model.Order{}, nil
 					},
 
-					fnUpdateOrderStatusPaidWithMetadata: func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
-						return model.Error("something went wrong")
+					fnRenewOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						return model.Error("something_went_wrong")
 					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
@@ -1555,14 +1545,38 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 					SubscriptionID: "brave.leo.monthly",
 				},
 			},
-			exp: tcExpected{err: model.Error("something went wrong")},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
+		},
+
+		{
+			name: "error_in_appendOrderMetadata",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return &model.Order{}, nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				set:   newOrderItemReqNewMobileSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.leo.monthly",
+				},
+			},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
 
 		{
 			name: "successful_case_android_leo_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						result := &model.Order{
 							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
 							Items: []model.OrderItem{
@@ -1596,7 +1610,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "successful_case_android_vpn_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						result := &model.Order{
 							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
 							Items: []model.OrderItem{
@@ -1960,22 +1974,31 @@ func TestIsErrStripeNotFound(t *testing.T) {
 }
 
 type mockPaidOrderCreator struct {
-	fnCreateOrder                       func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
-	fnUpdateOrderStatusPaidWithMetadata func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+	fnCreateOrderPremium        func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	fnRenewOrderWithExpPaidTime func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
+	fnAppendOrderMetadata       func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
 }
 
-func (s *mockPaidOrderCreator) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
-	if s.fnCreateOrder == nil {
+func (s *mockPaidOrderCreator) createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	if s.fnCreateOrderPremium == nil {
 		return &model.Order{}, nil
 	}
 
-	return s.fnCreateOrder(ctx, req, ordNew, items)
+	return s.fnCreateOrderPremium(ctx, req, ordNew, items)
 }
 
-func (s *mockPaidOrderCreator) UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
-	if s.fnUpdateOrderStatusPaidWithMetadata == nil {
+func (s *mockPaidOrderCreator) renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+	if s.fnRenewOrderWithExpPaidTime == nil {
 		return nil
 	}
 
-	return s.fnUpdateOrderStatusPaidWithMetadata(ctx, oid, mdata)
+	return s.fnRenewOrderWithExpPaidTime(ctx, id, expt, paidt)
+}
+
+func (s *mockPaidOrderCreator) appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+	if s.fnAppendOrderMetadata == nil {
+		return nil
+	}
+
+	return s.fnAppendOrderMetadata(ctx, oid, mdata)
 }

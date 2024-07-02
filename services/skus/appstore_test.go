@@ -6,6 +6,8 @@ import (
 
 	"github.com/awa/go-iap/appstore"
 	should "github.com/stretchr/testify/assert"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 func TestAppStoreSrvNotification_shouldProcess(t *testing.T) {
@@ -372,6 +374,56 @@ func TestShouldCancelOrderIOS(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := shouldCancelOrderIOS(tc.given.info, tc.given.now)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestNewReceiptDataApple(t *testing.T) {
+	type tcGiven struct {
+		req  model.ReceiptRequest
+		item *appstore.InApp
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   model.ReceiptData
+	}
+
+	tests := []testCase{
+		{
+			name: "valid",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "braveleo.monthly",
+				},
+				item: &appstore.InApp{
+					ProductID:             "braveleo.monthly",
+					OriginalTransactionID: "720000000000001",
+					ExpiresDate: appstore.ExpiresDate{
+						ExpiresDateMS: "1719792001000",
+					},
+				},
+			},
+			exp: model.ReceiptData{
+				Type:      model.VendorApple,
+				ProductID: "braveleo.monthly",
+				ExtID:     "720000000000001",
+				ExpiresAt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newReceiptDataApple(tc.given.req, tc.given.item)
 
 			should.Equal(t, tc.exp, actual)
 		})
