@@ -1418,7 +1418,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			return handlers.ValidationError("request", verrs)
 		}
 
-		extID, err := svc.validateReceipt(ctx, req)
+		rcpt, err := svc.validateReceipt(ctx, req)
 		if err != nil {
 			l.Warn().Err(err).Msg("failed to validate receipt with vendor")
 
@@ -1426,7 +1426,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 		}
 
 		{
-			_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
+			_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), rcpt.ExtID)
 			if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
 				l.Warn().Err(err).Msg("failed to lookup external id")
 
@@ -1438,7 +1438,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			}
 		}
 
-		mdata := newMobileOrderMdata(req.Type, extID)
+		mdata := newMobileOrderMdata(req.Type, rcpt.ExtID)
 
 		if err := svc.updateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
 			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
@@ -1448,7 +1448,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 		result := struct {
 			ExternalID string `json:"externalId"`
 			Vendor     string `json:"vendor"`
-		}{ExternalID: extID, Vendor: req.Type.String()}
+		}{ExternalID: rcpt.ExtID, Vendor: req.Type.String()}
 
 		return handlers.RenderContent(ctx, result, w, http.StatusOK)
 	}
@@ -1556,14 +1556,14 @@ func handleCheckOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Servi
 		return handlers.ValidationError("request", verrs)
 	}
 
-	extID, err := svc.validateReceipt(ctx, req)
+	rcpt, err := svc.validateReceipt(ctx, req)
 	if err != nil {
 		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
 
 		return handleReceiptErr(err)
 	}
 
-	if err := svc.checkOrderReceipt(ctx, orderID, extID); err != nil {
+	if err := svc.checkOrderReceipt(ctx, orderID, rcpt.ExtID); err != nil {
 		lg.Warn().Err(err).Msg("failed to check order receipt")
 
 		switch {

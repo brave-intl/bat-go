@@ -113,8 +113,8 @@ type tlv2Store interface {
 }
 
 type vendorReceiptValidator interface {
-	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
-	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
+	validateApple(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error)
+	validateGoogle(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error)
 	fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
 }
 
@@ -1764,14 +1764,16 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 }
 
 // validateReceipt validates receipt.
-func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest) (string, error) {
+func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error) {
 	switch req.Type {
 	case model.VendorApple:
 		return s.vendorReceiptValid.validateApple(ctx, req)
+
 	case model.VendorGoogle:
 		return s.vendorReceiptValid.validateGoogle(ctx, req)
+
 	default:
-		return "", model.ErrInvalidVendor
+		return model.ReceiptData{}, model.ErrInvalidVendor
 	}
 }
 
@@ -2125,13 +2127,13 @@ func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extI
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest) (*model.Order, error) {
 	// 1. Fetch receipt.
-	extID, err := s.validateReceipt(ctx, req)
+	rcpt, err := s.validateReceipt(ctx, req)
 	if err != nil {
 		return nil, &receiptValidError{err: err}
 	}
 
 	// 2. Validate it.
-	ord, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), extID)
+	ord, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), rcpt.ExtID)
 	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
 		return nil, err
 	}
@@ -2142,7 +2144,7 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	}
 
 	// 4. Create if missing.
-	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, extID)
+	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, rcpt.ExtID)
 }
 
 func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {

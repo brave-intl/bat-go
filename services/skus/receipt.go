@@ -51,13 +51,8 @@ func newReceiptVerifier(cl *http.Client, asKey string, playKey []byte) (*receipt
 }
 
 // validateApple validates Apple App Store receipt.
-func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	data, err := v.validateAppleTime(ctx, req, time.Now())
-	if err != nil {
-		return "", err
-	}
-
-	return data.ExtID, nil
+func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error) {
+	return v.validateAppleTime(ctx, req, time.Now())
 }
 
 func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (model.ReceiptData, error) {
@@ -113,13 +108,8 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 }
 
 // validateGoogle validates a Play Store receipt.
-func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	data, err := v.validateGoogleTime(ctx, req, time.Now())
-	if err != nil {
-		return "", err
-	}
-
-	return data.ExtID, nil
+func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error) {
+	return v.validateGoogleTime(ctx, req, time.Now())
 }
 
 func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (model.ReceiptData, error) {
