@@ -333,25 +333,50 @@ func (x *appStoreTransaction) isRevoked(now time.Time) bool {
 	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
 }
 
-type appStoreInApp appstore.InApp
-
-func (x *appStoreInApp) hasExpired(now time.Time) bool {
-	return now.After(x.expiresTime())
-}
-
-func (x *appStoreInApp) expiresTime() time.Time {
-	expms, _ := strconv.ParseInt(x.ExpiresDate.ExpiresDateMS, 10, 64)
-
-	return time.UnixMilli(expms).UTC()
-}
-
-func newReceiptDataApple(req model.ReceiptRequest, item *appstore.InApp) model.ReceiptData {
+func newReceiptDataApple(req model.ReceiptRequest, item *wrapAppStoreInApp) model.ReceiptData {
 	result := model.ReceiptData{
 		Type:      req.Type,
 		ProductID: item.ProductID,
 		ExtID:     item.OriginalTransactionID,
-		ExpiresAt: (*appStoreInApp)(item).expiresTime(),
+		ExpiresAt: item.expt,
 	}
 
 	return result
+}
+
+// wrapAppStoreInApp adapts and extends appstore.InApp to avoid parsing time more than once.
+//
+// An instance must be constructed using newWrapAppStoreInApp.
+type wrapAppStoreInApp struct {
+	*appstore.InApp
+	expt time.Time
+}
+
+// newWrapAppStoreInApp constructs a new wrapAppStoreInApp by wrapping val and parsing time.
+func newWrapAppStoreInApp(val *appstore.InApp) *wrapAppStoreInApp {
+	result := &wrapAppStoreInApp{
+		InApp: val,
+		expt:  (*appStoreInApp)(val).expiresTime(),
+	}
+
+	return result
+}
+
+func (x *wrapAppStoreInApp) hasExpired(now time.Time) bool {
+	return now.After(x.expt)
+}
+
+// appStoreInApp extends appstore.InApp with extra capabilities.
+type appStoreInApp appstore.InApp
+
+// expiresTime parses x.ExpiresDate.ExpiresDateMS.
+//
+// If ExpiresDateMS is currupt, the result is zero time, which indicates an expired item.
+func (x *appStoreInApp) expiresTime() time.Time {
+	expms, err := strconv.ParseInt(x.ExpiresDate.ExpiresDateMS, 10, 64)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return time.UnixMilli(expms).UTC()
 }

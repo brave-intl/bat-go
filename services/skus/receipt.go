@@ -134,12 +134,12 @@ func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, pkgName, subID,
 	return v.playStoreCl.VerifySubscription(ctx, pkgName, subID, token)
 }
 
-func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*appstore.InApp, bool) {
+func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
 	for i := range iap {
 		if iap[i].ProductID == subID {
-			item := &iap[i]
+			item := newWrapAppStoreInApp(&iap[i])
 
-			if !(*appStoreInApp)(item).hasExpired(now) {
+			if !item.hasExpired(now) {
 				return item, true
 			}
 		}
@@ -148,7 +148,7 @@ func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*appst
 	return nil, false
 }
 
-func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.Time) (*appstore.InApp, bool) {
+func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
 	item, ok := findInAppVPNLegacy(resp.Receipt.InApp, subID, now)
 	if ok {
 		return item, true
@@ -157,7 +157,7 @@ func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.T
 	return findInAppVPNLegacy(resp.LatestReceiptInfo, subID, now)
 }
 
-func findInAppVPNLegacy(iap []appstore.InApp, subID string, now time.Time) (*appstore.InApp, bool) {
+func findInAppVPNLegacy(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
 	switch subID {
 	case "brave-firewall-vpn-premium":
 		item, ok := findInAppBySubID(iap, "bravevpn.monthly", now)

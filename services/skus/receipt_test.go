@@ -764,7 +764,7 @@ func TestFindInAppBySubID(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		val *appstore.InApp
+		val *wrapAppStoreInApp
 		ok  bool
 	}
 
@@ -862,11 +862,14 @@ func TestFindInAppBySubID(t *testing.T) {
 				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: &appstore.InApp{
-					ProductID: "braveleo.monthly",
-					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "braveleo.monthly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
 					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},
 				ok: true,
 			},
@@ -895,11 +898,14 @@ func TestFindInAppBySubID(t *testing.T) {
 				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: &appstore.InApp{
-					ProductID: "braveleo.monthly",
-					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "braveleo.monthly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
 					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},
 				ok: true,
 			},
@@ -930,7 +936,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		val *appstore.InApp
+		val *wrapAppStoreInApp
 		ok  bool
 	}
 
@@ -982,11 +988,14 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: &appstore.InApp{
-					ProductID: "bravevpn.monthly",
-					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "bravevpn.monthly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
 					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},
 				ok: true,
 			},
@@ -1009,11 +1018,14 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: &appstore.InApp{
-					ProductID: "bravevpn.yearly",
-					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "bravevpn.yearly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
 					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},
 				ok: true,
 			},
@@ -1044,7 +1056,7 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		val *appstore.InApp
+		val *wrapAppStoreInApp
 		ok  bool
 	}
 
@@ -1081,11 +1093,14 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: &appstore.InApp{
-					ProductID: "bravevpn.monthly",
-					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "bravevpn.monthly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
 					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},
 				ok: true,
 			},
@@ -1106,11 +1121,14 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: &appstore.InApp{
-					ProductID: "bravevpn.yearly",
-					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "bravevpn.yearly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
 					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},
 				ok: true,
 			},
@@ -1131,11 +1149,14 @@ func TestFindInAppVPNLegacy(t *testing.T) {
 				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
-				val: &appstore.InApp{
-					ProductID: "bravevpn.yearly",
-					ExpiresDate: appstore.ExpiresDate{
-						ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "bravevpn.yearly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
 					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},
 				ok: true,
 			},
