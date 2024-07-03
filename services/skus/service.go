@@ -2108,6 +2108,8 @@ func (s *Service) appendOrderMetadataTx(ctx context.Context, dbi sqlx.ExecerCont
 				return err
 			}
 
+		// Related to the bug https://github.com/brave-intl/bat-go/blob/master/libs/datastore/models.go#L29.
+		// Since no floats are stored originally, it's find to cast it back to int.
 		case float64:
 			if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, k, int(val)); err != nil {
 				return err
@@ -2126,19 +2128,19 @@ func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extI
 }
 
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest) (*model.Order, error) {
-	// 1. Fetch receipt.
+	// 1. Fetch and validate the receipt.
 	rcpt, err := s.validateReceipt(ctx, req)
 	if err != nil {
 		return nil, &receiptValidError{err: err}
 	}
 
-	// 2. Validate it.
+	// 2. Check for existence.
 	ord, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), rcpt.ExtID)
 	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
 		return nil, err
 	}
 
-	// 3. Check for existence.
+	// 3. Return it if found. The caller must handle it accordingly.
 	if err == nil {
 		return ord, model.ErrOrderExistsForReceipt
 	}
