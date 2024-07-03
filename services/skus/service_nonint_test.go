@@ -1472,8 +1472,8 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		svc   *mockPaidOrderCreator
 		set   map[string]model.OrderItemRequestNew
 		ppcfg *premiumPaymentProcConfig
-		req   model.ReceiptRequest
-		extID string
+		rcpt  model.ReceiptData
+		paidt time.Time
 	}
 
 	type tcExpected struct {
@@ -1494,12 +1494,13 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 				svc:   &mockPaidOrderCreator{},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "invalid",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "invalid",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 				},
+				paidt: time.Now(),
 			},
 			exp: tcExpected{err: model.ErrInvalidMobileProduct},
 		},
@@ -1514,12 +1515,13 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.leo.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 				},
+				paidt: time.Now(),
 			},
 			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
@@ -1538,12 +1540,13 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.leo.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 				},
+				paidt: time.Now(),
 			},
 			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
@@ -1562,12 +1565,13 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.leo.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 				},
+				paidt: time.Now(),
 			},
 			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
@@ -1586,15 +1590,44 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 
 						return result, nil
 					},
+
+					fnRenewOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						if !expt.Equal(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected_expt")
+						}
+
+						if !paidt.Equal(time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC)) {
+							return model.Error("unexpected_paidt")
+						}
+
+						return nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						if mdata["externalID"] != "blob" {
+							return model.Error("unexpected_externalID")
+						}
+
+						if mdata["paymentProcessor"] != "android" {
+							return model.Error("unexpected_paymentProcessor")
+						}
+
+						if mdata["vendor"] != "android" {
+							return model.Error("unexpected_vendor")
+						}
+
+						return nil
+					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.leo.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
 				},
+				paidt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
 				ord: &model.Order{
@@ -1620,15 +1653,44 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 
 						return result, nil
 					},
+
+					fnRenewOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						if !expt.Equal(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected_expt")
+						}
+
+						if !paidt.Equal(time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC)) {
+							return model.Error("unexpected_paidt")
+						}
+
+						return nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						if mdata["externalID"] != "blob" {
+							return model.Error("unexpected_externalID")
+						}
+
+						if mdata["paymentProcessor"] != "android" {
+							return model.Error("unexpected_paymentProcessor")
+						}
+
+						if mdata["vendor"] != "android" {
+							return model.Error("unexpected_vendor")
+						}
+
+						return nil
+					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.vpn.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.vpn.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
 				},
+				paidt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
 				ord: &model.Order{
@@ -1645,7 +1707,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := createOrderWithReceipt(context.Background(), tc.given.svc, tc.given.set, tc.given.ppcfg, tc.given.req, tc.given.extID)
+			actual, err := createOrderWithReceipt(context.Background(), tc.given.svc, tc.given.set, tc.given.ppcfg, tc.given.rcpt, tc.given.paidt)
 			must.Equal(t, tc.exp.err, err)
 
 			if tc.exp.err != nil {

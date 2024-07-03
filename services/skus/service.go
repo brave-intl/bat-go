@@ -2144,7 +2144,9 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	}
 
 	// 4. Create if missing.
-	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, req, rcpt.ExtID)
+	paidt := time.Now()
+
+	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
 }
 
 func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
@@ -2181,8 +2183,8 @@ func createOrderWithReceipt(
 	svc paidOrderCreator,
 	itemReqSet map[string]model.OrderItemRequestNew,
 	ppcfg *premiumPaymentProcConfig,
-	req model.ReceiptRequest,
-	extID string,
+	rcpt model.ReceiptData,
+	paidt time.Time,
 ) (*model.Order, error) {
 	// 1. Find out what's being purchased from SubscriptionID.
 	/*
@@ -2190,7 +2192,7 @@ func createOrderWithReceipt(
 		- brave.leo.monthly -> brave-leo-premium
 		- brave.leo.yearly -> brave-leo-premium-year
 	*/
-	itemNew, err := newOrderItemReqForSubID(itemReqSet, req.SubscriptionID)
+	itemNew, err := newOrderItemReqForSubID(itemReqSet, rcpt.ProductID)
 	if err != nil {
 		return nil, err
 	}
@@ -2216,15 +2218,12 @@ func createOrderWithReceipt(
 	}
 
 	// 4. Mark order as paid with proper expiration.
-	expt := time.Time{}
-	paidt := time.Now()
-
-	if err := svc.renewOrderWithExpPaidTime(ctx, order.ID, expt, paidt); err != nil {
+	if err := svc.renewOrderWithExpPaidTime(ctx, order.ID, rcpt.ExpiresAt, paidt); err != nil {
 		return nil, err
 	}
 
 	// 5. Save mobile metadata.
-	mdata := newMobileOrderMdata(req.Type, extID)
+	mdata := newMobileOrderMdata(rcpt.Type, rcpt.ExtID)
 	if err := svc.appendOrderMetadata(ctx, order.ID, mdata); err != nil {
 		return nil, err
 	}
