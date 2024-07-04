@@ -1418,37 +1418,34 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			return handlers.ValidationError("request", verrs)
 		}
 
-		rcpt, err := svc.validateReceipt(ctx, req)
+		rcpt, err := svc.processSubmitReceipt(ctx, req, orderID)
 		if err != nil {
-			l.Warn().Err(err).Msg("failed to validate receipt with vendor")
-
-			return handleReceiptErr(err)
-		}
-
-		{
-			_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), rcpt.ExtID)
-			if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-				l.Warn().Err(err).Msg("failed to lookup external id")
-
-				return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+			// Found an existing order.
+			if errors.Is(err, model.ErrReceiptAlreadyLinked) {
+				return handlers.WrapError(err, "receipt has already been submitted", http.StatusConflict)
 			}
 
-			if err == nil {
-				return handlers.WrapError(model.ErrReceiptAlreadyLinked, "receipt has already been submitted", http.StatusConflict)
+			if errors.Is(err, model.ErrNoMatchOrderReceipt) {
+				return handlers.WrapError(err, "order_id does not match receipt order", http.StatusConflict)
 			}
+
+			// Use new so that the shorter IF and narrow scope are possible (via if := ...; {}).
+			// It's an example of one of the few legit uses for 'new'.
+			if rverr := new(receiptValidError); errors.As(err, &rverr) {
+				l.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+				return handleReceiptErr(rverr.err)
+			}
+
+			l.Warn().Err(err).Msg("failed to create order")
+
+			return handlers.WrapError(err, "failed to process submit receipt request", http.StatusInternalServerError)
 		}
 
-		mdata := newMobileOrderMdata(req.Type, rcpt.ExtID)
-
-		if err := svc.updateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
-			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
-			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
-		}
-
-		result := struct {
+		result := &struct {
 			ExternalID string `json:"externalId"`
 			Vendor     string `json:"vendor"`
-		}{ExternalID: rcpt.ExtID, Vendor: req.Type.String()}
+		}{ExternalID: rcpt.ExtID, Vendor: rcpt.Type.String()}
 
 		return handlers.RenderContent(ctx, result, w, http.StatusOK)
 	}
@@ -1556,14 +1553,15 @@ func handleCheckOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Servi
 		return handlers.ValidationError("request", verrs)
 	}
 
-	rcpt, err := svc.validateReceipt(ctx, req)
-	if err != nil {
-		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+	if err := svc.checkOrderReceipt(ctx, req, orderID); err != nil {
+		// Use new so that the shorter IF and narrow scope are possible (via if := ...; {}).
+		// It's an example of one of the few legit uses for 'new'.
+		if rverr := new(receiptValidError); errors.As(err, &rverr) {
+			lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
 
-		return handleReceiptErr(err)
-	}
+			return handleReceiptErr(rverr.err)
+		}
 
-	if err := svc.checkOrderReceipt(ctx, orderID, rcpt.ExtID); err != nil {
 		lg.Warn().Err(err).Msg("failed to check order receipt")
 
 		switch {

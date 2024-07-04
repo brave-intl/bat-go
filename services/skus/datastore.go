@@ -90,9 +90,7 @@ type Datastore interface {
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID, completedAt time.Time) error
-	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
-	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
 }
 
@@ -1321,21 +1319,6 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 	return nil
 }
 
-// AppendOrderMetadataInt appends the key and int value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadataInt(ctx context.Context, orderID *uuid.UUID, key string, value int) error {
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	if err != nil {
-		return err
-	}
-	defer rollback()
-
-	if err := pg.orderRepo.AppendMetadataInt(ctx, tx, *orderID, key, value); err != nil {
-		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	return commit()
-}
-
 // AppendOrderMetadata appends the key and string value to an order's metadata.
 func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key, value string) error {
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
@@ -1346,31 +1329,6 @@ func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID,
 
 	if err := pg.orderRepo.AppendMetadata(ctx, tx, *orderID, key, value); err != nil {
 		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	return commit()
-}
-
-// SetOrderPaid sets status to paid for the order, updates last paid and expiration.
-//
-// Deprecated: This method MUST NOT be used for Premium orders.
-func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error {
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	if err != nil {
-		return fmt.Errorf("failed to get db transaction: %w", err)
-	}
-	defer rollback()
-
-	if err := pg.orderRepo.SetStatus(ctx, tx, *orderID, OrderStatusPaid); err != nil {
-		return fmt.Errorf("error updating order %s: %w", orderID, err)
-	}
-
-	if err := pg.recordOrderPayment(ctx, tx, *orderID, time.Now()); err != nil {
-		return fmt.Errorf("failed to record order payment: %w", err)
-	}
-
-	if err := pg.updateOrderExpiresAt(ctx, tx, *orderID); err != nil {
-		return fmt.Errorf("failed to set order expires_at: %w", err)
 	}
 
 	return commit()

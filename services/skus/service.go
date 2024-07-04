@@ -1777,37 +1777,6 @@ func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest)
 	}
 }
 
-// updateOrderStatusPaidWithMetadata is legacy code that was used to save metadata and save information about order payment.
-//
-// Deprecated: Store metadata independently, and use s.renewOrderWithExpPaidTime.
-func (s *Service) updateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
-	// create a tx for use in all datastore calls
-	ctx, _, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
-	defer rollback() // doesnt hurt to rollback incase we panic
-
-	if err != nil {
-		return fmt.Errorf("failed to get db transaction: %w", err)
-	}
-
-	for k, v := range metadata {
-		if vv, ok := v.(string); ok {
-			if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, vv); err != nil {
-				return fmt.Errorf("failed to append order metadata: %w", err)
-			}
-		}
-		if vv, ok := v.(int); ok {
-			if err := s.Datastore.AppendOrderMetadataInt(ctx, orderID, k, vv); err != nil {
-				return fmt.Errorf("failed to append order metadata: %w", err)
-			}
-		}
-	}
-	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {
-		return fmt.Errorf("failed to set order paid: %w", err)
-	}
-
-	return commit()
-}
-
 // CreateOrder creates a Premium order for the given req.
 //
 // For AC and Search Captcha, see s.CreateOrderFromRequest.
@@ -2123,10 +2092,6 @@ func (s *Service) appendOrderMetadataTx(ctx context.Context, dbi sqlx.ExecerCont
 	return nil
 }
 
-func (s *Service) checkOrderReceipt(ctx context.Context, orderID uuid.UUID, extID string) error {
-	return checkOrderReceipt(ctx, s.Datastore.RawDB(), s.orderRepo, orderID, extID)
-}
-
 func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptRequest) (*model.Order, error) {
 	// 1. Fetch and validate the receipt.
 	rcpt, err := s.validateReceipt(ctx, req)
@@ -2149,6 +2114,62 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	paidt := time.Now()
 
 	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
+}
+
+func (s *Service) checkOrderReceipt(ctx context.Context, req model.ReceiptRequest, orderID uuid.UUID) error {
+	rcpt, err := s.validateReceipt(ctx, req)
+	if err != nil {
+		return &receiptValidError{err: err}
+	}
+
+	return checkOrderReceipt(ctx, s.Datastore.RawDB(), s.orderRepo, orderID, rcpt.ExtID)
+}
+
+// processSubmitReceipt was meant to be used for updating the order based on the receipt.
+//
+// Deprecated: This code exists only temporary and is not used anymore.
+// It will be deleted as soon as /submit-receipt no longer exists.
+func (s *Service) processSubmitReceipt(ctx context.Context, req model.ReceiptRequest, oid uuid.UUID) (model.ReceiptData, error) {
+	rcpt, err := s.validateReceipt(ctx, req)
+	if err != nil {
+		return model.ReceiptData{}, &receiptValidError{err: err}
+	}
+
+	tx, err := s.Datastore.RawDB().Beginx()
+	if err != nil {
+		return model.ReceiptData{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	ord, err := s.orderRepo.GetByExternalID(ctx, tx, rcpt.ExtID)
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+		return model.ReceiptData{}, err
+	}
+
+	if err == nil {
+		if !uuid.Equal(ord.ID, oid) {
+			return model.ReceiptData{}, model.ErrNoMatchOrderReceipt
+		}
+
+		return model.ReceiptData{}, model.ErrReceiptAlreadyLinked
+	}
+
+	paidt := time.Now()
+
+	if err := s.renewOrderWithExpPaidTimeTx(ctx, tx, oid, rcpt.ExpiresAt, paidt); err != nil {
+		return model.ReceiptData{}, err
+	}
+
+	mdata := newMobileOrderMdata(rcpt.Type, rcpt.ExtID)
+	if err := s.appendOrderMetadataTx(ctx, tx, ord.ID, mdata); err != nil {
+		return model.ReceiptData{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return model.ReceiptData{}, err
+	}
+
+	return rcpt, nil
 }
 
 func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
