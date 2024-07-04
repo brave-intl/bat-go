@@ -2035,6 +2035,189 @@ func TestIsErrStripeNotFound(t *testing.T) {
 	}
 }
 
+func TestReceiptValidError(t *testing.T) {
+	tests := []struct {
+		name  string
+		given error
+		exp   error
+	}{
+		{
+			name:  "wrapped",
+			given: &receiptValidError{err: model.Error("some_error")},
+			exp:   model.Error("some_error"),
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			if rverr := new(receiptValidError); errors.As(tc.given, &rverr) {
+				should.Equal(t, tc.exp, rverr.err)
+
+				return
+			} else {
+				should.Fail(t, "unexpected")
+			}
+		})
+	}
+}
+
+func TestService_appendOrderMetadataTx(t *testing.T) {
+	type tcGiven struct {
+		oid   uuid.UUID
+		mdata datastore.Metadata
+		repo  orderStoreSvc
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "error_append_metadata",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"string": "value",
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_append_metadata_int",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"int": int(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_append_metadata_int64",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"int": int64(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadataInt64: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_append_metadata_float64",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"float64": float64(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_invalid_type",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"bool": false,
+				},
+				repo: &repository.MockOrder{},
+			},
+			exp: model.ErrInvalidOrderMetadataType,
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"string":  "value",
+					"int":     int(42),
+					"int64":   int64(42),
+					"float64": float64(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key != "string" {
+							return model.Error("unexpected")
+						}
+
+						if val != "value" {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if key != "int" && key != "float64" {
+							return model.Error("unexpected")
+						}
+
+						if val != 42 {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+
+					FnAppendMetadataInt64: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error {
+						if key != "int64" {
+							return model.Error("unexpected")
+						}
+
+						if val != 42 {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.repo}
+
+			ctx := context.Background()
+
+			actual := svc.appendOrderMetadataTx(ctx, nil, tc.given.oid, tc.given.mdata)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 type mockPaidOrderCreator struct {
 	fnCreateOrderPremium        func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
 	fnRenewOrderWithExpPaidTime func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
