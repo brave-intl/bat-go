@@ -156,7 +156,7 @@ func skuNameByMobileName(subID string) (string, error) {
 	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly":
 		return "brave-leo-premium-year", nil
 
-	// iOS Leo Annual:
+	// iOS Leo Annual.
 	case "braveleo.yearly", "beta.braveleo.yearly", "nightly.braveleo.yearly":
 		return "brave-leo-premium-year", nil
 
