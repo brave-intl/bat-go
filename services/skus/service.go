@@ -1846,7 +1846,7 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 		}
 	}
 
-	if err := s.updateOrderIntvals(ctx, tx2, order.ID, items, numIntervals); err != nil {
+	if err := s.updateOrderIntervals(ctx, tx2, order.ID, items, numIntervals); err != nil {
 		return nil, fmt.Errorf("failed to update order metadata: %w", err)
 	}
 
@@ -1857,7 +1857,7 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 	return order, nil
 }
 
-func (s *Service) updateOrderIntvals(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
+func (s *Service) updateOrderIntervals(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
 	if nintvals > 0 {
 		if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, "numIntervals", nintvals); err != nil {
 			return err
