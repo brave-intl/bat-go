@@ -144,16 +144,37 @@ func newOrderItemReqForSubID(set map[string]model.OrderItemRequestNew, subID str
 
 func skuNameByMobileName(subID string) (string, error) {
 	switch subID {
-	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly", "braveleo.monthly":
+	// Android Leo Monthly.
+	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly":
 		return "brave-leo-premium", nil
 
-	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly", "braveleo.yearly":
+	// iOS Leo Monthly.
+	case "braveleo.monthly", "beta.braveleo.monthly", "nightly.braveleo.monthly":
+		return "brave-leo-premium", nil
+
+	// Android Leo Annual.
+	case "brave.leo.yearly", "beta.leo.yearly", "nightly.leo.yearly":
 		return "brave-leo-premium-year", nil
 
-	case "brave.vpn.monthly", "beta.bravevpn.monthly", "nightly.bravevpn.monthly", "bravevpn.monthly":
+	// iOS Leo Annual.
+	case "braveleo.yearly", "beta.braveleo.yearly", "nightly.braveleo.yearly":
+		return "brave-leo-premium-year", nil
+
+	// Android VPN Monthly.
+	case "brave.vpn.monthly", "beta.bravevpn.monthly", "nightly.bravevpn.monthly":
 		return "brave-vpn-premium", nil
 
-	case "brave.vpn.yearly", "beta.bravevpn.yearly", "nightly.bravevpn.yearly", "bravevpn.yearly":
+	// iOS VPN Monthly.
+	case "bravevpn.monthly":
+		return "brave-vpn-premium", nil
+
+	// Android VPN Annual.
+	case "brave.vpn.yearly", "beta.bravevpn.yearly", "nightly.bravevpn.yearly":
+		// Temporary: use the same sku as for monthly.
+		return "brave-vpn-premium", nil
+
+	// iOS VPN Annual.
+	case "bravevpn.yearly":
 		// Temporary: use the same sku as for monthly.
 		return "brave-vpn-premium", nil
 
