@@ -786,7 +786,7 @@ func TestFindInAppBySubID(t *testing.T) {
 		},
 
 		{
-			name: "one_item_not_found",
+			name: "one_item_not_found_product_id_sub_id_mismatch",
 			given: tcGiven{
 				iap: []appstore.InApp{
 					{
@@ -829,7 +829,7 @@ func TestFindInAppBySubID(t *testing.T) {
 		},
 
 		{
-			name: "one_item_found_expired",
+			name: "one_item_not_found_expired",
 			given: tcGiven{
 				iap: []appstore.InApp{
 					{
