@@ -10,10 +10,12 @@ const (
 	countryCode = "country_code"
 	success     = "success"
 	failure     = "failure"
+	failureType = "failure_type"
 )
 
 type Metric struct {
 	cntLinkZP                *prometheus.CounterVec
+	cntLinkSolana            *prometheus.CounterVec
 	cntAccValidateGemini     *prometheus.CounterVec
 	cntDocTypeByIssuingCntry *prometheus.CounterVec
 }
@@ -28,6 +30,14 @@ func New() *Metric {
 		[]string{status, countryCode},
 	)
 	prometheus.MustRegister(clzp)
+
+	clsol := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "count_link_solana_country_code",
+		Help: "Counts the number of successful and failed Solana linkings partitioned by country code and failure type",
+	},
+		[]string{status, countryCode, failureType},
+	)
+	prometheus.MustRegister(clsol)
 
 	accValidate := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -49,6 +59,7 @@ func New() *Metric {
 
 	return &Metric{
 		cntLinkZP:                clzp,
+		cntLinkSolana:            clsol,
 		cntAccValidateGemini:     accValidate,
 		cntDocTypeByIssuingCntry: cntDocTypeByIssuingCntry,
 	}
@@ -65,6 +76,46 @@ func (m *Metric) LinkFailureZP(cc string) {
 	m.cntLinkZP.With(prometheus.Labels{
 		countryCode: cc,
 		status:      failure,
+	}).Inc()
+}
+
+func (m *Metric) LinkFailureSolanaWhitelist(cc string) {
+	m.cntLinkSolana.With(prometheus.Labels{
+		countryCode: cc,
+		status:      failure,
+		failureType: "whitelist",
+	}).Inc()
+}
+
+func (m *Metric) LinkFailureSolanaRegion(cc string) {
+	m.cntLinkSolana.With(prometheus.Labels{
+		countryCode: cc,
+		status:      failure,
+		failureType: "region",
+	}).Inc()
+}
+
+func (m *Metric) LinkFailureSolanaChl(cc string) {
+	m.cntLinkSolana.With(prometheus.Labels{
+		countryCode: cc,
+		status:      failure,
+		failureType: "challenge",
+	}).Inc()
+}
+
+func (m *Metric) LinkFailureSolanaMsg(cc string) {
+	m.cntLinkSolana.With(prometheus.Labels{
+		countryCode: cc,
+		status:      failure,
+		failureType: "solana_message",
+	}).Inc()
+}
+
+func (m *Metric) LinkSuccessSolana(cc string) {
+	m.cntLinkSolana.With(prometheus.Labels{
+		countryCode: cc,
+		status:      success,
+		failureType: "",
 	}).Inc()
 }
 

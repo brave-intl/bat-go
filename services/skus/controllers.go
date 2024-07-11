@@ -997,7 +997,6 @@ func WebhookRouter(svc *Service) chi.Router {
 	return r
 }
 
-// HandleAndroidWebhook is the handler for the Google Playstore webhooks
 func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
@@ -1664,16 +1663,17 @@ func handleReceiptErr(err error) *handlers.AppError {
 	}
 
 	switch {
-	case errors.Is(err, errPurchaseFailed):
-		result.ErrorCode = purchaseFailedErrCode
-	case errors.Is(err, errPurchasePending):
-		result.ErrorCode = purchasePendingErrCode
-	case errors.Is(err, errPurchaseDeferred):
-		result.ErrorCode = purchaseDeferredErrCode
-	case errors.Is(err, errPurchaseStatusUnknown):
-		result.ErrorCode = purchaseStatusUnknownErrCode
+	case errors.Is(err, errIOSPurchaseNotFound):
+		result.ErrorCode = "purchase_not_found"
+
+	case errors.Is(err, errExpiredGPSSubPurchase):
+		result.ErrorCode = "purchase_expired"
+
+	case errors.Is(err, errPendingGPSSubPurchase):
+		result.ErrorCode = "purchase_pending"
+
 	default:
-		result.ErrorCode = purchaseValidationErrCode
+		result.ErrorCode = "validation_failed"
 	}
 
 	return result
