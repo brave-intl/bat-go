@@ -677,18 +677,18 @@ func TestPlayStoreDevNotification_isBeforeCutoff(t *testing.T) {
 
 		{
 			name:  "before",
-			given: &playStoreDevNotification{EventTimeMilli: "1717199999000"},
+			given: &playStoreDevNotification{EventTimeMilli: "1719791940000"},
 			exp:   true,
 		},
 
 		{
 			name:  "exact",
-			given: &playStoreDevNotification{EventTimeMilli: "1717200000000"},
+			given: &playStoreDevNotification{EventTimeMilli: "1719792000000"},
 		},
 
 		{
 			name:  "after",
-			given: &playStoreDevNotification{EventTimeMilli: "1717200001000"},
+			given: &playStoreDevNotification{EventTimeMilli: "1722470400000"},
 		},
 	}
 

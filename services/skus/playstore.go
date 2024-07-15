@@ -206,7 +206,7 @@ func (x *playStoreDevNotification) isBeforeCutoff() bool {
 		return true
 	}
 
-	cot := time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC)
+	cot := time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC)
 
 	// Assumption: server time is UTC.
 	event := time.UnixMilli(ems)

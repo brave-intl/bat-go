@@ -1689,7 +1689,7 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 
 	switch {
 	case ntf.shouldRenew():
-		expt := time.UnixMilli(txn.ExpiresDate)
+		expt := time.UnixMilli(txn.ExpiresDate).UTC()
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
@@ -1714,7 +1714,7 @@ func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playSto
 
 	// Temporary. Clean up after the initial rollout.
 	//
-	// Refuse to handle any events issued prior to 2024-06-01.
+	// Refuse to handle any events issued prior to 2024-07-01.
 	// This is to avoid unexpected effects from past events (in case we get them),
 	// and to avoid complicating the downstream logic.
 	if ntf.isBeforeCutoff() {
@@ -1748,7 +1748,7 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 			return err
 		}
 
-		expt := time.UnixMilli(sub.ExpiryTimeMillis)
+		expt := time.UnixMilli(sub.ExpiryTimeMillis).UTC()
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
