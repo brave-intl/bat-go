@@ -1,4 +1,4 @@
-FROM golang:1.19-alpine as builder
+FROM public.ecr.aws/docker/library/golang:1.19-alpine as builder
 
 # Put certs in builder image.
 RUN apk update
@@ -21,7 +21,7 @@ RUN cd main && go mod download && CGO_ENABLED=0 GOOS=linux go build \
     -o bat-go main.go
 
 # golang:1.19-alpine is based on alpine:3.18.
-FROM alpine:3.18 as base
+FROM public.ecr.aws/docker/library/alpine:3.18 as base
 
 # Put certs in artifact from builder.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
