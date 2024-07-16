@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
@@ -20,7 +19,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
-	"google.golang.org/api/idtoken"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -985,144 +983,107 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 	}
 }
 
-// WebhookRouter - handles calls from various payment method webhooks informing payments of completion
 func WebhookRouter(svc *Service) chi.Router {
 	r := chi.NewRouter()
 
 	r.Method(http.MethodPost, "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(svc)))
 	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(svc)))
-	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(svc)))
+	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("handleWebhookPlayStore", handleWebhookPlayStore(svc)))
 	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
 
 	return r
 }
 
-func HandleAndroidWebhook(service *Service) handlers.AppHandler {
+func handleWebhookPlayStore(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
+		return handleWebhookPlayStoreH(w, r, svc)
+	}
+}
 
-		l := logging.Logger(ctx, "payments").With().Str("func", "HandleAndroidWebhook").Logger()
+func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
+	ctx := r.Context()
 
-		if err := service.gcpValidator.validate(ctx, r); err != nil {
-			l.Error().Err(err).Msg("invalid request")
-			return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+	lg := logging.Logger(ctx, "skus").With().Str("func", "handleWebhookPlayStore").Logger()
+
+	if err := svc.gpsAuth.authenticate(ctx, r.Header.Get("Authorization")); err != nil {
+		if errors.Is(err, errGPSDisabled) {
+			lg.Warn().Msg("play store notifications disabled")
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
-		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
-		if err != nil {
-			l.Error().Err(err).Msg("failed to read payload")
-			return handlers.WrapValidationError(err)
-		}
+		lg.Err(err).Msg("invalid request")
 
-		l.Info().Str("payload", string(payload)).Msg("")
+		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+	}
 
-		var validationErrMap = map[string]interface{}{}
-
-		var req AndroidNotification
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			validationErrMap["request-body-decode"] = err.Error()
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Interface("req", req).Msg("")
-
-		dn, err := req.Message.GetDeveloperNotification()
-		if err != nil {
-			validationErrMap["invalid-developer-notification"] = err.Error()
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Interface("developer_notification", dn).Msg("")
-
-		if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
-			validationErrMap["invalid-developer-notification-token"] = "notification has no purchase token"
-			l.Error().Interface("validation_map", validationErrMap).Msg("validation_error")
-			return handlers.ValidationError("Error validating request", validationErrMap)
-		}
-
-		l.Info().Msg("verify_developer_notification")
-
-		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
-			l.Error().Err(err).Msg("failed to verify subscription notification")
-
-			switch {
-			case errors.Is(err, errNotFound), errors.Is(err, model.ErrOrderNotFound):
-				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-			default:
-				return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
-			}
-		}
+	data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Err(err).Msg("failed to read payload")
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
-}
 
-const (
-	errAuthHeaderEmpty  model.Error = "skus: gcp authorization header is empty"
-	errAuthHeaderFormat model.Error = "skus: gcp authorization header invalid format"
-	errInvalidIssuer    model.Error = "skus: gcp invalid issuer"
-	errInvalidEmail     model.Error = "skus: gcp invalid email"
-	errEmailNotVerified model.Error = "skus: gcp email not verified"
-)
-
-type gcpTokenValidator interface {
-	Validate(ctx context.Context, idToken string, audience string) (*idtoken.Payload, error)
-}
-
-type gcpValidatorConfig struct {
-	audience       string
-	issuer         string
-	serviceAccount string
-	disabled       bool
-}
-
-type gcpPushNotificationValidator struct {
-	validator gcpTokenValidator
-	cfg       gcpValidatorConfig
-}
-
-func newGcpPushNotificationValidator(gcpTokenValidator gcpTokenValidator, cfg gcpValidatorConfig) *gcpPushNotificationValidator {
-	return &gcpPushNotificationValidator{
-		validator: gcpTokenValidator,
-		cfg:       cfg,
-	}
-}
-
-func (g *gcpPushNotificationValidator) validate(ctx context.Context, r *http.Request) error {
-	if g.cfg.disabled {
-		return nil
-	}
-
-	ah := r.Header.Get("Authorization")
-	if ah == "" {
-		return errAuthHeaderEmpty
-	}
-
-	token := strings.Split(ah, " ")
-	if len(token) != 2 {
-		return errAuthHeaderFormat
-	}
-
-	p, err := g.validator.Validate(ctx, token[1], g.cfg.audience)
+	ntf, err := parsePlayStoreDevNotification(data)
 	if err != nil {
-		return fmt.Errorf("invalid authentication token: %w", err)
+		lg.Err(err).Str("payload", string(data)).Msg("failed to parse play store notification")
+
+		return handlers.ValidationError("request", map[string]interface{}{"parse-payload": err.Error()})
 	}
 
-	if p.Issuer == "" || p.Issuer != g.cfg.issuer {
-		return errInvalidIssuer
+	if err := svc.processPlayStoreNotification(ctx, ntf); err != nil {
+		l := lg.With().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Logger()
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			l.Warn().Err(err).Msg("failed to process play store notification")
+
+			// Should retry.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, errNotFound):
+			l.Warn().Err(err).Msg("failed to process play store notification")
+
+			// Order was not found, so nothing can be done.
+			// It might be an issue for VPN:
+			// - user has not linked yet;
+			// - billing cycle comes through, subscription renews;
+			// - user links immediately after billing cycle (they get 1 month);
+			// - there might be a small gap between order's expiration and next successful renewal;
+			// - the grace period should handle it.
+			// A better option is to create orders when the user subscribes, similar to Leo.
+			// Or allow for 1 or 2 retry attempts for the notification, but this requires tracking.
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+			l.Warn().Err(err).Msg("failed to process play store notification")
+
+			// No rows have changed whilst processing.
+			// This could happen in theory, but not in practice.
+			// It would mean that we attempted to update with the same data as it's in the database.
+			// This could happen when trying to process the same event twice, which could happen
+			// if the App Store sends multiple notifications about the same event.
+			// (E.g. auto-renew and billing recovery).
+
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+
+		default:
+			l.Err(err).Msg("failed to process play store notification")
+
+			// Retry for all other errors for now.
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
 	}
 
-	if p.Claims["email"] != g.cfg.serviceAccount {
-		return errInvalidEmail
+	msg := "skipped play store notification"
+	if ntf.shouldProcess() {
+		msg = "processed play store notification"
 	}
 
-	if p.Claims["email_verified"] != true {
-		return errEmailNotVerified
-	}
+	lg.Info().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Msg(msg)
 
-	return nil
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func handleWebhookAppStore(svc *Service) handlers.AppHandler {
@@ -1666,10 +1627,10 @@ func handleReceiptErr(err error) *handlers.AppError {
 	case errors.Is(err, errIOSPurchaseNotFound):
 		result.ErrorCode = "purchase_not_found"
 
-	case errors.Is(err, errExpiredGPSSubPurchase):
+	case errors.Is(err, errGPSSubPurchaseExpired):
 		result.ErrorCode = "purchase_expired"
 
-	case errors.Is(err, errPendingGPSSubPurchase):
+	case errors.Is(err, errGPSSubPurchasePending):
 		result.ErrorCode = "purchase_pending"
 
 	default:
