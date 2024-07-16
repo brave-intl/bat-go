@@ -1024,12 +1024,16 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 
+	lg.Info().Str("payload", string(data)).Msg("received developer notification")
+
 	ntf, err := parsePlayStoreDevNotification(data)
 	if err != nil {
 		lg.Err(err).Str("payload", string(data)).Msg("failed to parse play store notification")
 
 		return handlers.ValidationError("request", map[string]interface{}{"parse-payload": err.Error()})
 	}
+
+	lg.Info().Any("ntf", fmt.Sprintf("%v", ntf)).Msg("parsed notification")
 
 	if err := svc.processPlayStoreNotification(ctx, ntf); err != nil {
 		l := lg.With().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Logger()
