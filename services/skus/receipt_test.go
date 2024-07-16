@@ -118,7 +118,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 				now: time.Now(),
 			},
 			exp: tcExpected{
-				err: errExpiredGPSSubPurchase,
+				err: errGPSSubPurchaseExpired,
 			},
 		},
 
@@ -144,7 +144,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 				now: time.Now(),
 			},
 			exp: tcExpected{
-				err: errPendingGPSSubPurchase,
+				err: errGPSSubPurchasePending,
 			},
 		},
 

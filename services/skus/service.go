@@ -27,7 +27,9 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
+	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/idtoken"
+	"google.golang.org/api/option"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -109,10 +111,11 @@ type tlv2Store interface {
 type vendorReceiptValidator interface {
 	validateApple(ctx context.Context, req model.ReceiptRequest) (string, error)
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error)
+	fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
 }
 
-type gcpRequestValidator interface {
-	validate(ctx context.Context, r *http.Request) error
+type gpsMessageAuthenticator interface {
+	authenticate(ctx context.Context, token string) error
 }
 
 // Service contains datastore
@@ -142,7 +145,7 @@ type Service struct {
 	radomSellerAddress string
 
 	vendorReceiptValid vendorReceiptValidator
-	gcpValidator       gcpRequestValidator
+	gpsAuth            gpsMessageAuthenticator
 	assnCertVrf        *assnCertVerifier
 
 	payProcCfg    *premiumPaymentProcConfig
@@ -274,10 +277,7 @@ func InitService(
 		}
 	}
 
-	cl := &http.Client{
-		Transport: &dumpTransport{},
-		Timeout:   30 * time.Second,
-	}
+	cl := &http.Client{Timeout: 30 * time.Second}
 
 	asKey, _ := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
 	playKey, _ := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte)
@@ -296,7 +296,7 @@ func InitService(
 		return nil, err
 	}
 
-	idv, err := idtoken.NewValidator(ctx)
+	idv, err := idtoken.NewValidator(ctx, option.WithTelemetryDisabled())
 	if err != nil {
 		return nil, err
 	}
@@ -321,14 +321,12 @@ func InitService(
 		sublogger.Warn().Msg("gcp push subscription service account is empty")
 	}
 
-	conf := gcpValidatorConfig{
-		audience:       aud,
-		issuer:         iss,
-		serviceAccount: sa,
-		disabled:       disabled,
+	gpsCfg := gpsValidatorConfig{
+		aud:      aud,
+		iss:      iss,
+		svcAcct:  sa,
+		disabled: disabled,
 	}
-
-	gcpValidator := newGcpPushNotificationValidator(idv, conf)
 
 	service := &Service{
 		orderRepo:     orderRepo,
@@ -350,7 +348,7 @@ func InitService(
 		radomSellerAddress: radomSellerAddress,
 
 		vendorReceiptValid: rcptValidator,
-		gcpValidator:       gcpValidator,
+		gpsAuth:            newGPSNtfAuthenticator(gpsCfg, idv),
 		assnCertVrf:        assnCertVrf,
 
 		payProcCfg:    newPaymentProcessorConfig(env),
@@ -1691,65 +1689,81 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 
 	switch {
 	case ntf.shouldRenew():
-		expt := time.UnixMilli(txn.ExpiresDate)
+		expt := time.UnixMilli(txn.ExpiresDate).UTC()
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+
 	case ntf.shouldCancel():
 		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
 	default:
 		return nil
 	}
 }
 
-// verifyDeveloperNotification - verify the developer notification from playstore
-func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
-	// lookup the order based on the token as externalID
-	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
+func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playStoreDevNotification) error {
+	if !ntf.shouldProcess() {
+		return nil
+	}
+
+	extID, ok := ntf.purchaseToken()
+	if !ok {
+		return nil
+	}
+
+	// Temporary. Clean up after the initial rollout.
+	//
+	// Refuse to handle any events issued prior to 2024-07-01.
+	// This is to avoid unexpected effects from past events (in case we get them),
+	// and to avoid complicating the downstream logic.
+	if ntf.isBeforeCutoff() {
+		return nil
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to get order from db: %w", err)
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processPlayStoreNotificationTx(ctx, tx, ntf, extID); err != nil {
+		return err
 	}
 
-	if o == nil {
-		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+	return tx.Commit()
+}
+
+func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *playStoreDevNotification, extID string) error {
+	ord, err := s.orderRepo.GetByExternalID(ctx, dbi, extID)
+	if err != nil {
+		return err
 	}
 
-	// have order, now validate the receipt from the notification
-	if _, err := s.vendorReceiptValid.validateGoogle(ctx, model.ReceiptRequest{
-		Type:           model.VendorGoogle,
-		Blob:           dn.SubscriptionNotification.PurchaseToken,
-		Package:        dn.PackageName,
-		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
-	}); err != nil {
-		return fmt.Errorf("failed to validate purchase token: %w", err)
-	}
-
-	switch dn.SubscriptionNotification.NotificationType {
-	case androidSubscriptionRenewed,
-		androidSubscriptionRecovered,
-		androidSubscriptionPurchased,
-		androidSubscriptionRestarted,
-		androidSubscriptionInGracePeriod,
-		androidSubscriptionPriceChangeConfirmed:
-		if err = s.RenewOrder(ctx, o.ID); err != nil {
-			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+	switch {
+	// Renewal.
+	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldRenew():
+		sub, err := s.vendorReceiptValid.fetchSubPlayStore(ctx, ntf.PackageName, ntf.SubscriptionNtf.SubID, ntf.SubscriptionNtf.PurchaseToken)
+		if err != nil {
+			return err
 		}
-	case androidSubscriptionExpired,
-		androidSubscriptionRevoked,
-		androidSubscriptionPausedScheduleChanged,
-		androidSubscriptionPaused,
-		androidSubscriptionDeferred,
-		androidSubscriptionOnHold,
-		androidSubscriptionCanceled,
-		androidSubscriptionUnknown:
-		if err = s.CancelOrder(o.ID); err != nil {
-			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
-		}
+
+		expt := time.UnixMilli(sub.ExpiryTimeMillis).UTC()
+		paidt := time.Now()
+
+		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
+
+	// Sub cancellation.
+	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldCancel():
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
+	// Voiding.
+	case ntf.VoidedPurchaseNtf != nil && ntf.VoidedPurchaseNtf.shouldProcess():
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
 	default:
-		return errors.New("failed to act on subscription notification")
+		return nil
 	}
-
-	return nil
 }
 
 // validateReceipt validates receipt.
@@ -1760,7 +1774,7 @@ func (s *Service) validateReceipt(ctx context.Context, req model.ReceiptRequest)
 	case model.VendorGoogle:
 		return s.vendorReceiptValid.validateGoogle(ctx, req)
 	default:
-		return "", errorutils.ErrNotImplemented
+		return "", model.ErrInvalidVendor
 	}
 }
 
@@ -2252,30 +2266,6 @@ type tlv1CredPresentation struct {
 
 func ptrTo[T any](v T) *T {
 	return &v
-}
-
-func shouldCancelOrderIOS(info *appstore.JWSTransactionDecodedPayload, now time.Time) bool {
-	tx := (*appStoreTransaction)(info)
-
-	return tx.hasExpired(now) || tx.isRevoked(now)
-}
-
-type appStoreTransaction appstore.JWSTransactionDecodedPayload
-
-func (x *appStoreTransaction) hasExpired(now time.Time) bool {
-	if x == nil {
-		return false
-	}
-
-	return x.ExpiresDate > 0 && now.After(time.UnixMilli(x.ExpiresDate))
-}
-
-func (x *appStoreTransaction) isRevoked(now time.Time) bool {
-	if x == nil {
-		return false
-	}
-
-	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
 }
 
 func isErrStripeNotFound(err error) bool {
