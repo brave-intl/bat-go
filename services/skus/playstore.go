@@ -156,7 +156,7 @@ func (x *playStoreDevNotification) ntfType() string {
 	}
 }
 
-func (x playStoreDevNotification) ntfSubType() int {
+func (x *playStoreDevNotification) ntfSubType() int {
 	switch {
 	case x.SubscriptionNtf != nil:
 		return x.SubscriptionNtf.Type
