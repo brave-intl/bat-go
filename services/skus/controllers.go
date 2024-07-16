@@ -1033,7 +1033,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 		return handlers.ValidationError("request", map[string]interface{}{"parse-payload": err.Error()})
 	}
 
-	lg.Info().Any("ntf", fmt.Sprintf("%v", ntf)).Msg("parsed notification")
+	lg.Info().Str("ntf", fmt.Sprintf("%v", ntf)).Msg("parsed notification")
 
 	if err := svc.processPlayStoreNotification(ctx, ntf); err != nil {
 		l := lg.With().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Logger()
