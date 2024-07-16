@@ -2056,9 +2056,9 @@ func TestReceiptValidError(t *testing.T) {
 				should.Equal(t, tc.exp, rverr.err)
 
 				return
-			} else {
-				should.Fail(t, "unexpected")
 			}
+
+			should.Fail(t, "unexpected")
 		})
 	}
 }
