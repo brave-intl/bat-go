@@ -1,3 +1,19 @@
+FROM alpine:3.18 as sources
+
+RUN chown nobody:nobody /srv
+
+USER nobody
+
+# Copy the sources first to own image separating the mod files from the rest of
+# sources. This allows during the compilation to copy first only rarely changing
+# module files, run go download on them and cache the downloads into a separated
+# docker cache layer. The the sources are copied on top of that allowing to
+# avoid module download on frequent source changes.
+COPY --chown=nobody:nobody . /srv/repo
+RUN mkdir /srv/mod-files && cd /srv/repo && rm -rf .git \
+    && find . -name go.\* | xargs tar cf - | tar -C /srv/mod-files -xf - \
+    && find . -name go.\* -delete
+
 FROM golang:1.22-alpine as builder
 
 # Put certs in builder image.
@@ -5,18 +21,23 @@ RUN apk update
 RUN apk add -U --no-cache ca-certificates && update-ca-certificates
 RUN apk add make build-base git bash
 
+WORKDIR /src
+
+RUN chown -R nobody:nobody /src && mkdir /.cache && chown -R nobody:nobody /.cache
+
+USER nobody
+
+COPY --from=sources --link /srv/mod-files/ ./
+
+RUN cd main && go mod download
+
+COPY --from=sources --link /srv/repo ./
+
 ARG VERSION
 ARG BUILD_TIME
 ARG COMMIT
 
-WORKDIR /src
-COPY . ./
-
-RUN chown -R nobody:nobody /src/ && mkdir /.cache && chown -R nobody:nobody /.cache
-
-USER nobody
-
-RUN cd main && go mod download && CGO_ENABLED=0 GOOS=linux go build \
+RUN cd main && CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o bat-go main.go
 

@@ -23,7 +23,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/json"
@@ -43,6 +42,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentslib "github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/tools/payments"
 )
@@ -109,9 +109,21 @@ func main() {
 		log.Printf("S3 Bucket URI: %s\n", *b)
 	}
 
-	enclaveBaseURI, ok := paymentslib.APIBase[*env]
-	if !ok {
-		log.Fatalln("invalid env:", *env)
+	var enclaveBaseURI string
+	var ok bool
+	if nitro.EnclaveMocking() {
+		env := "NITRO_API_BASE"
+		enclaveBaseURI = os.Getenv(env)
+		if enclaveBaseURI == "" {
+			log.Fatalf(
+				"The environment variable %s was empty or not specified",
+				env)
+		}
+	} else {
+		enclaveBaseURI, ok = paymentslib.APIBase[*env]
+		if !ok {
+			log.Fatalln("invalid env:", *env)
+		}
 	}
 
 	// get the info endpoint to key kms arn
@@ -125,7 +137,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	valid, err := sp.VerifyResponse(verifier, resp)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -189,6 +201,11 @@ func encryptWithNitroKMS(
 	plainText []byte,
 	verbose bool,
 ) ([]byte, error) {
+	if nitro.EnclaveMocking() {
+		// Skip any encryption. Localstack stack does not support nitro
+		// attestation/encryption.
+		return plainText, nil
+	}
 
 	// get kms client from config
 	kmsClient := kms.NewFromConfig(cfg)

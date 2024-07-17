@@ -1,0 +1,5 @@
+# Local files with development scretes.
+/secrets/
+
+# Home in the container
+/container-home/

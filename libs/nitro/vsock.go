@@ -55,12 +55,12 @@ func parseVsockAddr(addr string) (uint32, uint32, error) {
 }
 
 // DialContext is a net.Dial wrapper which additionally allows connecting to vsock networks
-func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	logger := logging.Logger(ctx, "nitro.DialContext")
+func dialVsockContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	logger := logging.Logger(ctx, "nitro.dialVsockContext")
 	logger.Debug().
 		Str("network", fmt.Sprintf("%v", network)).
 		Str("addr", fmt.Sprintf("%v", addr)).
-		Msg("DialContext")
+		Msg("dialVsockContext")
 
 	cid, port, err := parseVsockAddr(addr)
 	if err != nil {
@@ -102,12 +102,16 @@ func (p *proxyClientConfig) Proxy(*http.Request) (*url.URL, error) {
 	return v, err
 }
 
-// NewProxyRoundTripper returns an http.RoundTripper which routes outgoing requests through the proxy addr
-func NewProxyRoundTripper(ctx context.Context, addr string) http.RoundTripper {
+// NewProxyTransport returns an http.Transport which routes outgoing requests
+// through the proxy addr.
+func NewProxyTransport(ctx context.Context, addr string) *http.Transport {
+	if enclaveMocking {
+		return &http.Transport{}
+	}
 	config := proxyClientConfig{ctx, addr}
 	return &http.Transport{
 		Proxy:       config.Proxy,
-		DialContext: DialContext,
+		DialContext: dialVsockContext,
 	}
 }
 
@@ -122,7 +126,7 @@ func NewReverseProxyServer(
 	}
 	proxy := httputil.NewSingleHostReverseProxy(proxyURL)
 	proxy.Transport = &http.Transport{
-		DialContext: DialContext,
+		DialContext: dialVsockContext,
 	}
 	proxy.Director = func(req *http.Request) {
 		req.Header.Add("X-Forwarded-Host", req.Host)
@@ -239,4 +243,26 @@ func bidirectionalCopy(ctx context.Context, a net.Conn, b net.Conn) {
 func syncCopy(wg *sync.WaitGroup, dst io.WriteCloser, src io.ReadCloser) {
 	defer wg.Done()
 	_, _ = io.Copy(dst, src)
+}
+
+func Listen(ctx context.Context, address string) (net.Listener, error) {
+	if enclaveMocking {
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			return nil, fmt.Errorf("failed to listen to tcp address %v - %w", address, err)
+		}
+		return l, nil
+	}
+
+	// TODO: share with parseVsockAddr
+	port, err := strconv.ParseUint(strings.Split(address, ":")[1], 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse vsock address - %w", err)
+	}
+
+	l, err := vsock.Listen(uint32(port), &vsock.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen to vsock %v - %w", address, err)
+	}
+	return l, nil
 }

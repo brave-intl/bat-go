@@ -26,6 +26,9 @@ elif "dev" in aws_vault:
     environment = "dev"
 del aws_vault
 
+if os.getenv("NITRO_ENCLAVE_MOCKING", ""):
+    environment = "local"
+
 # FIXME TODO pull env vars and set during pcr verification
 
 secrets_s3_bucket = ""
@@ -35,13 +38,11 @@ prepare_log = ""
 payout_report = ""
 redis_username = os.getenv("REDIS_USERNAME")
 redis_password = os.getenv("REDIS_PASSWORD")
-operator_key = "~/.ssh/settlements"
-
 os.putenv("REDISCLI_AUTH", redis_password)
 
-if os.getenv("NITRO_ENCLAVE_MOCKING", ""):
-    pcr2 = "abc2" * (96 / 4)
-    operator_key = "../../payment-test/secrets/payment-test-operator.pem"
+operator_key = os.getenv("BAT_OPERATOR_KEY", "")
+if not operator_key:
+    operator_key = "~/.ssh/settlements"
 
 jobs = bg.BackgroundJobManager()
 
@@ -81,6 +82,8 @@ def _set_redis_credentials():
 def _get_web_env():
     global redis_username, redis_password
     env = os.environ.copy()
+    if os.getenv("NITRO_ENCLAVE_MOCKING", ""):
+        return env
     if "AWS_VAULT" in env:
         del env["AWS_VAULT"]
     p = subprocess.Popen(["kubectl", "--context", cluster, "--namespace", f"payment-{environment}", "get", "deployments", "web", "-o", "json"], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -101,6 +104,8 @@ def _set_secrets_s3_bucket():
     secrets_s3_bucket = env["ENCLAVE_CONFIG_BUCKET_NAME"]
 
 def _get_pcr2():
+    if os.getenv("NITRO_ENCLAVE_MOCKING", ""):
+        return "abc2" * 24
     env = os.environ.copy()
     web_env = _get_web_env()
     env["EIF_COMMAND"] = web_env["EIF_COMMAND"]

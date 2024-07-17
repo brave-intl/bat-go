@@ -50,6 +50,10 @@ type SettlementClient interface {
 func NewSettlementClient(ctx context.Context, env string, config map[string]string) (context.Context, SettlementClient, error) {
 	ctx, _ = logging.SetupLogger(ctx)
 
+	if nitro.EnclaveMocking() {
+
+	}
+
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO
 	sp.KeyID = "primary"

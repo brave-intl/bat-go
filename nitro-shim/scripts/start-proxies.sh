@@ -9,8 +9,8 @@ echo "cid is ${CID}"
 # it's now time to set up proxy tools
 if [ "${service}" = "/payments" ]; then
     # setup inbound traffic proxy
-    export IN_ADDRS=":8080"
-    export OUT_ADDRS="${CID}:8080"
+    export IN_ADDRS=":8080,:8443"
+    export OUT_ADDRS="${CID}:8080,${CID}:8443"
     echo "${IN_ADDRS} to ${OUT_ADDRS}"
     # next startup the proxy
     /enclave/viproxy > /tmp/viproxy.log &

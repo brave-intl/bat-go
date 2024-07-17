@@ -1,6 +1,10 @@
 package payments
 
-import "os"
+import (
+	"os"
+
+	"github.com/brave-intl/bat-go/libs/nitro"
+)
 
 const (
 	jegan      = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDfcr9jUEu9D9lSpUnPwT1cCggCe48kZw1bJt+CXYSnh jegan+settlements@brave.com"
@@ -12,6 +16,12 @@ const (
 
 // vaultManagerKeys returns the set of keys permitted to interact with the secrets vault.
 func vaultManagerKeys() []string {
+	if nitro.EnclaveMocking() {
+		return []string{
+			nitro.ReadMockingSecretsFile("test-operator.pub"),
+			nitro.ReadMockingSecretsFile("test-operator2.pub"),
+		}
+	}
 	switch os.Getenv("ENV") {
 	case "staging":
 		return []string{jegan, evq}

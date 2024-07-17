@@ -63,6 +63,9 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+	if EnclaveMocking() {
+		ExpectedPCR1 = mockTestPCR(1)
+	}
 }
 
 func ParsePCRHex(pcrHex string) (PCRBytes, error) {
@@ -92,6 +95,10 @@ func hashMessage(message []byte) []byte {
 // contains all three values.
 func Attest(ctx context.Context, nonce, message, publicKey []byte) ([]byte, error) {
 	messageHash := hashMessage(message)
+
+	if EnclaveMocking() {
+		return messageHash, nil
+	}
 
 	var logger = logging.Logger(ctx, "nitro.Attest")
 	s, err := nsm.OpenDefaultSession()
@@ -150,24 +157,34 @@ func verifySigOnlyNotPCRs(
 	sig []byte,
 	verifyTime time.Time,
 ) (bool, PCRMap, error) {
-	pool := x509.NewCertPool()
-	ok := pool.AppendCertsFromPEM([]byte(RootAWSNitroCert))
-	if !ok {
-		return false, nil, errors.New("could not create a valid root cert pool")
-	}
+	var expectedHash []byte
+	var pcrs PCRMap
+	if EnclaveMocking() {
+		pcrs = make(PCRMap)
+		for i := 0; i < 4; i++ {
+			pcrs[uint(i)] = mockTestPCR(i)
+		}
+		expectedHash = sig
+	} else {
+		pool := x509.NewCertPool()
+		ok := pool.AppendCertsFromPEM([]byte(RootAWSNitroCert))
+		if !ok {
+			return false, nil, errors.New("could not create a valid root cert pool")
+		}
 
-	res, err := nitrite.Verify(
-		sig,
-		nitrite.VerifyOptions{
-			Roots:       pool,
-			CurrentTime: verifyTime,
-		},
-	)
-	if nil != err {
-		return false, nil, err
+		res, err := nitrite.Verify(
+			sig,
+			nitrite.VerifyOptions{
+				Roots:       pool,
+				CurrentTime: verifyTime,
+			},
+		)
+		if nil != err {
+			return false, nil, err
+		}
+		expectedHash = res.Document.UserData
+		pcrs = res.Document.PCRs
 	}
-	expectedHash := res.Document.UserData
-	pcrs := res.Document.PCRs
 	if len(pcrs) == 0 {
 		return false, nil, errors.New("failed to get PCR for the Nitro-signed document")
 	}

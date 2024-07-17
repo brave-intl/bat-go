@@ -49,7 +49,7 @@ func main() {
 
 	// command line flags
 	key := flag.String(
-		"k", "test/private.pem",
+		"k", "",
 		"the operator's key file location (ed25519 private key) in PEM format")
 
 	env := flag.String(

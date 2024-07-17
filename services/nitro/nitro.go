@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/services/payments"
 
 	"github.com/go-chi/chi"
-	"github.com/mdlayher/vsock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -111,9 +111,9 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	logaddr := viper.GetString("log-address")
-	writer := nitro.NewVsockWriter(logaddr)
+	logWriter := nitro.NewVsockWriter(logaddr)
 
-	ctx = context.WithValue(ctx, appctx.LogWriterCTXKey, writer)
+	ctx = context.WithValue(ctx, appctx.LogWriterCTXKey, logWriter)
 	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
 	ctx = context.WithValue(ctx, appctx.AWSRegionCTXKey, viper.GetString("aws-region"))
 	ctx = context.WithValue(ctx, appctx.PaymentsQLDBRoleArnCTXKey, viper.GetString("qldb-role-arn"))
@@ -136,6 +136,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 				Str("panic", fmt.Sprintf("%+v", rec)).
 				Str("stacktrace", string(debug.Stack())).
 				Msg("panic recovered")
+			os.Exit(2)
 		}
 	}()
 
@@ -152,28 +153,26 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	logger.Info().Msg("payments routes setup")
 
 	// setup listener
-	addr := viper.GetString("address")
-	port, err := strconv.ParseUint(strings.Split(addr, ":")[1], 10, 32)
-	if err != nil || port == 0 {
-		// panic if there is an error, or if the port is too large to fit in uint32
-		logger.Panic().Err(err).Msg("invalid --address")
-	}
+	httpListenAddress := viper.GetString("address")
 
 	// setup vsock listener
-	l, err := vsock.Listen(uint32(port), &vsock.Config{})
+	httpListener, err := nitro.Listen(ctx, httpListenAddress)
 	if err != nil {
-		logger.Panic().Err(err).Msg("listening on vsock port failed")
+		logger.Fatal().Err(err).Msg("failed to listen to HTTP port")
 	}
 	logger.Info().Msg("vsock listener setup")
+
 	// setup server
 	srv := http.Server{
 		Handler:      chi.ServerBaseContext(ctx, r),
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
-	logger.Info().Msg("starting server")
-	// run the server in another routine
-	logger.Fatal().Err(srv.Serve(l)).Msg("server shutdown")
+
+	logger.Info().Msgf("starting server on %s", httpListenAddress)
+
+	err = srv.Serve(httpListener)
+	logger.Fatal().Err(err).Msg("server shutdown")
 	return nil
 }
 

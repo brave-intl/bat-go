@@ -1,0 +1,132 @@
+services:
+  redis:
+    image: redis:7.0
+    restart: always
+    #ports:
+    #  - '6380:6380'
+    command: redis-server --save 20 1 --loglevel verbose --requirepass testpass --user redis --port 6380
+    #volumes:
+    #  - redis-cache:/data
+
+# Access to localstack:
+# export AWS_DEFAULT_REGION=us-east-1
+# export AWS_SECRET_ACCESS_KEY=test
+# export AWS_ACCESS_KEY_ID=test
+# export AWS_ENDPOINT_URL=http://localhost:4566
+
+  localstack:
+    image: localstack/localstack
+    stop_grace_period: "1s"
+    ports:
+      - "127.0.0.1:4566:4566"            # LocalStack Gateway
+      - "127.0.0.1:4510-4559:4510-4559"  # external services port range
+    environment:
+      # LocalStack configuration: https://docs.localstack.cloud/references/configuration/
+      - DEBUG=0
+    #volumes:
+      #- "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+      # Access to Docker is not necessary with S3.
+      # - "/var/run/docker.sock:/var/run/docker.sock"
+
+  shell:
+    image: bat-go-payment-test
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: local.dockerfile
+    depends_on:
+      - redis
+      - localstack
+    volumes:
+      - ..:/workspace
+    stop_grace_period: "1s"
+    # The shell uses localhost for redis by default, so use the redis container
+    # network for that to work.
+    network_mode: "service:redis"
+    command: >-
+      /workspace/payment-test/scripts/run-as-workspace-user.sh
+        /workspace/payment-test/scripts/start-shell.sh
+    working_dir: /workspace/tools/payments
+    stdin_open: true
+    tty: true
+    environment:
+      - NITRO_ENCLAVE_MOCKING=1
+      - NITRO_API_BASE=http://service:18080
+      - NITRO_EXPECTED_PCR2=abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2abc2
+      - BAT_OPERATOR_KEY=/workspace/payment-test/secrets/test-operator.pem
+      - DEBUG=1
+      - REDIS_ADDR=redis:6379
+      - REDIS_USERNAME=default
+      - REDIS_PASSWORD=testpass
+      - AWS_REGION=${AWS_REGION-us-west-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN-}
+      - AWS_CONTAINER_CREDENTIALS_FULL_URI=${AWS_CONTAINER_CREDENTIALS_FULL_URI-}
+      - AWS_CONTAINER_AUTHORIZATION_TOKEN=${AWS_CONTAINER_AUTHORIZATION_TOKEN-}
+
+  worker:
+    image: bat-go-payment-test
+    pull_policy: never
+    depends_on:
+      - redis
+      - localstack
+      - shell
+    volumes:
+      - ..:/workspace
+    command: >-
+      /workspace/payment-test/scripts/run-as-workspace-user.sh
+        /workspace/payment-test/scripts/run-until-rebuild.sh
+        /workspace/build/bat-go serve payments worker
+    restart: unless-stopped
+    working_dir: /workspace
+    environment:
+      - NITRO_ENCLAVE_MOCKING=1
+      - NITRO_API_BASE=http://service:18080
+      - REDIS_ADDR=redis:6380
+      - REDIS_USER=default
+      - REDIS_PASS=testpass
+      - DEBUG=1
+      - ENVIRONMENT=development
+
+  service:
+    image: bat-go-payment-test
+    pull_policy: never
+    depends_on:
+      - redis
+      - localstack
+      - shell
+    volumes:
+      - ..:/workspace
+    command: >-
+      /workspace/payment-test/scripts/run-as-workspace-user.sh
+        /workspace/payment-test/scripts/run-until-rebuild.sh
+        /workspace/build/bat-go serve nitro inside-enclave
+        --egress-address none --log-address none
+        --upstream-url http://0.0.0.0:8080
+    restart: unless-stopped
+    working_dir: /workspace
+    environment:
+      - NITRO_ENCLAVE_MOCKING=1
+      - BAT_PAYMENT_TEST_SECRETS=/workspace/payment-test/secrets/payments-test.json
+      - DEBUG=1
+      - ADDR=0.0.0.0:18080
+      - ADDR2=0.0.0.0:18443
+      - AWS_REGION="us-west-2"
+      - QLDB_LEDGER_ARN=arn:aws:qldb:us-west-2:239563960694:ledger/testing-igor-payment
+      - QLDB_LEDGER_NAME=testing-igor-payment
+      - QLDB_ROLE_ARN=arn:aws:iam::239563960694:role/settlements-dev-sso-qldb-20240628161845683100000001
+      - AWS_REGION=${AWS_REGION-us-west-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN-}
+      - AWS_CONTAINER_CREDENTIALS_FULL_URI=${AWS_CONTAINER_CREDENTIALS_FULL_URI-}
+      - AWS_CONTAINER_AUTHORIZATION_TOKEN=${AWS_CONTAINER_AUTHORIZATION_TOKEN-}
+
+    # For testing in the browser.
+    ports:
+      - "127.0.0.1:18080:18080"
+
+#volumes:
+#  redis-cache:
+#    driver: local

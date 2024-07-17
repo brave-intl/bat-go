@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -250,7 +251,15 @@ func (s *Service) createSolanaAddress(ctx context.Context, bucket, creatorKey st
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aws config: %w", err)
 	}
-	s3Client := s3.NewFromConfig(awsCfg)
+
+	var s3OptFns []func(*s3.Options)
+	if nitro.EnclaveMocking() {
+		// Force connection to the local stack
+		s3OptFns = append(s3OptFns, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String("http://localstack:4566")
+		})
+	}
+	s3Client := s3.NewFromConfig(awsCfg, s3OptFns...)
 
 	h := md5.New()
 	h.Write(encBuf.Bytes())
@@ -461,6 +470,12 @@ func (u *Unsealing) tryFetchOperatorShares(ctx context.Context, bucket string) e
 func (u *Unsealing) decryptWithNitroKMS(
 	ctx context.Context, awsCfg aws.Config, cipherText []byte,
 ) ([]byte, error) {
+	if nitro.EnclaveMocking() {
+		// data is not encrypted. Localstack stack does not support nitro
+		// attestation/encryption.
+		return cipherText, nil
+	}
+
 	privateKey, document, err := createAttestationDocument(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create attestation document: %w", err)
@@ -568,6 +583,26 @@ func (u *Unsealing) decryptSecrets(ctx context.Context) error {
 		logger.Debug().Int("solana key length", len(output["solanaPrivateKey"])).Msg("set decrypted key to secret map")
 	}
 
+	u.secrets = output
+	return nil
+}
+
+func (u *Unsealing) readTestSecretes() error {
+	envName := "BAT_PAYMENT_TEST_SECRETS"
+	secretsPath := os.Getenv(envName)
+	if secretsPath == "" {
+		return fmt.Errorf("The environment variable %s is not set", envName)
+	}
+	f, err := os.Open(secretsPath)
+	if err != nil {
+		return fmt.Errorf("Failed to open the test secrets from %s - %w", envName, err)
+	}
+
+	output := map[string]string{}
+	if err := json.NewDecoder(f).Decode(&output); err != nil {
+		return fmt.Errorf(
+			"failed to json decode the test secretes %s: %w", secretsPath, err)
+	}
 	u.secrets = output
 	return nil
 }

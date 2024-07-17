@@ -28,7 +28,9 @@ func init() {
 
 	// address - sets the address of the server to be started
 	ServeCmd.PersistentFlags().String("address", ":8080",
-		"the default address to bind to")
+		"the address to bind to the HTTP server")
+	ServeCmd.PersistentFlags().String("address2", ":8443",
+		"the address to bind the HTTPS server")
 	cmdutils.Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
 	cmdutils.Must(viper.BindEnv("address", "ADDR"))
 

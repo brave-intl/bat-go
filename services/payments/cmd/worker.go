@@ -3,6 +3,7 @@ package cmd
 import (
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/redisconsumer"
 	"github.com/brave-intl/bat-go/services/payments"
 	"github.com/spf13/cobra"
@@ -20,7 +21,11 @@ func WorkerRun(command *cobra.Command, args []string) {
 	user := viper.GetString("redis-user")
 	pass := viper.GetString("redis-pass")
 
-	redisClient, err := redisconsumer.NewStreamClient(ctx, env, addr, user, pass, true)
+	redisUseTLS := true
+	if nitro.EnclaveMocking() {
+		redisUseTLS = false
+	}
+	redisClient, err := redisconsumer.NewStreamClient(ctx, env, addr, user, pass, redisUseTLS)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to start redis consumer")
 		return

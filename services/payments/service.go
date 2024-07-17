@@ -221,29 +221,32 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return nil, nil, errors.New("no egress addr for payments service")
 	}
 
-	pcrs, err := nitro.GetPCRs()
-	if err != nil {
-		logger.Fatal().Err(err).Msg("could not retrieve nitro PCRs")
-		return nil, nil, errors.New("could not retrieve nitro PCRs")
-	}
-	store, err := NewVerifierStore()
-	if err != nil {
-		logger.Fatal().Err(err).Msg("could not create verifier store")
-		return nil, nil, errors.New("could not create verifier store")
-	}
-
 	service := &Service{
-		baseCtx:       ctx,
-		awsCfg:        awsCfg,
-		publicKey:     hex.EncodeToString(pcrs[2]),
-		signer:        nitro.Signer{},
-		verifierStore: store,
-		egressAddr:    egressAddr,
+		baseCtx:    ctx,
+		awsCfg:     awsCfg,
+		signer:     nitro.Signer{},
+		egressAddr: egressAddr,
 	}
 
-	// create the kms encryption key for this service for bootstrap operator shares
-	if err := service.configureKMSEncryptionKey(ctx); err != nil {
-		return nil, nil, fmt.Errorf("could not create kms secret encryption key: %w", err)
+	if !nitro.EnclaveMocking() {
+		pcrs, err := nitro.GetPCRs()
+		if err != nil {
+			logger.Fatal().Err(err).Msg("could not retrieve nitro PCRs")
+			return nil, nil, errors.New("could not retrieve nitro PCRs")
+		}
+		service.publicKey = hex.EncodeToString(pcrs[2])
+
+		verifierStore, err := NewVerifierStore()
+		if err != nil {
+			logger.Fatal().Err(err).Msg("could not create verifier store")
+			return nil, nil, errors.New("could not create verifier store")
+		}
+		service.verifierStore = verifierStore
+
+		// create the kms encryption key for this service for bootstrap operator shares
+		if err := service.configureKMSEncryptionKey(ctx); err != nil {
+			return nil, nil, fmt.Errorf("could not create kms secret encryption key: %w", err)
+		}
 	}
 
 	service.datastore, err = configureDatastore(ctx)

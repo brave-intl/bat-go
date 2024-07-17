@@ -114,8 +114,7 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 		Str("region", region).
 		Msg("setting up new aws config")
 
-	var client http.Client
-	tr := nitro.NewProxyRoundTripper(ctx, proxyAddr).(*http.Transport)
+	tr := nitro.NewProxyTransport(ctx, proxyAddr)
 
 	certs := x509.NewCertPool()
 	certs.AppendCertsFromPEM([]byte(amazonRoots))
@@ -132,7 +131,7 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 		return aws.Config{}, fmt.Errorf("failed to configure transport for HTTP/2, %v", err)
 	}
 
-	client = http.Client{
+	client := &http.Client{
 		Transport: tr,
 	}
 
@@ -143,7 +142,7 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithHTTPClient(&client),
+		config.WithHTTPClient(client),
 		config.WithRegion("us-west-2"),
 		config.WithLogger(applicationLogger),
 	)
@@ -151,14 +150,20 @@ func NewAWSConfig(ctx context.Context, proxyAddr string, region string) (aws.Con
 		return aws.Config{}, fmt.Errorf("unable to load SDK config, %v", err)
 	}
 
-	provider := ec2rolecreds.New(func(options *ec2rolecreds.Options) {
-		options.Client = imds.NewFromConfig(cfg)
-	})
-
-	return config.LoadDefaultConfig(context.TODO(),
-		config.WithHTTPClient(&client),
+	configOptions := []func(*config.LoadOptions) error{
+		config.WithHTTPClient(client),
 		config.WithRegion(region),
-		config.WithCredentialsProvider(provider),
 		config.WithLogger(applicationLogger),
-	)
+	}
+	if !nitro.EnclaveMocking() {
+		provider := ec2rolecreds.New(func(options *ec2rolecreds.Options) {
+			options.Client = imds.NewFromConfig(cfg)
+		})
+		configOptions = append(
+			configOptions,
+			config.WithCredentialsProvider(provider),
+		)
+	}
+
+	return config.LoadDefaultConfig(context.TODO(), configOptions...)
 }

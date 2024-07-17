@@ -16,7 +16,7 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test create-json-schema lint clean download-mod pcrs pcrs-only nitro-shim/tools/eifbuild/eifbuild
+.PHONY: all buildcmd docker docker-local test create-json-schema lint clean download-mod pcrs pcrs-only nitro-shim/tools/eifbuild/eifbuild
 
 all: test create-json-schema buildcmd
 
@@ -26,6 +26,15 @@ codeql: download-mod buildcmd
 
 buildcmd:
 	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
+
+# Create a development build for local testing. As running local container
+# monitor the executable to restart on change, build first toa temporary
+# location and the move to ensure tha the executable is always valid.
+builddev:
+	test -d build || mkdir build
+	rm -f build/bat-go.tmp
+	cd main && go build -o ../build/bat-go.tmp main.go
+	mv build/bat-go.tmp build/bat-go
 
 mock:
 	cd services && mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion

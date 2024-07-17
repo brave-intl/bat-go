@@ -544,6 +544,15 @@ func newQLDBDatastore(ctx context.Context) (*QLDBDatastore, error) {
 	creds := stscreds.NewAssumeRoleProvider(sts.NewFromConfig(awsCfg), qldbRoleArn)
 	awsCfg.Credentials = aws.NewCredentialsCache(creds)
 
+	if false {
+		// This may be necessary when connecting from the local dev environment
+		// to QLDB.
+		_, err := awsCfg.Credentials.Retrieve(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve credentials for QLDB: %w", err)
+		}
+	}
+
 	client := qldbsession.NewFromConfig(awsCfg)
 	// create our qldb driver
 	driver, err := qldbdriver.New(

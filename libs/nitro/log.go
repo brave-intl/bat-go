@@ -2,6 +2,7 @@ package nitro
 
 import (
 	"context"
+	"io"
 	"net"
 	"os"
 
@@ -17,7 +18,10 @@ type VsockWriter struct {
 }
 
 // NewVsockWriter - create a new vsock writer
-func NewVsockWriter(addr string) *VsockWriter {
+func NewVsockWriter(addr string) io.Writer {
+	if EnclaveMocking() {
+		return os.Stderr
+	}
 	return &VsockWriter{
 		socket: nil,
 		addr:   addr,
@@ -27,7 +31,7 @@ func NewVsockWriter(addr string) *VsockWriter {
 // Connect - interface implementation for connect method for VsockWriter
 func (w *VsockWriter) Connect() error {
 	if w.socket == nil {
-		s, err := DialContext(context.Background(), "tcp", w.addr)
+		s, err := dialVsockContext(context.Background(), "tcp", w.addr)
 		if err != nil {
 			return err
 		}
