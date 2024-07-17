@@ -2,7 +2,6 @@ package payments
 
 import (
 	"context"
-	"crypto"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,7 +26,6 @@ import (
 type getConfResponse struct {
 	EncryptionKeyARN string `json:"encryptionKeyArn"`
 	Environment      string `json:"environment"`
-	PublicKey        string `json:"publicKey"`
 }
 
 func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
@@ -36,17 +34,17 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 	// base router
 	r := chi.NewRouter()
 
-	nitroKey := httpsignature.NitroSigner{}
-
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO
 	sp.KeyID = "primary"
-	sp.Headers = []string{"digest", "date"}
+	sp.Headers = []string{
+		httpsignature.DigestHeader,
+		httpsignature.DateHeader,
+	}
 
 	ps := httpsignature.ParameterizedSignator{
 		SignatureParams: sp,
-		Signator:        nitroKey,
-		Opts:            crypto.Hash(0),
+		Signator:        nitro.Signer{},
 	}
 
 	// middlewares
@@ -84,7 +82,7 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 			"/submit",
 			middleware.InstrumentHandler(
 				"SubmitHandler",
-				s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
+				AuthorizerSignedMiddleware(nil)(SubmitHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("submit endpoint setup")
 		// address generation will have an http signature from a known list of public keys
@@ -92,7 +90,7 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 			"/generatesol",
 			middleware.InstrumentHandler(
 				"GenerateSolanaAddressHandler",
-				s.AuthorizerSignedMiddleware()(GenerateSolanaAddressHandler(s)),
+				AuthorizerSignedMiddleware(nil)(GenerateSolanaAddressHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("solana address generation endpoint setup")
 		// address approval will have an http signature from a known list of public keys
@@ -100,16 +98,22 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 			"/approvesol",
 			middleware.InstrumentHandler(
 				"ApproveSolanaAddressHandler",
-				s.AuthorizerSignedMiddleware()(ApproveSolanaAddressHandler(s)),
+				AuthorizerSignedMiddleware(nil)(ApproveSolanaAddressHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("solana address approval endpoint setup")
 		r.Post(
 			"/vault/create",
-			middleware.InstrumentHandler("CreateVaultHandler", CreateVaultHandler(s)).ServeHTTP)
+			middleware.InstrumentHandler(
+				"CreateVaultHandler",
+				AuthorizerSignedMiddleware(&managementAuthorizers)(CreateVaultHandler(s)),
+			).ServeHTTP)
 		logger.Info().Msg("vault create endpoint set up")
 		r.Post(
 			"/vault/verify",
-			middleware.InstrumentHandler("VerifyVaultHandler", VerifyVaultHandler(s)).ServeHTTP)
+			middleware.InstrumentHandler(
+				"VerifyVaultHandler",
+				AuthorizerSignedMiddleware(&managementAuthorizers)(VerifyVaultHandler(s)),
+			).ServeHTTP)
 		logger.Info().Msg("vault verify endpoint set up")
 
 		r.Get(
@@ -133,7 +137,6 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 		resp := &getConfResponse{
 			EncryptionKeyARN: service.kmsDecryptKeyArn,
 			Environment:      os.Getenv("ENV"),
-			PublicKey:        service.publicKey,
 		}
 
 		logger.Debug().Msg("handling configuration request")

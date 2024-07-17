@@ -22,15 +22,15 @@ func vaultManagerKeys() []string {
 	}
 }
 
-// paymentOperatorKeys returns the set of keys permitted to interact with transactions. This set
-// includes at least the vault manager keys.
+// paymentOperatorKeys returns the set of keys permitted to interact with
+// transactions in additions to vault managers.
 func paymentOperatorKeys() []string {
-	vaultManagers := vaultManagerKeys()
+	var operators []string
 	switch os.Getenv("ENV") {
 	case "staging":
-		return append(vaultManagers, jtieman)
+		return append(operators, jtieman)
 	case "development":
-		return append(vaultManagers, jtieman, kdenhartog)
+		return append(operators, jtieman, kdenhartog)
 	default:
 		return nil
 	}

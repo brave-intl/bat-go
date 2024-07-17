@@ -15,6 +15,13 @@ import (
 
 // GetOperatorPrivateKey - get the private key from the file specified
 func GetOperatorPrivateKey(filename string) (ed25519.PrivateKey, error) {
+	if filename == "" {
+		const env = "BAT_OPERATOR_KEY"
+		filename = os.Getenv(env)
+		if filename == "" {
+			return nil, fmt.Errorf("operator private key file must be specified either on the command line or via %s environment variable", env)
+		}
+	}
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open key file: %w", err)

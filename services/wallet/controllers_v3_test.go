@@ -3,7 +3,6 @@ package wallet_test
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
@@ -1079,7 +1078,7 @@ func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, priva
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = hex.EncodeToString(publicKey)
 	s.Headers = []string{"digest", "(request-target)"}
-	return s.Sign(privateKey, crypto.Hash(0), req)
+	return s.SignRequest(privateKey, req)
 }
 
 type result struct{}

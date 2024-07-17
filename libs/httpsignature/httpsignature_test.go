@@ -2,7 +2,6 @@ package httpsignature
 
 import (
 	"bytes"
-	"crypto"
 	"encoding/hex"
 	"io"
 	"io/ioutil"
@@ -70,7 +69,7 @@ func TestSign(t *testing.T) {
 	}
 	r.Header.Set("Foo", "bar")
 
-	err = s.Sign(privKey, crypto.Hash(0), r)
+	err = s.SignRequest(privKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building ED25519 signing string:", err)
 	}
@@ -102,7 +101,6 @@ func TestSignRequest(t *testing.T) {
 	ps := ParameterizedSignator{
 		SignatureParams: sp,
 		Signator:        privKey,
-		Opts:            crypto.Hash(0),
 	}
 
 	r, err := http.NewRequest("GET", "http://example.org/foo", nil)
@@ -135,7 +133,6 @@ func TestSignRequest(t *testing.T) {
 	ps2 := ParameterizedSignator{
 		SignatureParams: sp2,
 		Signator:        HMACKey(privHex),
-		Opts:            crypto.Hash(0),
 	}
 
 	r2, reqErr := http.NewRequest("GET", "http://example.org/foo2", nil)
@@ -170,7 +167,6 @@ func TestSignRequest(t *testing.T) {
 	ps3 := ParameterizedSignator{
 		SignatureParams: sp3,
 		Signator:        privKey,
-		Opts:            crypto.Hash(0),
 	}
 
 	r, err = http.NewRequest("GET", "http://example.org/foo", ioutil.NopCloser(bytes.NewBuffer(body)))
@@ -220,7 +216,7 @@ func TestVerify(t *testing.T) {
 	r.Header.Set("Foo", "bar")
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
 
-	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
+	valid, err := s.VerifyRequest(pubKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -231,7 +227,7 @@ func TestVerify(t *testing.T) {
 	s.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
 
-	valid, err = s.Verify(pubKey, crypto.Hash(0), r)
+	valid, err = s.VerifyRequest(pubKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -254,7 +250,7 @@ func TestVerify(t *testing.T) {
 	req.Header.Set("Foo", "bar")
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	valid, err = s2.Verify(hmacVerifier, nil, req)
+	valid, err = s2.VerifyRequest(hmacVerifier, req)
 	if err != nil {
 		t.Error("Unexpected error while building signing string:", err)
 	}
@@ -265,7 +261,7 @@ func TestVerify(t *testing.T) {
 	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	valid, err = s2.Verify(hmacVerifier, nil, req)
+	valid, err = s2.VerifyRequest(hmacVerifier, req)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -289,7 +285,7 @@ func TestVerify(t *testing.T) {
 	r.Header.Set("Foo", "bar")
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s3.Sig+`"`)
 
-	valid, err = s3.Verify(pubKey, crypto.Hash(0), r)
+	valid, err = s3.VerifyRequest(pubKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -304,7 +300,7 @@ func TestVerify(t *testing.T) {
 	if err != nil {
 		t.Error("Unexpected error while extracting signature parameters")
 	}
-	valid, err = sp.Verify(pubKey, crypto.Hash(0), r)
+	valid, err = sp.VerifyRequest(pubKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -315,7 +311,7 @@ func TestVerify(t *testing.T) {
 	s3.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s3.Sig+`"`)
 
-	valid, err = s3.Verify(pubKey, crypto.Hash(0), r)
+	valid, err = s3.VerifyRequest(pubKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -329,7 +325,7 @@ func TestVerify(t *testing.T) {
 	s3.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s3.Sig+`"`)
 
-	valid, err = s3.Verify(pubKey, crypto.Hash(0), r)
+	valid, err = s3.VerifyRequest(pubKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -353,7 +349,6 @@ func TestVerifyRequest(t *testing.T) {
 	pkv := ParameterizedKeystoreVerifier{
 		SignatureParams: sp,
 		Keystore:        &StaticKeystore{pubKey},
-		Opts:            crypto.Hash(0),
 	}
 
 	sig := "RbGSX1MttcKCpCkq9nsPGkdJGUZsAU+0TpiXJYkwde+0ZwxEp9dXO3v17DwyGLXjv385253RdGI7URbrI7J6DQ=="
@@ -394,7 +389,6 @@ func TestVerifyRequest(t *testing.T) {
 	pkv2 := ParameterizedKeystoreVerifier{
 		SignatureParams: sp2,
 		Keystore:        &StaticKeystore{hmacVerifier},
-		Opts:            crypto.Hash(0),
 	}
 
 	sig = "3RCLz6TH2I32nj1NY5YaUWDSCNPiKsAVIXjX4merDeNvrGondy7+f3sWQQJWRwEo90FCrthWrrVcgHqqFevS9Q=="
@@ -526,7 +520,7 @@ func TestSignatureParamsFromRequest(t *testing.T) {
 	}
 	r.Header.Set("Foo", "bar")
 
-	err = s.Sign(privKey, crypto.Hash(0), r)
+	err = s.SignRequest(privKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building ED25519 signing string:", err)
 	}
@@ -562,7 +556,6 @@ func TestSignResponse(t *testing.T) {
 	ps := ParameterizedSignator{
 		SignatureParams: sp,
 		Signator:        privKey,
-		Opts:            crypto.Hash(0),
 	}
 
 	resp := &http.Response{Header: http.Header{}}
@@ -622,7 +615,6 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 	ps := ParameterizedSignator{
 		SignatureParams: sp,
 		Signator:        privKey,
-		Opts:            crypto.Hash(0),
 	}
 
 	mw := &MockResponseWriter{h: http.Header{}}
@@ -667,7 +659,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 
 	// perform verification of the response
 	resp := &http.Response{Header: mw.h, Body: mw.b}
-	valid, err := s.VerifyResponse(Ed25519PubKey(privKey.Public().(ed25519.PublicKey)), crypto.Hash(0), resp)
+	valid, err := s.VerifyResponse(Ed25519PubKey(privKey.Public().(ed25519.PublicKey)), resp)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -696,7 +688,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 //	resp.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s.Sig+`"`)
 //
 //	// Fail first verification attempt because the date header is required above but is not set
-//	valid, err := s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+//	valid, err := s.VerifyResponse(pubKey, resp)
 //	if err == nil {
 //		t.Error("Should have failed due to missing date header")
 //	}
@@ -707,7 +699,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 //	resp.Header.Set("date", dateHeaderValue.Format(http.TimeFormat))
 //
 //	// Verify again, passing this time now that the date header is set
-//	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+//	valid, err = s.VerifyResponse(pubKey, resp)
 //	if err != nil {
 //		t.Error("Unexpected error while building signing string:", err)
 //	}
@@ -719,7 +711,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 //	s.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 //	resp.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s.Sig+`"`)
 //
-//	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+//	valid, err = s.VerifyResponse(pubKey, resp)
 //	if err != nil {
 //		t.Error("Unexpected error while building signing string")
 //	}
@@ -733,7 +725,7 @@ func TestParameterizedSignatorResponseWriter(t *testing.T) {
 //	s.Sig = "HvrmTu+A96H46IPZAYC2rmqRSgmgUgCcyPcnCikX0eGPSC6Va5jyr3blRLjpbGk6UMJ1FXckdWFnJxkt36gkBA=="
 //	resp.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest foo",signature="`+s.Sig+`"`)
 //
-//	valid, err = s.VerifyResponse(pubKey, crypto.Hash(0), resp)
+//	valid, err = s.VerifyResponse(pubKey, resp)
 //	if err != nil {
 //		t.Error("Unexpected error while building signing string")
 //	}

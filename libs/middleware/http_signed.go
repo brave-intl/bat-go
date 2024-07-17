@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"crypto"
 	"errors"
 	"net/http"
 
@@ -47,10 +46,12 @@ func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 	verifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{
 			Algorithm: httpsignature.ED25519,
-			Headers:   []string{"digest", "(request-target)"},
+			Headers: []string{
+				httpsignature.DigestHeader,
+				httpsignature.RequestTargetHeader,
+			},
 		},
 		Keystore: ks,
-		Opts:     crypto.Hash(0),
 	}
 
 	return VerifyHTTPSignedOnly(verifier)

@@ -29,12 +29,11 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto"
+	"crypto/ed25519"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -43,6 +42,7 @@ import (
 	"filippo.io/age"
 	"filippo.io/age/agessh"
 	client "github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/payments"
 	paymentscli "github.com/brave-intl/bat-go/tools/payments"
 )
@@ -57,8 +57,8 @@ func main() {
 	shareFile := flag.String("s", "", "the encrypted share file for the verifying operator. only needed for verify subcommand")
 	operatorKeyFile := flag.String(
 		"k",
-		"test/private.pem",
-		"the operator's key file location (ed25519 private key) in PEM format. only needed for verify subcommand",
+		"",
+		"the operator's key file location (ed25519 private key) in PEM format.",
 	)
 	verbose := flag.Bool("v", false, "view verbose logging")
 
@@ -74,18 +74,27 @@ func main() {
 		log.Printf("Threshold: %d\n", *threshold)
 	}
 
+	priv, err := paymentscli.GetOperatorPrivateKey(*operatorKeyFile)
+	if err != nil {
+		log.Fatalf("failed to open operator key file: %v\n", err.Error())
+	}
+
 	switch args[0] {
 	case "create":
-		resp := doRequest(
+		resp, err := doRequest(
 			ctx,
 			"/v1/payments/vault/create",
+			priv,
 			pcr2,
 			payments.CreateVaultRequest{Threshold: *threshold},
 		)
+		if err != nil {
+			log.Fatalf("failed to send the vault create request: %v\n", err)
+		}
 		defer resp.Body.Close()
 
 		vaultResp := payments.CreateVaultResponseWrapper{}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalf("failed to read response json: %w", err)
 		}
@@ -104,10 +113,6 @@ func main() {
 		}
 		log.Printf("Generated Public Key: %s", vaultResp.Data.PublicKey)
 	case "verify":
-		priv, err := paymentscli.GetOperatorPrivateKey(*operatorKeyFile)
-		if err != nil {
-			log.Fatalf("failed to open operator key file: %v\n", err.Error())
-		}
 
 		identity, err := agessh.NewEd25519Identity(priv)
 		if err != nil {
@@ -136,17 +141,21 @@ func main() {
 			log.Fatal("share is empty")
 		}
 
-		resp := doRequest(
+		resp, err := doRequest(
 			ctx,
 			"/v1/payments/vault/verify",
+			priv,
 			pcr2,
 			payments.VerifyVaultRequest{
 				Threshold: *threshold,
 				PublicKey: *vaultPublicKey,
 			},
 		)
+		if err != nil {
+			log.Fatalf("failed to send the vault verify request: %v\n", err)
+		}
 		vaultResp := payments.VerifyVaultResponseWrapper{}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalf("failed to read response json: %w", err)
 		}
@@ -182,42 +191,53 @@ func main() {
 func doRequest(
 	ctx context.Context,
 	path string,
+	key ed25519.PrivateKey,
 	pcr2 *string,
 	data interface{},
-) *http.Response {
+) (*http.Response, error) {
 	buf := bytes.NewBuffer([]byte{})
 	err := json.NewEncoder(buf).Encode(data)
 	if err != nil {
-		log.Fatalf("failed to marshal attested transaction body: %w", err)
+		return nil, fmt.Errorf("failed to marshal attested transaction body: %w", err)
 	}
 	apiBase := os.Getenv("NITRO_API_BASE")
 
 	req, err := http.NewRequest(http.MethodPost, apiBase+path, buf)
 	if err != nil {
-		log.Fatalf("failed to create request to sign: %w", err)
+		return nil, fmt.Errorf("failed to create request to sign: %w", err)
 	}
+	req.Header.Set("date", time.Now().Format(time.RFC1123))
+	req.Header.Set("content-length", fmt.Sprintf("%d", buf.Len()))
+	req.Header.Set("content-type", "application/json")
+
+	signator := httpsignature.GetEd25519RequestSignator(key)
+	err = signator.SignRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign HTTP request: %w", err)
+	}
+
 	httpClient, err := client.NewWithHTTPClient(apiBase, "", &http.Client{
 		Timeout: time.Second * 60,
 	})
 	if err != nil {
-		log.Fatalf("failed to create http client: %w", err)
+		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 	resp, err := httpClient.Do(ctx, req, nil)
 	if err != nil {
-		log.Fatalf("failed to submit http request: %w", err)
+		return nil, fmt.Errorf("failed to submit http request: %w", err)
 	}
 
 	sp, verifier, err := paymentscli.NewNitroVerifier(pcr2)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
 
-	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	valid, err := sp.VerifyResponse(verifier, resp)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
 	if !valid {
-		log.Fatalln("http signature was not valid, nitro attestation failed")
+		return nil, fmt.Errorf("http signature was not valid, nitro attestation failed")
 	}
-	return resp
+	return resp, nil
 }

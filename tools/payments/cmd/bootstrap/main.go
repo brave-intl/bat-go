@@ -101,8 +101,7 @@ func main() {
 		log.Fatalf("failed to read encrypted file: %v", err)
 	}
 
-	// s is the shamir share
-	s := shareVal.String()
+	shamirShare := shareVal.Bytes()
 
 	if *verbose {
 		// print out the configuration
@@ -153,58 +152,15 @@ func main() {
 		log.Fatalf("failed to load default aws config: %v", err)
 	}
 
-	// get kms client from config
-	kmsClient := kms.NewFromConfig(cfg)
-
-	// list the key policies associated with the key
-	keyPolicies, err := kmsClient.ListKeyPolicies(ctx, &kms.ListKeyPoliciesInput{
-		KeyId: aws.String(encryptKeyArn),
-	})
-	if err != nil {
-		log.Fatalf("failed to get key policy: %v", err)
-	}
-
-	for _, policy := range keyPolicies.PolicyNames {
-		// get the key policy associated with the key, prompt user to continue or not
-		keyPolicy, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
-			KeyId:      aws.String(encryptKeyArn),
-			PolicyName: aws.String(policy),
-		})
-		if err != nil {
-			log.Fatalf("failed to get key policy: %v", err)
-		}
-
-		// print out the policy name, principal and conditions of who can decrypt
-		var p = new(payments.KeyPolicy)
-		if err := json.Unmarshal([]byte(*keyPolicy.Policy), p); err != nil {
-			log.Fatalf("failed to parse key policy: %v", err)
-		}
-
-		for _, statement := range p.Statement {
-			if statement.Effect == "Allow" && strings.Contains(fmt.Sprintf("%+v", statement.Action), "Decrypt") {
-				conditions, err := json.MarshalIndent(statement.Condition, "", "\t")
-				if err != nil {
-					log.Fatalf("failed to parse key policy conditions: %v", err)
-				}
-				if *verbose {
-					log.Printf("\nPrincipal: %+v \n\tConditions: %s\n", statement.Principal.AWS, string(conditions))
-				}
-			}
-		}
-	}
-
-	// perform encryption of the operator's shamir share
-	out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{
-		KeyId:     aws.String(encryptKeyArn),
-		Plaintext: []byte(s),
-	})
+	encryptedShare, err := encryptWithNitroKMS(
+		ctx, cfg, encryptKeyArn, shamirShare, *verbose)
 	if err != nil {
 		log.Fatalf("failed to encrypt operator key share: %v", err)
 	}
 
 	s3Client := s3.NewFromConfig(cfg)
 	h := md5.New()
-	h.Write(out.CiphertextBlob)
+	h.Write(encryptedShare)
 
 	// put the ciphertext of the operator's share in s3.  the enclave is the only thing that can
 	// decrypt this, and waits until it has threshold shares to combine and decrypt the secrets
@@ -213,7 +169,7 @@ func main() {
 		Bucket: aws.String(*b),
 		Key: aws.String(
 			fmt.Sprintf("%s/operator-share_%s.json", *pcr2, time.Now().Format(time.RFC3339))),
-		Body:                      bytes.NewBuffer(out.CiphertextBlob),
+		Body:                      bytes.NewBuffer(encryptedShare),
 		ContentMD5:                aws.String(base64.StdEncoding.EncodeToString(h.Sum(nil))),
 		ObjectLockLegalHoldStatus: s3types.ObjectLockLegalHoldStatusOn,
 	})
@@ -224,4 +180,64 @@ func main() {
 	if *verbose {
 		log.Println("completed bootstrap.")
 	}
+}
+
+func encryptWithNitroKMS(
+	ctx context.Context,
+	cfg aws.Config,
+	encryptKeyArn string,
+	plainText []byte,
+	verbose bool,
+) ([]byte, error) {
+
+	// get kms client from config
+	kmsClient := kms.NewFromConfig(cfg)
+
+	// list the key policies associated with the key
+	keyPolicies, err := kmsClient.ListKeyPolicies(ctx, &kms.ListKeyPoliciesInput{
+		KeyId: aws.String(encryptKeyArn),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key policy: %w", err)
+	}
+
+	for _, policy := range keyPolicies.PolicyNames {
+		// get the key policy associated with the key, prompt user to continue or not
+		keyPolicy, err := kmsClient.GetKeyPolicy(ctx, &kms.GetKeyPolicyInput{
+			KeyId:      aws.String(encryptKeyArn),
+			PolicyName: aws.String(policy),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get key policy: %w", err)
+		}
+
+		// print out the policy name, principal and conditions of who can decrypt
+		var p = new(payments.KeyPolicy)
+		if err := json.Unmarshal([]byte(*keyPolicy.Policy), p); err != nil {
+			return nil, fmt.Errorf("failed to parse key policy: %w", err)
+		}
+
+		for _, statement := range p.Statement {
+			if statement.Effect == "Allow" && strings.Contains(fmt.Sprintf("%+v", statement.Action), "Decrypt") {
+				conditions, err := json.MarshalIndent(statement.Condition, "", "\t")
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse key policy conditions: %w", err)
+				}
+				if verbose {
+					log.Printf("\nPrincipal: %+v \n\tConditions: %s\n", statement.Principal.AWS, string(conditions))
+				}
+			}
+		}
+	}
+
+	// perform encryption of the operator's shamir share
+	out, err := kmsClient.Encrypt(ctx, &kms.EncryptInput{
+		KeyId:     aws.String(encryptKeyArn),
+		Plaintext: plainText,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt operator key share: %w", err)
+	}
+
+	return out.CiphertextBlob, nil
 }

@@ -32,3 +32,19 @@ func GenerateEd25519Key(rand io.Reader) (Ed25519PubKey, ed25519.PrivateKey, erro
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
 	return Ed25519PubKey(publicKey), privateKey, err
 }
+
+func GetEd25519KeyId(key ed25519.PrivateKey) string {
+	pubkey := key.Public().(ed25519.PublicKey)
+	return hex.EncodeToString(pubkey)
+}
+
+func GetEd25519RequestSignator(key ed25519.PrivateKey) ParameterizedSignator {
+	return ParameterizedSignator{
+		SignatureParams: SignatureParams{
+			Algorithm: ED25519,
+			KeyID:     GetEd25519KeyId(key),
+			Headers:   RequestSigningHeaders,
+		},
+		Signator: key,
+	}
+}

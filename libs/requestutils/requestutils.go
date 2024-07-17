@@ -15,7 +15,7 @@ import (
 
 type requestID string
 
-var (
+const (
 	payloadLimit10MB = int64(1024 * 1024 * 10)
 	// RequestIDHeaderKey is the request header key
 	RequestIDHeaderKey = "x-request-id"

@@ -46,7 +46,7 @@ func RestRun(command *cobra.Command, args []string) {
 	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
 	r.Post("/v1/payments/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
 	// submit will have an http signature from a known list of public keys
-	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
+	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", payments.AuthorizerSignedMiddleware(nil)(payments.SubmitHandler(s))).ServeHTTP)
 	// status to get the status and submission results from the submit
 	r.Post("/v1/payments/{documentID}/status", middleware.InstrumentHandler("StatusHandler", payments.SubmitHandler(s)).ServeHTTP)
 

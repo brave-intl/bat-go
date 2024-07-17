@@ -2,19 +2,16 @@ package payments
 
 import (
 	"context"
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLookupVerifier(t *testing.T) {
-	s := &Service{}
-	_, _, err := s.LookupVerifier(context.Background(), "invalid verifier")
+	a := &Authorizers{}
+	_, _, err := a.LookupVerifier(context.Background(), "invalid verifier")
 
-	if err == nil {
-		t.Error("should return an invalid verifier error")
-	}
 	var verifierError *ErrInvalidAuthorizer
-	if !errors.As(err, &verifierError) {
-		t.Error("should return an invalid verifier error")
-	}
+	assert.ErrorAs(t, err, &verifierError,
+		"should return an invalid verifier error")
 }

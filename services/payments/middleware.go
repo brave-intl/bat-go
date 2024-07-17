@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"crypto"
-
 	appctx "github.com/brave-intl/bat-go/libs/context"
 
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -21,17 +19,17 @@ func (s *Service) ConfigurationMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// AuthorizerSignedMiddleware requires that requests are signed by valid payment authorizers.
-func (s *Service) AuthorizerSignedMiddleware() func(http.Handler) http.Handler {
+// AuthorizerSignedMiddleware requires that requests are signed by valid payment authorizers. If `authorizer` is nil, use paymentAuthorizers.
+func AuthorizerSignedMiddleware(authorizers *Authorizers) func(http.Handler) http.Handler {
+	if authorizers == nil {
+		authorizers = &paymentAuthorizers
+	}
 	authorizerVerifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{
 			Algorithm: httpsignature.ED25519,
-			Headers: []string{
-				"(request-target)", "date", "digest", "content-length", "content-type",
-			},
+			Headers:   httpsignature.RequestSigningHeaders,
 		},
-		Keystore: s,
-		Opts:     crypto.Hash(0),
+		Keystore: authorizers,
 	}
 	// the actual middleware
 	return func(next http.Handler) http.Handler {

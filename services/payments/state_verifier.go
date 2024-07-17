@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -14,51 +15,55 @@ import (
 )
 
 type VerifierStore struct {
-	verifiers map[string]nitro.Verifier
+	// The map from hex value of PCR2 to the corresponding verifier. As we
+	// hard-code PCR1 value in the executable, there can only be one PCR1 for
+	// each PCR2 so we can use nitro.Verifier checking both PC1 and PCR2 as a
+	// value here.
+	allowedPCR2 map[string]nitro.Verifier
 }
 
-type pcrList []string
-
 func NewVerifierStore() (*VerifierStore, error) {
-	pcrs, err := nitro.GetPCRs()
-	if err != nil {
-		return nil, errors.New("could not retrieve nitro PCRs")
-	}
-
-	s := VerifierStore{verifiers: map[string]nitro.Verifier{}}
+	s := &VerifierStore{allowedPCR2: make(map[string]nitro.Verifier)}
 
 	// always accept attestations matching our own
-	pubKey := hex.EncodeToString(pcrs[2])
-	s.verifiers[pubKey] = nitro.NewVerifier(map[uint][]byte{
-		0: pcrs[0],
-		1: pcrs[1],
-		2: pcrs[2],
-	})
+	currentPCRs, err := nitro.GetPCRs()
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(currentPCRs[1], nitro.ExpectedPCR1) {
+		return nil, errors.New("unexpected value of PCR1, perhaps Nitro kernel/initd were updated")
+	}
+
+	// always accept attestations matching our own
+	pubKey := hex.EncodeToString(currentPCRs[2])
+	s.allowedPCR2[pubKey] = nitro.Verifier{
+		PCRs: nitro.PCRMap{
+			0: currentPCRs[0],
+			1: currentPCRs[1],
+			2: currentPCRs[2],
+		},
+	}
 
 	priorPCRs := strings.Split(os.Getenv("PRIOR_PCRS"), ",")
 
-	for _, pcr2Hex := range priorPCRs {
-		pcr2, err := hex.DecodeString(pcr2Hex)
+	// TODO: support multiple old PCR1, rather than using a hard-coded PCR1 for
+	// all old PCRs.
+	for i, pcr2Hex := range priorPCRs {
+		v, err := nitro.NewVerifier(pcr2Hex)
 		if err != nil {
-			return nil, errors.New("could not decode previous PCRs")
+			return nil, fmt.Errorf(
+				"invalid value in PRIOR_PCRS at index %d - %w", i, err)
 		}
-		s.verifiers[pcr2Hex] = nitro.NewVerifier(map[uint][]byte{
-			1: nitro.ExpectedPCR1,
-			2: pcr2,
-		})
+		s.allowedPCR2[pcr2Hex] = v
 	}
 
-	return &s, nil
-
+	return s, nil
 }
 
-func (s *VerifierStore) LookupVerifier(ctx context.Context, keyID string, updatedAt time.Time) (context.Context, *payments.Verifier, error) {
-	for k, v := range s.verifiers {
-		if k == keyID {
-			v.Now = func() time.Time { return updatedAt }
-			vv := (payments.Verifier)(v)
-			return ctx, &vv, nil
-		}
+func (s *VerifierStore) LookupVerifier(ctx context.Context, keyID string, updatedAt time.Time) (context.Context, payments.Verifier, error) {
+	verifier, exists := s.allowedPCR2[keyID]
+	if !exists {
+		return ctx, nil, fmt.Errorf("unknown key: %s", keyID)
 	}
-	return ctx, nil, fmt.Errorf("unknown key: %s", keyID)
+	return ctx, verifier, nil
 }

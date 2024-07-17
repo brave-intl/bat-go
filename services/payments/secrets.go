@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"time"
 
@@ -76,8 +75,8 @@ type Unsealing struct {
 const requiredOperatorShares = 2
 
 // createAttestationDocument will create an attestation document and return the private key and
-// attestation document which is attesting over the userData supplied
-func createAttestationDocument(ctx context.Context, userData []byte) (crypto.PrivateKey, []byte, error) {
+// attestation document which is attesting the private key
+func createAttestationDocument(ctx context.Context) (crypto.PrivateKey, []byte, error) {
 	// create a one time use nonce
 	nonce, err := createAttestationNonce(ctx)
 	if err != nil {
@@ -95,8 +94,8 @@ func createAttestationDocument(ctx context.Context, userData []byte) (crypto.Pri
 		return nil, nil, fmt.Errorf("failed to encode public key bytes for attestation: %w", err)
 	}
 
-	// attest to the document with passed in user data
-	document, err := nitro.Attest(ctx, nonce, userData, publicKeyMarshaled)
+	// attest to the document
+	document, err := nitro.Attest(ctx, nonce, nil, publicKeyMarshaled)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create attestation document: %w", err)
 	}
@@ -131,7 +130,6 @@ func nitroAwsCfg(ctx context.Context) (aws.Config, error) {
 		egressAddr = ":1234"
 	}
 
-	// download the configuration from s3 bucket/object
 	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
 	if !ok {
 		region = "us-west-2"
@@ -147,7 +145,7 @@ func (s *Service) createVault(
 	threshold int,
 ) (*paymentLib.CreateVaultResponse, error) {
 	managerKeys := vaultManagerKeys()
-	shares, vaultPubkey, err := generateShares(managerKeys, threshold)
+	shares, vaultPubkey, err := generateShares(len(managerKeys), threshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate new key with shares: %w", err)
 	}
@@ -193,12 +191,12 @@ func (s *Service) verifyVault(
 
 // generateShares generates a new ed25519 key and splits it into shares, returning the shares and
 // the public key for the newly generated private key.
-func generateShares(operatorKeys []string, threshold int) ([][]byte, string, error) {
+func generateShares(numberOfOperators, unlockThreshold int) ([][]byte, string, error) {
 	vaultIdentity, err := age.GenerateX25519Identity()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to generate X25519 identity: %w", err)
 	}
-	shares, err := shamir.Split([]byte(vaultIdentity.String()), len(operatorKeys), threshold)
+	shares, err := shamir.Split([]byte(vaultIdentity.String()), numberOfOperators, unlockThreshold)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to split key into shares: %w", err)
 	}
@@ -221,13 +219,13 @@ func encryptShares(shares [][]byte, operatorKeys []string) ([]paymentLib.Operato
 			return nil, fmt.Errorf("failed to encrypt to receipient share file: %w", err)
 		}
 
-		if _, err = io.WriteString(w, base64.StdEncoding.EncodeToString(share)); err != nil {
-			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer: %w", err)
-		}
-
+		_, err = io.WriteString(w, base64.StdEncoding.EncodeToString(share))
 		// Cannot defer this close because we are writing and using this writer in a loop. If this
 		// close is deferred, the shares will be corrupted.
-		w.Close()
+		err2 := w.Close()
+		if err != nil || err2 != nil {
+			return nil, fmt.Errorf("failed to write encoded ciphertext to encrypted buffer: %w", errors.Join(err, err2))
+		}
 
 		keyEmail := strings.Split(string(operatorKeys[i]), " ")
 		shareResult = append(shareResult, paymentLib.OperatorShareData{
@@ -438,33 +436,14 @@ func (u *Unsealing) tryFetchOperatorShares(ctx context.Context, bucket string) e
 			return fmt.Errorf("failed to get operator share from s3: %w", err)
 		}
 
-		data, err := ioutil.ReadAll(shareResponse.Body)
+		data, err := io.ReadAll(shareResponse.Body)
 		if err != nil {
 			return fmt.Errorf("failed to read operator share from s3 response: %w", err)
 		}
 
-		privateKey, document, err := createAttestationDocument(ctx, nil)
+		plaintext, err := u.decryptWithNitroKMS(ctx, awsCfg, data)
 		if err != nil {
-			return fmt.Errorf("failed to create attestation document: %w", err)
-		}
-
-		// decrypt with kms key that only enclave can decrypt with
-		decryptOutput, err := kms.NewFromConfig(awsCfg).Decrypt(ctx, &kms.DecryptInput{
-			CiphertextBlob:      data,
-			EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
-			KeyId:               aws.String(u.kmsDecryptKeyArn),
-			Recipient: &kmsTypes.RecipientInfo{
-				AttestationDocument:    document,                                       // attestation document
-				KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256, // how to decrypt
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to decrypt object with kms: %w", err)
-		}
-
-		plaintext, err := nitro.Decrypt(privateKey.(*rsa.PrivateKey), decryptOutput.CiphertextForRecipient)
-		if err != nil {
-			return fmt.Errorf("failed to decrypt the ciphertext for recipient from kms: %w", err)
+			return err
 		}
 
 		// store the decrypted keyShares on the service as [][]byte for later
@@ -477,6 +456,35 @@ func (u *Unsealing) tryFetchOperatorShares(ctx context.Context, bucket string) e
 	}
 
 	return nil
+}
+
+func (u *Unsealing) decryptWithNitroKMS(
+	ctx context.Context, awsCfg aws.Config, cipherText []byte,
+) ([]byte, error) {
+	privateKey, document, err := createAttestationDocument(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create attestation document: %w", err)
+	}
+
+	// decrypt with kms key that only enclave can decrypt with
+	decryptOutput, err := kms.NewFromConfig(awsCfg).Decrypt(ctx, &kms.DecryptInput{
+		CiphertextBlob:      cipherText,
+		EncryptionAlgorithm: kmsTypes.EncryptionAlgorithmSpecSymmetricDefault,
+		KeyId:               aws.String(u.kmsDecryptKeyArn),
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument:    document,                                       // attestation document
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256, // how to decrypt
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt object with kms: %w", err)
+	}
+
+	plaintext, err := nitro.Decrypt(privateKey.(*rsa.PrivateKey), decryptOutput.CiphertextForRecipient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt the ciphertext for recipient from kms: %w", err)
+	}
+	return plaintext, nil
 }
 
 func (u *Unsealing) fetchOperatorShares(
@@ -569,7 +577,8 @@ func getDecryptReader(
 	key OperatorKey,
 	cipherText []byte,
 ) (io.Reader, error) {
-	return age.Decrypt(bytes.NewReader(cipherText), key)
+	reader := bytes.NewReader(cipherText)
+	return age.Decrypt(reader, key)
 }
 
 func encryptToWriter(ctx context.Context, key OperatorKey, data []byte, destination io.Writer) error {

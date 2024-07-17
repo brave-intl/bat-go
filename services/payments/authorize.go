@@ -12,18 +12,41 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// validAuthorizers is the list of payment authorizers, mapping to individuals in payments-ops.
-var validAuthorizers = make(map[string]httpsignature.Ed25519PubKey)
+type Authorizers struct {
+	keys map[string]httpsignature.Ed25519PubKey
+}
+
+var managementAuthorizers Authorizers
+
+var paymentAuthorizers Authorizers
 
 func init() {
-	for _, key := range paymentOperatorKeys() {
+	if err := managementAuthorizers.AddKeys(vaultManagerKeys()); err != nil {
+		panic(err)
+	}
+
+	if err := paymentAuthorizers.AddKeys(paymentOperatorKeys()); err != nil {
+		panic(err)
+	}
+
+	// paymentAuthorizers includes the managers
+	for k, v := range managementAuthorizers.keys {
+		paymentAuthorizers.keys[k] = v
+	}
+}
+
+func (a *Authorizers) AddKeys(authorizedPublicKeys []string) error {
+	if a.keys == nil {
+		a.keys = make(map[string]httpsignature.Ed25519PubKey)
+	}
+	for _, key := range authorizedPublicKeys {
 		pub, err := DecodePublicKey(key)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("invalid authorizer public key - %w", err)
 		}
-		validAuthorizers[hex.EncodeToString(pub)] = pub
+		a.keys[hex.EncodeToString(pub)] = pub
 	}
-	fmt.Println(validAuthorizers)
+	return nil
 }
 
 // DecodePublicKey decodes the public key which can either be a raw hex encoded ed25519 public key or an ssh-ed25519 public key
@@ -57,15 +80,17 @@ func DecodePublicKey(key string) (httpsignature.Ed25519PubKey, error) {
 }
 
 // LookupVerifier implements keystore for httpsignature.
-func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
+func (a *Authorizers) LookupVerifier(
+	ctx context.Context,
+	keyID string,
+) (context.Context, httpsignature.Verifier, error) {
 	// keyID is the public key, we need to see if this exists in our verifier map
-	publicKey, exists := validAuthorizers[keyID]
+	publicKey, exists := a.keys[keyID]
 	if !exists {
 		return nil, nil, &ErrInvalidAuthorizer{}
 	}
 
-	verifier := httpsignature.Verifier(publicKey)
-	return ctx, &verifier, nil
+	return ctx, publicKey, nil
 }
 
 // AuthorizeTransaction - Add an Authorization for the Transaction

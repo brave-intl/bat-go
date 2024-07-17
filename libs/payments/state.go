@@ -34,15 +34,15 @@ type PaymentAuthorization struct {
 // within an enclave.
 type AuthenticatedPaymentState struct {
 	PaymentDetails
-	Status              PaymentStatus          `json:"status"`
-	Authorizations      []PaymentAuthorization `json:"authorizations"`
-	LastError           *PaymentError          `json:"lastError"`
-	DocumentID          string                 `json:"documentID"`
+	Status         PaymentStatus          `json:"status"`
+	Authorizations []PaymentAuthorization `json:"authorizations"`
+	LastError      *PaymentError          `json:"lastError"`
+	DocumentID     string                 `json:"documentID"`
 	// ExternalIdempotency is for state machines which have third party idempotency values that are
 	// not derministically generated from data that we control but that need to be retained between
 	// calls to Pay(). For example, Solana requires the block hash and transaction signature to
 	// guarantee idempotency.
-	ExternalIdempotency []byte                 `json:"externalIdempotency"`
+	ExternalIdempotency []byte `json:"externalIdempotency"`
 }
 
 // PaymentState is the high level structure which is stored in a datastore.
@@ -144,9 +144,12 @@ func (p PaymentStateHistory) GetAuthenticatedPaymentState(keystore Keystore, doc
 		if err != nil {
 			return nil, fmt.Errorf("signature validation for state with document ID %s failed: %w", documentID, err)
 		}
+		if verifier == nil {
+			return nil, fmt.Errorf("failed to locate a verifier for the keyId %s", state.PublicKey)
+		}
 
 		var unsafeState AuthenticatedPaymentState
-		valid, err := (*verifier).Verify(state.UnsafePaymentState, state.Signature, crypto.Hash(0))
+		valid, err := verifier.Verify(state.UnsafePaymentState, state.Signature, crypto.Hash(0))
 		if err != nil {
 			return nil, fmt.Errorf("signature validation for state with document ID %s failed: %w", documentID, err)
 		}

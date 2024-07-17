@@ -3,7 +3,6 @@ package httpsignature
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"encoding/hex"
 	"io/ioutil"
 	"net/http"
@@ -50,7 +49,7 @@ func TestEncapsulateRequest(t *testing.T) {
 	sp.KeyID = "primary"
 	sp.Headers = []string{"digest", "foo"}
 
-	valid, err := sp.Verify(pubKey, crypto.Hash(0), &r2)
+	valid, err := sp.VerifyRequest(pubKey, &r2)
 	assert.NoError(t, err)
 	assert.Equal(t, true, valid, "The siganture should be valid after an encapsulation roundtrip")
 
@@ -60,7 +59,7 @@ func TestEncapsulateRequest(t *testing.T) {
 	_, err = er.Extract(&r3)
 	assert.NoError(t, err)
 
-	valid, err = sp.Verify(pubKey, crypto.Hash(0), &r3)
+	valid, err = sp.VerifyRequest(pubKey, &r3)
 	assert.NoError(t, err)
 	assert.Equal(t, false, valid, "The siganture should be invalid since the body is different")
 }
@@ -103,7 +102,7 @@ func TestEncapsulateResponse(t *testing.T) {
 	sp.KeyID = "primary"
 	sp.Headers = []string{"digest", "foo"}
 
-	valid, err := sp.VerifyResponse(pubKey, crypto.Hash(0), &r2)
+	valid, err := sp.VerifyResponse(pubKey, &r2)
 	assert.NoError(t, err)
 	assert.Equal(t, true, valid, "The siganture should be valid after an encapsulation roundtrip")
 
@@ -113,7 +112,7 @@ func TestEncapsulateResponse(t *testing.T) {
 	_, err = er.Extract(&r3)
 	assert.NoError(t, err)
 
-	valid, err = sp.VerifyResponse(pubKey, crypto.Hash(0), &r3)
+	valid, err = sp.VerifyResponse(pubKey, &r3)
 	assert.NoError(t, err)
 	assert.Equal(t, false, valid, "The siganture should be invalid since the body is different")
 }

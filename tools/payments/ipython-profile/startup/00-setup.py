@@ -37,6 +37,12 @@ redis_username = os.getenv("REDIS_USERNAME")
 redis_password = os.getenv("REDIS_PASSWORD")
 operator_key = "~/.ssh/settlements"
 
+os.putenv("REDISCLI_AUTH", redis_password)
+
+if os.getenv("NITRO_ENCLAVE_MOCKING", ""):
+    pcr2 = "abc2" * (96 / 4)
+    operator_key = "../../payment-test/secrets/payment-test-operator.pem"
+
 jobs = bg.BackgroundJobManager()
 
 def _set_cluster():
@@ -90,7 +96,7 @@ def _get_web_env():
     return env
 
 def _set_secrets_s3_bucket():
-    global secrets_s3_bucket 
+    global secrets_s3_bucket
     env = _get_web_env()
     secrets_s3_bucket = env["ENCLAVE_CONFIG_BUCKET_NAME"]
 

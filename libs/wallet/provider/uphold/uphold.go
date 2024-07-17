@@ -346,9 +346,9 @@ func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
-	s.Headers = []string{"digest"}
+	s.Headers = []string{httpsignature.DigestHeader}
 
-	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
+	err = s.SignRequest(w.PrivKey, req)
 	return req, err
 }
 
@@ -534,9 +534,9 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
-	s.Headers = []string{"digest"}
+	s.Headers = []string{httpsignature.DigestHeader}
 
-	if err = s.Sign(w.PrivKey, crypto.Hash(0), req); err != nil {
+	if err = s.SignRequest(w.PrivKey, req); err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
 	}
 	return req, nil
@@ -671,7 +671,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("a transaction signature must cover the request body via digest")
 	}
 
-	valid, err := sigParams.Verify(w.PubKey, crypto.Hash(0), &req)
+	valid, err := sigParams.VerifyRequest(w.PubKey, &req)
 	if err != nil {
 		return nil, err
 	}

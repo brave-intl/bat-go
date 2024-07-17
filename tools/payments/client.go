@@ -3,8 +3,6 @@ package payments
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +13,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/nitro"
 	"github.com/brave-intl/bat-go/libs/payments"
 	"github.com/brave-intl/bat-go/libs/redisconsumer"
 	"github.com/brave-intl/bat-go/libs/requestutils"
@@ -23,10 +22,7 @@ import (
 
 const (
 	// headers
-	hostHeader   = "Host"
-	digestHeader = "Digest"
-	// dateHeader needs to be lowercase to pass the signing verifier validation.
-	dateHeader          = "date"
+	dateHeader          = "Date"
 	contentLengthHeader = "Content-Length"
 	contentTypeHeader   = "Content-Type"
 	signatureHeader     = "Signature"
@@ -57,14 +53,20 @@ func NewSettlementClient(ctx context.Context, env string, config map[string]stri
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.AWSNITRO
 	sp.KeyID = "primary"
-	sp.Headers = []string{"digest", "date"}
+	sp.Headers = []string{
+		httpsignature.DigestHeader,
+		httpsignature.DateHeader,
+	}
 
-	pcr2, err := hex.DecodeString(config["pcr2"])
+	verifier, err := nitro.NewVerifier(config["pcr2"])
 	if err != nil {
 		return nil, nil, err
 	}
 
-	verifier := httpsignature.NewNitroVerifier(map[uint][]byte{2: []byte(pcr2)})
+	// TODO: NewVerifier sets verifier.PCR1 to a compile-time defined constant.
+	// Clarify if we really do not want to check for PCR1. If we want the check,
+	// remove the following line.
+	delete(verifier.PCRs, uint(1))
 
 	client, err := newRedisClient(ctx, env, config["addr"], config["username"], config["pass"], &sp, verifier)
 	return ctx, client, err
@@ -231,13 +233,14 @@ func (rc *redisClient) HandlePrepareResponse(ctx context.Context, stream, id str
 	if err != nil {
 		return err
 	}
-	nitroVerifier, ok := rc.verifier.(httpsignature.NitroVerifier)
+	// Copy the verifier struct and update it with the new time
+	nitroVerifier, ok := rc.verifier.(nitro.Verifier)
 	if !ok {
 		return nil
 	}
-	nitroVerifier.Now = func() time.Time { return headerDate }
+	nitroVerifier.VerificationTime = headerDate
 
-	valid, err := rc.sp.VerifyResponse(nitroVerifier, crypto.Hash(0), &resp)
+	valid, err := rc.sp.VerifyResponse(nitroVerifier, &resp)
 	if err != nil {
 		return err
 	}

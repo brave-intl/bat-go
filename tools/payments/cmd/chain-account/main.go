@@ -21,9 +21,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -96,21 +93,7 @@ func generateSolanaAddress(ctx context.Context, key, env string, pcr2 *string, v
 		contentTypeHeader   = "Content-Type"
 	)
 
-	signer := httpsignature.ParameterizedSignator{
-		SignatureParams: httpsignature.SignatureParams{
-			Algorithm: httpsignature.ED25519,
-			KeyID:     hex.EncodeToString([]byte(priv.Public().(ed25519.PublicKey))),
-			Headers: []string{
-				"(request-target)",
-				"date",
-				"digest",
-				"content-length",
-				"content-type",
-			},
-		},
-		Signator: priv,
-		Opts:     crypto.Hash(0),
-	}
+	signer := httpsignature.GetEd25519RequestSignator(priv)
 
 	buf := bytes.NewBuffer([]byte{})
 	buf.WriteString(key)
@@ -153,7 +136,7 @@ func generateSolanaAddress(ctx context.Context, key, env string, pcr2 *string, v
 		log.Fatalln(err)
 	}
 
-	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	valid, err := sp.VerifyResponse(verifier, resp)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -179,21 +162,7 @@ func approveSolanaAddress(ctx context.Context, pubKey, key, env string, pcr2 *st
 		contentTypeHeader   = "Content-Type"
 	)
 
-	signer := httpsignature.ParameterizedSignator{
-		SignatureParams: httpsignature.SignatureParams{
-			Algorithm: httpsignature.ED25519,
-			KeyID:     hex.EncodeToString([]byte(priv.Public().(ed25519.PublicKey))),
-			Headers: []string{
-				"(request-target)",
-				"date",
-				"digest",
-				"content-length",
-				"content-type",
-			},
-		},
-		Signator: priv,
-		Opts:     crypto.Hash(0),
-	}
+	signer := httpsignature.GetEd25519RequestSignator(priv)
 
 	chainAddress := payments.AddressApprovalRequest{
 		Address: pubKey,
@@ -239,7 +208,7 @@ func approveSolanaAddress(ctx context.Context, pubKey, key, env string, pcr2 *st
 		log.Fatalln(err)
 	}
 
-	valid, err := sp.VerifyResponse(verifier, crypto.Hash(0), resp)
+	valid, err := sp.VerifyResponse(verifier, resp)
 	if err != nil {
 		log.Fatalln(err)
 	}

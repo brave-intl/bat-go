@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -102,7 +101,7 @@ func GenerateSecret() (secret string, nonce string, err error) {
 }
 
 // LookupVerifier returns the merchant key corresponding to the keyID used for verifying requests
-func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
+func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, httpsignature.Verifier, error) {
 	rootKeyIDStr, caveats, err := cryptography.DecodeKeyID(keyID)
 	if err != nil {
 		return nil, nil, err
@@ -139,8 +138,7 @@ func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Con
 
 	ctx = context.WithValue(ctx, merchantCtxKey{}, key.Merchant)
 
-	verifier := httpsignature.Verifier(httpsignature.HMACKey(secretKeyStr))
-	return ctx, &verifier, nil
+	return ctx, httpsignature.HMACKey(secretKeyStr), nil
 }
 
 // caveatsFromCtx returns authorized caveats from ctx.
@@ -188,17 +186,9 @@ func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{
 			Algorithm: httpsignature.HS2019,
-			Headers: []string{
-				"(request-target)",
-				"host",
-				"date",
-				"digest",
-				"content-length",
-				"content-type",
-			},
+			Headers:   httpsignature.RequestSigningHeaders,
 		},
 		Keystore: ks,
-		Opts:     crypto.Hash(0),
 	}
 
 	// TODO: Keep only VerifyHTTPSignedOnly after migrating Subscriptions to this method.

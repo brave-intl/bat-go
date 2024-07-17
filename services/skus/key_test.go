@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"crypto"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -216,17 +215,20 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.HS2019
 	sp.KeyID = iD
-	sp.Headers = []string{"(request-target)", "host", "date", "digest", "content-length", "content-type"}
+	sp.Headers = httpsignature.RequestSigningHeaders
 
 	ps := httpsignature.ParameterizedSignator{
 		SignatureParams: sp,
 		Signator:        httpsignature.HMACKey(attenuatedSecret),
-		Opts:            crypto.Hash(0),
 	}
-	req, err = http.NewRequest("GET", "/hello-world", nil)
-	req.Header.Set("Date", time.Now().Format(time.RFC1123))
+	req, err = http.NewRequest("GET", "http://localhost/hello-world", nil)
 	assert.NoError(t, err)
-	assert.NoError(t, ps.SignRequest(req))
+	req.Header.Set("Date", time.Now().Format(time.RFC1123))
+	req.Header.Set("Content-Length", "0")
+	req.Header.Set("Content-Type", "")
+	assert.NoError(t, err)
+	err = ps.SignRequest(req)
+	assert.NoError(t, err)
 
 	rows := sqlmock.NewRows([]string{
 		"id",

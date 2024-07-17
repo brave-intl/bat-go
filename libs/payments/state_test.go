@@ -43,9 +43,9 @@ type mockKeystore struct {
 func (m mockKeystore) LookupVerifier(
 	ctx context.Context,
 	keyID string, updatedAt time.Time,
-) (context.Context, *Verifier, error) {
+) (context.Context, Verifier, error) {
 	var verifier = (Verifier)(mockVerifier{value: m.value})
-	return ctx, &verifier, nil
+	return ctx, verifier, nil
 }
 
 var transactionHistorySetTrue = []PaymentStateHistory{

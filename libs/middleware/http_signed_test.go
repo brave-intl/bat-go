@@ -3,9 +3,8 @@ package middleware
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,9 +18,9 @@ type mockKeystore struct {
 	httpsignature.Verifier
 }
 
-func (m *mockKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
+func (m *mockKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, httpsignature.Verifier, error) {
 	if keyID == "primary" {
-		return ctx, &m.Verifier, nil
+		return ctx, m.Verifier, nil
 	}
 	return nil, nil, nil
 }
@@ -61,7 +60,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
-	err = s.Sign(privKey, crypto.Hash(0), req)
+	err = s.SignRequest(privKey, req)
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -71,7 +70,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
-	err = s.Sign(wrongKey, crypto.Hash(0), req)
+	err = s.SignRequest(wrongKey, req)
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -81,7 +80,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
-	err = s.Sign(privKey, crypto.Hash(0), req)
+	err = s.SignRequest(privKey, req)
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -91,9 +90,9 @@ func TestHTTPSignedOnly(t *testing.T) {
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
-	err = s.Sign(privKey, crypto.Hash(0), req)
+	err = s.SignRequest(privKey, req)
 	assert.NoError(t, err)
-	req.Body = ioutil.NopCloser(bytes.NewBuffer([]byte("hello world")))
+	req.Body = io.NopCloser(bytes.NewBuffer([]byte("hello world")))
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusForbidden, rr.Code, "request with signature from right key but wrong digest should fail")
@@ -109,7 +108,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	// Host is not in the header, but on the request itself
 	req.Host = "localhost"
 	assert.NoError(t, err)
-	err = s.Sign(privKey, crypto.Hash(0), req)
+	err = s.SignRequest(privKey, req)
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -121,14 +120,13 @@ func TestHTTPSignedOnly(t *testing.T) {
 			Headers:   []string{"digest", "(request-target)", "date", "host"}, // make sure host is in signing string
 		},
 		Keystore: &keystore,
-		Opts:     crypto.Hash(0),
 	}
 
 	handler = VerifyHTTPSignedOnly(verifier)(http.HandlerFunc(fn2))
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
-	err = s.Sign(privKey, crypto.Hash(0), req)
+	err = s.SignRequest(privKey, req)
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -139,7 +137,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)
 	req.Header.Set("Date", time.Now().Format(time.RFC1123))
-	err = s.Sign(privKey, crypto.Hash(0), req)
+	err = s.SignRequest(privKey, req)
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
