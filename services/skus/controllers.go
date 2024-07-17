@@ -117,7 +117,7 @@ func Router(
 
 		// For now, this endpoint is placed directly under /credentials.
 		// It would make sense to put it under /items/item_id, had the caller known the item id.
-		// However, the caller of this endpoit does not posses that knowledge, and it would have to call the order endpoint to get it.
+		// However, the caller of this endpoint does not possess that knowledge, and it would have to call the order endpoint to get it.
 		// This extra round-trip currently does not make sense.
 		// So until Bundles came along we can benefit from the fact that there is one item per order.
 		// By the time Bundles arrive, the caller would either have to fetch order anyway, or this can be communicated in another way.
@@ -623,14 +623,18 @@ type createItemCredsRequest struct {
 // createItemCreds handles requests for creating credentials for an item.
 func createItemCreds(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-		lg := logging.Logger(ctx, "skus.createItemCreds")
+		b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		if err != nil {
+			return handlers.WrapError(err, "error reading body", http.StatusBadRequest)
+		}
 
 		req := &createItemCredsRequest{}
-		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
-			lg.Error().Err(err).Msg("failed to read body payload")
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		if err := json.Unmarshal(b, req); err != nil {
+			return handlers.WrapError(err, "error decoding body", http.StatusBadRequest)
 		}
+
+		ctx := r.Context()
+		lg := logging.Logger(ctx, "skus.createItemCreds")
 
 		if _, err := govalidator.ValidateStruct(req); err != nil {
 			lg.Error().Err(err).Msg("failed to validate struct")
