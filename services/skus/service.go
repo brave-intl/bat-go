@@ -1689,7 +1689,7 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 
 	switch {
 	case ntf.shouldRenew():
-		expt := time.UnixMilli(txn.ExpiresDate).UTC()
+		expt := time.UnixMilli(txn.ExpiresDate).UTC().Add(24 * time.Hour)
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)
@@ -1748,7 +1748,7 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 			return err
 		}
 
-		expt := time.UnixMilli(sub.ExpiryTimeMillis).UTC()
+		expt := time.UnixMilli(sub.ExpiryTimeMillis).UTC().Add(24 * time.Hour)
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTime(ctx, dbi, ord.ID, expt, paidt)

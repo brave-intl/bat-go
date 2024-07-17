@@ -703,7 +703,7 @@ func GrantServer(
 	srv := http.Server{
 		Addr:         ":3333",
 		Handler:      chi.ServerBaseContext(ctx, r),
-		ReadTimeout:  3 * time.Second,
+		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
 	err = srv.ListenAndServe()
