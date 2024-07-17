@@ -424,9 +424,26 @@ func TestService_processPlayStoreNotificationTx(t *testing.T) {
 						SubID:         "nightly.bravevpn.monthly",
 					},
 				},
-				orepo: &repository.MockOrder{},
+				orepo: &repository.MockOrder{
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.July, 2, 0, 0, 0, 0, time.UTC)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
 				prepo: &repository.MockOrderPayHistory{},
-				pscl:  &mockPSClient{},
+				pscl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						result := &androidpublisher.SubscriptionPurchase{
+							PaymentState:     ptrTo[int64](1),
+							ExpiryTimeMillis: time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC).UnixMilli(),
+						}
+
+						return result, nil
+					},
+				},
 			},
 		},
 
@@ -558,10 +575,18 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 				},
 				txn: &appstore.JWSTransactionDecodedPayload{
 					OriginalTransactionId: "123456789000001",
-					ExpiresDate:           1704067201000,
+					ExpiresDate:           1704067200000,
 				},
 
-				orepo: &repository.MockOrder{},
+				orepo: &repository.MockOrder{
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
 				prepo: &repository.MockOrderPayHistory{},
 			},
 		},
