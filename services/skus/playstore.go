@@ -200,6 +200,10 @@ func (x *playStoreDevNotification) effect() string {
 	}
 }
 
+func (x *playStoreDevNotification) pkg() string {
+	return x.PackageName
+}
+
 func (x *playStoreDevNotification) isBeforeCutoff() bool {
 	ems, err := x.EventTimeMilli.Int64()
 	if err != nil {
