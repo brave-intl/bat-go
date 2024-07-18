@@ -90,10 +90,7 @@ type Datastore interface {
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID, completedAt time.Time) error
-	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
-	AppendOrderMetadataInt(context.Context, *uuid.UUID, string, int) error
-	AppendOrderMetadataInt64(context.Context, *uuid.UUID, string, int64) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
 }
 
@@ -293,7 +290,9 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 	return result, nil
 }
 
-// CreateOrder creates an order from the given prototype, and inserts items.
+// CreateOrder creates orders for Auto Contribute and Search Captcha.
+//
+// Deprecated: This method MUST NOT be used for Premium orders.
 func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	result, err := pg.orderRepo.Create(ctx, dbi, oreq)
 	if err != nil {
@@ -550,9 +549,7 @@ func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
 
 // UpdateOrder updates the orders status.
 //
-// Status should either be one of pending, paid, fulfilled, or canceled.
-//
-// TODO: rename it to better reflect the behaviour.
+// Deprecated: This method MUST NOT be used for Premium orders.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	ctx := context.Background()
 
@@ -1322,36 +1319,6 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 	return nil
 }
 
-// AppendOrderMetadataInt64 appends the key and int64 value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadataInt64(ctx context.Context, orderID *uuid.UUID, key string, value int64) error {
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	if err != nil {
-		return err
-	}
-	defer rollback()
-
-	if err := pg.orderRepo.AppendMetadataInt64(ctx, tx, *orderID, key, value); err != nil {
-		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	return commit()
-}
-
-// AppendOrderMetadataInt appends the key and int value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadataInt(ctx context.Context, orderID *uuid.UUID, key string, value int) error {
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	if err != nil {
-		return err
-	}
-	defer rollback()
-
-	if err := pg.orderRepo.AppendMetadataInt(ctx, tx, *orderID, key, value); err != nil {
-		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	return commit()
-}
-
 // AppendOrderMetadata appends the key and string value to an order's metadata.
 func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key, value string) error {
 	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
@@ -1367,29 +1334,9 @@ func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID,
 	return commit()
 }
 
-// SetOrderPaid sets status to paid for the order, updates last paid and expiration.
-func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error {
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	if err != nil {
-		return fmt.Errorf("failed to get db transaction: %w", err)
-	}
-	defer rollback()
-
-	if err := pg.orderRepo.SetStatus(ctx, tx, *orderID, OrderStatusPaid); err != nil {
-		return fmt.Errorf("error updating order %s: %w", orderID, err)
-	}
-
-	if err := pg.recordOrderPayment(ctx, tx, *orderID, time.Now()); err != nil {
-		return fmt.Errorf("failed to record order payment: %w", err)
-	}
-
-	if err := pg.updateOrderExpiresAt(ctx, tx, *orderID); err != nil {
-		return fmt.Errorf("failed to set order expires_at: %w", err)
-	}
-
-	return commit()
-}
-
+// recordOrderPayment records payments for Auto Contribute and Search Captcha.
+//
+// Deprecated: This method MUST NOT be used for Premium orders.
 func (pg *Postgres) recordOrderPayment(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
 	if err := pg.orderPayHistory.Insert(ctx, dbi, id, when); err != nil {
 		return err
@@ -1398,6 +1345,9 @@ func (pg *Postgres) recordOrderPayment(ctx context.Context, dbi sqlx.ExecerConte
 	return pg.orderRepo.SetLastPaidAt(ctx, dbi, id, when)
 }
 
+// updateOrderExpiresAt was used in updating order expiration using hardcoded period on the item or 1 month.
+//
+// Deprecated: This method MUST NOT be used for Premium orders.
 func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) error {
 	expiresAt, err := pg.orderRepo.GetExpiresAtAfterISOPeriod(ctx, dbi, orderID)
 	if err != nil {
