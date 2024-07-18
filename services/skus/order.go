@@ -44,7 +44,9 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	return mac, nil
 }
 
-// CreateOrderItemFromMacaroon creates an order item from a macaroon
+// CreateOrderItemFromMacaroon creates an order item for Auto Contribute and Search Captcha.
+//
+// Deprecated: This method MUST NOT be used for Premium orders.
 func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, []string, *model.IssuerConfig, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 

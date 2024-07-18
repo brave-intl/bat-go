@@ -102,6 +102,9 @@ func Router(
 	{
 		valid := validator.New()
 
+		// /submit-receipt is deprecated.
+		// Use /receipt instead.
+		// It received 0 requests in June 2024.
 		r.Method(http.MethodPost, "/{orderID}/submit-receipt", metricsMwr("SubmitReceipt", corsMwrPost(handleSubmitReceipt(svc, valid))))
 		r.Method(http.MethodPost, "/receipt", metricsMwr("createOrderFromReceipt", corsMwrPost(handleCreateOrderFromReceipt(svc, valid))))
 		r.Method(http.MethodPost, "/{orderID}/receipt", metricsMwr("checkOrderReceipt", authMwr(handleCheckOrderReceipt(svc, valid))))
@@ -1378,6 +1381,10 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 	}
 }
 
+// handleSubmitReceipt was used for linking IAP subscriptions.
+//
+// Deprecated: This endpoint is deprecated, and will be shut down soon.
+// It received 0 requests in June 2024.
 func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
@@ -1399,10 +1406,6 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 		}
 
-		// TODO(clD11): remove when no longer needed.
-		payloadS := string(payload)
-		l.Info().Interface("payload_byte", payload).Str("payload_str", payloadS).Msg("payload")
-
 		req, err := parseSubmitReceiptRequest(payload)
 		if err != nil {
 			l.Warn().Err(err).Msg("failed to deserialize request")
@@ -1419,40 +1422,34 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			return handlers.ValidationError("request", verrs)
 		}
 
-		// TODO(clD11): remove when no longer needed.
-		l.Info().Interface("req_decoded", req).Msg("req decoded")
-
-		extID, err := svc.validateReceipt(ctx, req)
+		rcpt, err := svc.processSubmitReceipt(ctx, req, orderID)
 		if err != nil {
-			l.Warn().Err(err).Msg("failed to validate receipt with vendor")
-
-			return handleReceiptErr(err)
-		}
-
-		{
-			_, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
-			if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-				l.Warn().Err(err).Msg("failed to lookup external id")
-
-				return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
+			// Found an existing order.
+			if errors.Is(err, model.ErrReceiptAlreadyLinked) {
+				return handlers.WrapError(err, "receipt has already been submitted", http.StatusConflict)
 			}
 
-			if err == nil {
-				return handlers.WrapError(model.ErrReceiptAlreadyLinked, "receipt has already been submitted", http.StatusConflict)
+			if errors.Is(err, model.ErrNoMatchOrderReceipt) {
+				return handlers.WrapError(err, "order_id does not match receipt order", http.StatusConflict)
 			}
+
+			// Use new so that the shorter IF and narrow scope are possible (via if := ...; {}).
+			// It's an example of one of the few legit uses for 'new'.
+			if rverr := new(receiptValidError); errors.As(err, &rverr) {
+				l.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+				return handleReceiptErr(rverr.err)
+			}
+
+			l.Warn().Err(err).Msg("failed to create order")
+
+			return handlers.WrapError(err, "failed to process submit receipt request", http.StatusInternalServerError)
 		}
 
-		mdata := newMobileOrderMdata(req, extID)
-
-		if err := svc.UpdateOrderStatusPaidWithMetadata(ctx, &orderID, mdata); err != nil {
-			l.Warn().Err(err).Msg("failed to update order with vendor metadata")
-			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
-		}
-
-		result := struct {
+		result := &struct {
 			ExternalID string `json:"externalId"`
 			Vendor     string `json:"vendor"`
-		}{ExternalID: extID, Vendor: req.Type.String()}
+		}{ExternalID: rcpt.ExtID, Vendor: rcpt.Type.String()}
 
 		return handlers.RenderContent(ctx, result, w, http.StatusOK)
 	}
@@ -1492,30 +1489,23 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 		return handlers.ValidationError("request", verrs)
 	}
 
-	extID, err := svc.validateReceipt(ctx, req)
+	ord, err := svc.createOrderWithReceipt(ctx, req)
 	if err != nil {
-		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
-
-		return handleReceiptErr(err)
-	}
-
-	{
-		ord, err := svc.orderRepo.GetByExternalID(ctx, svc.Datastore.RawDB(), extID)
-		if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
-			lg.Warn().Err(err).Msg("failed to lookup external id")
-
-			return handlers.WrapError(err, "failed to lookup external id", http.StatusInternalServerError)
-		}
-
-		if err == nil {
+		// Found an existing order, respond with the id (ord guaranteed not to be nil).
+		if errors.Is(err, model.ErrOrderExistsForReceipt) {
 			result := model.CreateOrderWithReceiptResponse{ID: ord.ID.String()}
 
 			return handlers.RenderContent(ctx, result, w, http.StatusConflict)
 		}
-	}
 
-	ord, err := svc.createOrderWithReceipt(ctx, req, extID)
-	if err != nil {
+		// Use new so that the shorter IF and narrow scope are possible (via if := ...; {}).
+		// It's an example of one of the few legit uses for 'new'.
+		if rverr := new(receiptValidError); errors.As(err, &rverr) {
+			lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+
+			return handleReceiptErr(rverr.err)
+		}
+
 		lg.Warn().Err(err).Msg("failed to create order")
 
 		return handlers.WrapError(err, "failed to create order", http.StatusInternalServerError)
@@ -1567,14 +1557,15 @@ func handleCheckOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Servi
 		return handlers.ValidationError("request", verrs)
 	}
 
-	extID, err := svc.validateReceipt(ctx, req)
-	if err != nil {
-		lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+	if err := svc.checkOrderReceipt(ctx, req, orderID); err != nil {
+		// Use new so that the shorter IF and narrow scope are possible (via if := ...; {}).
+		// It's an example of one of the few legit uses for 'new'.
+		if rverr := new(receiptValidError); errors.As(err, &rverr) {
+			lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
 
-		return handleReceiptErr(err)
-	}
+			return handleReceiptErr(rverr.err)
+		}
 
-	if err := svc.checkOrderReceipt(ctx, orderID, extID); err != nil {
 		lg.Warn().Err(err).Msg("failed to check order receipt")
 
 		switch {

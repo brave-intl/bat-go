@@ -32,6 +32,10 @@ func (x *playStoreSubPurchase) hasExpired(now time.Time) bool {
 	return x.ExpiryTimeMillis < now.UnixMilli()
 }
 
+func (x *playStoreSubPurchase) expiresTime() time.Time {
+	return time.UnixMilli(x.ExpiryTimeMillis).UTC()
+}
+
 func (x *playStoreSubPurchase) isPending() bool {
 	// The payment state is not present for canceled or expired subscriptions.
 	if x.PaymentState == nil {
@@ -341,4 +345,15 @@ func (x *playStoreVoidedPurchaseNtf) shouldProcess() bool {
 	default:
 		return false
 	}
+}
+
+func newReceiptDataGoogle(req model.ReceiptRequest, item *playStoreSubPurchase) model.ReceiptData {
+	result := model.ReceiptData{
+		Type:      req.Type,
+		ProductID: req.SubscriptionID,
+		ExtID:     req.Blob,
+		ExpiresAt: item.expiresTime(),
+	}
+
+	return result
 }

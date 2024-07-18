@@ -1,11 +1,14 @@
 package skus
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/awa/go-iap/appstore"
 	should "github.com/stretchr/testify/assert"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 func TestAppStoreSrvNotification_shouldProcess(t *testing.T) {
@@ -372,6 +375,273 @@ func TestShouldCancelOrderIOS(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := shouldCancelOrderIOS(tc.given.info, tc.given.now)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestNewReceiptDataApple(t *testing.T) {
+	type tcGiven struct {
+		req  model.ReceiptRequest
+		item *wrapAppStoreInApp
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   model.ReceiptData
+	}
+
+	tests := []testCase{
+		{
+			name: "valid",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "braveleo.monthly",
+				},
+				item: newWrapAppStoreInApp(&appstore.InApp{
+					ProductID:             "braveleo.monthly",
+					OriginalTransactionID: "720000000000001",
+					ExpiresDate: appstore.ExpiresDate{
+						ExpiresDateMS: "1719792001000",
+					},
+				}),
+			},
+			exp: model.ReceiptData{
+				Type:      model.VendorApple,
+				ProductID: "braveleo.monthly",
+				ExtID:     "720000000000001",
+				ExpiresAt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newReceiptDataApple(tc.given.req, tc.given.item)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestNewWrapAppStoreInApp(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *appstore.InApp
+		exp   *wrapAppStoreInApp
+	}
+
+	tests := []testCase{
+		{
+			name: "valid_expt",
+			given: &appstore.InApp{
+				ProductID:             "braveleo.monthly",
+				OriginalTransactionID: "720000000000001",
+				ExpiresDate: appstore.ExpiresDate{
+					ExpiresDateMS: "1719792001000",
+				},
+			},
+			exp: &wrapAppStoreInApp{
+				InApp: &appstore.InApp{
+					ProductID:             "braveleo.monthly",
+					OriginalTransactionID: "720000000000001",
+					ExpiresDate: appstore.ExpiresDate{
+						ExpiresDateMS: "1719792001000",
+					},
+				},
+				expt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+
+		{
+			name: "invalid_expt",
+			given: &appstore.InApp{
+				ProductID:             "braveleo.monthly",
+				OriginalTransactionID: "720000000000001",
+				ExpiresDate: appstore.ExpiresDate{
+					ExpiresDateMS: "garbage",
+				},
+			},
+			exp: &wrapAppStoreInApp{
+				InApp: &appstore.InApp{
+					ProductID:             "braveleo.monthly",
+					OriginalTransactionID: "720000000000001",
+					ExpiresDate: appstore.ExpiresDate{
+						ExpiresDateMS: "garbage",
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newWrapAppStoreInApp(tc.given)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestWrapAppStoreInApp_hasExpired(t *testing.T) {
+	type tcgiven struct {
+		val *wrapAppStoreInApp
+		now time.Time
+	}
+
+	type testCase struct {
+		name  string
+		given tcgiven
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "both_zero",
+			given: tcgiven{
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID:             "braveleo.monthly",
+						OriginalTransactionID: "720000000000001",
+						ExpiresDate:           appstore.ExpiresDate{},
+					},
+				},
+			},
+		},
+
+		{
+			name: "expt_zero",
+			given: tcgiven{
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID:             "braveleo.monthly",
+						OriginalTransactionID: "720000000000001",
+						ExpiresDate:           appstore.ExpiresDate{},
+					},
+				},
+				now: time.Now(),
+			},
+			exp: true,
+		},
+
+		{
+			name: "now_zero",
+			given: tcgiven{
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID:             "braveleo.monthly",
+						OriginalTransactionID: "720000000000001",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
+					},
+					expt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+
+		{
+			name: "expired",
+			given: tcgiven{
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID:             "braveleo.monthly",
+						OriginalTransactionID: "720000000000001",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
+					},
+					expt: time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
+				},
+				now: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: true,
+		},
+
+		{
+			name: "valid",
+			given: tcgiven{
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID:             "braveleo.monthly",
+						OriginalTransactionID: "720000000000001",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
+					},
+					expt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
+				now: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.val.hasExpired(tc.given.now)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestAppStoreInApp_expiresTime(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *appstore.InApp
+		exp   time.Time
+	}
+
+	tests := []testCase{
+		{
+			name: "empty_string",
+			given: &appstore.InApp{
+				ExpiresDate: appstore.ExpiresDate{},
+			},
+		},
+
+		{
+			name: "zero",
+			given: &appstore.InApp{
+				ExpiresDate: appstore.ExpiresDate{ExpiresDateMS: "0"},
+			},
+			exp: time.UnixMilli(0).UTC(),
+		},
+
+		{
+			name: "garbage",
+			given: &appstore.InApp{
+				ExpiresDate: appstore.ExpiresDate{ExpiresDateMS: "garbage"},
+			},
+		},
+
+		{
+			name: "valid",
+			given: &appstore.InApp{
+				ExpiresDate: appstore.ExpiresDate{
+					ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+				},
+			},
+			exp: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := (*appStoreInApp)(tc.given).expiresTime()
 
 			should.Equal(t, tc.exp, actual)
 		})
