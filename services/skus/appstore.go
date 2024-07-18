@@ -129,6 +129,14 @@ func (x *appStoreSrvNotification) shouldCancel() bool {
 	}
 }
 
+func (x *appStoreSrvNotification) ntfType() string {
+	return string(x.val.NotificationType)
+}
+
+func (x *appStoreSrvNotification) ntfSubType() string {
+	return string(x.val.Subtype)
+}
+
 func (x *appStoreSrvNotification) effect() string {
 	switch {
 	case x.shouldRenew():
@@ -138,6 +146,10 @@ func (x *appStoreSrvNotification) effect() string {
 	default:
 		return "skip"
 	}
+}
+
+func (x *appStoreSrvNotification) pkg() string {
+	return x.val.Data.BundleID
 }
 
 func parseAppStoreSrvNotification(vrf *assnCertVerifier, spayload string) (*appStoreSrvNotification, error) {
