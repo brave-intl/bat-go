@@ -1036,7 +1036,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 	}
 
 	if err := svc.processPlayStoreNotification(ctx, ntf); err != nil {
-		l := lg.With().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Logger()
+		l := lg.With().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Str("ntf_package", ntf.pkg()).Logger()
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -1085,7 +1085,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 		msg = "processed play store notification"
 	}
 
-	lg.Info().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Msg(msg)
+	lg.Info().Str("ntf_type", ntf.ntfType()).Int("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Str("ntf_package", ntf.pkg()).Msg(msg)
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
@@ -1126,7 +1126,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 	}
 
 	if err := svc.processAppStoreNotification(ctx, ntf); err != nil {
-		l := lg.With().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Logger()
+		l := lg.With().Str("ntf_type", ntf.ntfType()).Str("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Str("ntf_package", ntf.pkg()).Logger()
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -1176,7 +1176,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 		msg = "processed app store notification"
 	}
 
-	lg.Info().Str("ntf_type", string(ntf.val.NotificationType)).Str("ntf_subtype", string(ntf.val.Subtype)).Str("ntf_effect", ntf.effect()).Msg(msg)
+	lg.Info().Str("ntf_type", ntf.ntfType()).Str("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Str("ntf_package", ntf.pkg()).Msg(msg)
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
