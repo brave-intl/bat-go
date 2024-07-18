@@ -308,7 +308,7 @@ services:
 
   dynamodb:
     container_name: dynamodb
-    image: amazon/dynamodb-local:1.21.0
+    image: public.ecr.aws/aws-dynamodb-local/aws-dynamodb-local:1.21.0
     networks:
       - grant
     ports:
