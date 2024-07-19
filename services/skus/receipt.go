@@ -2,286 +2,176 @@ package skus
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httputil"
-	"strings"
 	"time"
 
 	"github.com/awa/go-iap/appstore"
 	"github.com/awa/go-iap/playstore"
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/logging"
+	"google.golang.org/api/androidpublisher/v3"
+
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 const (
-	androidPaymentStatePending int64 = iota
-	androidPaymentStatePaid
-	androidPaymentStateTrial
-	androidPaymentStatePendingDeferred
-
-	androidCancelReasonUser      int64 = 0
-	androidCancelReasonSystem    int64 = 1
-	androidCancelReasonReplaced  int64 = 2
-	androidCancelReasonDeveloper int64 = 3
+	errNoInAppTx           model.Error = "no in app info in response"
+	errIOSPurchaseNotFound model.Error = "ios: purchase not found"
 )
 
-var (
-	receiptValidationFns = map[Vendor]func(context.Context, interface{}) (string, error){
-		appleVendor:  validateIOSReceipt,
-		googleVendor: validateAndroidReceipt,
-	}
-	iosClient              *appstore.Client
-	androidClient          *playstore.Client
-	errClientMisconfigured = errors.New("misconfigured client")
-
-	errPurchaseUserCanceled      = errors.New("purchase is canceled by user")
-	errPurchaseSystemCanceled    = errors.New("purchase is canceled by google playstore")
-	errPurchaseReplacedCanceled  = errors.New("purchase is canceled and replaced")
-	errPurchaseDeveloperCanceled = errors.New("purchase is canceled by developer")
-
-	errPurchasePending       = errors.New("purchase is pending")
-	errPurchaseDeferred      = errors.New("purchase is deferred")
-	errPurchaseStatusUnknown = errors.New("purchase status is unknown")
-	errPurchaseFailed        = errors.New("purchase failed")
-
-	errPurchaseExpired = errors.New("purchase expired")
-
-	purchasePendingErrCode       = "purchase_pending"
-	purchaseDeferredErrCode      = "purchase_deferred"
-	purchaseStatusUnknownErrCode = "purchase_status_unknown"
-	purchaseFailedErrCode        = "purchase_failed"
-	purchaseValidationErrCode    = "validation_failed"
-)
-
-type dumpTransport struct{}
-
-func (dt *dumpTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	logger := logging.Logger(r.Context(), "skus").With().Str("func", "RoundTrip").Logger()
-
-	dump, err := httputil.DumpRequestOut(r, true)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to dump request")
-	}
-	logger.Debug().Msgf("****REQUEST****\n%q\n", dump)
-
-	resp, rtErr := http.DefaultTransport.RoundTrip(r)
-
-	dump, err = httputil.DumpResponse(resp, true)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to dump response")
-	}
-	logger.Debug().Msgf("****RESPONSE****\n%q\n****************\n\n", dump)
-
-	return resp, rtErr
+type appStoreVerifier interface {
+	Verify(ctx context.Context, req appstore.IAPRequest, result interface{}) error
 }
 
-func initClients(ctx context.Context) {
+type playStoreVerifier interface {
+	VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+}
 
-	var logClient = &http.Client{
-		Transport: &dumpTransport{},
+type receiptVerifier struct {
+	asKey       string
+	appStoreCl  appStoreVerifier
+	playStoreCl playStoreVerifier
+}
+
+func newReceiptVerifier(cl *http.Client, asKey string, playKey []byte) (*receiptVerifier, error) {
+	result := &receiptVerifier{
+		asKey:      asKey,
+		appStoreCl: appstore.NewWithClient(cl),
 	}
 
-	logger := logging.Logger(ctx, "skus").With().Str("func", "initClients").Logger()
-	iosClient = appstore.New()
-
-	if jsonKey, ok := ctx.Value(appctx.PlaystoreJSONKeyCTXKey).([]byte); ok {
-		var err error
-		androidClient, err = playstore.NewWithClient(jsonKey, logClient)
+	if playKey != nil && len(playKey) != 0 {
+		gpCl, err := playstore.NewWithClient(playKey, cl)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to initialize android client")
+			return nil, err
+		}
+
+		result.playStoreCl = gpCl
+	}
+
+	return result, nil
+}
+
+// validateApple validates Apple App Store receipt.
+func (v *receiptVerifier) validateApple(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error) {
+	return v.validateAppleTime(ctx, req, time.Now())
+}
+
+func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (model.ReceiptData, error) {
+	asreq := appstore.IAPRequest{
+		Password:               v.asKey,
+		ReceiptData:            req.Blob,
+		ExcludeOldTransactions: true,
+	}
+
+	resp := &appstore.IAPResponse{}
+	if err := v.appStoreCl.Verify(ctx, asreq, resp); err != nil {
+		return model.ReceiptData{}, fmt.Errorf("failed to verify receipt: %w", err)
+	}
+
+	// ProductID on an InApp object must match the SubscriptionID.
+	//
+	// By doing so we:
+	// - find the purchase that is being verified (i.e. to disambiguate VPN from Leo);
+	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
+	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID, now)
+	if ok {
+		return newReceiptDataApple(req, item), nil
+	}
+
+	// Try finding in latest_receipt_info.
+	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID, now)
+	if ok {
+		return newReceiptDataApple(req, item), nil
+	}
+
+	// Special case for VPN.
+	// The client may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
+	if req.SubscriptionID == "bravevpn.monthly" {
+		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly", now)
+		if ok {
+			return newReceiptDataApple(req, item), nil
+		}
+
+		item, ok = findInAppBySubID(resp.LatestReceiptInfo, "bravevpn.yearly", now)
+		if ok {
+			return newReceiptDataApple(req, item), nil
 		}
 	}
-}
 
-// validateIOSReceipt - validate apple receipt with their apis
-func validateIOSReceipt(ctx context.Context, receipt interface{}) (string, error) {
-	logger := logging.Logger(ctx, "skus").With().Str("func", "validateIOSReceipt").Logger()
-
-	// get the shared key from the context
-	sharedKey, sharedKeyOK := ctx.Value(appctx.AppleReceiptSharedKeyCTXKey).(string)
-
-	if iosClient != nil {
-		// handle v1 receipt type
-		if v, ok := receipt.(SubmitReceiptRequestV1); ok {
-			req := appstore.IAPRequest{
-				ReceiptData:            v.Blob,
-				ExcludeOldTransactions: true,
-			}
-			if sharedKeyOK && len(sharedKey) > 0 {
-				req.Password = sharedKey
-			}
-			resp := &appstore.IAPResponse{}
-			if err := iosClient.Verify(ctx, req, resp); err != nil {
-				logger.Error().Err(err).Msg("failed to verify receipt")
-				return "", fmt.Errorf("failed to verify receipt: %w", err)
-			}
-			logger.Debug().Msg(fmt.Sprintf("%+v", resp))
-			// get the transaction id back
-			if len(resp.Receipt.InApp) < 1 {
-				logger.Error().Msg("failed to verify receipt, no in app info")
-				return "", fmt.Errorf("failed to verify receipt, no in app info in response")
-			}
-			return resp.Receipt.InApp[0].OriginalTransactionID, nil
-		}
-	}
-	logger.Error().Msg("client is not configured")
-	return "", errClientMisconfigured
-}
-
-// validateAndroidReceipt - validate android receipt with their apis
-func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, error) {
-	logger := logging.Logger(ctx, "skus").With().Str("func", "validateAndroidReceipt").Logger()
-	if androidClient != nil {
-		if v, ok := receipt.(SubmitReceiptRequestV1); ok {
-			logger.Debug().Str("receipt", fmt.Sprintf("%+v", v)).Msg("about to verify subscription")
-			// handle v1 receipt type
-			resp, err := androidClient.VerifySubscription(ctx, v.Package, v.SubscriptionID, v.Blob)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to verify subscription")
-				return "", errPurchaseFailed
-			}
-
-			// is order expired?
-			if time.Unix(0, resp.ExpiryTimeMillis*int64(time.Millisecond)).Before(time.Now()) {
-				return "", errPurchaseExpired
-			}
-
-			logger.Debug().Msgf("resp: %+v", resp)
-			if resp.PaymentState != nil {
-				// check that the order was paid
-				switch *resp.PaymentState {
-				case androidPaymentStatePaid, androidPaymentStateTrial:
-					break
-				case androidPaymentStatePending:
-					// is there a cancel reason?
-					switch resp.CancelReason {
-					case androidCancelReasonUser:
-						return "", errPurchaseUserCanceled
-					case androidCancelReasonSystem:
-						return "", errPurchaseSystemCanceled
-					case androidCancelReasonReplaced:
-						return "", errPurchaseReplacedCanceled
-					case androidCancelReasonDeveloper:
-						return "", errPurchaseDeveloperCanceled
-					}
-					return "", errPurchasePending
-				case androidPaymentStatePendingDeferred:
-					return "", errPurchaseDeferred
-				default:
-					return "", errPurchaseStatusUnknown
-				}
-				return v.Blob, nil
-			}
-			logger.Error().Err(err).Msg("failed to verify subscription: no payment state")
-			return "", errPurchaseFailed
-		}
-	}
-	logger.Error().Msg("client is not configured")
-	return "", errClientMisconfigured
-}
-
-// get the public key from the jws header
-func extractPublicKey(jwsToken string) (*ecdsa.PublicKey, error) {
-	certStr, err := extractHeaderByIndex(jwsToken, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	cert, err := x509.ParseCertificate(certStr)
-	if err != nil {
-		return nil, err
-	}
-
-	switch pk := cert.PublicKey.(type) {
-	case *ecdsa.PublicKey:
-		return pk, nil
-	default:
-		return nil, errors.New("appstore public key must be of type ecdsa.PublicKey")
-	}
-}
-
-func extractHeaderByIndex(tokenStr string, index int) ([]byte, error) {
-	if index > 2 {
-		return nil, errors.New("invalid index")
-	}
-
-	tokenArr := strings.Split(tokenStr, ".")
-	headerByte, err := base64.RawStdEncoding.DecodeString(tokenArr[0])
-	if err != nil {
-		return nil, err
-	}
-
-	type Header struct {
-		Alg string   `json:"alg"`
-		X5c []string `json:"x5c"`
-	}
-	var header Header
-	err = json.Unmarshal(headerByte, &header)
-	if err != nil {
-		return nil, err
-	}
-
-	certByte, err := base64.StdEncoding.DecodeString(header.X5c[index])
-	if err != nil {
-		return nil, err
-	}
-
-	return certByte, nil
-}
-
-func verifyCert(certByte, intermediaCertStr []byte) error {
-	roots := x509.NewCertPool()
-	ok := roots.AppendCertsFromPEM([]byte(appleRootPEM))
+	// Handle legacy iOS versions predating the release that started using proper values for subscription_id.
+	// This only applies to VPN.
+	item, ok = findInAppBySubIDLegacy(resp, req.SubscriptionID, now)
 	if !ok {
-		return errors.New("failed to parse root certificate")
+		return model.ReceiptData{}, errIOSPurchaseNotFound
 	}
 
-	interCert, err := x509.ParseCertificate(intermediaCertStr)
-	if err != nil {
-		return errors.New("failed to parse intermedia certificate")
-	}
-	intermedia := x509.NewCertPool()
-	intermedia.AddCert(interCert)
-
-	cert, err := x509.ParseCertificate(certByte)
-	if err != nil {
-		return err
-	}
-
-	opts := x509.VerifyOptions{
-		Roots:         roots,
-		Intermediates: intermedia,
-	}
-
-	_, err = cert.Verify(opts)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return newReceiptDataApple(req, item), nil
 }
 
-// rootPEM is from `openssl x509 -inform der -in AppleRootCA-G3.cer -out apple_root.pem`
-const appleRootPEM = `
------BEGIN CERTIFICATE-----
-MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwS
-QXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9u
-IEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcN
-MTQwNDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBS
-b290IENBIC0gRzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9y
-aXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49
-AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtf
-TjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517
-IDvYuVTZXpmkOlEKMaNCMEAwHQYDVR0OBBYEFLuw3qFYM4iapIqZ3r6966/ayySr
-MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gA
-MGUCMQCD6cHEFl4aXTQY2e3v9GwOAEZLuN+yRhHFD/3meoyhpmvOwgPUnPWTxnS4
-at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2QfyFMm+YhidDkLF1vLUagM
-6BgD56KyKA==
------END CERTIFICATE-----
-`
+// validateGoogle validates a Play Store receipt.
+func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error) {
+	return v.validateGoogleTime(ctx, req, time.Now())
+}
+
+func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (model.ReceiptData, error) {
+	sub, err := v.fetchSubPlayStore(ctx, req.Package, req.SubscriptionID, req.Blob)
+	if err != nil {
+		return model.ReceiptData{}, fmt.Errorf("failed to fetch subscription purchase: %w", err)
+	}
+
+	psub := (*playStoreSubPurchase)(sub)
+	if psub.hasExpired(now) {
+		return model.ReceiptData{}, errGPSSubPurchaseExpired
+	}
+
+	if psub.isPending() {
+		return model.ReceiptData{}, errGPSSubPurchasePending
+	}
+
+	return newReceiptDataGoogle(req, psub), nil
+}
+
+func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+	return v.playStoreCl.VerifySubscription(ctx, pkgName, subID, token)
+}
+
+func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
+	for i := range iap {
+		if iap[i].ProductID == subID {
+			item := newWrapAppStoreInApp(&iap[i])
+
+			if !item.hasExpired(now) {
+				return item, true
+			}
+		}
+	}
+
+	return nil, false
+}
+
+func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
+	item, ok := findInAppVPNLegacy(resp.Receipt.InApp, subID, now)
+	if ok {
+		return item, true
+	}
+
+	return findInAppVPNLegacy(resp.LatestReceiptInfo, subID, now)
+}
+
+func findInAppVPNLegacy(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
+	switch subID {
+	case "brave-firewall-vpn-premium":
+		item, ok := findInAppBySubID(iap, "bravevpn.monthly", now)
+		if ok {
+			return item, true
+		}
+
+		// Quick fix for linking coming from iOS v1.61.1 and below.
+		// The old clients might send brave-firewall-vpn-premium for bravevpn.yearly.
+		return findInAppBySubID(iap, "bravevpn.yearly", now)
+
+	case "brave-firewall-vpn-premium-year":
+		return findInAppBySubID(iap, "bravevpn.yearly", now)
+	default:
+		return nil, false
+	}
+}

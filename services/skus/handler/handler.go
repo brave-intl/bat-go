@@ -19,8 +19,6 @@ import (
 
 const (
 	reqBodyLimit10MB = 10 << 20
-
-	errSomethingWentWrong model.Error = "something went wrong"
 )
 
 type orderService interface {
@@ -55,25 +53,22 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 	}
 
 	if len(req.Items) == 0 {
-		return handlers.ValidationError(
-			"Error validating request body",
-			map[string]interface{}{
-				"items": "array must contain at least one item",
-			},
-		)
+		return handlers.ValidationError("request body", map[string]interface{}{"items": "array must contain at least one item"})
 	}
 
-	lg := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
+	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderHandler").Logger()
 
 	// The SKU is validated in CreateOrderItemFromMacaroon.
 	order, err := h.svc.CreateOrderFromRequest(ctx, req)
 	if err != nil {
 		if errors.Is(err, model.ErrInvalidSKU) {
-			lg.Error().Err(err).Msg("invalid sku")
+			lg.Err(err).Msg("invalid sku")
+
 			return handlers.ValidationError(err.Error(), nil)
 		}
 
-		lg.Error().Err(err).Msg("error creating the order")
+		lg.Err(err).Msg("error creating the order")
+
 		return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 	}
 
@@ -106,17 +101,17 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		}
 	}
 
-	lg := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderNew").Logger()
+	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderNew").Logger()
 
 	result, err := h.svc.CreateOrder(ctx, req)
 	if err != nil {
-		lg.Error().Err(err).Msg("failed to create order")
+		lg.Err(err).Msg("failed to create order")
 
 		if errors.Is(err, model.ErrInvalidOrderRequest) {
 			return handlers.WrapError(err, "Invalid order data supplied", http.StatusUnprocessableEntity)
 		}
 
-		return handlers.WrapError(errSomethingWentWrong, "Couldn't finish creating order", http.StatusInternalServerError)
+		return handlers.WrapError(model.ErrSomethingWentWrong, "Couldn't finish creating order", http.StatusInternalServerError)
 	}
 
 	return handlers.RenderContent(ctx, result, w, http.StatusCreated)

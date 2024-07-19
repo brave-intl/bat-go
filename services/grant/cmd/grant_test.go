@@ -16,6 +16,7 @@ func TestNewSrvStatusFromCtx(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, true)
 	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, true)
 	ctx = context.WithValue(ctx, appctx.DisableZebPayLinkingCTXKey, true)
+	ctx = context.WithValue(ctx, appctx.DisableSolanaLinkingCTXKey, true)
 
 	act := newSrvStatusFromCtx(ctx)
 	exp := map[string]interface{}{
@@ -24,6 +25,7 @@ func TestNewSrvStatusFromCtx(t *testing.T) {
 			"gemini":   false,
 			"bitflyer": false,
 			"zebpay":   false,
+			"solana":   false,
 		},
 	}
 

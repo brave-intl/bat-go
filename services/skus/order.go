@@ -19,28 +19,16 @@ import (
 )
 
 const (
-	paymentProcessor = "paymentProcessor"
-	// IOSPaymentMethod - indicating this used an ios payment method
-	IOSPaymentMethod = "ios"
-	// AndroidPaymentMethod - indicating this used an android payment method
-	AndroidPaymentMethod = "android"
-)
-
-const (
-	// TODO(pavelb): Gradually replace it everywhere.
-	StripePaymentMethod = model.StripePaymentMethod
-
-	StripeInvoiceUpdated              = "invoice.updated"
-	StripeInvoicePaid                 = "invoice.paid"
-	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
+	whStripeInvoiceUpdated          = "invoice.updated"
+	whStripeInvoicePaid             = "invoice.paid"
+	whStripeCustSubscriptionDeleted = "customer.subscription.deleted"
 )
 
 // TODO(pavelb): Gradually replace these everywhere.
 type (
-	Order                         = model.Order
-	OrderItem                     = model.OrderItem
-	CreateCheckoutSessionResponse = model.CreateCheckoutSessionResponse
-	Issuer                        = model.Issuer
+	Order     = model.Order
+	OrderItem = model.OrderItem
+	Issuer    = model.Issuer
 )
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
@@ -56,7 +44,9 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	return mac, nil
 }
 
-// CreateOrderItemFromMacaroon creates an order item from a macaroon
+// CreateOrderItemFromMacaroon creates an order item for Auto Contribute and Search Captcha.
+//
+// Deprecated: This method MUST NOT be used for Premium orders.
 func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, []string, *model.IssuerConfig, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
@@ -172,22 +162,19 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	return &orderItem, allowedPaymentMethods, issuerConfig, nil
 }
 
-func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
-	// has an existing checkout session
-	var email string
-	if stripeSession == nil {
-		// stripe session does not exist
-		return email
+func getCustEmailFromStripeCheckout(sess *stripe.CheckoutSession) string {
+	// Use the customer email if the customer has completed the payment flow.
+	if sess.Customer != nil && sess.Customer.Email != "" {
+		return sess.Customer.Email
 	}
-	if stripeSession.CustomerEmail != "" {
-		// if the email was stored on the stripe session customer email, use it
-		email = stripeSession.CustomerEmail
-	} else if stripeSession.Customer != nil && stripeSession.Customer.Email != "" {
-		// if the stripe session has a customer record, with an email, use it
-		email = stripeSession.Customer.Email
+
+	// This is unlikely to be set, but in case it is, use it.
+	if sess.CustomerEmail != "" {
+		return sess.CustomerEmail
 	}
-	// if there is no record of an email, stripe will ask for it and make a new customer
-	return email
+
+	// Default to empty, Stripe will ask the customer.
+	return ""
 }
 
 // RenewOrder updates the order status to paid and records payment history.
@@ -198,5 +185,5 @@ func (s *Service) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return fmt.Errorf("failed to set order status to paid: %w", err)
 	}
 
-	return s.DeleteOrderCreds(ctx, orderID, true)
+	return nil
 }

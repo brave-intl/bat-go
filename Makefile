@@ -122,30 +122,30 @@ bat-go-repro.tar:
 	make docker-reproducible
 
 docker-up-dev:
-	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d
 
 docker-up-dev-rep:
-	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose \
 		-f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
 
 docker-test:
-	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test && cd main && go run main.go generate json-schema
+	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test && cd main && go run main.go generate json-schema
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -p 3333:3333 dev /bin/bash
+	VAULT_TOKEN=$(VAULT_TOKEN) docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -p 3333:3333 dev /bin/bash
 
 docker-refresh-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev-refresh.yml up -d dev-refresh
+	VAULT_TOKEN=$(VAULT_TOKEN) docker compose -f docker-compose.yml -f docker-compose.dev-refresh.yml up -d dev-refresh
 
 docker-refresh-skus:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.skus-refresh.yml up -d skus-refresh
+	VAULT_TOKEN=$(VAULT_TOKEN) docker compose -f docker-compose.yml -f docker-compose.skus-refresh.yml up -d skus-refresh
 
 settlement-tools:
 	$(eval GOOS?=darwin)
@@ -212,8 +212,6 @@ lint: ensure-gomod-volume
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/libs golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/services golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/tools golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/serverless/email/webhook golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/serverless/email/unsubscribe golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 
 download-mod:
 	cd ./cmd && go mod download && cd ..
@@ -221,13 +219,10 @@ download-mod:
 	cd ./main && go mod download && cd ..
 	cd ./services && go mod download && cd ..
 	cd ./tools && go mod download && cd ..
-	cd ./serverless/email/status && go mod download && cd ../../..
-	cd ./serverless/email/unsubscribe && go mod download && cd ../../..
-	cd ./serverless/email/webhook && go mod download && cd ../../..
 
 docker-up-ext: ensure-shared-net
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ext.yml run --rm -p 3333:3333 dev /bin/bash
+	VAULT_TOKEN=$(VAULT_TOKEN) docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ext.yml run --rm -p 3333:3333 dev /bin/bash
 
 ensure-gomod-volume:
 	docker volume create batgo_lint_gomod

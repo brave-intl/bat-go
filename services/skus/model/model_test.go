@@ -16,6 +16,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/datastore"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
@@ -694,6 +695,450 @@ func TestOrder_HasItem(t *testing.T) {
 			}
 
 			should.Equal(t, tc.exp.item, item)
+		})
+	}
+}
+
+func TestOrder_StripeSubID(t *testing.T) {
+	type tcExpected struct {
+		val string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeSubscriptionId": 42,
+				},
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeSubscriptionId": "",
+				},
+			},
+			exp: tcExpected{ok: true},
+		},
+
+		{
+			name: "sub_id",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeSubscriptionId": "sub_id",
+				},
+			},
+			exp: tcExpected{val: "sub_id", ok: true},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.StripeSubID()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestOrder_IsIOS(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_pp",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "pp_stripe_no_vn",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+				},
+			},
+		},
+
+		{
+			name: "pp_stripe_vn_android",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+					"vendor":           "android",
+				},
+			},
+		},
+
+		{
+			name: "pp_ios_vn_android",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "ios",
+					"vendor":           "android",
+				},
+			},
+		},
+
+		{
+			name: "pp_stripe_vn_ios",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+					"vendor":           "ios",
+				},
+			},
+		},
+
+		{
+			name: "ios",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "ios",
+					"vendor":           "ios",
+				},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.IsIOS()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestOrder_IsAndroid(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_pp",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "pp_stripe_no_vn",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+				},
+			},
+		},
+
+		{
+			name: "pp_stripe_vn_ios",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+					"vendor":           "ios",
+				},
+			},
+		},
+
+		{
+			name: "pp_android_vn_ios",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "android",
+					"vendor":           "ios",
+				},
+			},
+		},
+
+		{
+			name: "pp_stripe_vn_android",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+					"vendor":           "android",
+				},
+			},
+		},
+
+		{
+			name: "android",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "android",
+					"vendor":           "android",
+				},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.IsAndroid()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestOrder_PaymentProc(t *testing.T) {
+	type tcExpected struct {
+		val string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": 42,
+				},
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "",
+				},
+			},
+			exp: tcExpected{ok: true},
+		},
+
+		{
+			name: "sub_id",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+				},
+			},
+			exp: tcExpected{val: "stripe", ok: true},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.PaymentProc()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestOrder_Vendor(t *testing.T) {
+	type tcExpected struct {
+		val model.Vendor
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+			exp: tcExpected{
+				val: model.VendorUnknown,
+			},
+		},
+
+		{
+			name: "no_field",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+			exp: tcExpected{
+				val: model.VendorUnknown,
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"vendor": 42,
+				},
+			},
+			exp: tcExpected{
+				val: model.VendorUnknown,
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"vendor": "",
+				},
+			},
+			exp: tcExpected{
+				ok: true,
+			},
+		},
+
+		{
+			name: "something_else",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"vendor": "something_else",
+				},
+			},
+			exp: tcExpected{
+				val: model.Vendor("something_else"),
+				ok:  true,
+			},
+		},
+
+		{
+			name: "apple",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"vendor": "ios",
+				},
+			},
+			exp: tcExpected{
+				val: model.VendorApple,
+				ok:  true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.Vendor()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestOrder_ShouldSetTrialDays(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name:  "not_paid",
+			given: model.Order{Status: model.OrderStatusPending},
+		},
+
+		{
+			name: "not_paid_not_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPending,
+				AllowedPaymentMethods: pq.StringArray{"something"},
+			},
+		},
+
+		{
+			name:  "paid",
+			given: model.Order{Status: model.OrderStatusPaid},
+		},
+
+		{
+			name: "paid_not_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPaid,
+				AllowedPaymentMethods: pq.StringArray{"something"},
+			},
+		},
+
+		{
+			name: "paid_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPaid,
+				AllowedPaymentMethods: pq.StringArray{"stripe"},
+			},
+		},
+
+		{
+			name: "not_paid_stripe",
+			given: model.Order{
+				Status:                model.OrderStatusPending,
+				AllowedPaymentMethods: pq.StringArray{"stripe"},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.ShouldSetTrialDays()
+			should.Equal(t, tc.exp, actual)
 		})
 	}
 }

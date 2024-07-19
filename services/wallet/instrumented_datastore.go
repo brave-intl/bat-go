@@ -13,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -255,7 +256,7 @@ func (_d DatastoreWithPrometheus) InsertWalletTx(ctx context.Context, tx *sqlx.T
 }
 
 // LinkWallet implements Datastore
-func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, id string, providerID string, providerLinkingID uuid.UUID, depositProvider string, country string) (err error) {
+func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, id string, providerID string, providerLinkingID uuid.UUID, depositProvider string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -265,7 +266,7 @@ func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, id string, pro
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "LinkWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.LinkWallet(ctx, id, providerID, providerLinkingID, depositProvider, country)
+	return _d.base.LinkWallet(ctx, id, providerID, providerLinkingID, depositProvider)
 }
 
 // Migrate implements Datastore

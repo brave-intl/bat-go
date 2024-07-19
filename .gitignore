@@ -37,9 +37,10 @@ share-0.gpg
 
 fetch-quote.json
 main/main
-zebpay_test.env
-zebpay_stage.pem
 prepare-*response.log
+
+go.work
+go.work.sum
 nitro-shim/tools/eifbuild/third_party/**
 nitro-image.eif
 bat-go-repro.tar

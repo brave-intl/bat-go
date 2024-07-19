@@ -2,16 +2,18 @@ package cmd
 
 import (
 	"net/http"
-	"time"
-
 	// pprof imports
 	_ "net/http/pprof"
+	"os"
+	"strings"
+	"time"
 
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/wallet"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,11 +24,18 @@ import (
 // wallets rest microservice.
 func WalletRestRun(command *cobra.Command, args []string) {
 	ctx, service := wallet.SetupService(command.Context())
-	router := cmd.SetupRouter(ctx)
-	wallet.RegisterRoutes(ctx, service, router)
 
 	logger, err := appctx.GetLogger(ctx)
 	cmdutils.Must(err)
+
+	router := cmd.SetupRouter(ctx)
+
+	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
+	if len(dappAO) == 0 {
+		logger.Panic().Msg("dapp origin env missing")
+	}
+
+	wallet.RegisterRoutes(ctx, service, router, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO))
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {

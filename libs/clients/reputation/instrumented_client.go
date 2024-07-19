@@ -40,6 +40,20 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
+// GetReputationSummary implements Client
+func (_d ClientWithPrometheus) GetReputationSummary(ctx context.Context, paymentID uuid.UUID) (r1 RepSummaryResponse, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "GetReputationSummary", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetReputationSummary(ctx, paymentID)
+}
+
 // IsDrainReputable implements Client
 func (_d ClientWithPrometheus) IsDrainReputable(ctx context.Context, id uuid.UUID, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (b1 bool, ia1 []int, err error) {
 	_since := time.Now()
