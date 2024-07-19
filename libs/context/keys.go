@@ -253,6 +253,8 @@ const (
 	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
 	// EnclaveConfigObjectNameCTXKey specifies the config object name for nitro enclave payments service
 	EnclaveSecretsObjectNameCTXKey CTXKey = "enclave_config_object_name"
+	// EnclaveSolanaAddressCTXKey specifies the solana address for nitro enclave payments service
+	EnclaveSolanaAddressCTXKey CTXKey = "enclave_solana_address_name"
 	// EnclaveConfigBucketNameCTXKey specifies the config bucket name for nitro enclave payments service
 	EnclaveSecretsBucketNameCTXKey CTXKey = "enclave_config_bucket_name"
 	// EnclaveOperatorSharesBucketNameCTXKey specifies the operator shares bucket name for nitro enclave payments service

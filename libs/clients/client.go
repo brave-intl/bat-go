@@ -24,7 +24,7 @@ import (
 )
 
 // TransferLimit is the limit of BAT any client can transfer
-var TransferLimit = decimal.NewFromInt(300)
+var TransferLimit = decimal.NewFromInt(50)
 
 // regular expression mapped to the replacement
 var redactHeaders = map[*regexp.Regexp][]byte{

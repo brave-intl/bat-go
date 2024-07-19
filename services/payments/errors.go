@@ -28,3 +28,15 @@ type InsufficientAuthorizationsError struct{}
 func (e *InsufficientAuthorizationsError) Error() string {
 	return "insufficient authorizations"
 }
+
+const (
+	ErrSolanaTransactionUnknown Error = "transaction status unknown"
+	ErrSolanaTransactionNotFound Error = "transaction not found"
+	ErrSolanaTransactionNotConfirmed Error = "transaction not confirmed"
+)
+
+type Error string
+
+func (e Error) Error() string {
+	return string(e)
+}

@@ -90,10 +90,6 @@ func main() {
 		log.Printf("Redis: %s, %s\n", *redisAddr, *redisUser)
 	}
 
-	if *env != "development" && len(*pcr2) != 96 {
-		log.Fatal("a valid pcr2 is required to authorize outside of development\n")
-	}
-
 	// setup the settlement redis client
 	ctx, client, err := paymentscli.NewSettlementClient(ctx, *env, map[string]string{
 		"addr": *redisAddr, "pass": *redisPass, "username": *redisUser, "pcr2": *pcr2, // client specific configurations
@@ -108,6 +104,7 @@ func main() {
 
 	for _, name := range files {
 		func() {
+			var batchSize int64
 			f, err := os.Open(name)
 			if err != nil {
 				log.Fatalf("failed to open report file: %v\n", err)
@@ -119,8 +116,18 @@ func main() {
 				log.Fatalf("failed to read report from stdin: %v\n", err)
 			}
 
+			if len(report) < 1 {
+				log.Fatalf("report is empty: %s after reading file data: %s\n", report, f)
+			}
 			if report[0].PayoutID != *payoutID {
 				log.Fatalf("payoutID did not match report: %s\n", report[0].PayoutID)
+			}
+
+			if report[0].Custodian == "solana" {
+				batchSize = 100
+			}
+			if report[0].Custodian == "zebpay" {
+				batchSize = 50
 			}
 
 			preparedReportFile, err := os.Open(*preparedReportFilename)
@@ -167,6 +174,7 @@ func main() {
 				ConsumerGroup: payments.SubmitPrefix + *payoutID + "-cg",
 				Stream:        payments.SubmitPrefix + *payoutID,
 				Count:         len(report),
+				BatchSize:     batchSize,
 			}
 
 			err = client.ConfigureWorker(ctx, payments.SubmitConfigStream, wc)

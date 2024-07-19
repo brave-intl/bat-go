@@ -15,6 +15,7 @@ type WorkerConfig struct {
 	ConsumerGroup string `json:"consumerGroup"`
 	Stream        string `json:"stream"`
 	Count         int    `json:"count"`
+	BatchSize     int64   `json:"batchSize"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler required for go-redis

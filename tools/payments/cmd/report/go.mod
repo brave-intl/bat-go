@@ -1,4 +1,4 @@
-module github.com/brave-intl/bat-go/tools/payments/cmd/prepare
+module github.com/brave-intl/bat-go/tools/payments/cmd/report
 
 replace github.com/brave-intl/bat-go/tools/payments => ../../
 
@@ -17,8 +17,12 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
+	github.com/getsentry/sentry-go v0.14.0 // indirect
+	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/google/uuid v1.3.0 // indirect
+	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hf/nitrite v0.0.0-20211104000856-f9e0dcc73703 // indirect
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -31,9 +35,12 @@ require (
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/redis/go-redis/v9 v9.3.0 // indirect
+	github.com/rs/xid v1.4.0 // indirect
 	github.com/rs/zerolog v1.29.0 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
+	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
+	github.com/throttled/throttled v2.2.5+incompatible // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/net v0.16.0 // indirect

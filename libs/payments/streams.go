@@ -7,6 +7,8 @@ const (
 	SubmitPrefix = "submit-"
 	// ResponseSuffix is the suffix for streams dealing with responses
 	ResponseSuffix = "-response"
+	// Statusuffix is the suffix for the set containing response statuses
+	StatusSuffix = "-status"
 )
 
 var (

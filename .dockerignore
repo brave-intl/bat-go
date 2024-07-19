@@ -8,3 +8,6 @@ grantTokens.json
 /create-keypair
 /create-tokens
 /verify-tokens
+nitro-shim/tools/eifbuild/third_party/**
+nitro-image.eif
+bat-go-repro.tar

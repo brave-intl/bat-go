@@ -1,8 +1,10 @@
 package payments
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -11,6 +13,8 @@ import (
 	"os"
 	"time"
 
+	solanaClient "github.com/blocto/solana-go-sdk/client"
+	"github.com/blocto/solana-go-sdk/rpc"
 	"github.com/brave-intl/bat-go/libs/clients/zebpay"
 	"github.com/brave-intl/bat-go/libs/nitro"
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
@@ -53,9 +57,14 @@ func (s *baseStateMachine) Prepare(ctx context.Context) (*paymentLib.Authenticat
 	return s.SetNextState(ctx, paymentLib.Prepared)
 }
 
+// IsAuthorized checks whether the state machine has 2 or more authorization, returning true if so
+func (s *baseStateMachine) IsAuthorized(ctx context.Context) bool {
+	return len(s.getTransaction().Authorizations) >= 2
+}
+
 // Authorize implements TxStateMachine for the baseStateMachine.
 func (s *baseStateMachine) Authorize(ctx context.Context) (*paymentLib.AuthenticatedPaymentState, error) {
-	if len(s.getTransaction().Authorizations) >= 2 {
+	if s.IsAuthorized(ctx) {
 		return s.SetNextState(ctx, paymentLib.Authorized)
 	}
 	return s.transaction, &InsufficientAuthorizationsError{}
@@ -122,6 +131,18 @@ func (s *Service) StateMachineFromTransaction(
 			signingKey: signingKey,
 			zebpayHost: os.Getenv("ZEBPAY_SERVER"),
 		}
+	case "solana":
+		solClient := solanaClient.New(rpc.WithEndpoint(os.Getenv("SOLANA_RPC_ENDPOINT")), rpc.WithHTTPClient(&client))
+		keyBytes, err := base64.StdEncoding.DecodeString(os.Getenv("SOLANA_SIGNING_KEY"))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode solana private key: %w", err)
+		}
+		machine = &SolanaMachine{
+			signingKey:      keyBytes,
+			solanaRpcClient: *solClient,
+			splMintAddress:  SPLBATMintAddress,
+			splMintDecimals: SPLBATMintDecimals,
+		}
 	case "dryrun-happypath":
 		machine = &HappyPathMachine{}
 	case "dryrun-prepare-fails":
@@ -141,8 +162,8 @@ func Drive[T TxStateMachine](
 	ctx context.Context,
 	machine T,
 ) (*paymentLib.AuthenticatedPaymentState, error) {
-	// Drive is called recursively, so we need to check whether a deadline has been set
-	// by a prior caller and only set the default deadline if not.
+	// Check whether a deadline has been set by a prior caller and only set the default deadline if
+	// not.
 	if _, deadlineSet := ctx.Deadline(); !deadlineSet {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
@@ -184,13 +205,49 @@ func (s *Service) DriveTransaction(
 	state, lastErr := Drive(ctx, stateMachine)
 	if state != nil {
 		var errTmp paymentLib.PaymentError
+		// If the error is already a PaymentError use it
 		if errors.As(lastErr, &errTmp) {
 			state.LastError = &errTmp
 		} else if lastErr != nil {
-			// Assume any non-categorized error is temporary
+			// If it's not a PaymentError turn it into one. Assume any error coming to us without
+			// PaymentError structure is temporary
 			state.LastError = paymentLib.ProcessingErrorFromError(lastErr, true)
 		} else {
 			state.LastError = nil
+		}
+
+		// Get the validated history of the transaction from qldb so that we can safely access
+		// current persisted state
+		history, err := s.datastore.GetPaymentStateHistory(ctx, state.DocumentID)
+		if err != nil {
+			return fmt.Errorf("failed to get history from document id: %w", err)
+		}
+		persistedState, err := history.GetAuthenticatedPaymentState(
+			s.verifierStore,
+			state.DocumentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to validate payment state history: %w", err)
+		}
+		// If there is idempotency data in qldb and in our generated state and
+		// it is different from the idempotency data in the current state it
+		// means that there was a race between two calls to Authenticate and we
+		// are operating on the loser. There is no risk to proceeding as long as
+		// we retain the winner idempotency.
+		if persistedState != nil &&
+			persistedState.ExternalIdempotency != nil &&
+			state.ExternalIdempotency != nil &&
+			!bytes.Equal(state.ExternalIdempotency, persistedState.ExternalIdempotency) {
+			state.ExternalIdempotency = persistedState.ExternalIdempotency
+		}
+
+		// If there is a persisted LastError and the current LastError on the state is
+		// nil, indicating no new error, retain the already-persisted LastError in the
+		// record.
+		if persistedState != nil &&
+			persistedState.LastError != nil &&
+			state.LastError == nil {
+			state.LastError = persistedState.LastError
 		}
 
 		marshaledState, err := json.Marshal(state)
@@ -207,8 +264,7 @@ func (s *Service) DriveTransaction(
 			return fmt.Errorf("failed to sign transaction: %w", err)
 		}
 
-		s.datastore.UpdatePaymentState(ctx, state.DocumentID, &paymentState)
-
+		err = s.datastore.UpdatePaymentState(ctx, state.DocumentID, &paymentState)
 		if err != nil {
 			return fmt.Errorf("failed to update transaction: %w", err)
 		}

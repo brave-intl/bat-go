@@ -22,6 +22,63 @@ type SubmitRequest struct {
 // SubmitResponse is returned to provide the status of a payment after submission, along with any
 // error that resulted, if necessary.
 type SubmitResponse struct {
-	Status PaymentStatus `json:"status" valid:"required"`
-	PaymentDetails `json:"paymentDetails,omitempty"`
+	Status              PaymentStatus `json:"status" valid:"required"`
+	PaymentDetails      `json:"paymentDetails,omitempty"`
+	ExternalIdempotency string `json:"externalIdempotency,omitempty"`
+}
+
+// AddressApprovalRequest is provided to indicate approval of an on-chain address.
+type AddressApprovalRequest struct {
+	Address string `json:"address" valid:"required"`
+}
+
+// OperatorShare represents the association between an operator name and their encrypted share
+type OperatorShareData struct {
+	Name     string `json:"name" valid:"required"`
+	Material []byte `json:"material" valid:"required"`
+}
+
+type OperatorPubkeyData struct {
+	Name      string `json:"name" valid:"required"`
+	PublicKey string `json:"publicKey" valid:"required"`
+}
+
+// CreateVaultRequest is provided to request vault creation for secrets storage.
+type CreateVaultRequest struct {
+	Threshold int                  `json:"threshold" valid:"required"`
+}
+
+// CreateVaultResponse provides shares, associated with names provided in CreateVaultRequest, as
+// well as the public key resulting from creation and the threshold specified in the request.
+type CreateVaultResponse struct {
+	Shares    []OperatorShareData `json:"operatorData" valid:"required"`
+	PublicKey string                 `json:"publicKey" valid:"required"`
+	Threshold int                    `json:"threshold" valid:"required"`
+}
+
+// CreateVaultResponseWrapper is a data wrapper that exposes the service's response object to the
+// client
+type CreateVaultResponseWrapper struct {
+	Data CreateVaultResponse `json:"data"`
+}
+
+// VerifyVaultResponseWrapper is a data wrapper that exposes the service's response object to the
+// client
+type VerifyVaultResponseWrapper struct {
+	Data VerifyVaultResponse `json:"data"`
+}
+
+// VerifyVaultRequest is provided to request vault approval for a given configuration and public
+// key. The provided parameters and public key must exist and match in QLDB for approval to succeed.
+type VerifyVaultRequest struct {
+	Threshold int                  `json:"threshold" valid:"required"`
+	PublicKey string               `json:"publicKey" valid:"required"`
+}
+
+// VerifyVaultResponse returns the number of approvals, whether a vault is fully approved, and the
+// public key of the approved vault.
+type VerifyVaultResponse struct {
+	Operators []string `json:"operatorKeys" valid:"required"`
+	Threshold int      `json:"threshold" valid:"required"`
+	PublicKey string   `json:"publicKey" valid:"required"`
 }

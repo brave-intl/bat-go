@@ -39,7 +39,7 @@ type StreamClient interface {
 	// AddMessges to the specified stream
 	AddMessages(ctx context.Context, stream string, message ...interface{}) error
 	// ReadAndHandle any messages for the specified consumer, including any retries
-	ReadAndHandle(ctx context.Context, stream, consumerGroup, consumerID string, handle MessageHandler)
+	ReadAndHandle(ctx context.Context, stream, consumerGroup, consumerID string, handle MessageHandler, batchSize int64)
 	// UnacknowledgedCount returns the count of messages which are either unread or pending
 	UnacknowledgedCounts(ctx context.Context, stream, consumerGroup string) (lag int64, pending int64, err error)
 	// GetStreamLength returns the stream length
@@ -48,6 +48,8 @@ type StreamClient interface {
 	GetMessageRetryAfter(ctx context.Context, id string) (bool, error)
 	// SetMessageRetryAfter for message id, expiring after delay
 	SetMessageRetryAfter(ctx context.Context, id string, delay time.Duration) error
+	// IncrementSetScore increments the score of an element in a redis sorted set by 1
+	IncrementSetScore(ctx context.Context, set, element string) error
 }
 
 // RedisClient is an implementation of StreamClient using an actual redis connection
@@ -155,7 +157,7 @@ func chunkMessages(chunkSize int, messages []interface{}) [][]interface{} {
 }
 
 // ReadAndHandle any messages for the specified consumer, including any retries
-func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consumerGroup, consumerID string, handle MessageHandler) {
+func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consumerGroup, consumerID string, handle MessageHandler, batchSize int64) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return
@@ -166,7 +168,7 @@ func (redisClient *RedisClient) ReadAndHandle(ctx context.Context, stream, consu
 			Group:    consumerGroup,
 			Consumer: consumerID,
 			Streams:  []string{stream, id},
-			Count:    10,
+			Count:    batchSize,
 			Block:    100 * time.Millisecond,
 			NoAck:    false,
 		}).Result()
@@ -261,9 +263,14 @@ func (redisClient *RedisClient) SetMessageRetryAfter(ctx context.Context, id str
 	return redisClient.Set(ctx, RetryAfterPrefix+id, "", delay).Err()
 }
 
+// IncrementSetScore increments the score of an element in a redis sorted set by 1
+func (redisClient *RedisClient) IncrementSetScore(ctx context.Context, set, element string) error {
+	return redisClient.ZIncrBy(ctx, set, 1, element).Err()
+}
+
 // StartConsumer using a generic stream client
 // NOTE: control will remain in this function until context cancellation
-func StartConsumer(ctx context.Context, streamClient StreamClient, stream, consumerGroup, consumerID string, handle MessageHandler) error {
+func StartConsumer(ctx context.Context, streamClient StreamClient, stream, consumerGroup, consumerID string, handle MessageHandler, batchSize int64) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
@@ -289,7 +296,7 @@ func StartConsumer(ctx context.Context, streamClient StreamClient, stream, consu
 	for {
 		select {
 		case <-ticker.C:
-			streamClient.ReadAndHandle(ctx, stream, consumerGroup, consumerID, handle)
+			streamClient.ReadAndHandle(ctx, stream, consumerGroup, consumerID, handle, batchSize)
 		case <-ctx.Done():
 			logger.Info().Msg("shutting down consumer")
 			return nil

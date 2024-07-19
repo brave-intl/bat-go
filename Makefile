@@ -16,7 +16,8 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test create-json-schema lint clean download-mod
+.PHONY: all buildcmd docker test create-json-schema lint clean download-mod pcrs pcrs-only nitro-shim/tools/eifbuild/eifbuild
+
 all: test create-json-schema buildcmd
 
 .DEFAULT: buildcmd
@@ -101,17 +102,24 @@ docker:
 	docker tag bat-go:$(GIT_VERSION)$(BUILD_TIME) bat-go:latest
 
 docker-reproducible:
-	docker run -v $(PWD):/workspace --network=host \
+	$(eval TMP_CHECKOUT = $(shell mktemp -d 2>/dev/null || mktemp -d -t 'bat-go-tmp'))
+	git clone . $(TMP_CHECKOUT)
+	cd $(TMP_CHECKOUT) && bash -c 'for f in `git ls-files` ; do touch -d `git log -1 --format="%aI" "$$f"` "$$f" ; done'
+	rm -rf $(TMP_CHECKOUT)/.git
+	docker run --rm -v $(HOME)/.cache/kaniko:/cache -v $(HOME)/.linuxkit/cache:/linuxkit -v $(TMP_CHECKOUT):/workspace --network=host \
 		gcr.io/kaniko-project/executor:latest \
 		--reproducible --dockerfile /workspace/Dockerfile \
 		--no-push --tarPath /workspace/bat-go-repro.tar \
-		--destination bat-go-repro:latest --context dir:///workspace/ && cat bat-go-repro.tar | docker load
+		--cache --cache-copy-layers --cache-dir /cache --cache-repo oci:/cache/bat-go-repro \
+		--oci-layout-path /linuxkit \
+		--destination bat-go-repro:latest --context dir:///workspace/ || (rm -rf $(TMP_CHECKOUT) && false)
+	cat $(TMP_CHECKOUT)/bat-go-repro.tar | docker load
+	cp $(TMP_CHECKOUT)/bat-go-repro.tar .
+	rm -rf $(TMP_CHECKOUT)
+	sudo chown -R $(USER):$(USER) $(HOME)/.linuxkit/cache
 
-docker-payments:
-	docker rmi -f bat-go/payments:latest
-	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) --target payments -t bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) .
-	docker tag bat-go/payments:$(GIT_VERSION)$(BUILD_TIME) bat-go/payments:latest
+bat-go-repro.tar:
+	make docker-reproducible
 
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose \
@@ -221,3 +229,26 @@ ensure-gomod-volume:
 
 ensure-shared-net:
 	if [ -z $$(docker network ls -q -f "name=brave_shared_net") ]; then docker network create brave_shared_net; fi
+
+install-eifbuild:
+	cargo install --git https://github.com/aws/aws-nitro-enclaves-image-format --example eif_build
+
+install-hooks:
+	cp tools/payments/git-hooks/post-merge .git/hooks/post-merge
+	chmod +x .git/hooks/post-merge
+
+nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli:
+	mkdir -p nitro-shim/tools/eifbuild/third_party && git clone https://github.com/aws/aws-nitro-enclaves-cli --depth 1 nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli
+
+nitro-shim/tools/eifbuild/eifbuild:
+	cd nitro-shim/tools/eifbuild && make
+
+pcrs: nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli nitro-shim/tools/eifbuild/eifbuild bat-go-repro.tar
+	make pcrs-only
+
+pcrs-only: nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli nitro-shim/tools/eifbuild/eifbuild
+	@which eifbuild || echo "Missing eifbuild, ensure that you've run `make install-eifbuild`"
+	@echo
+	@echo './nitro-shim/tools/eifbuild/eifbuild -pass-env "$$(EIF_PASS_ENV)" -output-file nitro-image.eif -blobs-path nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli/blobs/x86_64 -- "$$(EIF_COMMAND)"'
+	@echo
+	@./nitro-shim/tools/eifbuild/eifbuild -pass-env "$(EIF_PASS_ENV)" -output-file nitro-image.eif -blobs-path nitro-shim/tools/eifbuild/third_party/aws-nitro-enclaves-cli/blobs/x86_64 -- "$(EIF_COMMAND)"

@@ -13,6 +13,8 @@ import (
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
 
+	"github.com/brave-intl/bat-go/libs/clients"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -25,6 +27,7 @@ import (
 type getConfResponse struct {
 	EncryptionKeyARN string `json:"encryptionKeyArn"`
 	Environment      string `json:"environment"`
+	PublicKey        string `json:"publicKey"`
 }
 
 func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
@@ -66,8 +69,8 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 		// Log all payments requests
 		r.Use(middleware.RequestLogger(logger))
 
-		// prepare inserts transactions into qldb, returning a document which needs to be submitted by
-		// an authorizer
+		// prepare inserts transactions into qldb, returning a document which needs to be submitted
+		// by an authorizer
 		r.Post(
 			"/prepare",
 			middleware.InstrumentHandler(
@@ -84,6 +87,30 @@ func SetupRouter(ctx context.Context, s *Service) (context.Context, *chi.Mux) {
 				s.AuthorizerSignedMiddleware()(SubmitHandler(s)),
 			).ServeHTTP)
 		logger.Info().Msg("submit endpoint setup")
+		// address generation will have an http signature from a known list of public keys
+		r.Post(
+			"/generatesol",
+			middleware.InstrumentHandler(
+				"GenerateSolanaAddressHandler",
+				s.AuthorizerSignedMiddleware()(GenerateSolanaAddressHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("solana address generation endpoint setup")
+		// address approval will have an http signature from a known list of public keys
+		r.Post(
+			"/approvesol",
+			middleware.InstrumentHandler(
+				"ApproveSolanaAddressHandler",
+				s.AuthorizerSignedMiddleware()(ApproveSolanaAddressHandler(s)),
+			).ServeHTTP)
+		logger.Info().Msg("solana address approval endpoint setup")
+		r.Post(
+			"/vault/create",
+			middleware.InstrumentHandler("CreateVaultHandler", CreateVaultHandler(s)).ServeHTTP)
+		logger.Info().Msg("vault create endpoint set up")
+		r.Post(
+			"/vault/verify",
+			middleware.InstrumentHandler("VerifyVaultHandler", VerifyVaultHandler(s)).ServeHTTP)
+		logger.Info().Msg("vault verify endpoint set up")
 
 		r.Get(
 			"/info",
@@ -106,6 +133,7 @@ func GetConfigurationHandler(service *Service) handlers.AppHandler {
 		resp := &getConfResponse{
 			EncryptionKeyARN: service.kmsDecryptKeyArn,
 			Environment:      os.Getenv("ENV"),
+			PublicKey:        service.publicKey,
 		}
 
 		logger.Debug().Msg("handling configuration request")
@@ -140,6 +168,12 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		if err != nil {
 			logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
 			return handlers.WrapError(err, "failed to validate transaction", http.StatusBadRequest)
+		}
+
+		// Implement a simple maximum payout amount
+		if req.Amount.GreaterThan(clients.TransferLimit) {
+			logger.Error().Err(err).Str("amount", req.Amount.String()).Str("to", req.To).Msg("requested payment amount exceeds maximum")
+			return handlers.WrapError(err, "requested payment amount exceeds maximum", http.StatusBadRequest)
 		}
 
 		authenticatedState := req.ToAuthenticatedPaymentState()
@@ -238,16 +272,190 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			code = http.StatusOK
 		}
 
+		// If the status is Authorized and we're using Solana then we need to proceed immediately to
+		// Pay. Set the retry header to 0 to indicate to the Worker that is should call again
+		// without delay. This is especially important for Solana, where we have only a short time
+		// (~1 minute) to get the transaction into the chain.
+		if (status == paymentLib.Authorized || status == paymentLib.Pending) && authenticatedState.PaymentDetails.Custodian == "solana" {
+			w.Header().Add("x-retry-after", "0")
+		}
+
 		// NOTE: we are intentionally returning an AppError even in the success case as some errors are
 		// "permanent" errors indiciating a transaction state machine has reached an end state
 		return &handlers.AppError{
 			Cause:   err,
 			Message: "submitted",
 			Code:    code,
-			Data:    paymentLib.SubmitResponse{
-				Status: status,
+			Data: paymentLib.SubmitResponse{
+				Status:         status,
 				PaymentDetails: authenticatedState.PaymentDetails,
 			},
+		}
+	}
+}
+
+// GenerateSolanaAddressHandler.
+func GenerateSolanaAddressHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		logger := logging.Logger(ctx, "GenerateSolanaAddressHandler")
+		logger.Debug().Msg("handling solana address generation request")
+
+		// we have passed the http signature middleware, record who authorized the tx
+		keyID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "error getting identity of transaction authorizer", http.StatusInternalServerError)
+		}
+
+		// get the secrets bucket name from environment
+		secretsBucketName, ok := service.baseCtx.Value(appctx.EnclaveSecretsBucketNameCTXKey).(string)
+		if !ok {
+			return handlers.WrapError(err, "no secrets bucket configured", http.StatusInternalServerError)
+		}
+		chainAddress, err := service.createSolanaAddress(ctx, secretsBucketName, keyID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to create solana address", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "key created",
+			Code:    http.StatusOK,
+			Data:    chainAddress,
+		}
+	}
+}
+
+// ApproveSolanaAddressHandler.handles requests to approve solana addresses. 2 calls to this endpoiont
+// from separate operators is needed to fully approve an address for use.
+func ApproveSolanaAddressHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			logger          = logging.Logger(ctx, "ApproveSolanaAddressHandler")
+			approvalRequest = &paymentLib.AddressApprovalRequest{}
+		)
+
+		// read the transactions in the body
+		err := requestutils.ReadJSON(ctx, r.Body, &approvalRequest)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(approvalRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str("approvals", fmt.Sprintf("%+v", approvalRequest)).Msg("handling approval request")
+
+		// we have passed the http signature middleware, record who authorized the tx
+		keyID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.WrapError(err, "error getting identity of address authorizer", http.StatusInternalServerError)
+		}
+
+		chainAddress, err := service.approveSolanaAddress(ctx, approvalRequest.Address, keyID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to approve solana address", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "key approved",
+			Code:    http.StatusOK,
+			Data:    chainAddress,
+		}
+	}
+}
+
+// CreateVaultHandler generates a key used to encrypt API keys and wallet private keys with shamir
+// shares, stores metadata about this key in QLDB, returns the shamir shares, and discards the
+// private key.
+func CreateVaultHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			logger       = logging.Logger(ctx, "CreateVaultHandler")
+			vaultRequest = paymentLib.CreateVaultRequest{}
+		)
+
+		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(vaultRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", vaultRequest),
+		).Msg("handling vault creation request")
+
+		createdVaultResponse, err := service.createVault(ctx, vaultRequest.Threshold)
+		if err != nil {
+			return handlers.WrapError(err, "failed to create vault", http.StatusInternalServerError)
+		}
+
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", createdVaultResponse),
+		).Msg("sending vault creation response")
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "vault created",
+			Code:    http.StatusOK,
+			Data:    createdVaultResponse,
+		}
+	}
+}
+
+// VerifyVaultHandler returns the QLDB record for a vault for the purposes of configuration
+// verification in the operator tooling
+func VerifyVaultHandler(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		var (
+			logger       = logging.Logger(ctx, "VerifyVaultHandler")
+			vaultRequest = paymentLib.VerifyVaultRequest{}
+		)
+
+		err := requestutils.ReadJSON(ctx, r.Body, &vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(vaultRequest)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str(
+			"vault",
+			fmt.Sprintf("%+v", vaultRequest),
+		).Msg("handling vault verify request")
+
+		verifyVaultResponse, err := service.verifyVault(ctx, vaultRequest)
+		if err != nil {
+			return handlers.WrapError(err, "failed to verify vault", http.StatusInternalServerError)
+		}
+
+		return &handlers.AppError{
+			Cause:   err,
+			Message: "vault verification data",
+			Code:    http.StatusOK,
+			Data:    verifyVaultResponse,
 		}
 	}
 }
