@@ -3,7 +3,10 @@ package skus
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,12 +18,788 @@ import (
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 	"github.com/stripe/stripe-go/v72"
+	"google.golang.org/api/androidpublisher/v3"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
+
+func TestService_uniqBatchesTxTime(t *testing.T) {
+	type tcGiven struct {
+		orderID  uuid.UUID
+		itemID   uuid.UUID
+		from     time.Time
+		to       time.Time
+		ordRepo  *repository.MockOrder
+		itemRepo *repository.MockOrderItem
+		tlv2Repo *repository.MockTLV2
+	}
+
+	type tcExpected struct {
+		lim int
+		val int
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderNotFound,
+			},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "pending",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderNotPaid,
+			},
+		},
+
+		{
+			name: "invalid_order_no_items",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrInvalidOrderNoItems,
+			},
+		},
+
+		{
+			name: "legacy_default_item_unsupported_cred_type",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:      uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrUnsupportedCredType,
+			},
+		},
+
+		{
+			name: "legacy_default_item_uniq_batches_error",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+								CredentialType: "time-limited-v2",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 0, model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "legacy_default_item_success",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+								CredentialType: "time-limited-v2",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 1, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				lim: 10,
+				val: 1,
+			},
+		},
+
+		{
+			name: "explicit_item_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:      uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000001")),
+								OrderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderItemNotFound,
+			},
+		},
+
+		{
+			name: "explicit_item_success",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				from:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:     id,
+							Status: "paid",
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+								CredentialType: "time-limited-v2",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 2, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				lim: 10,
+				val: 2,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itemRepo,
+				tlv2Repo:      tc.given.tlv2Repo,
+			}
+
+			ctx := context.Background()
+
+			lim, nact, err := svc.uniqBatchesTxTime(ctx, nil, tc.given.orderID, tc.given.itemID, tc.given.from, tc.given.to)
+			must.Equal(t, true, errors.Is(err, tc.exp.err))
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.lim, lim)
+			should.Equal(t, tc.exp.val, nact)
+		})
+	}
+}
+
+func TestService_processPlayStoreNotificationTx(t *testing.T) {
+	type tcGiven struct {
+		extID string
+		ntf   *playStoreDevNotification
+		orepo *repository.MockOrder
+		prepo *repository.MockOrderPayHistory
+		pscl  *mockPSClient
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "get_order_error",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: "1717200001000", // 2024-06-01 00:00:01
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          2,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "sub_should_renew_fetch_error",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: "1717200001000", // 2024-06-01 00:00:01
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          2,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "sub_should_renew",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          2,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.July, 2, 0, 0, 0, 0, time.UTC)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl: &mockPSClient{
+					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
+						result := &androidpublisher.SubscriptionPurchase{
+							PaymentState:     ptrTo[int64](1),
+							ExpiryTimeMillis: time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC).UnixMilli(),
+						}
+
+						return result, nil
+					},
+				},
+			},
+		},
+
+		{
+			name: "sub_should_cancel",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          3,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+
+		{
+			name: "void_should_cancel",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:       "com.brave.browser_nightly",
+					EventTimeMilli:    json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 1},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+
+		{
+			name: "skip_sub",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:    "com.brave.browser_nightly",
+					EventTimeMilli: json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					SubscriptionNtf: &playStoreSubscriptionNtf{
+						Type:          20,
+						PurchaseToken: "PURCHASE_TOKEN_01",
+						SubID:         "nightly.bravevpn.monthly",
+					},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+
+		{
+			name: "skip_void",
+			given: tcGiven{
+				extID: "PURCHASE_TOKEN_01",
+				ntf: &playStoreDevNotification{
+					PackageName:       "com.brave.browser_nightly",
+					EventTimeMilli:    json.Number(strconv.FormatInt(time.Now().UnixMilli(), 10)),
+					VoidedPurchaseNtf: &playStoreVoidedPurchaseNtf{ProductType: 2},
+				},
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+				pscl:  &mockPSClient{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:          tc.given.orepo,
+				payHistRepo:        tc.given.prepo,
+				vendorReceiptValid: &receiptVerifier{playStoreCl: tc.given.pscl},
+			}
+
+			ctx := context.Background()
+
+			err := svc.processPlayStoreNotificationTx(ctx, nil, tc.given.ntf, tc.given.extID)
+			should.Equal(t, true, errors.Is(err, tc.exp))
+		})
+	}
+}
+
+func TestService_processAppStoreNotificationTx(t *testing.T) {
+	type tcGiven struct {
+		ntf   *appStoreSrvNotification
+		txn   *appstore.JWSTransactionDecodedPayload
+		orepo *repository.MockOrder
+		prepo *repository.MockOrderPayHistory
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "get_order_error",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{val: &appstore.SubscriptionNotificationV2DecodedPayload{}},
+				txn: &appstore.JWSTransactionDecodedPayload{OriginalTransactionId: "123456789000001"},
+				orepo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "should_renew",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{
+					val: &appstore.SubscriptionNotificationV2DecodedPayload{
+						NotificationType: appstore.NotificationTypeV2DidRenew,
+						Subtype:          appstore.SubTypeV2BillingRecovery,
+					},
+				},
+				txn: &appstore.JWSTransactionDecodedPayload{
+					OriginalTransactionId: "123456789000001",
+					ExpiresDate:           1704067200000,
+				},
+
+				orepo: &repository.MockOrder{
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+		},
+
+		{
+			name: "should_cancel",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{
+					val: &appstore.SubscriptionNotificationV2DecodedPayload{
+						NotificationType: appstore.NotificationTypeV2DidChangeRenewalStatus,
+						Subtype:          appstore.SubTypeV2AutoRenewDisabled,
+					},
+				},
+				txn: &appstore.JWSTransactionDecodedPayload{
+					OriginalTransactionId: "123456789000001",
+					ExpiresDate:           1704067201000,
+				},
+
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+		},
+
+		{
+			name: "anything_else",
+			given: tcGiven{
+				ntf: &appStoreSrvNotification{
+					val: &appstore.SubscriptionNotificationV2DecodedPayload{
+						NotificationType: appstore.NotificationTypeV2PriceIncrease,
+						Subtype:          appstore.SubTypeV2Accepted,
+					},
+				},
+				txn: &appstore.JWSTransactionDecodedPayload{
+					OriginalTransactionId: "123456789000001",
+					ExpiresDate:           1704067201000,
+				},
+
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:   tc.given.orepo,
+				payHistRepo: tc.given.prepo,
+			}
+
+			ctx := context.Background()
+
+			err := svc.processAppStoreNotificationTx(ctx, nil, tc.given.ntf, tc.given.txn)
+			should.Equal(t, true, errors.Is(err, tc.exp))
+		})
+	}
+}
+
+func TestService_renewOrderWithExpPaidTimeTx(t *testing.T) {
+	type tcGiven struct {
+		id    uuid.UUID
+		expt  time.Time
+		paidt time.Time
+		orepo *repository.MockOrder
+		prepo *repository.MockOrderPayHistory
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "set_status_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "set_expires_at_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "set_last_paid_at_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetLastPaidAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "insert_pay_history_failed",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{},
+				prepo: &repository.MockOrderPayHistory{
+					FnInsert: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				id:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				expt:  time.UnixMilli(1735689599000),
+				paidt: time.UnixMilli(1704067201000),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if status != model.OrderStatusPaid {
+							return model.Error("unexpected: status")
+						}
+
+						return nil
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if !when.Equal(time.UnixMilli(1735689599000)) {
+							return model.Error("unexpected: expt")
+						}
+
+						return nil
+					},
+
+					FnSetLastPaidAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if !when.Equal(time.UnixMilli(1704067201000)) {
+							return model.Error("unexpected: expt")
+						}
+
+						return nil
+					},
+				},
+				prepo: &repository.MockOrderPayHistory{
+					FnInsert: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if !when.Equal(time.UnixMilli(1704067201000)) {
+							return model.Error("unexpected: expt")
+						}
+
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:   tc.given.orepo,
+				payHistRepo: tc.given.prepo,
+			}
+
+			ctx := context.Background()
+
+			err := svc.renewOrderWithExpPaidTimeTx(ctx, nil, tc.given.id, tc.given.expt, tc.given.paidt)
+			should.Equal(t, true, errors.Is(err, tc.exp))
+		})
+	}
+}
 
 func TestCheckNumBlindedCreds(t *testing.T) {
 	type tcGiven struct {
@@ -393,8 +1172,8 @@ func TestDoItemsHaveSUOrTlv2(t *testing.T) {
 
 func TestNewMobileOrderMdata(t *testing.T) {
 	type tcGiven struct {
+		vnd   model.Vendor
 		extID string
-		req   model.ReceiptRequest
 	}
 
 	type testCase struct {
@@ -408,12 +1187,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 			name: "android",
 			given: tcGiven{
 				extID: "extID",
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "subID",
-				},
+				vnd:   model.VendorGoogle,
 			},
 			exp: datastore.Metadata{
 				"externalID":       "extID",
@@ -426,12 +1200,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 			name: "ios",
 			given: tcGiven{
 				extID: "extID",
-				req: model.ReceiptRequest{
-					Type:           model.VendorApple,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "subID",
-				},
+				vnd:   model.VendorApple,
 			},
 			exp: datastore.Metadata{
 				"externalID":       "extID",
@@ -445,7 +1214,7 @@ func TestNewMobileOrderMdata(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newMobileOrderMdata(tc.given.req, tc.given.extID)
+			actual := newMobileOrderMdata(tc.given.vnd, tc.given.extID)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -728,8 +1497,8 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		svc   *mockPaidOrderCreator
 		set   map[string]model.OrderItemRequestNew
 		ppcfg *premiumPaymentProcConfig
-		req   model.ReceiptRequest
-		extID string
+		rcpt  model.ReceiptData
+		paidt time.Time
 	}
 
 	type tcExpected struct {
@@ -750,65 +1519,93 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 				svc:   &mockPaidOrderCreator{},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "invalid",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "invalid",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 				},
+				paidt: time.Now(),
 			},
 			exp: tcExpected{err: model.ErrInvalidMobileProduct},
 		},
 
 		{
-			name: "error_in_createOrder",
+			name: "error_in_createOrderPremium",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
-						return nil, model.Error("something went wrong")
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
 					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.leo.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 				},
+				paidt: time.Now(),
 			},
-			exp: tcExpected{err: model.Error("something went wrong")},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
 
 		{
-			name: "error_in_UpdateOrderStatusPaidWithMetadata",
+			name: "error_in_renewOrderWithExpPaidTime",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						return &model.Order{}, nil
 					},
 
-					fnUpdateOrderStatusPaidWithMetadata: func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
-						return model.Error("something went wrong")
+					fnRenewOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						return model.Error("something_went_wrong")
 					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.leo.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 				},
+				paidt: time.Now(),
 			},
-			exp: tcExpected{err: model.Error("something went wrong")},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
+		},
+
+		{
+			name: "error_in_appendOrderMetadata",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return &model.Order{}, nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				set:   newOrderItemReqNewMobileSet("development"),
+				ppcfg: newPaymentProcessorConfig("development"),
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
+				},
+				paidt: time.Now(),
+			},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
 
 		{
 			name: "successful_case_android_leo_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						result := &model.Order{
 							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
 							Items: []model.OrderItem{
@@ -818,15 +1615,44 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 
 						return result, nil
 					},
+
+					fnRenewOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						if !expt.Equal(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected_expt")
+						}
+
+						if !paidt.Equal(time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC)) {
+							return model.Error("unexpected_paidt")
+						}
+
+						return nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						if mdata["externalID"] != "blob" {
+							return model.Error("unexpected_externalID")
+						}
+
+						if mdata["paymentProcessor"] != "android" {
+							return model.Error("unexpected_paymentProcessor")
+						}
+
+						if mdata["vendor"] != "android" {
+							return model.Error("unexpected_vendor")
+						}
+
+						return nil
+					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.leo.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.leo.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
 				},
+				paidt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
 				ord: &model.Order{
@@ -842,7 +1668,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			name: "successful_case_android_vpn_monthly",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{
-					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 						result := &model.Order{
 							ID: uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
 							Items: []model.OrderItem{
@@ -852,15 +1678,44 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 
 						return result, nil
 					},
+
+					fnRenewOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						if !expt.Equal(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected_expt")
+						}
+
+						if !paidt.Equal(time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC)) {
+							return model.Error("unexpected_paidt")
+						}
+
+						return nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						if mdata["externalID"] != "blob" {
+							return model.Error("unexpected_externalID")
+						}
+
+						if mdata["paymentProcessor"] != "android" {
+							return model.Error("unexpected_paymentProcessor")
+						}
+
+						if mdata["vendor"] != "android" {
+							return model.Error("unexpected_vendor")
+						}
+
+						return nil
+					},
 				},
 				set:   newOrderItemReqNewMobileSet("development"),
 				ppcfg: newPaymentProcessorConfig("development"),
-				req: model.ReceiptRequest{
-					Type:           model.VendorGoogle,
-					Blob:           "blob",
-					Package:        "package",
-					SubscriptionID: "brave.vpn.monthly",
+				rcpt: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.vpn.monthly",
+					ExtID:     "blob",
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
 				},
+				paidt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
 				ord: &model.Order{
@@ -877,7 +1732,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := createOrderWithReceipt(context.Background(), tc.given.svc, tc.given.set, tc.given.ppcfg, tc.given.req, tc.given.extID)
+			actual, err := createOrderWithReceipt(context.Background(), tc.given.svc, tc.given.set, tc.given.ppcfg, tc.given.rcpt, tc.given.paidt)
 			must.Equal(t, tc.exp.err, err)
 
 			if tc.exp.err != nil {
@@ -979,106 +1834,158 @@ func TestService_checkOrderReceipt(t *testing.T) {
 	}
 }
 
-func TestShouldCancelOrderIOS(t *testing.T) {
+func TestService_doTLV2ExistTxTime(t *testing.T) {
 	type tcGiven struct {
-		now  time.Time
-		info *appstore.JWSTransactionDecodedPayload
+		reqID uuid.UUID
+		item  *model.OrderItem
+		creds []string
+		from  time.Time
+		to    time.Time
+		repo  *repository.MockTLV2
 	}
 
 	type testCase struct {
 		name  string
 		given tcGiven
-		exp   bool
+		exp   error
 	}
 
 	tests := []testCase{
 		{
-			name: "nil",
+			name: "invalid_credential_type",
 			given: tcGiven{
-				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo:  &repository.MockTLV2{},
 			},
+			exp: model.ErrUnsupportedCredType,
 		},
 
 		{
-			name: "empty_dates_not_expired",
+			name: "submission_report_error",
 			given: tcGiven{
-				now:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-				info: &appstore.JWSTransactionDecodedPayload{},
-			},
-		},
-
-		{
-			name: "expires_date_before_no_revocation_date",
-			given: tcGiven{
-				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-				info: &appstore.JWSTransactionDecodedPayload{
-					// 2023-12-31 23:59:59.
-					ExpiresDate: 1704067199000,
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+						return model.TLV2CredSubmissionReport{}, model.Error("something_went_wrong")
+					},
 				},
 			},
-			exp: true,
+			exp: model.Error("something_went_wrong"),
 		},
 
 		{
-			name: "expires_date_after_no_revocation_date",
+			name: "submission_submitted",
 			given: tcGiven{
-				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-				info: &appstore.JWSTransactionDecodedPayload{
-					// 2024-01-01 01:00:01.
-					ExpiresDate: 1704070801000,
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+						return model.TLV2CredSubmissionReport{Submitted: true}, nil
+					},
 				},
 			},
+			exp: errCredsAlreadySubmitted,
 		},
 
 		{
-			name: "expires_date_after_revocation_date_after",
+			name: "submission_mismatch",
 			given: tcGiven{
-				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-				info: &appstore.JWSTransactionDecodedPayload{
-					// 2024-01-01 01:00:01.
-					ExpiresDate: 1704070801000,
-
-					// 2024-01-01 00:30:01.
-					RevocationDate: 1704069001000,
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+						return model.TLV2CredSubmissionReport{ReqIDMistmatch: true}, nil
+					},
 				},
 			},
+			exp: errCredsAlreadySubmittedMismatch,
 		},
 
 		{
-			name: "expires_date_after_revocation_date_before",
+			name: "uniq_batches_error",
 			given: tcGiven{
-				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-				info: &appstore.JWSTransactionDecodedPayload{
-					// 2024-01-01 01:00:01.
-					ExpiresDate: 1704070801000,
-
-					// 2023-12-31 23:30:01.
-					RevocationDate: 1704065401000,
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 0, model.Error("something_went_wrong")
+					},
 				},
 			},
-			exp: true,
+			exp: model.Error("something_went_wrong"),
 		},
 
 		{
-			name: "no_expires_date_revocation_date_before",
+			name: "uniq_batches_over_limit",
 			given: tcGiven{
-				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-				info: &appstore.JWSTransactionDecodedPayload{
-					// 2023-12-31 23:59:59.
-					RevocationDate: 1704067199000,
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
+				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo: &repository.MockTLV2{
+					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+						return 10, nil
+					},
 				},
 			},
-			exp: true,
+			exp: ErrCredsAlreadyExist,
 		},
 
 		{
-			name: "no_expires_date_revocation_date_after",
+			name: "success",
 			given: tcGiven{
-				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-				info: &appstore.JWSTransactionDecodedPayload{
-					// 2024-01-01 01:00:01.
-					RevocationDate: 1704070801000,
+				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				item: &model.OrderItem{
+					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType: "time-limited-v2",
 				},
+				creds: []string{"cred_01", "cred_02"},
+				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+				repo:  &repository.MockTLV2{},
 			},
 		},
 	}
@@ -1087,8 +1994,11 @@ func TestShouldCancelOrderIOS(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := shouldCancelOrderIOS(tc.given.info, tc.given.now)
+			svc := &Service{tlv2Repo: tc.given.repo}
 
+			ctx := context.Background()
+
+			actual := svc.doTLV2ExistTxTime(ctx, nil, tc.given.reqID, tc.given.item, tc.given.creds, tc.given.from, tc.given.to)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -1150,23 +2060,215 @@ func TestIsErrStripeNotFound(t *testing.T) {
 	}
 }
 
-type mockPaidOrderCreator struct {
-	fnCreateOrder                       func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
-	fnUpdateOrderStatusPaidWithMetadata func(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error
+func TestReceiptValidError(t *testing.T) {
+	tests := []struct {
+		name  string
+		given error
+		exp   error
+	}{
+		{
+			name:  "wrapped",
+			given: &receiptValidError{err: model.Error("some_error")},
+			exp:   model.Error("some_error"),
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			if rverr := new(receiptValidError); errors.As(tc.given, &rverr) {
+				should.Equal(t, tc.exp, rverr.err)
+
+				return
+			}
+
+			should.Fail(t, "unexpected")
+		})
+	}
 }
 
-func (s *mockPaidOrderCreator) createOrder(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
-	if s.fnCreateOrder == nil {
+func TestService_appendOrderMetadataTx(t *testing.T) {
+	type tcGiven struct {
+		oid   uuid.UUID
+		mdata datastore.Metadata
+		repo  orderStoreSvc
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "error_append_metadata",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"string": "value",
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_append_metadata_int",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"int": int(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_append_metadata_int64",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"int": int64(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadataInt64: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_append_metadata_float64",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"float64": float64(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_invalid_type",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"bool": false,
+				},
+				repo: &repository.MockOrder{},
+			},
+			exp: model.ErrInvalidOrderMetadataType,
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				oid: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				mdata: datastore.Metadata{
+					"string":  "value",
+					"int":     int(42),
+					"int64":   int64(42),
+					"float64": float64(42),
+				},
+				repo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key != "string" {
+							return model.Error("unexpected")
+						}
+
+						if val != "value" {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if key != "int" && key != "float64" {
+							return model.Error("unexpected")
+						}
+
+						if val != 42 {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+
+					FnAppendMetadataInt64: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error {
+						if key != "int64" {
+							return model.Error("unexpected")
+						}
+
+						if val != 42 {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.repo}
+
+			ctx := context.Background()
+
+			actual := svc.appendOrderMetadataTx(ctx, nil, tc.given.oid, tc.given.mdata)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+type mockPaidOrderCreator struct {
+	fnCreateOrderPremium        func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	fnRenewOrderWithExpPaidTime func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
+	fnAppendOrderMetadata       func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
+}
+
+func (s *mockPaidOrderCreator) createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+	if s.fnCreateOrderPremium == nil {
 		return &model.Order{}, nil
 	}
 
-	return s.fnCreateOrder(ctx, req, ordNew, items)
+	return s.fnCreateOrderPremium(ctx, req, ordNew, items)
 }
 
-func (s *mockPaidOrderCreator) UpdateOrderStatusPaidWithMetadata(ctx context.Context, oid *uuid.UUID, mdata datastore.Metadata) error {
-	if s.fnUpdateOrderStatusPaidWithMetadata == nil {
+func (s *mockPaidOrderCreator) renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+	if s.fnRenewOrderWithExpPaidTime == nil {
 		return nil
 	}
 
-	return s.fnUpdateOrderStatusPaidWithMetadata(ctx, oid, mdata)
+	return s.fnRenewOrderWithExpPaidTime(ctx, id, expt, paidt)
+}
+
+func (s *mockPaidOrderCreator) appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+	if s.fnAppendOrderMetadata == nil {
+		return nil
+	}
+
+	return s.fnAppendOrderMetadata(ctx, oid, mdata)
 }

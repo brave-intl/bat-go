@@ -7,12 +7,21 @@ import (
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 
+	"github.com/brave-intl/bat-go/libs/datastore"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 type MockOrder struct {
-	FnGet             func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
-	FnGetByExternalID func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnGet                 func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	FnGetByExternalID     func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnCreate              func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
+	FnSetStatus           func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	FnSetExpiresAt        func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnSetLastPaidAt       func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnAppendMetadata      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
+	FnAppendMetadataInt   func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
+	FnAppendMetadataInt64 func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 }
 
 func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -37,6 +46,103 @@ func (r *MockOrder) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return r.FnGetByExternalID(ctx, dbi, extID)
+}
+
+func (r *MockOrder) Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error) {
+	if r.FnCreate == nil {
+		result := &model.Order{
+			ID:                    uuid.NewV4(),
+			MerchantID:            oreq.MerchantID,
+			Currency:              oreq.Currency,
+			Status:                oreq.Status,
+			Location:              datastore.NullString{NullString: oreq.Location},
+			TotalPrice:            oreq.TotalPrice,
+			AllowedPaymentMethods: oreq.AllowedPaymentMethods,
+			ValidFor:              oreq.ValidFor,
+		}
+
+		return result, nil
+	}
+
+	return r.FnCreate(ctx, dbi, oreq)
+}
+
+func (r *MockOrder) SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+	if r.FnSetStatus == nil {
+		return nil
+	}
+
+	return r.FnSetStatus(ctx, dbi, id, status)
+}
+
+func (r *MockOrder) SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+	if r.FnSetExpiresAt == nil {
+		return nil
+	}
+
+	return r.FnSetExpiresAt(ctx, dbi, id, when)
+}
+
+func (r *MockOrder) SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+	if r.FnSetLastPaidAt == nil {
+		return nil
+	}
+
+	return r.FnSetLastPaidAt(ctx, dbi, id, when)
+}
+
+func (r *MockOrder) AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+	if r.FnAppendMetadata == nil {
+		return nil
+	}
+
+	return r.FnAppendMetadata(ctx, dbi, id, key, val)
+}
+
+func (r *MockOrder) AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+	if r.FnAppendMetadataInt == nil {
+		return nil
+	}
+
+	return r.FnAppendMetadataInt(ctx, dbi, id, key, val)
+}
+
+func (r *MockOrder) AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error {
+	if r.FnAppendMetadataInt64 == nil {
+		return nil
+	}
+
+	return r.FnAppendMetadataInt64(ctx, dbi, id, key, val)
+}
+
+type MockOrderItem struct {
+	FnGet           func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FnFindByOrderID func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
+	FnInsertMany    func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+}
+
+func (r *MockOrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+	if r.FnGet == nil {
+		return &model.OrderItem{ID: id}, nil
+	}
+
+	return r.FnGet(ctx, dbi, id)
+}
+
+func (r *MockOrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+	if r.FnFindByOrderID == nil {
+		return []model.OrderItem{{ID: uuid.Nil, OrderID: orderID}}, nil
+	}
+
+	return r.FnFindByOrderID(ctx, dbi, orderID)
+}
+
+func (r *MockOrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error) {
+	if r.FnInsertMany == nil {
+		return items, nil
+	}
+
+	return r.FnInsertMany(ctx, dbi, items...)
 }
 
 type MockIssuer struct {
@@ -88,4 +194,46 @@ func (r *MockIssuer) Create(ctx context.Context, dbi sqlx.QueryerContext, req mo
 	}
 
 	return r.FnCreate(ctx, dbi, req)
+}
+
+type MockOrderPayHistory struct {
+	FnInsert func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+}
+
+func (r *MockOrderPayHistory) Insert(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+	if r.FnInsert == nil {
+		return nil
+	}
+
+	return r.FnInsert(ctx, dbi, id, when)
+}
+
+type MockTLV2 struct {
+	FnGetCredSubmissionReport func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
+	FnUniqBatches             func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
+	FnDeleteLegacy            func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
+}
+
+func (r *MockTLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+	if r.FnGetCredSubmissionReport == nil {
+		return model.TLV2CredSubmissionReport{}, nil
+	}
+
+	return r.FnGetCredSubmissionReport(ctx, dbi, reqID, creds...)
+}
+
+func (r *MockTLV2) UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
+	if r.FnUniqBatches == nil {
+		return 0, nil
+	}
+
+	return r.FnUniqBatches(ctx, dbi, orderID, itemID, from, to)
+}
+
+func (r *MockTLV2) DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error {
+	if r.FnDeleteLegacy == nil {
+		return nil
+	}
+
+	return r.FnDeleteLegacy(ctx, dbi, orderID)
 }

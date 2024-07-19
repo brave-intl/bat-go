@@ -2,27 +2,19 @@ package promotion
 
 import (
 	"context"
-	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	w "github.com/brave-intl/bat-go/libs/wallet"
-	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
-	"golang.org/x/crypto/ed25519"
 )
 
 const localEnv = "local"
@@ -89,7 +81,6 @@ type Service struct {
 	kafkaWriter                 *kafka.Writer
 	kafkaDialer                 *kafka.Dialer
 	kafkaAdminAttestationReader kafkautils.Consumer
-	hotWallet                   *uphold.Wallet
 	pauseSuggestionsUntil       time.Time
 	pauseSuggestionsUntilMu     sync.RWMutex
 }
@@ -113,44 +104,6 @@ func (service *Service) InitKafka(ctx context.Context) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to generate codecs kafka: %w", err)
-	}
-	return nil
-}
-
-// InitHotWallet by reading the keypair and card id from the environment
-func (service *Service) InitHotWallet(ctx context.Context) error {
-	grantWalletPublicKeyHex := os.Getenv("GRANT_WALLET_PUBLIC_KEY")
-	grantWalletPrivateKeyHex := os.Getenv("GRANT_WALLET_PRIVATE_KEY")
-	grantWalletCardID := os.Getenv("GRANT_WALLET_CARD_ID")
-
-	if len(grantWalletCardID) > 0 {
-		var info w.Info
-		info.Provider = "uphold"
-		info.ProviderID = grantWalletCardID
-		{
-			tmp := altcurrency.BAT
-			info.AltCurrency = &tmp
-		}
-
-		var pubKey httpsignature.Ed25519PubKey
-		var privKey ed25519.PrivateKey
-		var err error
-
-		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
-		if err != nil {
-			return errorutils.Wrap(err, "grantWalletPublicKeyHex is invalid")
-		}
-		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
-		if err != nil {
-			return errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
-		}
-
-		service.hotWallet, err = uphold.New(ctx, info, privKey, pubKey)
-		if err != nil {
-			return err
-		}
-	} else if os.Getenv("ENV") != localEnv {
-		return errors.New("GRANT_WALLET_CARD_ID must be set in production")
 	}
 	return nil
 }
@@ -212,10 +165,6 @@ func InitService(
 		return nil, err
 	}
 
-	err = service.InitHotWallet(ctx)
-	if err != nil {
-		return nil, err
-	}
 	return service, nil
 }
 

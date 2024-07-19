@@ -307,7 +307,7 @@ func TestFingerprintCheck(t *testing.T) {
 	var proxy func(*http.Request) (*url.URL, error)
 	wrongFingerprint := "IYSLsapSKlkofKfi6M2hmS4gzXbQKGIX/DHBWIgstw3="
 
-	client = &http.Client{
+	client := &http.Client{
 		Timeout: time.Second * 60,
 		// remove middleware calls
 		Transport: &http.Transport{

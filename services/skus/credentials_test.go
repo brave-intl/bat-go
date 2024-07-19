@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -58,6 +59,10 @@ func (suite *CredentialsTestSuite) AfterTest() {
 	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 }
 
+func (s *CredentialsTestSuite) TearDownSuite() {
+	skustest.CleanDB(s.T(), s.storage.RawDB())
+}
+
 func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_KafkaDuplicates() {
 	// Create an issuer and a paid order with one order item and a time limited v2 credential type.
 	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
@@ -100,9 +105,10 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_KafkaDuplic
 		})
 	}
 
-	handler := SignedOrderCredentialsHandler{
+	handler := &SignedOrderCredentialsHandler{
 		decoder:   &SigningOrderResultDecoder{codec: codec},
 		datastore: suite.storage,
+		tlv2Repo:  repository.NewTLV2(),
 	}
 
 	// Send them to handler with varied times and routines to mock different consumers.
@@ -126,73 +132,95 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_KafkaDuplic
 }
 
 func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_RequestDuplicates() {
-	// Create an issuer and a paid order with one order item and a time limited v2 credential type.
 	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
 	order, issuer := createOrderAndIssuer(suite.T(), ctx, suite.storage, devFreeTimeLimitedV2)
 
-	// Insert a ten signing order requests for the same order and item id
-	var requestIDs []uuid.UUID
-	for i := 0; i < 10; i++ {
-		requestIDs = append(requestIDs, uuid.NewV4())
-		err := suite.storage.InsertSigningOrderRequestOutbox(context.Background(), requestIDs[i], order.ID,
-			order.Items[0].ID, SigningOrderRequest{})
+	reqIDs := []uuid.UUID{
+		uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+		uuid.Must(uuid.FromString("decade00-0000-4000-a000-000000000000")),
+		uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+		uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+		uuid.Must(uuid.FromString("5ca1ab1e-0000-4000-a000-000000000000")),
+		uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+	}
+
+	for i := range reqIDs {
+		err := suite.storage.InsertSigningOrderRequestOutbox(ctx, reqIDs[i], order.ID, order.Items[0].ID, SigningOrderRequest{})
 		suite.Require().NoError(err)
 	}
 
-	validTo := time.Now().Add(time.Hour)
-	validFrom := time.Now().Local()
+	now := time.Now().UTC()
 
-	// Create signed order results for all the request with the same order, order item and valid to and valid from.
-	var signedOrderResults []SigningOrderResult
-	for i := 0; i < len(requestIDs); i++ {
-		signedOrderResults = append(signedOrderResults, suite.makeMsg(requestIDs[i], order.ID, order.Items[0].ID,
-			issuer.ID, validTo, validFrom))
+	validFrom := now
+	validTo := now.Add(1 * time.Hour)
+
+	results := make([]SigningOrderResult, 0, len(reqIDs))
+	for i := range reqIDs {
+		results = append(results, suite.makeMsg(reqIDs[i], order.ID, order.Items[0].ID, issuer.ID, validTo, validFrom))
 	}
 
-	// Create Kafka messages from the signed order results.
 	codec, err := goavro.NewCodec(signingOrderResultSchema)
 	suite.Require().NoError(err)
 
-	var kafkaMessages []kafka.Message
-	for i := 0; i < len(signedOrderResults); i++ {
-		b, err := json.Marshal(signedOrderResults[i])
+	msgs := make([]kafka.Message, 0, len(results))
+	for i := range results {
+		data, err := json.Marshal(results[i])
 		suite.Require().NoError(err)
 
-		native, _, err := codec.NativeFromTextual(b)
+		native, _, err := codec.NativeFromTextual(data)
 		suite.Require().NoError(err)
 
 		binary, err := codec.BinaryFromNative(nil, native)
 		suite.Require().NoError(err)
 
-		kafkaMessages = append(kafkaMessages, kafka.Message{
+		msgs = append(msgs, kafka.Message{
 			Topic: kafkaUnsignedOrderCredsTopic,
 			Value: binary,
 		})
 	}
 
-	handler := SignedOrderCredentialsHandler{
+	handler := &SignedOrderCredentialsHandler{
 		decoder:   &SigningOrderResultDecoder{codec: codec},
 		datastore: suite.storage,
+		tlv2Repo:  repository.NewTLV2(),
 	}
 
 	// Send them to handler with varied times and routines to mock different consumers.
 	var wg sync.WaitGroup
-	for i := 0; i < len(kafkaMessages); i++ {
+	for i := range msgs {
 		wg.Add(1)
+
 		go func(index int) {
 			defer wg.Done()
 			time.Sleep(time.Millisecond * time.Duration(test.RandomIntWithMax(100)))
-			_ = handler.Handle(context.Background(), kafkaMessages[index])
+			_ = handler.Handle(ctx, msgs[index])
 		}(i)
 	}
+
 	wg.Wait()
 
 	creds, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	suite.NoError(err)
 
-	suite.Require().NotNil(creds)
-	suite.Assert().Len(creds.Credentials, 1)
-	suite.Assert().Equal(order.Items[0].ID, creds.Credentials[0].ItemID)
+	suite.Require().Equal(true, creds != nil)
+	suite.Require().Equal(6, len(reqIDs))
+	suite.Require().Equal(6, len(creds.Credentials))
+
+	sort.Slice(reqIDs, func(i, j int) bool {
+		return reqIDs[i].String() < reqIDs[j].String()
+	})
+
+	sort.Slice(creds.Credentials, func(i, j int) bool {
+		return creds.Credentials[i].RequestID < creds.Credentials[j].RequestID
+	})
+
+	for i := range reqIDs {
+		suite.Assert().Equal(order.ID, creds.Credentials[i].OrderID)
+		suite.Assert().Equal(order.Items[0].ID, creds.Credentials[i].ItemID)
+
+		// Add later.
+		// suite.Assert().Equal(reqIDs[i].String(), creds.Credentials[i].RequestID)
+	}
 }
 
 func TestCreateIssuer_NewIssuer(t *testing.T) {

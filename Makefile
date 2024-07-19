@@ -204,8 +204,6 @@ lint: ensure-gomod-volume
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/libs golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/services golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/tools golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/serverless/email/webhook golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/serverless/email/unsubscribe golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
 
 download-mod:
 	cd ./cmd && go mod download && cd ..
@@ -213,9 +211,6 @@ download-mod:
 	cd ./main && go mod download && cd ..
 	cd ./services && go mod download && cd ..
 	cd ./tools && go mod download && cd ..
-	cd ./serverless/email/status && go mod download && cd ../../..
-	cd ./serverless/email/unsubscribe && go mod download && cd ../../..
-	cd ./serverless/email/webhook && go mod download && cd ../../..
 
 docker-up-ext: ensure-shared-net
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))

@@ -36,7 +36,6 @@ func (suite *StripeTestSuite) SetupTest() {
 	// setup the context
 	suite.ctx = context.Background()
 	suite.ctx = context.WithValue(suite.ctx, appctx.DebugLoggingCTXKey, false)
-	suite.ctx = context.WithValue(suite.ctx, appctx.LogLevelCTXKey, "info")
 	suite.ctx, _ = logutils.SetupLogger(suite.ctx)
 
 	stripeKey := os.Getenv("STRIPE_ONRAMP_SECRET_KEY")

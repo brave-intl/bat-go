@@ -56,54 +56,6 @@ func (mr *MockDatastoreMockRecorder) AppendOrderMetadata(arg0, arg1, arg2, arg3 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadata", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadata), arg0, arg1, arg2, arg3)
 }
 
-// AppendOrderMetadataInt mocks base method.
-func (m *MockDatastore) AppendOrderMetadataInt(arg0 context.Context, arg1 *go_uuid.UUID, arg2 string, arg3 int) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendOrderMetadataInt", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AppendOrderMetadataInt indicates an expected call of AppendOrderMetadataInt.
-func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt), arg0, arg1, arg2, arg3)
-}
-
-// AppendOrderMetadataInt64 mocks base method.
-func (m *MockDatastore) AppendOrderMetadataInt64(arg0 context.Context, arg1 *go_uuid.UUID, arg2 string, arg3 int64) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendOrderMetadataInt64", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AppendOrderMetadataInt64 indicates an expected call of AppendOrderMetadataInt64.
-func (mr *MockDatastoreMockRecorder) AppendOrderMetadataInt64(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadataInt64", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadataInt64), arg0, arg1, arg2, arg3)
-}
-
-// AreTimeLimitedV2CredsSubmitted mocks base method.
-func (m *MockDatastore) AreTimeLimitedV2CredsSubmitted(ctx context.Context, requestID go_uuid.UUID, blindedCreds ...string) (AreTimeLimitedV2CredsSubmittedResult, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, requestID}
-	for _, a := range blindedCreds {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "AreTimeLimitedV2CredsSubmitted", varargs...)
-	ret0, _ := ret[0].(AreTimeLimitedV2CredsSubmittedResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AreTimeLimitedV2CredsSubmitted indicates an expected call of AreTimeLimitedV2CredsSubmitted.
-func (mr *MockDatastoreMockRecorder) AreTimeLimitedV2CredsSubmitted(ctx, requestID interface{}, blindedCreds ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, requestID}, blindedCreds...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AreTimeLimitedV2CredsSubmitted", reflect.TypeOf((*MockDatastore)(nil).AreTimeLimitedV2CredsSubmitted), varargs...)
-}
-
 // BeginTx mocks base method.
 func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
 	m.ctrl.T.Helper()
@@ -738,20 +690,6 @@ func (m *MockDatastore) SendSigningRequest(ctx context.Context, signingRequestWr
 func (mr *MockDatastoreMockRecorder) SendSigningRequest(ctx, signingRequestWriter interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendSigningRequest", reflect.TypeOf((*MockDatastore)(nil).SendSigningRequest), ctx, signingRequestWriter)
-}
-
-// SetOrderPaid mocks base method.
-func (m *MockDatastore) SetOrderPaid(arg0 context.Context, arg1 *go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetOrderPaid", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetOrderPaid indicates an expected call of SetOrderPaid.
-func (mr *MockDatastoreMockRecorder) SetOrderPaid(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOrderPaid", reflect.TypeOf((*MockDatastore)(nil).SetOrderPaid), arg0, arg1)
 }
 
 // SetOrderTrialDays mocks base method.

@@ -160,66 +160,53 @@ func TestHandleReceiptErr(t *testing.T) {
 		},
 
 		{
-			name:  "errPurchaseFailed",
-			given: errPurchaseFailed,
+			name:  "errIOSPurchaseNotFound",
+			given: errIOSPurchaseNotFound,
 			exp: &handlers.AppError{
-				Message:   "Error " + errPurchaseFailed.Error(),
+				Message:   "Error " + errIOSPurchaseNotFound.Error(),
 				Code:      http.StatusBadRequest,
-				ErrorCode: purchaseFailedErrCode,
+				ErrorCode: "purchase_not_found",
 				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseFailed.Error()},
+					"validationErrors": map[string]interface{}{"receiptErrors": errIOSPurchaseNotFound.Error()},
 				},
 			},
 		},
 
 		{
-			name:  "errPurchasePending",
-			given: errPurchasePending,
+			name:  "errExpiredGPSSubPurchase",
+			given: errGPSSubPurchaseExpired,
 			exp: &handlers.AppError{
-				Message:   "Error " + errPurchasePending.Error(),
+				Message:   "Error " + errGPSSubPurchaseExpired.Error(),
 				Code:      http.StatusBadRequest,
-				ErrorCode: purchasePendingErrCode,
+				ErrorCode: "purchase_expired",
 				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPurchasePending.Error()},
+					"validationErrors": map[string]interface{}{"receiptErrors": errGPSSubPurchaseExpired.Error()},
 				},
 			},
 		},
 
 		{
-			name:  "errPurchaseDeferred",
-			given: errPurchaseDeferred,
+			name:  "errPendingGPSSubPurchase",
+			given: errGPSSubPurchasePending,
 			exp: &handlers.AppError{
-				Message:   "Error " + errPurchaseDeferred.Error(),
+				Message:   "Error " + errGPSSubPurchasePending.Error(),
 				Code:      http.StatusBadRequest,
-				ErrorCode: purchaseDeferredErrCode,
+				ErrorCode: "purchase_pending",
 				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseDeferred.Error()},
-				},
-			},
-		},
-
-		{
-			name:  "errPurchaseStatusUnknown",
-			given: errPurchaseStatusUnknown,
-			exp: &handlers.AppError{
-				Message:   "Error " + errPurchaseStatusUnknown.Error(),
-				Code:      http.StatusBadRequest,
-				ErrorCode: purchaseStatusUnknownErrCode,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errPurchaseStatusUnknown.Error()},
+					"validationErrors": map[string]interface{}{"receiptErrors": errGPSSubPurchasePending.Error()},
 				},
 			},
 		},
 
 		{
 			name:  "errSomethingElse",
-			given: model.Error("something else"),
+			given: model.Error("something_else"),
 			exp: &handlers.AppError{
-				Message:   "Error something else",
+				Message:   "Error something_else",
 				Code:      http.StatusBadRequest,
-				ErrorCode: purchaseValidationErrCode,
+				ErrorCode: "validation_failed",
 				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": "something else"},
+					"validationErrors": map[string]interface{}{"receiptErrors": "something_else"},
 				},
 			},
 		},

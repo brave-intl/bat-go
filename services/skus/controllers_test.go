@@ -248,9 +248,11 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	InitEncryptionKeys()
 
 	suite.service = &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  pg,
-		cbClient:   suite.mockCB,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     pg,
+		cbClient:      suite.mockCB,
 		wallet: &wallet.Service{
 			Datastore: walletDB,
 		},
@@ -271,6 +273,10 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 	suite.mockCtrl.Finish()
+}
+
+func (s *ControllersTestSuite) TearDownSuite(sn, tn string) {
+	skustest.CleanDB(s.T(), s.storage.RawDB())
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macaroon.Token, quantity int) (Order, *Issuer) {
@@ -332,94 +338,6 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	suite.Require().Equal(exp, err)
 
 	return order, issuer
-}
-
-func (suite *ControllersTestSuite) TestIOSWebhookCertFail() {
-	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
-	suite.Assert().NotNil(order)
-
-	// Check the order
-	suite.Assert().Equal("10", order.TotalPrice.String())
-
-	// add the external id to metadata as if an initial receipt was submitted
-	err := suite.service.Datastore.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
-	suite.Require().NoError(err)
-
-	handler := handleIOSWebhook(suite.service)
-
-	// create a jws message to send
-	body := []byte{}
-
-	// create request to webhook
-	req, err := http.NewRequest("POST", "/v1/ios", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-}
-
-func (suite *ControllersTestSuite) TestAndroidWebhook() {
-	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
-	suite.Assert().NotNil(order)
-
-	// Check the order
-	suite.Assert().Equal("10", order.TotalPrice.String())
-
-	// add the external id to metadata as if an initial receipt was submitted
-	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
-	suite.Require().NoError(err)
-
-	suite.service.vendorReceiptValid = &mockVendorReceiptValidator{
-		fnValidateGoogle: func(ctx context.Context, req model.ReceiptRequest) (string, error) {
-			return "my external id", nil
-		},
-	}
-
-	suite.service.gcpValidator = &mockGcpRequestValidator{}
-
-	handler := HandleAndroidWebhook(suite.service)
-
-	// notification message
-	devNotify := DeveloperNotification{
-		PackageName: "package name",
-		SubscriptionNotification: SubscriptionNotification{
-			NotificationType: androidSubscriptionCanceled,
-			PurchaseToken:    "my external id",
-			SubscriptionID:   "subscription id",
-		},
-	}
-
-	buf, err := json.Marshal(&devNotify)
-	suite.Require().NoError(err)
-
-	// wrapper notification message
-	notification := &AndroidNotification{
-		Message: AndroidNotificationMessage{
-			Data: base64.StdEncoding.EncodeToString(buf), // dev notification is b64 encoded
-		},
-		Subscription: "subscription",
-	}
-
-	body, err := json.Marshal(&notification)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/android", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	suite.Require().Equal(http.StatusOK, rr.Code)
-
-	// get order and check the state changed to canceled
-	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
-	suite.Assert().Equal("canceled", updatedOrder.Status)
 }
 
 func (suite *ControllersTestSuite) TestCreateOrder() {
@@ -675,14 +593,11 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 	ctx := context.Background()
 	// setup debug for client
 	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, true)
-	// setup debug log level
-	ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, "debug")
 
 	// setup a new logger, add to context as well
-	_, logger := logutils.SetupLogger(ctx)
+	ctx, _ = logutils.SetupLogger(ctx)
 
 	w := uphold.Wallet{
-		Logger:  logger,
 		Info:    info,
 		PrivKey: privKey,
 		PubKey:  publicKey,
@@ -849,7 +764,11 @@ func generateWallet(ctx context.Context, t *testing.T) *uphold.Wallet {
 		t.Fatal(err)
 	}
 	info.PublicKey = hex.EncodeToString(publicKey)
-	newWallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+	newWallet := &uphold.Wallet{
+		Info:    info,
+		PrivKey: privateKey,
+		PubKey:  publicKey,
+	}
 	err = newWallet.Register(ctx, "bat-go test card")
 	if err != nil {
 		t.Fatal(err)
@@ -1003,6 +922,9 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 }
 
 func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
+	// Until Kafka certs have been fixed.
+	suite.T().SkipNow()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1466,6 +1388,9 @@ func (suite *ControllersTestSuite) ReadKafkaVoteEvent(ctx context.Context) VoteE
 // This test performs a full e2e test using challenge bypass server to sign use order credentials.
 // It uses three tokens and expects three tokens and three signed creds to be returned.
 func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_SingleUse() {
+	// Until Kafka certs have been fixed.
+	suite.T().SkipNow()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1500,10 +1425,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
@@ -1532,7 +1459,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer())
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), repository.NewTLV2())
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
@@ -1606,6 +1533,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 // which translates to three time limited v2 order credentials being stored for the single order containing
 // a single order item.
 func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_TimeLimitedV2() {
+	// Until Kafka certs have been fixed.
+	suite.T().SkipNow()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1643,10 +1573,12 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
@@ -1678,7 +1610,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewIssuer())
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), repository.NewTLV2())
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
@@ -1770,10 +1702,12 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
 
 	service := &Service{
-		issuerRepo: repository.NewIssuer(),
-		Datastore:  suite.storage,
-		cbClient:   client,
-		retry:      backoff.Retry,
+		orderRepo:     repository.NewOrder(),
+		orderItemRepo: repository.NewOrderItem(),
+		issuerRepo:    repository.NewIssuer(),
+		Datastore:     suite.storage,
+		cbClient:      client,
+		retry:         backoff.Retry,
 	}
 
 	order, err := service.CreateOrderFromRequest(ctx, request)
@@ -1889,36 +1823,4 @@ func newCORSOptsEnv() cors.Options {
 	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
 
 	return NewCORSOpts(origins, dbg)
-}
-
-type mockVendorReceiptValidator struct {
-	fnValidateApple  func(ctx context.Context, req model.ReceiptRequest) (string, error)
-	fnValidateGoogle func(ctx context.Context, req model.ReceiptRequest) (string, error)
-}
-
-func (v *mockVendorReceiptValidator) validateApple(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	if v.fnValidateApple == nil {
-		return "apple_defaul", nil
-	}
-
-	return v.fnValidateApple(ctx, req)
-}
-
-func (v *mockVendorReceiptValidator) validateGoogle(ctx context.Context, req model.ReceiptRequest) (string, error) {
-	if v.fnValidateGoogle == nil {
-		return "google_default", nil
-	}
-
-	return v.fnValidateGoogle(ctx, req)
-}
-
-type mockGcpRequestValidator struct {
-	fnValidate func(ctx context.Context, r *http.Request) error
-}
-
-func (m *mockGcpRequestValidator) validate(ctx context.Context, r *http.Request) error {
-	if m.fnValidate == nil {
-		return nil
-	}
-	return m.fnValidate(ctx, r)
 }

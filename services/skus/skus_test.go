@@ -24,97 +24,121 @@ func TestSKUNameByMobileName(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name:  "android_release_monthly_leo",
+			name:  "android_leo_monthly_release",
 			given: "brave.leo.monthly",
 			exp:   tcExpected{sku: "brave-leo-premium"},
 		},
 
 		{
-			name:  "android_beta_monthly_leo",
+			name:  "android_leo_monthly_beta",
 			given: "beta.leo.monthly",
 			exp:   tcExpected{sku: "brave-leo-premium"},
 		},
 
 		{
-			name:  "android_nightly_monthly_leo",
+			name:  "android_leo_monthly_nightly",
 			given: "nightly.leo.monthly",
 			exp:   tcExpected{sku: "brave-leo-premium"},
 		},
 
 		{
-			name:  "ios_monthly_leo",
+			name:  "ios_leo_monthly_release",
 			given: "braveleo.monthly",
 			exp:   tcExpected{sku: "brave-leo-premium"},
 		},
 
 		{
-			name:  "android_release_yearly_leo",
+			name:  "ios_leo_monthly_beta",
+			given: "beta.braveleo.monthly",
+			exp:   tcExpected{sku: "brave-leo-premium"},
+		},
+
+		{
+			name:  "ios_leo_monthly_nightly",
+			given: "nightly.braveleo.monthly",
+			exp:   tcExpected{sku: "brave-leo-premium"},
+		},
+
+		{
+			name:  "android_leo_annual_release",
 			given: "brave.leo.yearly",
 			exp:   tcExpected{sku: "brave-leo-premium-year"},
 		},
 
 		{
-			name:  "android_beta_yearly_leo",
+			name:  "android_leo_annual_beta",
 			given: "beta.leo.yearly",
 			exp:   tcExpected{sku: "brave-leo-premium-year"},
 		},
 
 		{
-			name:  "android_nightly_yearly_leo",
+			name:  "android_leo_annual_nightly",
 			given: "nightly.leo.yearly",
 			exp:   tcExpected{sku: "brave-leo-premium-year"},
 		},
 
 		{
-			name:  "ios_yearly_leo",
+			name:  "ios_leo_annual_release",
 			given: "braveleo.yearly",
 			exp:   tcExpected{sku: "brave-leo-premium-year"},
 		},
 
 		{
-			name:  "android_release_monthly_vpn",
+			name:  "ios_leo_annual_beta",
+			given: "beta.braveleo.yearly",
+			exp:   tcExpected{sku: "brave-leo-premium-year"},
+		},
+
+		{
+			name:  "ios_leo_annual_nightly",
+			given: "nightly.braveleo.yearly",
+			exp:   tcExpected{sku: "brave-leo-premium-year"},
+		},
+
+		{
+			name:  "android_vpn_monthly_release",
 			given: "brave.vpn.monthly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 
 		{
-			name:  "android_beta_monthly_vpn",
+			name:  "android_vpn_monthly_beta",
 			given: "beta.bravevpn.monthly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 
 		{
-			name:  "android_nightly_monthly_vpn",
+			name:  "android_vpn_monthly_nightly",
 			given: "nightly.bravevpn.monthly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 
 		{
-			name:  "ios_monthly_vpn",
+			name:  "ios_vpn_monthly_release",
 			given: "bravevpn.monthly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 
 		{
-			name:  "android_release_yearly_vpn",
+			name:  "android_vpn_annual_release",
 			given: "brave.vpn.yearly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 
 		{
-			name:  "android_beta_yearly_vpn",
+			name:  "android_vpn_annual_beta",
 			given: "beta.bravevpn.yearly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 
 		{
-			name:  "android_nightly_yearly_vpn",
+			name:  "android_vpn_annual_nightly",
 			given: "nightly.bravevpn.yearly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 
 		{
-			name:  "ios_yearly_vpn",
+			name:  "ios_vpn_annual_release",
 			given: "bravevpn.yearly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
@@ -123,6 +147,18 @@ func TestSKUNameByMobileName(t *testing.T) {
 			name:  "invalid",
 			given: "something_else",
 			exp:   tcExpected{err: model.ErrInvalidMobileProduct},
+		},
+
+		{
+			name:  "ios_vpn_monthly_legacy",
+			given: "brave-firewall-vpn-premium",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
+		},
+
+		{
+			name:  "ios_vpn_annual_legacy",
+			given: "brave-firewall-vpn-premium-year",
+			exp:   tcExpected{sku: "brave-vpn-premium"},
 		},
 	}
 

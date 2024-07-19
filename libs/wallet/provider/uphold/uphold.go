@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -45,7 +46,6 @@ import (
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
 	walletutils.Info
-	Logger  *zerolog.Logger
 	PrivKey crypto.Signer
 	PubKey  httpsignature.Verifier
 }
@@ -54,12 +54,13 @@ const (
 	dateFormat              = "2006-01-02T15:04:05.000Z"
 	batchSize               = 50
 	listTransactionsRetries = 5
+	httpTimeout             = time.Second * 60
 )
 
 const (
 	// The Intermediate Certificates
-	sandboxFingerprint = "qdIxIYy48PlSNqk6+p0eTAaRX3+YewGs2Q0kdd7Cu+c="
-	prodFingerprint    = "qdIxIYy48PlSNqk6+p0eTAaRX3+YewGs2Q0kdd7Cu+c="
+	sandboxFingerprint = "tl2IZaqu6xeE6iVuJmPIKsJW5N88W1nysF1WZE1THFs="
+	prodFingerprint    = "tl2IZaqu6xeE6iVuJmPIKsJW5N88W1nysF1WZE1THFs="
 )
 
 var (
@@ -90,7 +91,13 @@ var (
 		"sandbox": sandboxFingerprint,
 		"prod":    prodFingerprint,
 	}[environment]
-	client *http.Client
+
+	// The client to connect to Uphold servers while performing fingerprint
+	// checks on the server certificates.
+	defaultHTTPClient *http.Client
+
+	// The client without fingerprint checks.
+	httpClientNoFP *http.Client
 )
 
 func init() {
@@ -115,12 +122,33 @@ func init() {
 	} else {
 		proxy = nil
 	}
-	client = &http.Client{
-		Timeout: time.Second * 60,
+
+	fingerprintDialer := pindialer.MakeContextDialer(upholdCertFingerprint)
+
+	// Uphold reports HTTP 401 error when connecting with HTTP2, so disable
+	// HTTP/2 via setting TLSNextProto to an empty map. We do not need to set
+	// this field on defaultHTTPClient as we set DialTLSContext without setting
+	// ForceAttemptHTTP2 and that disables HTTP/2 also. But for clarity we
+	// always set TLSNextProto.
+	disableHTTP2 := make(
+		map[string]func(authority string, c *tls.Conn) http.RoundTripper,
+		0,
+	)
+	defaultHTTPClient = &http.Client{
+		Timeout: httpTimeout,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
+				DialTLSContext: fingerprintDialer,
 				Proxy:          proxy,
-				DialTLSContext: pindialer.MakeContextDialer(upholdCertFingerprint),
+				TLSNextProto:   disableHTTP2,
+			}, "uphold"),
+	}
+	httpClientNoFP = &http.Client{
+		Timeout: httpTimeout,
+		Transport: middleware.InstrumentRoundTripper(
+			&http.Transport{
+				Proxy:        proxy,
+				TLSNextProto: disableHTTP2,
 			}, "uphold"),
 	}
 }
@@ -141,7 +169,11 @@ func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubK
 	if !info.AltCurrency.IsValid() {
 		return nil, errors.New("a wallet must have a valid altcurrency")
 	}
-	return &Wallet{Info: info, PrivKey: privKey, PubKey: pubKey}, nil
+	return &Wallet{
+		Info:    info,
+		PrivKey: privKey,
+		PubKey:  pubKey,
+	}, nil
 }
 
 // FromWalletInfo returns an uphold wallet matching the provided wallet info
@@ -169,7 +201,11 @@ func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	return req, err
 }
 
-func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, error) {
+func submit(
+	logger *zerolog.Logger,
+	client *http.Client,
+	req *http.Request,
+) ([]byte, *http.Response, error) {
 	req.Header.Add("content-type", "application/json")
 
 	dump, err := httputil.DumpRequestOut(req, true)
@@ -262,8 +298,18 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 		return "", false, "", fmt.Errorf("failed to prepare transaction: %w", err)
 	}
 
-	// submit the transaction the payload
-	uhResp, err := grantWallet.SubmitTransaction(ctx, transactionB64, false)
+	// Submit the transaction payload.
+	//
+	// As we use the wallet only for validation but not for a payment, skip
+	// fingerprint checks to avoid outages when Uphold change the certificate.
+	// For payments it is not a problem as they are done in batch and can be
+	// repeated.
+	uhResp, err := grantWallet.submitTransaction(
+		ctx,
+		httpClientNoFP,
+		transactionB64,
+		false, /*confirm*/
+	)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to submit transaction")
 		return "", false, "", fmt.Errorf("failed to submit transaction: %w", err)
@@ -361,7 +407,7 @@ func (w *Wallet) Register(ctx context.Context, label string) error {
 		return err
 	}
 
-	body, _, err := submit(logger, req)
+	body, _, err := submit(logger, defaultHTTPClient, req)
 	if err != nil {
 		return err
 	}
@@ -400,7 +446,7 @@ func (w *Wallet) SubmitRegistration(ctx context.Context, registrationB64 string)
 		return err
 	}
 
-	body, _, err := submit(logger, req)
+	body, _, err := submit(logger, defaultHTTPClient, req)
 	if err != nil {
 		return err
 	}
@@ -456,7 +502,7 @@ func (w *Wallet) GetCardDetails(ctx context.Context) (*CardDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(logger, req)
+	body, _, err := submit(logger, defaultHTTPClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -588,7 +634,7 @@ func (w *Wallet) Transfer(ctx context.Context, altcurrency altcurrency.AltCurren
 		return nil, fmt.Errorf("failed to sign the transfer: %w", err)
 	}
 
-	respBody, _, err := submit(logger, req)
+	respBody, _, err := submit(logger, defaultHTTPClient, req)
 	if err != nil {
 		// we need this to be draincoded wrapped error so we get the reason for failure in drains
 		if codedErr, ok := err.(Coded); ok {
@@ -843,10 +889,21 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.Transacti
 	return &txInfo
 }
 
-// SubmitTransaction submits the base64 encoded transaction for verification but does not move funds
-//
-//	unless confirm is set to true.
+// SubmitTransaction submits the base64 encoded transaction for verification but
+// does not move funds unless confirm is set to true.
 func (w *Wallet) SubmitTransaction(ctx context.Context, transactionB64 string, confirm bool) (*walletutils.TransactionInfo, error) {
+	return w.submitTransaction(ctx, defaultHTTPClient, transactionB64, confirm)
+}
+
+func (w *Wallet) submitTransaction(
+	ctx context.Context,
+	client *http.Client,
+	transactionB64 string,
+	confirm bool,
+) (*walletutils.TransactionInfo, error) {
+	if confirm && client != defaultHTTPClient {
+		panic("TLS fingerprint checks must be enabled when confirming")
+	}
 	logger := logging.FromContext(ctx)
 
 	_, err := w.VerifyTransaction(ctx, transactionB64)
@@ -879,7 +936,7 @@ func (w *Wallet) SubmitTransaction(ctx context.Context, transactionB64 string, c
 		return nil, err
 	}
 
-	respBody, _, err := submit(logger, req)
+	respBody, _, err := submit(logger, client, req)
 	if err != nil {
 		return nil, err
 	}
@@ -901,7 +958,7 @@ func (w *Wallet) ConfirmTransaction(ctx context.Context, id string) (*walletutil
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(logger, req)
+	body, _, err := submit(logger, defaultHTTPClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -927,7 +984,7 @@ func (w *Wallet) GetTransaction(ctx context.Context, id string) (*walletutils.Tr
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(logger, req)
+	body, _, err := submit(logger, defaultHTTPClient, req)
 	if err != nil {
 		return nil, err
 	}
@@ -970,7 +1027,7 @@ func (w *Wallet) ListTransactions(ctx context.Context, limit int, startDate time
 		var body []byte
 		var resp *http.Response
 		for i := 0; i < listTransactionsRetries; i++ {
-			body, resp, err = submit(logger, req)
+			body, resp, err = submit(logger, defaultHTTPClient, req)
 			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
 				logger.Debug().
 					Str("path", "github.com/brave-intl/bat-go/wallet/provider/uphold").
@@ -1070,7 +1127,7 @@ func (w *Wallet) CreateCardAddress(ctx context.Context, network string) (string,
 		return "", err
 	}
 
-	body, _, err := submit(logger, req)
+	body, _, err := submit(logger, defaultHTTPClient, req)
 	if err != nil {
 		return "", err
 	}

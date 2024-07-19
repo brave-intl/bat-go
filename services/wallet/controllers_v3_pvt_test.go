@@ -1103,3 +1103,8 @@ func (m *mockMtc) LinkFailureZP(cc string) {
 func (m *mockMtc) LinkFailureGemini(_ string)                          {}
 func (m *mockMtc) LinkSuccessGemini(_ string)                          {}
 func (m *mockMtc) CountDocTypeByIssuingCntry(_ []gemini.ValidDocument) {}
+func (m *mockMtc) LinkFailureSolanaWhitelist(_ string)                 {}
+func (m *mockMtc) LinkFailureSolanaRegion(_ string)                    {}
+func (m *mockMtc) LinkFailureSolanaChl(_ string)                       {}
+func (m *mockMtc) LinkFailureSolanaMsg(_ string)                       {}
+func (m *mockMtc) LinkSuccessSolana(_ string)                          {}
