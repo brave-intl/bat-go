@@ -8,20 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/logging"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
-	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v72"
 	"gopkg.in/macaroon.v2"
 
-	"github.com/brave-intl/bat-go/services/skus/model"
-)
+	"github.com/brave-intl/bat-go/libs/logging"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
 
-const (
-	whStripeInvoiceUpdated          = "invoice.updated"
-	whStripeInvoicePaid             = "invoice.paid"
-	whStripeCustSubscriptionDeleted = "customer.subscription.deleted"
+	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 // TODO(pavelb): Gradually replace these everywhere.
@@ -175,15 +169,4 @@ func getCustEmailFromStripeCheckout(sess *stripe.CheckoutSession) string {
 
 	// Default to empty, Stripe will ask the customer.
 	return ""
-}
-
-// RenewOrder updates the order status to paid and records payment history.
-//
-// Status should either be one of pending, paid, fulfilled, or canceled.
-func (s *Service) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
-	if err := s.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
-		return fmt.Errorf("failed to set order status to paid: %w", err)
-	}
-
-	return nil
 }

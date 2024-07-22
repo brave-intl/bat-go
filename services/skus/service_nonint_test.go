@@ -537,7 +537,7 @@ func TestService_processPlayStoreNotificationTx(t *testing.T) {
 func TestService_processAppStoreNotificationTx(t *testing.T) {
 	type tcGiven struct {
 		ntf   *appStoreSrvNotification
-		txn   *appstore.JWSTransactionDecodedPayload
+		txn   *appStoreTransaction
 		orepo *repository.MockOrder
 		prepo *repository.MockOrderPayHistory
 	}
@@ -553,7 +553,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 			name: "get_order_error",
 			given: tcGiven{
 				ntf: &appStoreSrvNotification{val: &appstore.SubscriptionNotificationV2DecodedPayload{}},
-				txn: &appstore.JWSTransactionDecodedPayload{OriginalTransactionId: "123456789000001"},
+				txn: &appStoreTransaction{OriginalTransactionId: "123456789000001"},
 				orepo: &repository.MockOrder{
 					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
 						return nil, model.Error("something_went_wrong")
@@ -573,7 +573,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 						Subtype:          appstore.SubTypeV2BillingRecovery,
 					},
 				},
-				txn: &appstore.JWSTransactionDecodedPayload{
+				txn: &appStoreTransaction{
 					OriginalTransactionId: "123456789000001",
 					ExpiresDate:           1704067200000,
 				},
@@ -600,7 +600,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 						Subtype:          appstore.SubTypeV2AutoRenewDisabled,
 					},
 				},
-				txn: &appstore.JWSTransactionDecodedPayload{
+				txn: &appStoreTransaction{
 					OriginalTransactionId: "123456789000001",
 					ExpiresDate:           1704067201000,
 				},
@@ -619,7 +619,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 						Subtype:          appstore.SubTypeV2Accepted,
 					},
 				},
-				txn: &appstore.JWSTransactionDecodedPayload{
+				txn: &appStoreTransaction{
 					OriginalTransactionId: "123456789000001",
 					ExpiresDate:           1704067201000,
 				},
@@ -2238,6 +2238,458 @@ func TestService_appendOrderMetadataTx(t *testing.T) {
 			ctx := context.Background()
 
 			actual := svc.appendOrderMetadataTx(ctx, nil, tc.given.oid, tc.given.mdata)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestService_processStripeNotificationTx(t *testing.T) {
+	type tcGiven struct {
+		ntf     *stripeNotification
+		ordRepo orderStoreSvc
+		phRepo  orderPayHistoryStore
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "skip",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw:     &stripe.Event{Type: "invoice.updated"},
+					invoice: &stripe.Invoice{},
+				},
+				ordRepo: &repository.MockOrder{},
+				phRepo:  &repository.MockOrderPayHistory{},
+			},
+		},
+
+		{
+			name: "renew_sub_id_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw:     &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{},
+				},
+				ordRepo: &repository.MockOrder{},
+				phRepo:  &repository.MockOrderPayHistory{},
+			},
+			exp: errStripeNoInvoiceSub,
+		},
+
+		{
+			name: "renew_order_id_error_no_lines",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines:        &stripe.InvoiceLineList{},
+					},
+				},
+				ordRepo: &repository.MockOrder{},
+				phRepo:  &repository.MockOrderPayHistory{},
+			},
+			exp: errStripeNoInvoiceLines,
+		},
+
+		{
+			name: "renew_get_order_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "renew_should_update_sub_id_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{
+								"stripeSubscriptionId": "wrong_sub_id",
+							},
+						}
+
+						return result, nil
+					},
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "renew_expires_time_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{},
+						}
+
+						return result, nil
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+			exp: errStripeInvalidSubPeriod,
+		},
+
+		{
+			name: "renew_renew_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+									Period: &stripe.Period{
+										Start: 1719792001,
+										End:   1722470400,
+									},
+								},
+							},
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{},
+						}
+
+						return result, nil
+					},
+
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "renew_update_payment_proc_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+									Period: &stripe.Period{
+										Start: 1719792001,
+										End:   1722470400,
+									},
+								},
+							},
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{},
+						}
+
+						return result, nil
+					},
+
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "paymentProcessor" && val == model.StripePaymentMethod {
+							return model.Error("something_went_wrong")
+						}
+
+						return nil
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "renew_success",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+									Period: &stripe.Period{
+										Start: 1719792001,
+										End:   1722470400,
+									},
+								},
+							},
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{},
+						}
+
+						return result, nil
+					},
+
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeSubscriptionId" && val == "sub_id" {
+							return nil
+						}
+
+						if key == "paymentProcessor" && val == model.StripePaymentMethod {
+							return nil
+						}
+
+						return model.Error("unexpected_metadata")
+					},
+
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if uuid.Equal(id, uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000"))) && status == model.OrderStatusPaid {
+							return nil
+						}
+
+						return model.Error("unexpected_status")
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if uuid.Equal(id, uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000"))) && when.Equal(time.Unix(1722470400, 0).UTC().Add(24*time.Hour)) {
+							return nil
+						}
+
+						return model.Error("unexpected_expt")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+		},
+
+		{
+			name: "cancel_order_id_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "customer.subscription.deleted"},
+					sub: &stripe.Subscription{
+						ID: "sub_id",
+					},
+				},
+				ordRepo: &repository.MockOrder{},
+				phRepo:  &repository.MockOrderPayHistory{},
+			},
+			exp: errStripeOrderIDMissing,
+		},
+
+		{
+			name: "cancel_update_status_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "customer.subscription.deleted"},
+					sub: &stripe.Subscription{
+						ID: "sub_id",
+						Metadata: map[string]string{
+							"orderID": "facade00-0000-4000-a000-000000000000",
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "cancel_success",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "customer.subscription.deleted"},
+					sub: &stripe.Subscription{
+						ID: "sub_id",
+						Metadata: map[string]string{
+							"orderID": "facade00-0000-4000-a000-000000000000",
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if uuid.Equal(id, uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000"))) && status == model.OrderStatusCanceled {
+							return nil
+						}
+
+						return model.Error("unexpected_status")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.ordRepo, payHistRepo: tc.given.phRepo}
+
+			ctx := context.Background()
+
+			actual := svc.processStripeNotificationTx(ctx, nil, tc.given.ntf)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestShouldUpdateOrderStripeSubID(t *testing.T) {
+	type tcGiven struct {
+		ord   *model.Order
+		subID string
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "true_sub_id_not_set",
+			given: tcGiven{
+				ord:   &model.Order{},
+				subID: "sub_id",
+			},
+			exp: true,
+		},
+
+		{
+			name: "true_sub_id_empty",
+			given: tcGiven{
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "",
+					},
+				},
+				subID: "sub_id",
+			},
+			exp: true,
+		},
+
+		{
+			name: "true_sub_id_different",
+			given: tcGiven{
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "old_sub_id",
+					},
+				},
+				subID: "sub_id",
+			},
+			exp: true,
+		},
+
+		{
+			name: "false_sub_id_same",
+			given: tcGiven{
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "sub_id",
+					},
+				},
+				subID: "sub_id",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := shouldUpdateOrderStripeSubID(tc.given.ord, tc.given.subID)
 			should.Equal(t, tc.exp, actual)
 		})
 	}

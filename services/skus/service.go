@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/awa/go-iap/appstore"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -27,7 +26,6 @@ import (
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
-	"google.golang.org/api/androidpublisher/v3"
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 
@@ -115,7 +113,7 @@ type tlv2Store interface {
 type vendorReceiptValidator interface {
 	validateApple(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error)
 	validateGoogle(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error)
-	fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+	fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*playStoreSubPurchase, error)
 }
 
 type gpsMessageAuthenticator interface {
@@ -1652,6 +1650,77 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	}
 }
 
+func (s *Service) processStripeNotification(ctx context.Context, ntf *stripeNotification) error {
+	if !ntf.shouldProcess() {
+		return nil
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processStripeNotificationTx(ctx, tx, ntf); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
+	switch {
+	case ntf.shouldRenew():
+		subID, err := ntf.subID()
+		if err != nil {
+			return err
+		}
+
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.Get(ctx, dbi, oid)
+		if err != nil {
+			return err
+		}
+
+		if shouldUpdateOrderStripeSubID(ord, subID) {
+			if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "stripeSubscriptionId", subID); err != nil {
+				return err
+			}
+		}
+
+		expt, err := ntf.expiresTime()
+		if err != nil {
+			return err
+		}
+
+		// Add 1-day leeway in case next billing cycle's webhook gets delayed.
+		expt = expt.Add(24 * time.Hour)
+
+		paidt := time.Now()
+
+		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
+			return err
+		}
+
+		return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+
+	case ntf.shouldCancel():
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		return s.orderRepo.SetStatus(ctx, dbi, oid, model.OrderStatusCanceled)
+
+	default:
+		return nil
+	}
+}
+
 // processAppStoreNotification determines whether ntf is worth processing, and does it if it is.
 //
 // More on ntf types https://developer.apple.com/documentation/appstoreservernotifications/notificationtype#4304524.
@@ -1678,7 +1747,7 @@ func (s *Service) processAppStoreNotification(ctx context.Context, ntf *appStore
 	return tx.Commit()
 }
 
-func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *appStoreSrvNotification, txn *appstore.JWSTransactionDecodedPayload) error {
+func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *appStoreSrvNotification, txn *appStoreTransaction) error {
 	ord, err := s.orderRepo.GetByExternalID(ctx, dbi, txn.OriginalTransactionId)
 	if err != nil {
 		return err
@@ -1686,7 +1755,7 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 
 	switch {
 	case ntf.shouldRenew():
-		expt := time.UnixMilli(txn.ExpiresDate).UTC().Add(24 * time.Hour)
+		expt := txn.expiresTime().Add(24 * time.Hour)
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
@@ -1706,15 +1775,6 @@ func (s *Service) processPlayStoreNotification(ctx context.Context, ntf *playSto
 
 	extID, ok := ntf.purchaseToken()
 	if !ok {
-		return nil
-	}
-
-	// Temporary. Clean up after the initial rollout.
-	//
-	// Refuse to handle any events issued prior to 2024-07-01.
-	// This is to avoid unexpected effects from past events (in case we get them),
-	// and to avoid complicating the downstream logic.
-	if ntf.isBeforeCutoff() {
 		return nil
 	}
 
@@ -1745,7 +1805,7 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 			return err
 		}
 
-		expt := time.UnixMilli(sub.ExpiryTimeMillis).UTC().Add(24 * time.Hour)
+		expt := sub.expiresTime().Add(24 * time.Hour)
 		paidt := time.Now()
 
 		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
@@ -2428,4 +2488,12 @@ func (x *receiptValidError) Error() string {
 	}
 
 	return x.err.Error()
+}
+
+func shouldUpdateOrderStripeSubID(ord *model.Order, subID string) bool {
+	if sid, ok := ord.StripeSubID(); !ok || sid != subID {
+		return true
+	}
+
+	return false
 }
