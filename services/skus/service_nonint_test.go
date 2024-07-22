@@ -537,7 +537,7 @@ func TestService_processPlayStoreNotificationTx(t *testing.T) {
 func TestService_processAppStoreNotificationTx(t *testing.T) {
 	type tcGiven struct {
 		ntf   *appStoreSrvNotification
-		txn   *appstore.JWSTransactionDecodedPayload
+		txn   *appStoreTransaction
 		orepo *repository.MockOrder
 		prepo *repository.MockOrderPayHistory
 	}
@@ -553,7 +553,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 			name: "get_order_error",
 			given: tcGiven{
 				ntf: &appStoreSrvNotification{val: &appstore.SubscriptionNotificationV2DecodedPayload{}},
-				txn: &appstore.JWSTransactionDecodedPayload{OriginalTransactionId: "123456789000001"},
+				txn: &appStoreTransaction{OriginalTransactionId: "123456789000001"},
 				orepo: &repository.MockOrder{
 					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
 						return nil, model.Error("something_went_wrong")
@@ -573,7 +573,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 						Subtype:          appstore.SubTypeV2BillingRecovery,
 					},
 				},
-				txn: &appstore.JWSTransactionDecodedPayload{
+				txn: &appStoreTransaction{
 					OriginalTransactionId: "123456789000001",
 					ExpiresDate:           1704067200000,
 				},
@@ -600,7 +600,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 						Subtype:          appstore.SubTypeV2AutoRenewDisabled,
 					},
 				},
-				txn: &appstore.JWSTransactionDecodedPayload{
+				txn: &appStoreTransaction{
 					OriginalTransactionId: "123456789000001",
 					ExpiresDate:           1704067201000,
 				},
@@ -619,7 +619,7 @@ func TestService_processAppStoreNotificationTx(t *testing.T) {
 						Subtype:          appstore.SubTypeV2Accepted,
 					},
 				},
-				txn: &appstore.JWSTransactionDecodedPayload{
+				txn: &appStoreTransaction{
 					OriginalTransactionId: "123456789000001",
 					ExpiresDate:           1704067201000,
 				},

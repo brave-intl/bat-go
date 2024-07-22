@@ -194,7 +194,7 @@ func parseAppStoreSrvNotification(vrf *assnCertVerifier, spayload string) (*appS
 	return result, nil
 }
 
-func parseTxnInfo(pubKey *ecdsa.PublicKey, spayload appstore.JWSTransaction) (*appstore.JWSTransactionDecodedPayload, error) {
+func parseTxnInfo(pubKey *ecdsa.PublicKey, spayload appstore.JWSTransaction) (*appStoreTransaction, error) {
 	raw, err := jose.ParseSigned(string(spayload))
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func parseTxnInfo(pubKey *ecdsa.PublicKey, spayload appstore.JWSTransaction) (*a
 		return nil, err
 	}
 
-	return result, nil
+	return (*appStoreTransaction)(result), nil
 }
 
 //nolint:unused
@@ -329,12 +329,16 @@ func shouldCancelOrderIOS(info *appstore.JWSTransactionDecodedPayload, now time.
 
 type appStoreTransaction appstore.JWSTransactionDecodedPayload
 
+func (x *appStoreTransaction) expiresTime() time.Time {
+	return time.UnixMilli(x.ExpiresDate).UTC()
+}
+
 func (x *appStoreTransaction) hasExpired(now time.Time) bool {
 	if x == nil {
 		return false
 	}
 
-	return x.ExpiresDate > 0 && now.After(time.UnixMilli(x.ExpiresDate))
+	return x.ExpiresDate > 0 && now.After(x.expiresTime())
 }
 
 func (x *appStoreTransaction) isRevoked(now time.Time) bool {
