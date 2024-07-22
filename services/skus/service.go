@@ -1650,6 +1650,77 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	}
 }
 
+func (s *Service) processStripeNotification(ctx context.Context, ntf *stripeNotification) error {
+	if !ntf.shouldProcess() {
+		return nil
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processStripeNotificationTx(ctx, tx, ntf); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
+	switch {
+	case ntf.shouldRenew():
+		subID, err := ntf.subID()
+		if err != nil {
+			return err
+		}
+
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.Get(ctx, dbi, oid)
+		if err != nil {
+			return err
+		}
+
+		if shouldUpdateOrderStripeSubID(ord, subID) {
+			if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "stripeSubscriptionId", subID); err != nil {
+				return err
+			}
+		}
+
+		expt, err := ntf.expiresTime()
+		if err != nil {
+			return err
+		}
+
+		// Add 1-day leeway in case next billing cycle's webhook gets delayed.
+		expt = expt.Add(24 * time.Hour)
+
+		paidt := time.Now()
+
+		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
+			return err
+		}
+
+		return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+
+	case ntf.shouldCancel():
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		return s.orderRepo.SetStatus(ctx, dbi, oid, model.OrderStatusCanceled)
+
+	default:
+		return nil
+	}
+}
+
 // processAppStoreNotification determines whether ntf is worth processing, and does it if it is.
 //
 // More on ntf types https://developer.apple.com/documentation/appstoreservernotifications/notificationtype#4304524.
@@ -2417,4 +2488,12 @@ func (x *receiptValidError) Error() string {
 	}
 
 	return x.err.Error()
+}
+
+func shouldUpdateOrderStripeSubID(ord *model.Order, subID string) bool {
+	if sid, ok := ord.StripeSubID(); !ok || sid != subID {
+		return true
+	}
+
+	return false
 }

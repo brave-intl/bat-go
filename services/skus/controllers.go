@@ -17,7 +17,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-playground/validator/v10"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/webhook"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
@@ -1273,109 +1272,80 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		lg := logging.Logger(ctx, "skus").With().Str("func", "HandleStripeWebhook").Logger()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleStripeWebhook").Logger()
 
 		secret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
 		if err != nil {
-			lg.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
+			lg.Err(err).Msg("failed to get stripe_webhook_secret from context")
+
 			return handlers.WrapError(err, "error getting stripe_webhook_secret from context", http.StatusInternalServerError)
 		}
 
 		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			lg.Error().Err(err).Msg("failed to read request body")
-			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
+			lg.Err(err).Msg("failed to read request body")
+
+			// Nothing can be done if failed to read the body.
+			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
 
 		event, err := webhook.ConstructEvent(data, r.Header.Get("Stripe-Signature"), secret)
 		if err != nil {
-			lg.Error().Err(err).Msg("failed to verify Stripe signature")
+			lg.Err(err).Msg("failed to verify stripe signature")
+
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
-		switch event.Type {
-		case whStripeInvoiceUpdated, whStripeInvoicePaid:
-			invoice := &stripe.Invoice{}
-			if err := json.Unmarshal(event.Data.Raw, invoice); err != nil {
-				lg.Error().Err(err).Msg("failed to parse invoice")
-				return handlers.WrapError(err, "error parsing webhook invoice", http.StatusBadRequest)
+		ntf, err := parseStripeNotification(&event)
+		if err != nil {
+			if errors.Is(err, errStripeSkipEvent) {
+				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 			}
 
-			sub, err := svc.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
-			if err != nil {
-				lg.Error().Err(err).Msg("failed to get subscription")
+			// Unlikely to be able to do anything about it.
+			// Consider responding with http.StatusOK.
 
-				if isErrStripeNotFound(err) {
-					return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-				}
+			return handlers.WrapError(err, "failed to parse event", http.StatusBadRequest)
+		}
 
-				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
-			}
+		if err := svc.processStripeNotification(ctx, ntf); err != nil {
+			l := lg.With().Str("ntf_type", ntf.ntfType()).Str("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Logger()
 
-			orderID, err := uuid.FromString(sub.Metadata["orderID"])
-			if err != nil {
-				lg.Error().Err(err).Msg("failed to parse orderID from Stripe metadata")
-				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
-			}
+			switch {
+			case errors.Is(err, context.Canceled):
+				l.Warn().Err(err).Msg("failed to process stripe notification")
 
-			ord, err := svc.orderRepo.Get(ctx, svc.Datastore.RawDB(), orderID)
-			if err != nil {
-				lg.Error().Err(err).Msg("failed to get order")
+				// Should retry.
+				return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
 
-				if errors.Is(err, model.ErrOrderNotFound) {
-					return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-				}
+			case errors.Is(err, model.ErrOrderNotFound):
+				l.Warn().Err(err).Msg("failed to process stripe notification")
 
-				return handlers.WrapError(err, "failed to get order", http.StatusInternalServerError)
-			}
-
-			if subID, ok := ord.StripeSubID(); !ok || subID != sub.ID {
-				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sub.ID); err != nil {
-					lg.Error().Err(err).Msg("failed to update order metadata stripeSubscriptionId")
-					return handlers.WrapError(err, "failed to update order metadata stripeSubscriptionId", http.StatusInternalServerError)
-				}
-			}
-
-			switch event.Type {
-			case whStripeInvoiceUpdated:
 				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-			case whStripeInvoicePaid:
-				if err := svc.RenewOrder(ctx, orderID); err != nil {
-					lg.Error().Err(err).Msg("failed to renew order")
-					return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
-				}
+			case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+				l.Warn().Err(err).Msg("failed to process stripe notification")
 
-				if err := svc.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.StripePaymentMethod); err != nil {
-					lg.Error().Err(err).Msg("failed to update order metadata paymentProcessor")
-					return handlers.WrapError(err, "failed to update order metadata paymentProcessor", http.StatusInternalServerError)
-				}
+				// No rows have changed whilst processing.
+				// This could happen in theory, but not in practice.
+				// It would mean that we attempted to update with the same data as it's in the database.
 
 				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
 			default:
-				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+				l.Err(err).Msg("failed to process stripe notification")
+
+				// Retry for all other errors for now.
+				return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 			}
-
-		case whStripeCustSubscriptionDeleted:
-			// TODO: Enable it and handle properly.
-
-			sub := &stripe.Subscription{}
-			if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
-				return handlers.WrapError(err, "failed to parse subscription", http.StatusBadRequest)
-			}
-
-			orderID, err := uuid.FromString(sub.Metadata["orderID"])
-			if err != nil {
-				return handlers.WrapError(err, "failed to parse orderID from Stripe metadata", http.StatusInternalServerError)
-			}
-
-			if err := svc.Datastore.UpdateOrder(orderID, OrderStatusCanceled); err != nil {
-				return handlers.WrapError(err, "failed to update order status canceled", http.StatusInternalServerError)
-			}
-
-			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 		}
+
+		msg := "skipped stripe notification"
+		if ntf.shouldProcess() {
+			msg = "processed stripe notification"
+		}
+
+		lg.Info().Str("ntf_type", ntf.ntfType()).Str("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Msg(msg)
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
