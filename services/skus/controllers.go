@@ -703,6 +703,8 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
+		l := logging.Logger(ctx, "skus").With().Str("func", "GetOrderCreds").Logger()
+
 		creds, status, err := service.GetCredentials(ctx, *orderID.UUID())
 		if err != nil {
 			if errors.Is(err, errSetRetryAfter) {
@@ -713,6 +715,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 				}
 				w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
 			} else {
+				l.Error().Err(err).Str("orderID", orderID.String()).Int("status", status).Msg("failed to get order creds")
 				return handlers.WrapError(err, "Error getting credentials", status)
 			}
 		}
@@ -796,10 +799,13 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			reqID = *reqIDRaw.UUID()
 		}
 
+		l := logging.Logger(ctx, "skus").With().Str("func", "getOrderCredsByID").Logger()
+
 		itemIDv := *itemID.UUID()
 		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), itemIDv, reqID)
 		if err != nil {
 			if !errors.Is(err, errSetRetryAfter) {
+				l.Error().Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("failed to get item creds")
 				return handlers.WrapError(err, "Error getting credentials", status)
 			}
 
