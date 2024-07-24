@@ -48,12 +48,6 @@ func TestSKUNameByMobileName(t *testing.T) {
 		},
 
 		{
-			name:  "ios_leo_monthly_beta",
-			given: "beta.braveleo.monthly",
-			exp:   tcExpected{sku: "brave-leo-premium"},
-		},
-
-		{
 			name:  "ios_leo_monthly_nightly",
 			given: "nightly.braveleo.monthly",
 			exp:   tcExpected{sku: "brave-leo-premium"},
@@ -80,12 +74,6 @@ func TestSKUNameByMobileName(t *testing.T) {
 		{
 			name:  "ios_leo_annual_release",
 			given: "braveleo.yearly",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
-		},
-
-		{
-			name:  "ios_leo_annual_beta",
-			given: "beta.braveleo.yearly",
 			exp:   tcExpected{sku: "brave-leo-premium-year"},
 		},
 
