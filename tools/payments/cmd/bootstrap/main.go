@@ -44,7 +44,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	paymentslib "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/brave-intl/bat-go/tools/payments"
+	"github.com/brave-intl/payments-service/tools/payments"
 )
 
 func main() {

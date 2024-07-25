@@ -45,7 +45,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/brave-intl/bat-go/libs/requestutils"
-	"github.com/brave-intl/bat-go/tools/payments"
+	"github.com/brave-intl/payments-service/tools/payments"
 	"github.com/hashicorp/vault/shamir"
 )
 

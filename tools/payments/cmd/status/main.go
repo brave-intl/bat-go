@@ -30,7 +30,7 @@ import (
 	"log"
 	"strings"
 
-	paymentscli "github.com/brave-intl/bat-go/tools/payments"
+	paymentscli "github.com/brave-intl/payments-service/tools/payments"
 )
 
 func main() {

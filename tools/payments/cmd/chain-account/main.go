@@ -35,7 +35,7 @@ import (
 	client "github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/payments"
-	paymentscli "github.com/brave-intl/bat-go/tools/payments"
+	paymentscli "github.com/brave-intl/payments-service/tools/payments"
 )
 
 func main() {
