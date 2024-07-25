@@ -5,34 +5,12 @@ package main
 import (
 	// pull in tool module. setup code is in init
 
-	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/logging"
-	_ "github.com/brave-intl/bat-go/tools/cmd"
+	"github.com/brave-intl/payments-service/cmd"
 
-	// pull in settlement module. setup code is in init
-	_ "github.com/brave-intl/bat-go/tools/settlement/cmd"
-	// pull in vault module. setup code is in init
-	_ "github.com/brave-intl/bat-go/tools/vault/cmd"
-	// pull in wallet module. setup code is in init
-	_ "github.com/brave-intl/bat-go/tools/wallet/cmd"
-	// pull in macaroon module. setup code is in init
-	_ "github.com/brave-intl/bat-go/tools/macaroon/cmd"
-	// pull in merchat module. setup code is in init
-	_ "github.com/brave-intl/bat-go/tools/merchant/cmd"
-
-	// pull in rewards module. setup code is in init
-	_ "github.com/brave-intl/bat-go/services/rewards/cmd"
-	// pull in wallets module. setup code is in init
-	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
-	// pull in serve module. setup code is in init
-	_ "github.com/brave-intl/bat-go/services/cmd"
-	// pull in ratios module. setup code is in init
-	_ "github.com/brave-intl/bat-go/services/ratios/cmd"
-	// pull in grants module. setup code is in init
-	_ "github.com/brave-intl/bat-go/services/grant/cmd"
 	// pull in payments service
-	_ "github.com/brave-intl/bat-go/services/nitro"
-	_ "github.com/brave-intl/bat-go/services/payments/cmd"
+	_ "github.com/brave-intl/payments-service/services/nitro"
+	_ "github.com/brave-intl/payments-service/services/payments/cmd"
 )
 
 var (

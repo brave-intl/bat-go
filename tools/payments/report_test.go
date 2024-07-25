@@ -8,7 +8,7 @@ import (
 	should "github.com/stretchr/testify/assert"
 
 	paymentLib "github.com/brave-intl/bat-go/libs/payments"
-	"github.com/brave-intl/bat-go/tools/payments"
+	"github.com/brave-intl/payments-service/tools/payments"
 )
 
 func TestAttestedReport_EnsureUniqueDest(t *testing.T) {

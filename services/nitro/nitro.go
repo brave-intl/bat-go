@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	rootcmd "github.com/brave-intl/bat-go/cmd"
+	rootcmd "github.com/brave-intl/payments-service/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/nitro"
-	srvcmd "github.com/brave-intl/bat-go/services/cmd"
-	"github.com/brave-intl/bat-go/services/payments"
+	srvcmd "github.com/brave-intl/payments-service/services/cmd"
+	"github.com/brave-intl/payments-service/services/payments"
 
 	"github.com/go-chi/chi"
 	"github.com/mdlayher/vsock"

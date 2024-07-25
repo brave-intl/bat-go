@@ -7,11 +7,11 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
-	rootcmd "github.com/brave-intl/bat-go/cmd"
+	rootcmd "github.com/brave-intl/payments-service/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/services/cmd"
-	"github.com/brave-intl/bat-go/services/payments"
+	"github.com/brave-intl/payments-service/services/cmd"
+	"github.com/brave-intl/payments-service/services/payments"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"

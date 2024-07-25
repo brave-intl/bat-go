@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	rootcmd "github.com/brave-intl/bat-go/cmd"
+	rootcmd "github.com/brave-intl/payments-service/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/redisconsumer"
-	"github.com/brave-intl/bat-go/services/payments"
+	"github.com/brave-intl/payments-service/services/payments"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

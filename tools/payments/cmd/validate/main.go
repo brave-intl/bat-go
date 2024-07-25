@@ -24,7 +24,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/brave-intl/bat-go/tools/payments"
+	"github.com/brave-intl/payments-service/tools/payments"
 )
 
 func main() {

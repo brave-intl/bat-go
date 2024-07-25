@@ -1,8 +1,0 @@
-[ server_cert ]
-keyUsage = digitalSignature, keyEncipherment
-nsCertType = server
-subjectAltName = DNS:redis,IP:127.0.0.1
-
-[ client_cert ]
-keyUsage = digitalSignature, keyEncipherment
-nsCertType = client
