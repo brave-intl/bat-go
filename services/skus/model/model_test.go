@@ -12,6 +12,7 @@ import (
 	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
+	
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
@@ -330,6 +331,61 @@ func TestOrderStripeMetadata(t *testing.T) {
 			name: "add_id",
 			given: tcGiven{
 				data: &model.OrderStripeMetadata{
+					SuccessURI: "https://example.com/success",
+					CancelURI:  "https://example.com/cancel",
+				},
+				oid: "some_order_id",
+			},
+			exp: tcExpected{
+				surl: "https://example.com/success?order_id=some_order_id",
+				curl: "https://example.com/cancel?order_id=some_order_id",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			act1, err := tc.given.data.SuccessURL(tc.given.oid)
+			must.Equal(t, nil, err)
+
+			should.Equal(t, tc.exp.surl, act1)
+
+			act2, err := tc.given.data.CancelURL(tc.given.oid)
+			must.Equal(t, nil, err)
+
+			should.Equal(t, tc.exp.curl, act2)
+		})
+	}
+}
+
+func TestOrderRadomMetadata(t *testing.T) {
+	type tcGiven struct {
+		data *model.OrderRadomMetadata
+		oid  string
+	}
+
+	type tcExpected struct {
+		surl string
+		curl string
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "empty",
+		},
+
+		{
+			name: "add_id",
+			given: tcGiven{
+				data: &model.OrderRadomMetadata{
 					SuccessURI: "https://example.com/success",
 					CancelURI:  "https://example.com/cancel",
 				},

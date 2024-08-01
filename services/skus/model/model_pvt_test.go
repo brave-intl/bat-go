@@ -26,7 +26,7 @@ func TestAddURLParam(t *testing.T) {
 		exp   tcExpected
 	}
 
-	// Don't test for invalid inputs due to url.Parse's tolerance.
+	// Don't test for invalid inputs due to url.Parses tolerance.
 	tests := []testCase{
 		{
 			name: "empty",
