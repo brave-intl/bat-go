@@ -1924,7 +1924,7 @@ func TestService_doTLV2ExistTxTime(t *testing.T) {
 				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				repo: &repository.MockTLV2{
 					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
-						return model.TLV2CredSubmissionReport{ReqIDMistmatch: true}, nil
+						return model.TLV2CredSubmissionReport{ReqIDMismatch: true}, nil
 					},
 				},
 			},
