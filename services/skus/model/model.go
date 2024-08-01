@@ -705,8 +705,8 @@ func (c *IssuerConfig) NumIntervals() int {
 }
 
 type TLV2CredSubmissionReport struct {
-	Submitted      bool `db:"submitted"`
-	ReqIDMistmatch bool `db:"req_id_mismatch"`
+	Submitted     bool `db:"submitted"`
+	ReqIDMismatch bool `db:"req_id_mismatch"`
 }
 
 // ReceiptRequest represents a receipt submitted by a mobile or web client.
