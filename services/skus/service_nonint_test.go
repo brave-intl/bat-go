@@ -4506,6 +4506,20 @@ func Test_orderItemsToLineItems(t *testing.T) {
 		},
 
 		{
+			name: "product_id_invalid_type",
+			given: tcGiven{
+				orderItems: []OrderItem{{
+					Metadata: map[string]interface{}{
+						"radom_product_id": 12345,
+					},
+				}},
+			},
+			exp: tcExpected{
+				err: errRadomInvalidType,
+			},
+		},
+
+		{
 			name: "success",
 			given: tcGiven{
 				orderItems: []OrderItem{

@@ -473,6 +473,22 @@ func (r *OrderItemRequestNew) Metadata() map[string]interface{} {
 	return nil
 }
 
+func (r *OrderItemRequestNew) Metadata() map[string]interface{} {
+	if r == nil {
+		return nil
+	}
+
+	if r.StripeMetadata != nil {
+		return r.StripeMetadata.Metadata()
+	}
+
+	if r.RadomMetadata != nil {
+		return r.RadomMetadata.Metadata()
+	}
+
+	return nil
+}
+
 // OrderStripeMetadata holds data relevant to the order in Stripe.
 type OrderStripeMetadata struct {
 	SuccessURI string `json:"success_uri" validate:"http_url"`

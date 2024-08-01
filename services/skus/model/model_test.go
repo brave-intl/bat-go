@@ -1212,6 +1212,75 @@ func TestOrderItem_StripeItemID(t *testing.T) {
 			},
 			exp: tcExpected{val: "stripe_item_id", ok: true},
 		},
+func TestOrderItemRequestNew_Metadata(t *testing.T) {
+	type tcGiven struct {
+		oreq model.OrderItemRequestNew
+	}
+
+	type tcExpected struct {
+		metadata map[string]interface{}
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "nil",
+		},
+
+		{
+			name: "stripe_metadata",
+			given: tcGiven{
+				oreq: model.OrderItemRequestNew{
+					StripeMetadata: &model.ItemStripeMetadata{
+						ProductID: "product_1",
+						ItemID:    "item_1",
+					},
+				},
+			},
+			exp: tcExpected{
+				metadata: map[string]interface{}{
+					"stripe_product_id": "product_1",
+					"stripe_item_id":    "item_1",
+				},
+			},
+		},
+
+		{
+			name: "radom_metadata",
+			given: tcGiven{
+				oreq: model.OrderItemRequestNew{
+					RadomMetadata: &model.ItemRadomMetadata{
+						ProductID: "product_1",
+					},
+				},
+			},
+			exp: tcExpected{
+				metadata: map[string]interface{}{
+					"radom_product_id": "product_1",
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.oreq.Metadata()
+			should.Equal(t, tc.exp.metadata, actual)
+		})
+	}
+}
+
+func mustDecimalFromString(v string) decimal.Decimal {
+	result, err := decimal.NewFromString(v)
+	if err != nil {
+		panic(err)
 	}
 
 	for i := range tests {
