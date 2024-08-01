@@ -1265,6 +1265,13 @@ func TestOrderItemRequestNew_Metadata(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "no_metadata",
+			given: tcGiven{
+				oreq: model.OrderItemRequestNew{},
+			},
+		},
 	}
 
 	for i := range tests {
