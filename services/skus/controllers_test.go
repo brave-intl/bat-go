@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/golang/mock/gomock"
@@ -275,8 +276,8 @@ func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	suite.mockCtrl.Finish()
 }
 
-func (s *ControllersTestSuite) TearDownSuite(sn, tn string) {
-	skustest.CleanDB(s.T(), s.storage.RawDB())
+func (suite *ControllersTestSuite) TearDownSuite(sn, tn string) {
+	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macaroon.Token, quantity int) (Order, *Issuer) {
@@ -1757,6 +1758,72 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 
 	suite.Assert().Equal(http.StatusBadRequest, appError.Code)
 	suite.Assert().Contains(appError.Error(), ErrCredsAlreadyExist.Error())
+}
+
+func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
+	suite.service.issuerRepo = &repository.MockIssuer{}
+
+	sessID := uuid.NewV4().String()
+
+	suite.service.radomClient = &mockRadomClient{
+		fnCreateCheckoutSession: func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+			return radom.CheckoutSessionResponse{
+				SessionID: sessID,
+			}, nil
+		}}
+
+	oreq := model.CreateOrderRequestNew{
+		Email:    "example@example.com",
+		Currency: "USD",
+		RadomMetadata: &model.OrderRadomMetadata{
+			SuccessURI: "https://example-success.com",
+			CancelURI:  "https://example-cancel.com",
+		},
+		PaymentMethods: []string{model.RadomPaymentMethod},
+		Items: []model.OrderItemRequestNew{
+			{
+				Quantity:                    1,
+				SKU:                         "sku",
+				Location:                    "https://example.com",
+				Description:                 "description",
+				CredentialType:              timeLimitedV2,
+				CredentialValidDuration:     "P1M",
+				CredentialValidDurationEach: ptrTo("P1M"),
+				Price:                       decimal.NewFromInt(1),
+				RadomMetadata: &model.ItemRadomMetadata{
+					ProductID: "product_1",
+				},
+			},
+		},
+	}
+
+	b, err := json.Marshal(oreq)
+	suite.Require().NoError(err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer(b))
+
+	rw := httptest.NewRecorder()
+
+	oh := handlers.AppHandler(handler.NewOrder(suite.service).CreateNew)
+	svr := &http.Server{Addr: ":8080", Handler: oh}
+
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusCreated, rw.Code)
+
+	var resp model.Order
+	{
+		err := json.Unmarshal(rw.Body.Bytes(), &resp)
+		suite.Require().NoError(err)
+	}
+
+	order, err := suite.service.orderRepo.Get(context.Background(), suite.service.Datastore.RawDB(), resp.ID)
+	suite.Require().NoError(err)
+
+	actual, ok := order.Metadata["radomCheckoutSessionId"].(string)
+	suite.Require().True(ok)
+
+	suite.Equal(sessID, actual)
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
