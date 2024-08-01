@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/awa/go-iap/appstore"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -4320,6 +4321,365 @@ func TestBuildStripeLineItems(t *testing.T) {
 			should.Equal(t, tc.exp, actual)
 		})
 	}
+}
+
+func TestService_createRadomSessID(t *testing.T) {
+	type tcExpected struct {
+		sessionID string
+		mustErr   must.ErrorAssertionFunc
+	}
+
+	type tcGiven struct {
+		req   *model.CreateOrderRequestNew
+		order *model.Order
+		radCl radomClient
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "err_success_url",
+			given: tcGiven{
+				order: &model.Order{},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://invalid%.com",
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NotNil(t, err)
+				},
+			},
+		},
+
+		{
+			name: "err_cancel_url",
+			given: tcGiven{
+				order: &model.Order{},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://invalid%.com",
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NotNil(t, err)
+				},
+			},
+		},
+
+		{
+			name: "err_order_items_to_line_items",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []OrderItem{{}},
+				},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://example.com",
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, errRadomProductIDNotFound)
+				},
+			},
+		},
+
+		{
+			name: "err_create_checkout_session",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []OrderItem{
+						{
+							Metadata: datastore.Metadata{
+								"radom_product_id": "product_1",
+							},
+						},
+					},
+				},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://example.com",
+					},
+				},
+				radCl: &mockRadomClient{
+					fnCreateCheckoutSession: func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+						return radom.CheckoutSessionResponse{}, model.Error("some error")
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, model.Error("some error"))
+				},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []OrderItem{
+						{
+							Metadata: datastore.Metadata{
+								"radom_product_id": "product_1",
+							},
+						},
+					},
+				},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://example.com",
+					},
+				},
+				radCl: &mockRadomClient{
+					fnCreateCheckoutSession: func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+						return radom.CheckoutSessionResponse{SessionID: "session_id"}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				sessionID: "session_id",
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.Nil(t, err)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := Service{
+				radomClient: tc.given.radCl,
+			}
+			ctx := context.Background()
+
+			actual, err := s.createRadomSessID(ctx, tc.given.req, tc.given.order)
+			tc.exp.mustErr(t, err)
+
+			should.Equal(t, tc.exp.sessionID, actual)
+		})
+	}
+}
+
+func Test_orderItemsToLineItems(t *testing.T) {
+	type tcGiven struct {
+		orderItems []model.OrderItem
+	}
+
+	type tcExpected struct {
+		lineItems []radom.LineItem
+		err       error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "product_id_not_found",
+			given: tcGiven{
+				orderItems: []OrderItem{{}},
+			},
+			exp: tcExpected{
+				err: errRadomProductIDNotFound,
+			},
+		},
+
+		{
+			name: "product_id_invalid_type",
+			given: tcGiven{
+				orderItems: []OrderItem{{
+					Metadata: map[string]interface{}{
+						"radom_product_id": 12345,
+					},
+				}},
+			},
+			exp: tcExpected{
+				err: errRadomInvalidType,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				orderItems: []OrderItem{
+					{
+						Metadata: map[string]interface{}{
+							"radom_product_id": "product_1",
+						},
+					},
+					{
+						Metadata: map[string]interface{}{
+							"radom_product_id": "product_2",
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				lineItems: []radom.LineItem{
+					{
+						ProductID: "product_1",
+					},
+					{
+						ProductID: "product_2",
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := orderItemsToLineItems(tc.given.orderItems)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.lineItems, actual)
+		})
+	}
+}
+
+func Test_newRadomGateway(t *testing.T) {
+	type tcGiven struct {
+		env string
+	}
+
+	type tcExpected struct {
+		gateway radom.Gateway
+		err     error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "development",
+			given: tcGiven{
+				"development",
+			},
+			exp: tcExpected{
+				gateway: radom.Gateway{
+					Managed: radom.Managed{
+						Methods: []radom.Method{
+							{
+								Network: "SepoliaTestnet",
+								Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+							},
+							{
+								Network: "PolygonTestnet",
+								Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "staging",
+			given: tcGiven{
+				"staging",
+			},
+			exp: tcExpected{
+				gateway: radom.Gateway{
+					Managed: radom.Managed{
+						Methods: []radom.Method{
+							{
+								Network: "SepoliaTestnet",
+								Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+							},
+							{
+								Network: "PolygonTestnet",
+								Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "production",
+			given: tcGiven{
+				"production",
+			},
+			exp: tcExpected{
+				gateway: radom.Gateway{
+					Managed: radom.Managed{
+						Methods: []radom.Method{
+							{
+								Network: "Polygon",
+								Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+							},
+
+							{
+								Network: "Ethereum",
+								Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "unknown",
+			given: tcGiven{
+				"random_env",
+			},
+			exp: tcExpected{
+				err: model.Error("skus: unknown environment"),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := newRadomGateway(tc.given.env)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.gateway, actual)
+		})
+	}
+}
+
+type mockRadomClient struct {
+	fnCreateCheckoutSession func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+}
+
+func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+	if m.fnCreateCheckoutSession == nil {
+		return radom.CheckoutSessionResponse{}, nil
+	}
+
+	return m.fnCreateCheckoutSession(ctx, creq)
 }
 
 type mockPaidOrderCreator struct {

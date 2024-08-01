@@ -2,9 +2,7 @@
 package model
 
 import (
-	"context"
 	"database/sql"
-	"fmt"
 	"net/url"
 	"sort"
 	"strconv"
@@ -14,7 +12,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/datastore"
 )
 
@@ -28,9 +25,6 @@ const (
 	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
 	ErrInvalidOrderNoItems                    Error = "model: invalid order: no items"
-	ErrInvalidOrderNoSuccessURL               Error = "model: invalid order: no success url"
-	ErrInvalidOrderNoCancelURL                Error = "model: invalid order: no cancel url"
-	ErrInvalidOrderNoProductID                Error = "model: invalid order: no product id"
 	ErrNoStripeCheckoutSessID                 Error = "model: order: no stripe checkout session id"
 	ErrInvalidOrderMetadataType               Error = "model: order: invalid metadata type"
 
@@ -95,10 +89,6 @@ func (v Vendor) String() string {
 	return string(v)
 }
 
-type radomClient interface {
-	CreateCheckoutSession(ctx context.Context, req *radom.CheckoutSessionRequest) (*radom.CheckoutSessionResponse, error)
-}
-
 // Order represents an individual order.
 type Order struct {
 	ID                    uuid.UUID            `json:"id" db:"id"`
@@ -133,76 +123,6 @@ func (o *Order) IsRadomPayable() bool {
 
 func (o *Order) ShouldSetTrialDays() bool {
 	return !o.IsPaid() && o.IsStripePayable()
-}
-
-// CreateRadomCheckoutSession creates a Radom checkout session for o.
-func (o *Order) CreateRadomCheckoutSession(
-	ctx context.Context,
-	client radomClient,
-	sellerAddr string,
-) (CreateCheckoutSessionResponse, error) {
-	return o.CreateRadomCheckoutSessionWithTime(ctx, client, sellerAddr, time.Now().Add(24*time.Hour))
-}
-
-// CreateRadomCheckoutSessionWithTime creates a Radom checkout session for o.
-//
-// TODO: This must be refactored before it's usable. Issues with the current implementation:
-// - it assumes one item per order;
-// - most of the logic does not belong in here;
-// - metadata information must be passed explisictly instead of being parsed (it's known prior to this place);
-// And more.
-func (o *Order) CreateRadomCheckoutSessionWithTime(
-	ctx context.Context,
-	client radomClient,
-	sellerAddr string,
-	expiresAt time.Time,
-) (CreateCheckoutSessionResponse, error) {
-	if len(o.Items) < 1 {
-		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoItems
-	}
-
-	successURI, ok := o.Items[0].Metadata["radom_success_uri"].(string)
-	if !ok {
-		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoSuccessURL
-	}
-
-	cancelURI, ok := o.Items[0].Metadata["radom_cancel_uri"].(string)
-	if !ok {
-		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoCancelURL
-	}
-
-	productID, ok := o.Items[0].Metadata["radom_product_id"].(string)
-	if !ok {
-		return EmptyCreateCheckoutSessionResponse(), ErrInvalidOrderNoProductID
-	}
-
-	resp, err := client.CreateCheckoutSession(ctx, &radom.CheckoutSessionRequest{
-		SuccessURL: successURI,
-		CancelURL:  cancelURI,
-		// Gateway will be set by the client.
-		Metadata: radom.Metadata([]radom.KeyValue{
-			{
-				Key:   "braveOrderId",
-				Value: o.ID.String(),
-			},
-		}),
-		LineItems: []radom.LineItem{
-			{
-				ProductID: productID,
-			},
-		},
-		ExpiresAt: expiresAt.Unix(),
-		Customizations: map[string]interface{}{
-			"leftPanelColor":     "linear-gradient(125deg, rgba(0,0,128,1) 0%, RGBA(196,22,196,1) 100%)",
-			"primaryButtonColor": "#000000",
-			"slantedEdge":        true,
-		},
-	})
-	if err != nil {
-		return EmptyCreateCheckoutSessionResponse(), fmt.Errorf("failed to get checkout session response: %w", err)
-	}
-
-	return CreateCheckoutSessionResponse{SessionID: resp.SessionID}, nil
 }
 
 // IsPaid returns true if the order is paid.
@@ -475,6 +395,7 @@ type CreateOrderRequestNew struct {
 	Email          string                `json:"email" validate:"required,email"`
 	Currency       string                `json:"currency" validate:"required,iso4217"`
 	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
+	RadomMetadata  *OrderRadomMetadata   `json:"radom_metadata"`
 	PaymentMethods []string              `json:"payment_methods"`
 	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
 }
@@ -494,6 +415,7 @@ type OrderItemRequestNew struct {
 	CredentialValidDurationEach *string             `json:"each_credential_valid_duration"`
 	IssuanceInterval            *string             `json:"issuance_interval"`
 	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
+	RadomMetadata               *ItemRadomMetadata  `json:"radom_metadata"`
 }
 
 func (r *OrderItemRequestNew) TokenBufferOrDefault() int {
@@ -534,6 +456,22 @@ func (r *OrderItemRequestNew) IsTLV2() bool {
 	}
 
 	return r.CredentialType == "time-limited-v2"
+}
+
+func (r *OrderItemRequestNew) Metadata() map[string]interface{} {
+	if r == nil {
+		return nil
+	}
+
+	if r.StripeMetadata != nil {
+		return r.StripeMetadata.Metadata()
+	}
+
+	if r.RadomMetadata != nil {
+		return r.RadomMetadata.Metadata()
+	}
+
+	return nil
 }
 
 // OrderStripeMetadata holds data relevant to the order in Stripe.
@@ -579,6 +517,49 @@ func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
 
 	if m.ItemID != "" {
 		result["stripe_item_id"] = m.ItemID
+	}
+
+	return result
+}
+
+// OrderRadomMetadata holds data relevant to the order in Radom.
+type OrderRadomMetadata struct {
+	SuccessURI string `json:"success_uri" validate:"http_url"`
+	CancelURI  string `json:"cancel_uri" validate:"http_url"`
+}
+
+func (m *OrderRadomMetadata) SuccessURL(oid string) (string, error) {
+	if m == nil {
+		return "", nil
+	}
+
+	return addURLParam(m.SuccessURI, "order_id", oid)
+}
+
+func (m *OrderRadomMetadata) CancelURL(oid string) (string, error) {
+	if m == nil {
+		return "", nil
+	}
+
+	return addURLParam(m.CancelURI, "order_id", oid)
+}
+
+// ItemRadomMetadata holds data about the product in Radom.
+type ItemRadomMetadata struct {
+	ProductID string `json:"product_id"`
+}
+
+// Metadata returns the contents of m as a map for datastore.Metadata.
+//
+// It can be called when m is nil.
+func (m *ItemRadomMetadata) Metadata() map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+	if m.ProductID != "" {
+		result["radom_product_id"] = m.ProductID
 	}
 
 	return result
