@@ -2659,6 +2659,7 @@ func newRadomGateway(env string) (radom.Gateway, error) {
 						Network: "SepoliaTestnet",
 						Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
 					},
+
 					{
 						Network: "PolygonTestnet",
 						Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
