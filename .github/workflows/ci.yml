@@ -77,17 +77,17 @@ jobs:
       with:
         version: '1.25.4'
 
-    - run: docker-compose pull
+    - run: docker compose pull
 
     - name: Start Vault
       run: |
-        docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault;
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault;
         sleep 3
 
     - name: Run Tests
       run: |
         export VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 );
-        docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -v /opt/go/pkg:/go/pkg dev make
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -v /opt/go/pkg:/go/pkg dev make
 
     - name: Ensure Module Directory
       if: steps.setup-go.outputs.cache-hit != 'true'
