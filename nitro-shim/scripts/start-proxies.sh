@@ -23,12 +23,10 @@ elif [ "${service}" = "/star-randsrv" ]; then
         -listen "unix://${domain_socket}" &
     # give gvproxy a second to start
     sleep 1
-    # instruct gvproxy to forward port 9090 to the enclave
-    curl \
-        -X POST \
-        --unix-socket "$domain_socket" \
-        -d '{"local":":9090","remote":"192.168.127.2:9090"}' \
-        "http:/unix/services/forwarder/expose"
     # run vsock relay to proxy incoming requests
-    /enclave/vsock-relay -s "0.0.0.0:443" -l "4:443" -c 1000 &
+    /enclave/vsock-relay \
+        -s "0.0.0.0:443,0.0.0.0:9443,0.0.0.0:9090" \
+        -d "4:443,4:9443,4:9090" \
+        -c 1000 \
+        --host-ip-provider-port 6161 &
 fi
