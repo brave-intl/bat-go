@@ -19,9 +19,9 @@ type mockKeystore struct {
 	httpsignature.Verifier
 }
 
-func (m *mockKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
+func (m *mockKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, httpsignature.Verifier, error) {
 	if keyID == "primary" {
-		return ctx, &m.Verifier, nil
+		return ctx, m.Verifier, nil
 	}
 	return nil, nil, nil
 }

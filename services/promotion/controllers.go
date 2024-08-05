@@ -121,7 +121,7 @@ func WalletEventRouter(service *Service, vbatExpires time.Time) chi.Router {
 }
 
 // LookupVerifier based on the HTTP signing keyID, which in our case is the walletID
-func (service *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
+func (service *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, httpsignature.Verifier, error) {
 	walletID, err := uuid.FromString(keyID)
 	if err != nil {
 		return nil, nil, errorutils.Wrap(err, "KeyID format is invalid")
@@ -144,8 +144,7 @@ func (service *Service) LookupVerifier(ctx context.Context, keyID string) (conte
 			return nil, nil, err
 		}
 	}
-	tmp := httpsignature.Verifier(publicKey)
-	return ctx, &tmp, nil
+	return ctx, publicKey, nil
 }
 
 // PromotionsResponse is a list of known promotions to be consumed by the browser
