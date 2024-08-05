@@ -72,23 +72,7 @@ const (
 	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
 
-	// for skus ac validation
-
-	// SkusGeminiClientCTXKey - context key for the build time of code
-	SkusGeminiClientCTXKey CTXKey = "skus_gemini_client"
-	// SkusGeminiBrowserClientIDCTXKey - context key for the gemini browser client id
-	SkusGeminiBrowserClientIDCTXKey CTXKey = "skus_gemini_browser_client_id"
-	// SkusGeminiClientIDCTXKey - context key for the gemini client id
-	SkusGeminiClientIDCTXKey CTXKey = "skus_gemini_client_id"
-	// SkusGeminiClientSecretCTXKey - context key for the gemini client secret
-	SkusGeminiClientSecretCTXKey CTXKey = "skus_gemini_client_secret"
-	// SkusGeminiAPIKeyCTXKey - context key for the gemini api key
-	SkusGeminiAPIKeyCTXKey CTXKey = "skus_gemini_api_key"
-	// SkusGeminiAPISecretCTXKey - context key for the gemini api secret
-	SkusGeminiAPISecretCTXKey CTXKey = "skus_gemini_api_secret"
-	// SkusGeminiSettlementAddressCTXKey - context key for the gemini settlement address
-	SkusGeminiSettlementAddressCTXKey CTXKey = "skus_gemini_settlement_address"
-	// SkusEnableStoreSignedOrderCredsConsumer enables the store sigend order creds consumers
+	// SkusEnableStoreSignedOrderCredsConsumer enables the store signed order creds consumers
 	SkusEnableStoreSignedOrderCredsConsumer CTXKey = "skus_enable_store_signed_order_creds_consumer"
 	// SkusNumberStoreSignedOrderCredsConsumer number of consumers to create for store signed order creds
 	SkusNumberStoreSignedOrderCredsConsumer CTXKey = "skus_number_store_signed_order_creds_consumer"

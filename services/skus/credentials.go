@@ -13,7 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -342,7 +342,7 @@ func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	// Fail because these creds were submitted with a different req_id.
-	if report.ReqIDMistmatch {
+	if report.ReqIDMismatch {
 		return errCredsAlreadySubmittedMismatch
 	}
 

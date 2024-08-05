@@ -72,13 +72,7 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 	// By doing so we:
 	// - find the purchase that is being verified (i.e. to disambiguate VPN from Leo);
 	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
-	item, ok := findInAppBySubID(resp.Receipt.InApp, req.SubscriptionID, now)
-	if ok {
-		return newReceiptDataApple(req, item), nil
-	}
-
-	// Try finding in latest_receipt_info.
-	item, ok = findInAppBySubID(resp.LatestReceiptInfo, req.SubscriptionID, now)
+	item, ok := findInAppBySubIDIAP(resp, req.SubscriptionID, now)
 	if ok {
 		return newReceiptDataApple(req, item), nil
 	}
@@ -86,12 +80,7 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 	// Special case for VPN.
 	// The client may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
 	if req.SubscriptionID == "bravevpn.monthly" {
-		item, ok := findInAppBySubID(resp.Receipt.InApp, "bravevpn.yearly", now)
-		if ok {
-			return newReceiptDataApple(req, item), nil
-		}
-
-		item, ok = findInAppBySubID(resp.LatestReceiptInfo, "bravevpn.yearly", now)
+		item, ok := findInAppBySubIDIAP(resp, "bravevpn.yearly", now)
 		if ok {
 			return newReceiptDataApple(req, item), nil
 		}
@@ -138,6 +127,15 @@ func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, pkgName, subID,
 	return (*playStoreSubPurchase)(sub), nil
 }
 
+func findInAppBySubIDIAP(iap *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
+	result, ok := findInAppBySubID(iap.LatestReceiptInfo, subID, now)
+	if ok {
+		return result, true
+	}
+
+	return findInAppBySubID(iap.Receipt.InApp, subID, now)
+}
+
 func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
 	for i := range iap {
 		if iap[i].ProductID == subID {
@@ -153,12 +151,12 @@ func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*wrapA
 }
 
 func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
-	item, ok := findInAppVPNLegacy(resp.Receipt.InApp, subID, now)
+	item, ok := findInAppVPNLegacy(resp.LatestReceiptInfo, subID, now)
 	if ok {
 		return item, true
 	}
 
-	return findInAppVPNLegacy(resp.LatestReceiptInfo, subID, now)
+	return findInAppVPNLegacy(resp.Receipt.InApp, subID, now)
 }
 
 func findInAppVPNLegacy(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {

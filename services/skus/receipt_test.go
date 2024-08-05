@@ -756,6 +756,112 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 	}
 }
 
+func TestFindInAppBySubIDIAP(t *testing.T) {
+	type tcGiven struct {
+		resp  *appstore.IAPResponse
+		subID string
+		now   time.Time
+	}
+
+	type tcExpected struct {
+		val *wrapAppStoreInApp
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "empty",
+			given: tcGiven{
+				subID: "braveleo.monthly",
+				resp:  &appstore.IAPResponse{},
+			},
+		},
+
+		{
+			name: "found_latest_receipt_info",
+			given: tcGiven{
+				resp: &appstore.IAPResponse{
+					LatestReceiptInfo: []appstore.InApp{
+						{
+							ProductID: "bravevpn.yearly",
+							ExpiresDate: appstore.ExpiresDate{
+								ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+							},
+						},
+					},
+				},
+				subID: "bravevpn.yearly",
+				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: tcExpected{
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "bravevpn.yearly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
+					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
+				},
+				ok: true,
+			},
+		},
+
+		{
+			name: "found_receipt",
+			given: tcGiven{
+				resp: &appstore.IAPResponse{
+					Receipt: appstore.Receipt{
+						InApp: []appstore.InApp{
+							{
+								ProductID: "bravevpn.monthly",
+								ExpiresDate: appstore.ExpiresDate{
+									ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+								},
+							},
+						},
+					},
+				},
+				subID: "bravevpn.monthly",
+				now:   time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: tcExpected{
+				val: &wrapAppStoreInApp{
+					InApp: &appstore.InApp{
+						ProductID: "bravevpn.monthly",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC).UnixMilli(), 10),
+						},
+					},
+					expt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
+				},
+				ok: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := findInAppBySubIDIAP(tc.given.resp, tc.given.subID, tc.given.now)
+			must.Equal(t, tc.exp.ok, ok)
+
+			if !tc.exp.ok {
+				return
+			}
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
 func TestFindInAppBySubID(t *testing.T) {
 	type tcGiven struct {
 		iap   []appstore.InApp

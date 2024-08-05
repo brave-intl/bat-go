@@ -1199,17 +1199,10 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, orderID, itemID, reqID 
 	}
 
 	if creds != nil {
-		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
-		if creds.SignedCreds == nil {
-			return nil, http.StatusAccepted, nil
-		}
-
-		// TODO: End
 		return []OrderCreds{*creds}, http.StatusOK, nil
 	}
 
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
-	if err != nil {
+	if _, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, http.StatusNotFound, errLegacySUCredsNotFound
 		}
@@ -1217,11 +1210,9 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, orderID, itemID, reqID 
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
 	}
 
-	if outboxMessages.CompletedAt == nil {
-		return nil, http.StatusAccepted, nil
-	}
-
-	return nil, http.StatusInternalServerError, model.Error("unreachable condition")
+	// Given an outbox message was found i.e. it did not return a sql.ErrNoRows we can assume a message has been
+	// submitted for signing but not yet complete as no creds were found.
+	return nil, http.StatusAccepted, nil
 }
 
 // GetTimeLimitedV2Creds returns all the tlv2 credentials for a given order, item and request id.

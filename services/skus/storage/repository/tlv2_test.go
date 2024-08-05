@@ -119,7 +119,7 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				val: model.TLV2CredSubmissionReport{ReqIDMistmatch: true},
+				val: model.TLV2CredSubmissionReport{ReqIDMismatch: true},
 			},
 		},
 	}
