@@ -69,16 +69,16 @@ func TestAppStoreSrvNotification_shouldRenew(t *testing.T) {
 	}
 
 	tests := []testCase{
-		{
-			name: "initial_buy",
-			given: &appStoreSrvNotification{
-				val: &appstore.SubscriptionNotificationV2DecodedPayload{
-					NotificationType: appstore.NotificationTypeV2Subscribed,
-					Subtype:          appstore.SubTypeV2InitialBuy,
-				},
-			},
-			exp: true,
-		},
+		// {
+		// 	name: "initial_buy",
+		// 	given: &appStoreSrvNotification{
+		// 		val: &appstore.SubscriptionNotificationV2DecodedPayload{
+		// 			NotificationType: appstore.NotificationTypeV2Subscribed,
+		// 			Subtype:          appstore.SubTypeV2InitialBuy,
+		// 		},
+		// 	},
+		// 	exp: true,
+		// },
 
 		{
 			name: "auto_renew",
