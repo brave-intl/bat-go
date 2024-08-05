@@ -75,6 +75,10 @@ func (x *appStoreSrvNotification) shouldProcess() bool {
 // TODO: Update to a lookup table instead.
 func (x *appStoreSrvNotification) shouldRenew() bool {
 	switch {
+	// // Initial buy.
+	// case x.val.NotificationType == appstore.NotificationTypeV2Subscribed && x.val.Subtype == appstore.SubTypeV2InitialBuy:
+	// 	return true
+
 	// Auto-renew.
 	case x.val.NotificationType == appstore.NotificationTypeV2DidRenew && x.val.Subtype == "":
 		return true
