@@ -17,7 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"golang.org/x/crypto/ed25519"
 	"gotest.tools/assert"
 )
 
@@ -61,12 +60,12 @@ func TestRegister(t *testing.T) {
 		info.AltCurrency = &tmp
 	}
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	destWallet := &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+	destWallet := &Wallet{Info: info, PrivKey: key, PubKey: key.Public()}
 	err = destWallet.Register(ctx, "bat-go test card")
 	if err != nil {
 		t.Error(err)
@@ -156,19 +155,13 @@ func TestTransactions(t *testing.T) {
 		donorInfo.AltCurrency = &tmp
 	}
 
-	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
 	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
-	var donorPublicKey httpsignature.Ed25519PubKey
-	var donorPrivateKey ed25519.PrivateKey
-	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
+	var donorPrivateKey httpsignature.Ed25519PrivKey
+	donorPrivateKey, err := hex.DecodeString(donorWalletPrivateKeyHex)
 	if err != nil {
 		t.Fatal(err)
 	}
-	donorPrivateKey, err = hex.DecodeString(donorWalletPrivateKeyHex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
+	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPrivateKey.Public()}
 
 	var info wallet.Info
 	info.Provider = "uphold"
@@ -178,12 +171,12 @@ func TestTransactions(t *testing.T) {
 		info.AltCurrency = &tmp
 	}
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	destWallet := &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+	destWallet := &Wallet{Info: info, PrivKey: key, PubKey: key.Public()}
 	err = destWallet.Register(ctx, "bat-go test transaction card")
 	if err != nil {
 		t.Error(err)
@@ -344,10 +337,10 @@ func requireDonorWallet(t *testing.T) *Wallet {
 		info.AltCurrency = &tmp
 	}
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+	return &Wallet{Info: info, PrivKey: key, PubKey: key.Public()}
 }

@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"crypto"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -221,7 +220,6 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 	ps := httpsignature.ParameterizedSignator{
 		SignatureParams: sp,
 		Signator:        httpsignature.HMACKey(attenuatedSecret),
-		Opts:            crypto.Hash(0),
 	}
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	req.Header.Set("Date", time.Now().Format(time.RFC1123))

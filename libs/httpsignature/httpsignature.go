@@ -6,12 +6,10 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
@@ -37,12 +35,14 @@ type signature struct {
 // Signator is an interface for cryptographic signature creation
 // NOTE that this is a subset of the crypto.Signer interface
 type Signator interface {
-	Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error)
+	SignMessage(message []byte) (signature []byte, err error)
 }
 
 // Verifier is an interface for cryptographic signature verification
 type Verifier interface {
-	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
+	// Should return ErrBadSignature if the verification fails due to signature
+	// mismatch.
+	VerifySignature(message, sig []byte) error
 	String() string
 }
 
@@ -50,7 +50,6 @@ type Verifier interface {
 type ParameterizedSignator struct {
 	SignatureParams
 	Signator Signator
-	Opts     crypto.SignerOpts
 }
 
 // Keystore provides a way to lookup a public key based on the keyID a request was signed with
@@ -68,7 +67,6 @@ type StaticKeystore struct {
 type ParameterizedKeystoreVerifier struct {
 	SignatureParams
 	Keystore Keystore
-	Opts     crypto.SignerOpts
 }
 
 const (
@@ -82,6 +80,8 @@ const (
 
 var (
 	signatureRegex = regexp.MustCompile(`(\w+)="([^"]*)"`)
+
+	ErrBadSignature = errors.New("Signature mismatch")
 )
 
 // LookupVerifier by returning a static verifier
@@ -140,7 +140,7 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 				if err != nil {
 					return out, err
 				}
-				req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+				req.Body = io.NopCloser(bytes.NewBuffer(body))
 				d.Update(body)
 			}
 			req.Header.Add("Digest", d.String())
@@ -167,13 +167,13 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 	return out, nil
 }
 
-// Sign the included HTTP request req using signator and options opts
-func (sp *SignatureParams) Sign(signator Signator, opts crypto.SignerOpts, req *http.Request) error {
+// Sign the included HTTP request req using the signator
+func (sp *SignatureParams) SignRequest(signator Signator, req *http.Request) error {
 	ss, err := sp.BuildSigningString(req)
 	if err != nil {
 		return err
 	}
-	sig, err := signator.Sign(rand.Reader, ss, opts)
+	sig, err := signator.SignMessage(ss)
 	if err != nil {
 		return err
 	}
@@ -190,29 +190,29 @@ func (sp *SignatureParams) Sign(signator Signator, opts crypto.SignerOpts, req *
 	return nil
 }
 
-// SignRequest using signator and options opts in the parameterized signator
+// SignRequest using signator in the parameterized signator
 func (p *ParameterizedSignator) SignRequest(req *http.Request) error {
-	return p.SignatureParams.Sign(p.Signator, p.Opts, req)
+	return p.SignatureParams.SignRequest(p.Signator, req)
 }
 
 // Verify the HTTP signature s over HTTP request req using verifier with options opts
-func (sp *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
+func (sp *SignatureParams) VerifyRequest(verifier Verifier, req *http.Request) error {
 	signingStr, err := sp.BuildSigningString(req)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	var tmp signature
 	err = tmp.UnmarshalText([]byte(req.Header.Get("Signature")))
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	sig, err := base64.StdEncoding.DecodeString(tmp.Sig)
 	if err != nil {
-		return false, err
+		return err
 	}
-	return verifier.Verify(signingStr, sig, opts)
+	return verifier.VerifySignature(signingStr, sig)
 }
 
 // VerifyRequest using keystore to lookup verifier with options opts
@@ -236,12 +236,8 @@ func (pkv *ParameterizedKeystoreVerifier) VerifyRequest(req *http.Request) (cont
 	sp.Algorithm = pkv.SignatureParams.Algorithm
 	sp.Headers = pkv.SignatureParams.Headers
 
-	valid, err := sp.Verify(verifier, pkv.Opts, req)
-	if err != nil {
+	if err := sp.VerifyRequest(verifier, req); err != nil {
 		return nil, "", err
-	}
-	if !valid {
-		return nil, "", errors.New("signature is not valid")
 	}
 
 	return ctx, sp.KeyID, nil

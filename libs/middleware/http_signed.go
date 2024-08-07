@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"crypto"
 	"errors"
 	"net/http"
 	"time"
@@ -43,7 +42,6 @@ func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 			Headers:   []string{"digest", "(request-target)"},
 		},
 		Keystore: ks,
-		Opts:     crypto.Hash(0),
 	}
 
 	return VerifyHTTPSignedOnly(verifier)

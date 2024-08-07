@@ -1,13 +1,12 @@
 package httpsignature
 
 import (
-	"crypto"
 	"encoding/hex"
 	"net/http"
 	"reflect"
 	"testing"
 
-	"golang.org/x/crypto/ed25519"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildSigningString(t *testing.T) {
@@ -48,7 +47,7 @@ func TestBuildSigningString(t *testing.T) {
 
 func TestSign(t *testing.T) {
 	// ED25519 Test
-	var privKey ed25519.PrivateKey
+	var privKey Ed25519PrivKey
 	privHex := "96aa9ec42242a9a62196281045705196a64e12b15e9160bbb630e38385b82700e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d"
 	privKey, err := hex.DecodeString(privHex)
 	if err != nil {
@@ -66,7 +65,7 @@ func TestSign(t *testing.T) {
 	}
 	r.Header.Set("Foo", "bar")
 
-	err = s.Sign(privKey, crypto.Hash(0), r)
+	err = s.SignRequest(privKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building ED25519 signing string:", err)
 	}
@@ -83,7 +82,7 @@ func TestSign(t *testing.T) {
 
 func TestSignRequest(t *testing.T) {
 	// ED25519 Test
-	var privKey ed25519.PrivateKey
+	var privKey Ed25519PrivKey
 	privHex := "96aa9ec42242a9a62196281045705196a64e12b15e9160bbb630e38385b82700e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d"
 	privKey, err := hex.DecodeString(privHex)
 	if err != nil {
@@ -98,7 +97,6 @@ func TestSignRequest(t *testing.T) {
 	ps := ParameterizedSignator{
 		SignatureParams: sp,
 		Signator:        privKey,
-		Opts:            crypto.Hash(0),
 	}
 
 	r, err := http.NewRequest("GET", "http://example.org/foo", nil)
@@ -131,7 +129,6 @@ func TestSignRequest(t *testing.T) {
 	ps2 := ParameterizedSignator{
 		SignatureParams: sp2,
 		Signator:        HMACKey(privHex),
-		Opts:            crypto.Hash(0),
 	}
 
 	r2, reqErr := http.NewRequest("GET", "http://example.org/foo2", nil)
@@ -178,24 +175,14 @@ func TestVerify(t *testing.T) {
 	r.Header.Set("Foo", "bar")
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
 
-	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
-	if err != nil {
-		t.Error("Unexpected error while building signing string")
-	}
-	if !valid {
-		t.Error("The signature should be valid")
-	}
+	err = s.VerifyRequest(pubKey, r)
+	assert.NoError(t, err)
 
 	s.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
 
-	valid, err = s.Verify(pubKey, crypto.Hash(0), r)
-	if err != nil {
-		t.Error("Unexpected error while building signing string")
-	}
-	if valid {
-		t.Error("The signature should be invalid")
-	}
+	err = s.VerifyRequest(pubKey, r)
+	assert.ErrorIs(t, err, ErrBadSignature)
 
 	var hmacVerifier HMACKey = "yyqz64U$eG?eUAp24Pm!Fn!Cn"
 	var s2 signature
@@ -212,24 +199,14 @@ func TestVerify(t *testing.T) {
 	req.Header.Set("Foo", "bar")
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	valid, err = s2.Verify(hmacVerifier, nil, req)
-	if err != nil {
-		t.Error("Unexpected error while building signing string:", err)
-	}
-	if !valid {
-		t.Error("The signature should be valid")
-	}
+	err = s2.VerifyRequest(hmacVerifier, req)
+	assert.NoError(t, err)
 
 	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	valid, err = s2.Verify(hmacVerifier, nil, req)
-	if err != nil {
-		t.Error("Unexpected error while building signing string")
-	}
-	if valid {
-		t.Error("The signature should be invalid")
-	}
+	err = s2.VerifyRequest(hmacVerifier, req)
+	assert.ErrorIs(t, err, ErrBadSignature)
 }
 
 func TestVerifyRequest(t *testing.T) {
@@ -247,7 +224,6 @@ func TestVerifyRequest(t *testing.T) {
 	pkv := ParameterizedKeystoreVerifier{
 		SignatureParams: sp,
 		Keystore:        &StaticKeystore{pubKey},
-		Opts:            crypto.Hash(0),
 	}
 
 	sig := "RbGSX1MttcKCpCkq9nsPGkdJGUZsAU+0TpiXJYkwde+0ZwxEp9dXO3v17DwyGLXjv385253RdGI7URbrI7J6DQ=="
@@ -288,7 +264,6 @@ func TestVerifyRequest(t *testing.T) {
 	pkv2 := ParameterizedKeystoreVerifier{
 		SignatureParams: sp2,
 		Keystore:        &StaticKeystore{hmacVerifier},
-		Opts:            crypto.Hash(0),
 	}
 
 	sig = "3RCLz6TH2I32nj1NY5YaUWDSCNPiKsAVIXjX4merDeNvrGondy7+f3sWQQJWRwEo90FCrthWrrVcgHqqFevS9Q=="
@@ -402,7 +377,7 @@ func TestTextUnmarshal(t *testing.T) {
 }
 
 func TestSignatureParamsFromRequest(t *testing.T) {
-	var privKey ed25519.PrivateKey
+	var privKey Ed25519PrivKey
 	privHex := "96aa9ec42242a9a62196281045705196a64e12b15e9160bbb630e38385b82700e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d"
 	privKey, err := hex.DecodeString(privHex)
 	if err != nil {
@@ -420,7 +395,7 @@ func TestSignatureParamsFromRequest(t *testing.T) {
 	}
 	r.Header.Set("Foo", "bar")
 
-	err = s.Sign(privKey, crypto.Hash(0), r)
+	err = s.SignRequest(privKey, r)
 	if err != nil {
 		t.Error("Unexpected error while building ED25519 signing string:", err)
 	}

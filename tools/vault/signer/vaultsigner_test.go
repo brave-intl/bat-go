@@ -4,75 +4,51 @@
 package vaultsigner
 
 import (
-	"crypto"
-	"crypto/rand"
 	"testing"
 
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	uuid "github.com/satori/go.uuid"
-	"golang.org/x/crypto/ed25519"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSign(t *testing.T) {
 	wrappedClient, err := Connect()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	publicKey, privateKey, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	key, err := httpsignature.GenerateEd25519Key()
+	assert.NoError(t, err)
+
 	name := uuid.NewV4()
 
-	signer, err := wrappedClient.FromKeypair(privateKey, publicKey, "vaultsigner-test-"+name.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	signer, err := wrappedClient.FromKey(key, "vaultsigner-test-"+name.String())
+	assert.NoError(t, err)
 
 	message := []byte("hello world")
 
-	signature, err := signer.Sign(rand.Reader, message, crypto.Hash(0))
-	if err != nil {
-		t.Fatal(err)
-	}
+	signature, err := signer.SignMessage(message)
+	assert.NoError(t, err)
 
-	if !ed25519.Verify(publicKey, message, signature) {
-		t.Fatal("Signature did not match")
-	}
+	err = key.Public().VerifySignature(message, signature)
+	assert.NoError(t, err)
 }
 
 func TestVerify(t *testing.T) {
 	wrappedClient, err := Connect()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	publicKey, privateKey, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	key, err := httpsignature.GenerateEd25519Key()
+	assert.NoError(t, err)
 	name := uuid.NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
-	signer, err := wrappedClient.FromKeypair(privateKey, publicKey, "vaultsigner-test-"+name.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	signer, err := wrappedClient.FromKey(key, "vaultsigner-test-"+name.String())
+	assert.NoError(t, err)
 
 	message := []byte("hello world")
 
-	signature, err := privateKey.Sign(rand.Reader, message, crypto.Hash(0))
-	if err != nil {
-		t.Fatal(err)
-	}
+	signature, err := key.SignMessage(message)
+	assert.NoError(t, err)
 
-	valid, err := signer.Verify(message, signature, crypto.Hash(0))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !valid {
-		t.Fatal("Signature should be valid")
-	}
+	err = signer.VerifySignature(message, signature)
+	assert.NoError(t, err)
 }

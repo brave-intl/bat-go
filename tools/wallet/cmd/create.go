@@ -69,13 +69,13 @@ func CreateOnUphold(ctx context.Context, name string) error {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	if err != nil {
 		return err
 	}
-	publicKeyHex := hex.EncodeToString([]byte(publicKey))
+	publicKeyHex := key.PublicHex()
 
-	privateKeyHex := hex.EncodeToString([]byte(privateKey))
+	privateKeyHex := hex.EncodeToString(key)
 	logger.Info().
 		Str("public_key", publicKeyHex).
 		Str("private_key", privateKeyHex).
@@ -91,7 +91,7 @@ func CreateOnUphold(ctx context.Context, name string) error {
 	}
 	info.PublicKey = publicKeyHex
 
-	wallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+	wallet := &uphold.Wallet{Info: info, PrivKey: key, PubKey: key.Public()}
 
 	err = wallet.Register(ctx, name)
 	if err != nil {

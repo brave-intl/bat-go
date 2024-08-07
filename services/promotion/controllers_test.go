@@ -5,7 +5,6 @@ package promotion
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -273,7 +272,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 }
 
 // ClaimPromotion helper that calls promotion endpoint and does assertions
-func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutils.Info, privKey crypto.Signer,
+func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutils.Info, privKey httpsignature.Signator,
 	promotion *Promotion, blindedCreds []string, claimStatus int) *uuid.UUID {
 
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
@@ -297,7 +296,7 @@ func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutil
 	s.KeyID = w.ID
 	s.Headers = []string{"digest", "(request-target)"}
 
-	err = s.Sign(privKey, crypto.Hash(0), req)
+	err = s.SignRequest(privKey, req)
 	suite.Require().NoError(err)
 
 	rctx := chi.NewRouteContext()

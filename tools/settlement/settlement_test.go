@@ -13,7 +13,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/shopspring/decimal"
-	"golang.org/x/crypto/ed25519"
 )
 
 func TestTransactions(t *testing.T) {
@@ -48,7 +47,7 @@ func TestTransactions(t *testing.T) {
 	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
 	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
 	var donorPublicKey httpsignature.Ed25519PubKey
-	var donorPrivateKey ed25519.PrivateKey
+	var donorPrivateKey httpsignature.Ed25519PrivKey
 	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +150,7 @@ func TestDeterministicSigning(t *testing.T) {
 	donorWalletPublicKeyHex := "10ba999b2b7b9eabc0f44fa26bf122ebbfa98dc6fef31e6251a9c1c58d60bb8d"
 	donorWalletPrivateKeyHex := "8d6a620a566e094cebaec67edca32a68efce962890570157f0b8a5389cc5f6df10ba999b2b7b9eabc0f44fa26bf122ebbfa98dc6fef31e6251a9c1c58d60bb8d"
 	var donorPublicKey httpsignature.Ed25519PubKey
-	var donorPrivateKey ed25519.PrivateKey
+	var donorPrivateKey httpsignature.Ed25519PrivKey
 	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
 	if err != nil {
 		t.Fatal(err)

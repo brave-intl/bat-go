@@ -3,8 +3,6 @@ package wallet
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -64,10 +62,10 @@ func TestCreateBraveWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	// setup keypair
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	require.NoError(t, err)
 
-	err = signRequest(r, publicKey, privKey)
+	err = signRequest(r, key)
 	require.NoError(t, err)
 
 	r = r.WithContext(ctx)
@@ -1019,12 +1017,12 @@ func TestIsAllowedOrigin(t *testing.T) {
 	}
 }
 
-func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
+func signRequest(req *http.Request, key httpsignature.Ed25519PrivKey) error {
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
-	s.KeyID = hex.EncodeToString(publicKey)
+	s.KeyID = key.PublicHex()
 	s.Headers = []string{"digest", "(request-target)"}
-	return s.Sign(privateKey, crypto.Hash(0), req)
+	return s.SignRequest(key, req)
 }
 
 type result struct{}

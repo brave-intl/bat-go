@@ -2,7 +2,6 @@ package payments
 
 import (
 	"context"
-	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,8 +24,8 @@ var (
 			Provider:   "uphold",
 			PublicKey:  "",
 		},
-		PrivKey: ed25519.PrivateKey([]byte("")),
-		PubKey:  httpsignature.Ed25519PubKey([]byte("")),
+		PrivKey: httpsignature.Ed25519PrivKey(""),
+		PubKey:  httpsignature.Ed25519PubKey(""),
 	}
 	upholdSucceedTransaction = custodian.Transaction{ProviderID: "1234"}
 )

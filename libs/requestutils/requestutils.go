@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/libs/closers"
@@ -30,7 +29,7 @@ var (
 // ReadWithLimit reads an io reader with a limit and closes
 func ReadWithLimit(ctx context.Context, body io.Reader, limit int64) ([]byte, error) {
 	defer closers.Panic(ctx, body.(io.Closer))
-	return ioutil.ReadAll(io.LimitReader(body, limit))
+	return io.ReadAll(io.LimitReader(body, limit))
 }
 
 // Read an io reader

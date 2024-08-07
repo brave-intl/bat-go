@@ -5,7 +5,6 @@ package wallet_test
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -94,10 +93,10 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 
 	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	err = signRequest(request, publicKey, privateKey)
+	err = signRequest(request, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -109,7 +108,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 	err = json.NewDecoder(rw.Body).Decode(&response)
 	suite.Require().NoError(err)
 
-	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
+	walletID := uuid.NewV5(wallet.ClaimNamespace, key.PublicHex())
 	suite.Assert().Equal(walletID.String(), response.PaymentID)
 }
 
@@ -141,10 +140,10 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 
 	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	err = signRequest(request, publicKey, privateKey)
+	err = signRequest(request, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -152,7 +151,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 
 	suite.Assert().Equal(http.StatusForbidden, rw.Code)
 
-	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
+	walletID := uuid.NewV5(wallet.ClaimNamespace, key.PublicHex())
 
 	info, err := suite.storage.GetWallet(ctx, walletID)
 	suite.Require().NoError(err)
@@ -193,19 +192,20 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlready
 
 	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	err = signRequest(request, publicKey, privateKey)
+	err = signRequest(request, key)
 	suite.Require().NoError(err)
 
 	// create existing wallet
-	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	pubkeyHex := key.PublicHex()
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, pubkeyHex).String()
 	var altCurrency = altcurrency.BAT
 	info := &walletutils.Info{
 		ID:          paymentID,
 		Provider:    "brave",
-		PublicKey:   publicKey.String(),
+		PublicKey:   pubkeyHex,
 		AltCurrency: &altCurrency,
 	}
 
@@ -264,10 +264,10 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 
 	request := httptest.NewRequest(http.MethodPost, "/v4/wallets", bytes.NewBuffer(payload))
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	err = signRequest(request, publicKey, privateKey)
+	err = signRequest(request, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -275,7 +275,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 
 	suite.Assert().Equal(http.StatusInternalServerError, rw.Code)
 
-	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
+	walletID := uuid.NewV5(wallet.ClaimNamespace, key.PublicHex())
 
 	info, err := suite.storage.GetWallet(ctx, walletID)
 	suite.Require().NoError(err)
@@ -301,16 +301,17 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	pubkeyHex := key.PublicHex()
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, pubkeyHex).String()
 
 	var altCurrency = altcurrency.BAT
 	info := &walletutils.Info{
 		ID:          paymentID,
 		Provider:    "brave",
-		PublicKey:   publicKey.String(),
+		PublicKey:   pubkeyHex,
 		AltCurrency: &altCurrency,
 	}
 
@@ -332,7 +333,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
 		bytes.NewBuffer(payload))
 
-	err = signUpdateRequest(request, paymentID, privateKey)
+	err = signUpdateRequest(request, paymentID, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -350,10 +351,10 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationM
 	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, key.PublicHex()).String()
 
 	router := chi.NewRouter()
 	wallet.RegisterRoutes(ctx, service, router, noOpHandler(), noOpMw())
@@ -370,7 +371,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationM
 	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
 		bytes.NewBuffer(payload))
 
-	err = signUpdateRequest(request, paymentID, privateKey)
+	err = signUpdateRequest(request, paymentID, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -389,16 +390,17 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_PaymentIDMism
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	pubkeyHex := key.PublicHex()
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, pubkeyHex).String()
 
 	var altCurrency = altcurrency.BAT
 	info := &walletutils.Info{
 		ID:          paymentID,
 		Provider:    "brave",
-		PublicKey:   publicKey.String(),
+		PublicKey:   pubkeyHex,
 		AltCurrency: &altCurrency,
 	}
 
@@ -420,7 +422,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_PaymentIDMism
 	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", uuid.NewV4()),
 		bytes.NewBuffer(payload))
 
-	err = signUpdateRequest(request, paymentID, privateKey)
+	err = signUpdateRequest(request, paymentID, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -456,16 +458,17 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlr
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	pubkeyHex := key.PublicHex()
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, pubkeyHex).String()
 
 	var altCurrency = altcurrency.BAT
 	info := &walletutils.Info{
 		ID:          paymentID,
 		Provider:    "brave",
-		PublicKey:   publicKey.String(),
+		PublicKey:   pubkeyHex,
 		AltCurrency: &altCurrency,
 	}
 
@@ -487,7 +490,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlr
 	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
 		bytes.NewBuffer(payload))
 
-	err = signUpdateRequest(request, paymentID, privateKey)
+	err = signUpdateRequest(request, paymentID, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -521,16 +524,17 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_ReputationCal
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err)
 
-	paymentID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String()).String()
+	pubkeyHex := key.PublicHex()
+	paymentID := uuid.NewV5(wallet.ClaimNamespace, pubkeyHex).String()
 
 	var altCurrency = altcurrency.BAT
 	info := &walletutils.Info{
 		ID:          paymentID,
 		Provider:    "brave",
-		PublicKey:   publicKey.String(),
+		PublicKey:   pubkeyHex,
 		AltCurrency: &altCurrency,
 	}
 
@@ -552,7 +556,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_ReputationCal
 	request := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/v4/wallets/%s", paymentID),
 		bytes.NewBuffer(payload))
 
-	err = signUpdateRequest(request, paymentID, privateKey)
+	err = signUpdateRequest(request, paymentID, key)
 	suite.Require().NoError(err)
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -649,12 +653,12 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4_Not_Whitelisted() {
 	suite.Assert().Equal(false, resp.SelfCustodyAvailable["solana"])
 }
 
-func signUpdateRequest(req *http.Request, paymentID string, privateKey ed25519.PrivateKey) error {
+func signUpdateRequest(req *http.Request, paymentID string, privateKey httpsignature.Ed25519PrivKey) error {
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = paymentID
 	s.Headers = []string{"digest", "(request-target)"}
-	return s.Sign(privateKey, crypto.Hash(0), req)
+	return s.SignRequest(privateKey, req)
 }
 
 func noOpHandler() middleware.InstrumentHandlerDef {
@@ -671,10 +675,10 @@ func noOpMw() func(next http.Handler) http.Handler {
 	}
 }
 
-func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
+func signRequest(req *http.Request, key httpsignature.Ed25519PrivKey) error {
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
-	s.KeyID = hex.EncodeToString(publicKey)
+	s.KeyID = key.PublicHex()
 	s.Headers = []string{"digest", "(request-target)"}
-	return s.Sign(privateKey, crypto.Hash(0), req)
+	return s.SignRequest(key, req)
 }

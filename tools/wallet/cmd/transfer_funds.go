@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"crypto"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -23,7 +22,6 @@ import (
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ed25519"
 )
 
 var (
@@ -156,7 +154,7 @@ func RunTransferFunds(command *cobra.Command, args []string) error {
 	)
 }
 
-func pullRequisiteSecrets(from string, usevault bool) (string, crypto.Signer, error) {
+func pullRequisiteSecrets(from string, usevault bool) (string, httpsignature.Ed25519Signator, error) {
 	if usevault {
 		return pullRequisiteSecretsFromVault(from)
 	}
@@ -168,7 +166,7 @@ func pullRequisiteSecrets(from string, usevault bool) (string, crypto.Signer, er
 	return providerID, privateKey, err
 }
 
-func pullRequisiteSecretsFromPrompt(from string) (string, crypto.Signer, error) {
+func pullRequisiteSecretsFromPrompt(from string) (string, httpsignature.Ed25519Signator, error) {
 	log.Println("Enter your recovery phrase:")
 	reader := bufio.NewReader(os.Stdin)
 	recoveryPhrase, err := reader.ReadString('\n')
@@ -186,17 +184,17 @@ func pullRequisiteSecretsFromPrompt(from string) (string, crypto.Signer, error) 
 		return "", nil, err
 	}
 
-	return from, key, nil
+	return from, httpsignature.Ed25519PrivKey(key), nil
 }
 
-func pullRequisiteSecretsFromEnv(from string) (string, crypto.Signer, error) {
+func pullRequisiteSecretsFromEnv(from string) (string, httpsignature.Ed25519Signator, error) {
 	privateKeyHex := os.Getenv("ED25519_PRIVATE_KEY")
 
 	if len(privateKeyHex) == 0 {
 		return "", nil, nil
 	}
 
-	var privKey ed25519.PrivateKey
+	var privKey httpsignature.Ed25519PrivKey
 	privKey, err := hex.DecodeString(privateKeyHex)
 	if err != nil {
 		return "", nil, errors.New("Key material must be passed as hex")
@@ -205,7 +203,7 @@ func pullRequisiteSecretsFromEnv(from string) (string, crypto.Signer, error) {
 	return from, privKey, nil
 }
 
-func pullRequisiteSecretsFromVault(from string) (string, *vaultsigner.Ed25519Signer, error) {
+func pullRequisiteSecretsFromVault(from string) (string, httpsignature.Ed25519Signator, error) {
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		return "", nil, err
@@ -260,7 +258,7 @@ func TransferFunds(
 	walletc := altcurrency.BAT
 
 	var info wallet.Info
-	info.PublicKey = hex.EncodeToString(signer.Public().(ed25519.PublicKey))
+	info.PublicKey = hex.EncodeToString(signer.Public())
 	info.Provider = "uphold"
 	info.ProviderID = providerID
 	{
@@ -268,13 +266,7 @@ func TransferFunds(
 		info.AltCurrency = &tmp
 	}
 
-	var pubKey httpsignature.Ed25519PubKey
-	pubKey, err = hex.DecodeString(info.PublicKey)
-	if err != nil {
-		return err
-	}
-
-	w, err := uphold.New(ctx, info, signer, pubKey)
+	w, err := uphold.New(ctx, info, signer, signer.Public())
 	if err != nil {
 		return err
 	}
