@@ -251,14 +251,9 @@ func InitService(
 			return nil, model.Error("skus: radom secret not found")
 		}
 
-		proxyAddr := os.Getenv("HTTP_PROXY")
-		if proxyAddr == "" {
-			return nil, model.Error("skus: radom http proxy value not found")
-		}
-
 		var err error
 
-		radomCl, err = radom.New(srvURL, authToken, proxyAddr)
+		radomCl, err = radom.New(srvURL, authToken)
 		if err != nil {
 			return nil, err
 		}
