@@ -56,7 +56,7 @@ type ParameterizedSignator struct {
 // Keystore provides a way to lookup a public key based on the keyID a request was signed with
 type Keystore interface {
 	// LookupVerifier based on the keyID
-	LookupVerifier(ctx context.Context, keyID string) (context.Context, *Verifier, error)
+	LookupVerifier(ctx context.Context, keyID string) (context.Context, Verifier, error)
 }
 
 // StaticKeystore is a keystore that always returns a static verifier independent of keyID
@@ -85,8 +85,8 @@ var (
 )
 
 // LookupVerifier by returning a static verifier
-func (sk *StaticKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, *Verifier, error) {
-	return ctx, &sk.Verifier, nil
+func (sk *StaticKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, Verifier, error) {
+	return ctx, sk.Verifier, nil
 }
 
 // TODO Add New function
@@ -236,7 +236,7 @@ func (pkv *ParameterizedKeystoreVerifier) VerifyRequest(req *http.Request) (cont
 	sp.Algorithm = pkv.SignatureParams.Algorithm
 	sp.Headers = pkv.SignatureParams.Headers
 
-	valid, err := sp.Verify(*verifier, pkv.Opts, req)
+	valid, err := sp.Verify(verifier, pkv.Opts, req)
 	if err != nil {
 		return nil, "", err
 	}
