@@ -576,7 +576,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 	handler := CreateUpholdTransaction(suite.service)
 
 	// create an uphold wallet
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	suite.Require().NoError(err, "Failed to create wallet keypair")
 
 	walletID := uuid.NewV4()
@@ -586,7 +586,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 		Provider:    "uphold",
 		ProviderID:  "-",
 		AltCurrency: &bat,
-		PublicKey:   hex.EncodeToString(publicKey),
+		PublicKey:   key.PublicHex(),
 		LastBalance: nil,
 	}
 
@@ -599,8 +599,8 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 
 	w := uphold.Wallet{
 		Info:    info,
-		PrivKey: privKey,
-		PubKey:  publicKey,
+		PrivKey: key,
+		PubKey:  key.Public(),
 	}
 	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
@@ -759,15 +759,15 @@ func generateWallet(ctx context.Context, t *testing.T) *uphold.Wallet {
 		info.AltCurrency = &tmp
 	}
 
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 	if err != nil {
 		t.Fatal(err)
 	}
-	info.PublicKey = hex.EncodeToString(publicKey)
+	info.PublicKey = key.PublicHex()
 	newWallet := &uphold.Wallet{
 		Info:    info,
-		PrivKey: privateKey,
-		PubKey:  publicKey,
+		PrivKey: key,
+		PubKey:  key.Public(),
 	}
 	err = newWallet.Register(ctx, "bat-go test card")
 	if err != nil {

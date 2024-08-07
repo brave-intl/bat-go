@@ -284,20 +284,19 @@ func (suite *WalletControllersTestSuite) createBody(tx string) string {
 }
 
 func (suite *WalletControllersTestSuite) NewWallet(service *wallet.Service, provider string) *uphold.Wallet {
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	publicKeyString := hex.EncodeToString(publicKey)
+	key, err := httpsignature.GenerateEd25519Key()
 
 	bat := altcurrency.BAT
 	info := walletutils.Info{
 		ID:          uuid.NewV4().String(),
-		PublicKey:   publicKeyString,
+		PublicKey:   key.PublicHex(),
 		Provider:    provider,
 		AltCurrency: &bat,
 	}
 	w := &uphold.Wallet{
 		Info:    info,
-		PrivKey: privKey,
-		PubKey:  publicKey,
+		PrivKey: key,
+		PubKey:  key.Public(),
 	}
 
 	reg, err := w.PrepareRegistration("Brave Browser Test Link")
@@ -307,8 +306,7 @@ func (suite *WalletControllersTestSuite) NewWallet(service *wallet.Service, prov
 		service,
 		suite.createBody(reg),
 		http.StatusCreated,
-		publicKey,
-		privKey,
+		key,
 		true,
 	)
 
@@ -326,7 +324,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 
 	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 
 	// assume 400 is already covered
 	// fail because of lacking signature presence
@@ -334,8 +332,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 		service,
 		`{}`,
 		http.StatusBadRequest,
-		publicKey,
-		privKey,
+		key,
 		false,
 	)
 
@@ -345,8 +342,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 		service,
 		``,
 		http.StatusCreated,
-		publicKey,
-		privKey,
+		key,
 		true,
 	)
 
@@ -369,14 +365,13 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 
 	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	key, err := httpsignature.GenerateEd25519Key()
 
 	badJSONBodyParse := suite.createUpholdWalletV3(
 		service,
 		``,
 		http.StatusBadRequest,
-		publicKey,
-		privKey,
+		key,
 		true,
 	)
 	suite.Assert().JSONEq(`{
@@ -395,8 +390,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 		service,
 		`{"signedCreationRequest":""}`,
 		http.StatusBadRequest,
-		publicKey,
-		privKey,
+		key,
 		true,
 	)
 
@@ -409,8 +403,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 		service,
 		`{}`,
 		http.StatusBadRequest,
-		publicKey,
-		privKey,
+		key,
 		false,
 	)
 
@@ -656,8 +649,7 @@ func (suite *WalletControllersTestSuite) createBraveWalletV3(
 	service *wallet.Service,
 	body string,
 	code int,
-	publicKey httpsignature.Ed25519PubKey,
-	privateKey ed25519.PrivateKey,
+	key httpsignature.Ed25519PrivKey,
 	shouldSign bool,
 ) string {
 
@@ -672,11 +664,7 @@ func (suite *WalletControllersTestSuite) createBraveWalletV3(
 	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
-		suite.SignRequest(
-			req,
-			publicKey,
-			privateKey,
-		)
+		suite.SignRequest(req, key)
 	}
 
 	rctx := chi.NewRouteContext()
@@ -694,8 +682,7 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 	service *wallet.Service,
 	body string,
 	code int,
-	publicKey httpsignature.Ed25519PubKey,
-	privateKey ed25519.PrivateKey,
+	key httpsignature.Ed25519PrivKey,
 	shouldSign bool,
 ) string {
 
@@ -710,11 +697,7 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
-		suite.SignRequest(
-			req,
-			publicKey,
-			privateKey,
-		)
+		suite.SignRequest(req, key)
 	}
 
 	rctx := chi.NewRouteContext()
@@ -728,13 +711,13 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 	return rr.Body.String()
 }
 
-func (suite *WalletControllersTestSuite) SignRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) {
+func (suite *WalletControllersTestSuite) SignRequest(req *http.Request, key httpsignature.Ed25519PrivKey) {
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
-	s.KeyID = hex.EncodeToString(publicKey)
+	s.KeyID = key.PublicHex()
 	s.Headers = []string{"digest", "(request-target)"}
 
-	err := s.Sign(privateKey, crypto.Hash(0), req)
+	err := s.SignRequest(key, req)
 	suite.Require().NoError(err)
 }
 

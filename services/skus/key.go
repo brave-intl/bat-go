@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -197,7 +196,6 @@ func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 			},
 		},
 		Keystore: ks,
-		Opts:     crypto.Hash(0),
 	}
 
 	// TODO: Keep only VerifyHTTPSignedOnly after migrating Subscriptions to this method.

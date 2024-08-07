@@ -3,7 +3,6 @@ package uphold
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
@@ -39,14 +38,13 @@ import (
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"golang.org/x/crypto/ed25519"
 )
 
 // Wallet a wallet information using Uphold as the provider
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
 	walletutils.Info
-	PrivKey crypto.Signer
+	PrivKey httpsignature.Signator
 	PubKey  httpsignature.Verifier
 }
 
@@ -155,7 +153,7 @@ func init() {
 
 // New returns an uphold wallet constructed using the provided parameters
 // NOTE that it does not register a wallet with Uphold if it does not already exist
-func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
+func New(ctx context.Context, info walletutils.Info, privKey httpsignature.Signator, pubKey httpsignature.Verifier) (*Wallet, error) {
 	if info.Provider != "uphold" {
 		return nil, errors.New("the wallet provider or deposit account must be uphold")
 	}
@@ -186,7 +184,7 @@ func FromWalletInfo(ctx context.Context, info walletutils.Info) (*Wallet, error)
 			return nil, err
 		}
 	}
-	return New(ctx, info, ed25519.PrivateKey{}, publicKey)
+	return New(ctx, info, httpsignature.Ed25519PrivKey{}, publicKey)
 }
 
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
@@ -287,8 +285,8 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 			Provider:   "uphold",
 			PublicKey:  grantWalletPublicKey,
 		},
-		PrivKey: ed25519.PrivateKey([]byte(gwPrivateKey)),
-		PubKey:  httpsignature.Ed25519PubKey([]byte(gwPublicKey)),
+		PrivKey: httpsignature.Ed25519PrivKey(gwPrivateKey),
+		PubKey:  httpsignature.Ed25519PubKey(gwPublicKey),
 	}
 
 	// prepare a transaction by creating a payload
@@ -394,7 +392,7 @@ func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
 
-	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
+	err = s.SignRequest(w.PrivKey, req)
 	return req, err
 }
 
@@ -582,7 +580,7 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
 
-	if err = s.Sign(w.PrivKey, crypto.Hash(0), req); err != nil {
+	if err := s.SignRequest(w.PrivKey, req); err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
 	}
 	return req, nil
@@ -717,12 +715,9 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("a transaction signature must cover the request body via digest")
 	}
 
-	valid, err := sigParams.Verify(w.PubKey, crypto.Hash(0), &req)
+	err = sigParams.VerifyRequest(w.PubKey, &req)
 	if err != nil {
 		return nil, err
-	}
-	if !valid {
-		return nil, errors.New("the signature is invalid")
 	}
 
 	var transactionRecode transactionRequestRecode
@@ -1153,7 +1148,7 @@ func FundWallet(ctx context.Context, destWallet *Wallet, amount decimal.Decimal)
 	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
 	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
 	var donorPublicKey httpsignature.Ed25519PubKey
-	var donorPrivateKey ed25519.PrivateKey
+	var donorPrivateKey httpsignature.Ed25519PrivKey
 	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
 	if err != nil {
 		return zero, err
