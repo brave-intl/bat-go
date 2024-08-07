@@ -8,16 +8,17 @@ import (
 )
 
 type Client struct {
-	client *clients.SimpleHTTPClient
+	client    *clients.SimpleHTTPClient
+	authToken string
 }
 
-func New(srvURL, authToken, proxyAddr string) (*Client, error) {
-	cl, err := clients.NewWithProxy("radom", srvURL, authToken, proxyAddr)
+func New(srvURL, authToken string) (*Client, error) {
+	cl, err := clients.New(srvURL, "")
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{client: cl}, nil
+	return &Client{client: cl, authToken: authToken}, nil
 }
 
 type Gateway struct {
@@ -61,6 +62,8 @@ func (c *Client) CreateCheckoutSession(ctx context.Context, creq CheckoutSession
 	if err != nil {
 		return CheckoutSessionResponse{}, err
 	}
+
+	req.Header.Add("Authorization", c.authToken)
 
 	var resp CheckoutSessionResponse
 	if _, err := c.client.Do(ctx, req, &resp); err != nil {
