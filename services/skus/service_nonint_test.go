@@ -3045,6 +3045,7 @@ func Test_newRadomGateway(t *testing.T) {
 
 type mockRadomClient struct {
 	fnCreateCheckoutSession func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	fnGetSubscription       func(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error)
 }
 
 func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
@@ -3053,6 +3054,14 @@ func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq radom.
 	}
 
 	return m.fnCreateCheckoutSession(ctx, creq)
+}
+
+func (m *mockRadomClient) GetSubscription(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error) {
+	if m.fnGetSubscription == nil {
+		return radom.SubscriptionResponse{}, nil
+	}
+
+	return m.fnGetSubscription(ctx, subID)
 }
 
 type mockPaidOrderCreator struct {

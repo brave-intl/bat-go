@@ -121,6 +121,11 @@ type gpsMessageAuthenticator interface {
 
 type radomClient interface {
 	CreateCheckoutSession(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	GetSubscription(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error)
+}
+
+type radomMessageAuthenticator interface {
+	Authenticate(ctx context.Context, token string) error
 }
 
 type Service struct {
@@ -148,6 +153,7 @@ type Service struct {
 
 	radomClient  radomClient
 	radomGateway radom.Gateway
+	radomAuth    radomMessageAuthenticator
 
 	vendorReceiptValid vendorReceiptValidator
 	gpsAuth            gpsMessageAuthenticator
@@ -256,6 +262,9 @@ func InitService(
 		}
 	}
 
+	// TODO add secret
+	radAuth := radom.NewMessageAuthenticator(radom.MessageAuthConfig{})
+
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
@@ -350,6 +359,7 @@ func InitService(
 
 		radomClient:  radomCl,
 		radomGateway: radomGateway,
+		radomAuth:    radAuth,
 
 		vendorReceiptValid: rcptValidator,
 		gpsAuth:            newGPSNtfAuthenticator(gpsCfg, idv),
@@ -2280,6 +2290,120 @@ func (s *Service) processSubmitReceipt(ctx context.Context, req model.ReceiptReq
 	}
 
 	return rcpt, nil
+}
+
+func (s *Service) processRadomEvent(ctx context.Context, event radom.Event) error {
+	if !event.ShouldProcess() {
+		return nil
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil) // TODO
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processRadomEventTx(ctx, tx, event); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, event radom.Event) error {
+	switch {
+	case event.IsNewSub():
+		oid, err := event.OrderID()
+		if err != nil {
+			return err
+		}
+
+		subID, err := event.SubID()
+		if err != nil {
+			return err
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, subID)
+		if err != nil {
+			return err
+		}
+
+		nxtB, err := rsub.NextBillingDate()
+		if err != nil {
+			return err
+		}
+
+		expAt := nxtB.Add(24 * time.Hour)
+
+		paidAt, err := rsub.LastPaid()
+		if err != nil {
+			return err
+		}
+
+		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
+			return err
+		}
+
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "externalID", subID.String()); err != nil {
+			return err
+		}
+
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod); err != nil {
+			return err
+		}
+
+	case event.ShouldRenew():
+		subID, err := event.SubID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		if err != nil {
+			return err
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, subID)
+		if err != nil {
+			return err
+		}
+
+		nxtB, err := rsub.NextBillingDate()
+		if err != nil {
+			return err
+		}
+
+		expAt := nxtB.Add(24 * time.Hour)
+
+		paidAt, err := rsub.LastPaid()
+		if err != nil {
+			return err
+		}
+
+		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt); err != nil {
+			return err
+		}
+
+	case event.ShouldCancel():
+		subID, err := event.SubID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		if err != nil {
+			return err
+		}
+
+		if err := s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled); err != nil {
+			return err
+		}
+
+	default:
+		return model.Error("skus: unknown event type") // TODO better message
+	}
+
+	return nil
 }
 
 func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
