@@ -34,6 +34,10 @@ import (
 	"github.com/hashicorp/vault/shamir"
 )
 
+const (
+	minimumOperatorShares = 2 // ~1M BAT
+)
+
 // ChainAddress represents an on-chain address used for payouts. It needs to be persisted
 // to QLDB in this form to manage approvals and record the creator.
 type ChainAddress struct {
@@ -515,6 +519,9 @@ func (s *Service) decryptSecrets(ctx context.Context) (map[string]string, error)
 }
 
 func (s *Service) decryptWithShares(ctx context.Context, buf bytes.Buffer) (io.Reader, error) {
+	if !enoughOperatorShares(minimumOperatorShares)  {
+		return nil, fmt.Errorf("minimum number of operator shares not met: expected %d but got %d", minimumOperatorShares, len(s.keyShares))
+	}
 	// combine the service configured key shares
 	privateKey, err := shamir.Combine(s.keyShares)
 	if err != nil {
@@ -530,6 +537,10 @@ func (s *Service) decryptWithShares(ctx context.Context, buf bytes.Buffer) (io.R
 }
 
 func (s *Service) encryptWithShares(ctx context.Context, data []byte) (io.Reader, error) {
+	if !enoughOperatorShares(minimumOperatorShares)  {
+		return nil, fmt.Errorf("minimum number of operator shares not met: expected %d but got %d", minimumOperatorShares, len(s.keyShares))
+	}
+	
 	// combine the service configured key shares
 	privateKey, err := shamir.Combine(s.keyShares)
 	if err != nil {

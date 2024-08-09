@@ -290,13 +290,10 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 					<-time.After(60 * time.Second)
 					continue
 				}
-				if ok := service.enoughOperatorShares(ctx, 1); ok { // 2 is the number of shares required
-					// yes - attempt to decrypt the file
-					if err := service.configureSecrets(ctx); err != nil {
-						// fail to decrypt?  panic loudly
-						return nil, nil, fmt.Errorf("failed to configure payments service secrets: %w", err)
-					}
-					break
+				// yes - attempt to decrypt the file
+				if err := service.configureSecrets(ctx); err != nil {
+					// fail to decrypt?  panic loudly
+					return nil, nil, fmt.Errorf("failed to configure payments service secrets: %w", err)
 				}
 				logger.Error().Err(err).Msg("need more operator shares to decrypt secrets")
 				// no - poll for operator shares until we can attempt to decrypt the file
