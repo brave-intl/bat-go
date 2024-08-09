@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -23,7 +22,6 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v72"
-	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
 	"google.golang.org/api/idtoken"
@@ -48,6 +46,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/xstripe"
 )
 
 var (
@@ -102,6 +101,7 @@ type orderStoreSvc interface {
 	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
 	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
+	GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
 }
 
 type tlv2Store interface {
@@ -120,6 +120,13 @@ type gpsMessageAuthenticator interface {
 	authenticate(ctx context.Context, token string) error
 }
 
+type stripeClient interface {
+	Session(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
+	CreateSession(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
+	Subscription(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
+	FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool)
+}
+
 // Service contains datastore
 type Service struct {
 	orderRepo     orderStoreSvc
@@ -135,7 +142,7 @@ type Service struct {
 	cbClient           cbr.Client
 	geminiClient       gemini.Client
 	geminiConf         *gemini.Conf
-	scClient           *client.API
+	stripeCl           stripeClient
 	codecs             map[string]*goavro.Codec
 	kafkaWriter        *kafka.Writer
 	kafkaDialer        *kafka.Dialer
@@ -208,16 +215,16 @@ func InitService(
 ) (*Service, error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
-	// setup stripe if exists in context and enabled
 	scClient := &client.API{}
 	if enabled, ok := ctx.Value(appctx.StripeEnabledCTXKey).(bool); ok && enabled {
-		sublogger.Debug().Msg("stripe enabled")
+		stripe.EnableTelemetry = false
+
 		var err error
 		stripe.Key, err = appctx.GetStringFromContext(ctx, appctx.StripeSecretCTXKey)
 		if err != nil {
 			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
 		}
-		// initialize stripe client
+
 		scClient.Init(stripe.Key, nil)
 	}
 
@@ -343,7 +350,7 @@ func InitService(
 		geminiClient:       geminiClient,
 		geminiConf:         geminiConf,
 		cbClient:           cbClient,
-		scClient:           scClient,
+		stripeCl:           xstripe.NewClient(scClient),
 		pauseVoteUntilMu:   sync.RWMutex{},
 		retry:              backoff.Retry,
 		radomClient:        radomClient,
@@ -532,25 +539,6 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 	}
 	defer func() { _ = tx2.Rollback() }()
 
-	if !order.IsPaid() {
-		// TODO: Remove this after confirming no calls are made to this for Premium orders.
-		if order.IsStripePayable() {
-			session, err := order.CreateStripeCheckoutSession(
-				req.Email,
-				parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
-				parseURLAddOrderIDParam(stripeCancelURI, order.ID),
-				order.GetTrialDays(),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create checkout session: %w", err)
-			}
-
-			if err := s.orderRepo.AppendMetadata(ctx, tx2, order.ID, "stripeCheckoutSessionId", session.SessionID); err != nil {
-				return nil, fmt.Errorf("failed to update order metadata: %w", err)
-			}
-		}
-	}
-
 	if numIntervals > 0 {
 		if err := s.orderRepo.AppendMetadataInt(ctx, tx2, order.ID, "numIntervals", numIntervals); err != nil {
 			return nil, fmt.Errorf("failed to update order metadata: %w", err)
@@ -570,93 +558,98 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req model.CreateOr
 	return order, nil
 }
 
-// GetOrder - business logic for getting an order, needs to validate the checkout session is not expired
-func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
-	// get the order
-	order, err := s.Datastore.GetOrder(orderID)
+func (s *Service) getTransformOrder(ctx context.Context, orderID uuid.UUID) (*model.Order, error) {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := s.getTransformOrderTx(ctx, tx, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s *Service) getTransformOrderTx(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) (*model.Order, error) {
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get order (%s): %w", orderID.String(), err)
 	}
 
-	if order != nil {
-		if !order.IsPaid() && order.IsStripePayable() {
-			order, err = s.TransformStripeOrder(order)
-			if err != nil {
-				return nil, fmt.Errorf("failed to transform stripe order (%s): %w", orderID.String(), err)
-			}
-		}
+	// Nothing more to do for orders with a Stripe subscription.
+	if _, ok := ord.StripeSubID(); ok {
+		return ord, nil
 	}
 
-	return order, nil
+	if !shouldTransformStripeOrder(ord) {
+		return ord, nil
+	}
 
+	if err := s.updateOrderStripeSession(ctx, dbi, ord); err != nil {
+		return nil, fmt.Errorf("failed to transform stripe order (%s): %w", orderID.String(), err)
+	}
+
+	return s.getOrderFullTx(ctx, dbi, orderID)
 }
 
-// TransformStripeOrder updates checkout session if expired, checks the status of the checkout session.
-func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
-	ctx := context.Background()
+// updateOrderStripeSession checks the status of the checkout session, updates it if expired.
+func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtContext, ord *model.Order) error {
+	expSessID, err := s.orderRepo.GetExpiredStripeCheckoutSessionID(ctx, dbi, ord.ID)
+	if err != nil && !errors.Is(err, model.ErrExpiredStripeCheckoutSessionIDNotFound) {
+		return fmt.Errorf("failed to check for expired stripe checkout session: %w", err)
+	}
 
-	// check if this order has an expired checkout session
-	expired, cs, err := s.Datastore.CheckExpiredCheckoutSession(order.ID)
+	var newSessID string
+
+	if expSessID != "" {
+		nsessID, err := s.recreateStripeSession(ctx, dbi, ord, expSessID)
+		if err != nil {
+			return fmt.Errorf("failed to create checkout session: %w", err)
+		}
+
+		newSessID = nsessID
+	}
+
+	// Below goes some leagcy stuff.
+	// There was also a bug where the old subscription would be tested for payment.
+	// The code below did not take into account that the session could have been updated just above.
+	//
+	// If this is a stripe order, and there is a checkout session, check it with Stripe.
+	// The redirect flow sometimes is too fast for the webhook to be delivered.
+	sessID, ok := chooseStripeSessID(ord, newSessID)
+	if !ok || sessID == "" {
+		// Nothing to do here.
+		return nil
+	}
+
+	sess, err := s.stripeCl.Session(ctx, sessID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check for expired stripe checkout session: %w", err)
+		return fmt.Errorf("failed to get stripe checkout session: %w", err)
 	}
 
-	if expired {
-		// get old checkout session from stripe by id
-		stripeSession, err := session.Get(cs, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
-		}
-
-		checkoutSession, err := order.CreateStripeCheckoutSession(
-			getCustEmailFromStripeCheckout(stripeSession),
-			stripeSession.SuccessURL, stripeSession.CancelURL,
-			order.GetTrialDays(),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create checkout session: %w", err)
-		}
-
-		err = s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update order metadata: %w", err)
-		}
+	// Skip unpaid sessions.
+	if sess.PaymentStatus != "paid" {
+		return nil
 	}
 
-	// if this is a stripe order, and there is a checkout session, we actually need to check it with
-	// stripe, as the redirect flow sometimes is too fast for the webhook to be delivered.
-	// exclude any order with a subscription identifier from stripe
-	if _, sOK := order.Metadata["stripeSubscriptionId"]; !sOK {
-		if cs, ok := order.Metadata["stripeCheckoutSessionId"].(string); ok && cs != "" {
-			// get old checkout session from stripe by id
-			sess, err := session.Get(cs, nil)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
-			}
-
-			// Set status to paid and the subscription id and if the session is actually paid.
-			if sess.PaymentStatus == "paid" {
-				if err = s.Datastore.UpdateOrder(order.ID, "paid"); err != nil {
-					return nil, fmt.Errorf("failed to update order to paid status: %w", err)
-				}
-
-				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "stripeSubscriptionId", sess.Subscription.ID); err != nil {
-					return nil, fmt.Errorf("failed to update order to add the subscription id")
-				}
-
-				if err := s.Datastore.AppendOrderMetadata(ctx, &order.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
-					return nil, fmt.Errorf("failed to update order to add the payment processor")
-				}
-			}
-		}
-	}
-
-	result, err := s.Datastore.GetOrder(order.ID)
+	// Need to update the order as paid.
+	// This requires fetching the subscription as the expiry time is needed.
+	sub, err := s.stripeCl.Subscription(ctx, sess.Subscription.ID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get order: %w", err)
+		return err
 	}
 
-	return result, nil
+	expt := time.Unix(sub.CurrentPeriodEnd, 0).UTC()
+	paidt := time.Unix(sub.CurrentPeriodStart, 0).UTC()
+
+	return s.renewOrderStripe(ctx, dbi, ord, sub.ID, expt, paidt)
 }
 
 // CancelOrder cancels an order, propagates to stripe if needed.
@@ -727,28 +720,14 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		return nil
 	}
 
-	// Recreate the stripe checkout session.
-	oldSessID, ok := ord.Metadata["stripeCheckoutSessionId"].(string)
+	oldSessID, ok := ord.StripeSessID()
 	if !ok {
 		return model.ErrNoStripeCheckoutSessID
 	}
 
-	sess, err := session.Get(oldSessID, nil)
-	if err != nil {
-		return fmt.Errorf("failed to get stripe checkout session: %w", err)
-	}
+	_, err = s.recreateStripeSession(ctx, s.Datastore.RawDB(), ord, oldSessID)
 
-	cs, err := ord.CreateStripeCheckoutSession(getCustEmailFromStripeCheckout(sess), sess.SuccessURL, sess.CancelURL, ord.GetTrialDays())
-	if err != nil {
-		return fmt.Errorf("failed to create checkout session: %w", err)
-	}
-
-	// Overwrite the old checkout session.
-	if err := s.Datastore.AppendOrderMetadata(ctx, &ord.ID, "stripeCheckoutSessionId", cs.SessionID); err != nil {
-		return fmt.Errorf("failed to update order metadata: %w", err)
-	}
-
-	return nil
+	return err
 }
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
@@ -1069,19 +1048,6 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	}
 
 	return sum.GreaterThanOrEqual(order.TotalPrice), nil
-}
-
-func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
-	// add order id to the stripe success and cancel urls
-	surl, err := url.Parse(u)
-	if err == nil {
-		surlv := surl.Query()
-		surlv.Add("order_id", orderID.String())
-		surl.RawQuery = surlv.Encode()
-		return surl.String()
-	}
-	// there was a parse error, return whatever was given
-	return u
 }
 
 // UniqBatches returns the limit for active batches and the current number of active batches.
@@ -1677,27 +1643,14 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		if shouldUpdateOrderStripeSubID(ord, subID) {
-			if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "stripeSubscriptionId", subID); err != nil {
-				return err
-			}
-		}
-
 		expt, err := ntf.expiresTime()
 		if err != nil {
 			return err
 		}
 
-		// Add 1-day leeway in case next billing cycle's webhook gets delayed.
-		expt = expt.Add(24 * time.Hour)
-
 		paidt := time.Now()
 
-		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
-			return err
-		}
-
-		return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+		return s.renewOrderStripe(ctx, dbi, ord, subID, expt, paidt)
 
 	case ntf.shouldCancel():
 		oid, err := ntf.orderID()
@@ -1875,7 +1828,7 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 	if !order.IsPaid() {
 		switch {
 		case order.IsStripePayable():
-			ssid, err := s.createStripeSessID(ctx, req, order)
+			ssid, err := s.createStripeSession(ctx, req, order)
 			if err != nil {
 				return nil, err
 			}
@@ -1955,7 +1908,7 @@ func (s *Service) createOrderIssuers(ctx context.Context, dbi sqlx.QueryerContex
 	return numIntervals, nil
 }
 
-func (s *Service) createStripeSessID(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
+func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
 	oid := order.ID.String()
 
 	surl, err := req.StripeMetadata.SuccessURL(oid)
@@ -1968,12 +1921,16 @@ func (s *Service) createStripeSessID(ctx context.Context, req *model.CreateOrder
 		return "", err
 	}
 
-	sess, err := model.CreateStripeCheckoutSession(oid, req.Email, surl, curl, order.GetTrialDays(), order.Items)
-	if err != nil {
-		return "", fmt.Errorf("failed to create checkout session: %w", err)
+	sreq := createStripeSessionRequest{
+		orderID:    oid,
+		email:      req.Email,
+		successURL: surl,
+		cancelURL:  curl,
+		trialDays:  order.GetTrialDays(),
+		items:      buildStripeLineItems(order.Items),
 	}
 
-	return sess.SessionID, nil
+	return createStripeSession(ctx, s.stripeCl, sreq)
 }
 
 // TODO: Refactor the Radom-related logic.
@@ -2058,7 +2015,7 @@ func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, e
 // renewOrderWithExpPaidTimeTx performs updates relevant to advancing a paid order forward after renewal.
 //
 // TODO: Add a repo method to update all three fields at once.
-func (s *Service) renewOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expt, paidt time.Time) error {
+func (s *Service) renewOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, expt, paidt time.Time) error {
 	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
 		return err
 	}
@@ -2309,6 +2266,55 @@ func createOrderWithReceipt(
 	return order, nil
 }
 
+func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string, expt, paidt time.Time) error {
+	if shouldUpdateOrderStripeSubID(ord, subID) {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
+			return err
+		}
+	}
+
+	// Add 1-day leeway in case next billing cycle's webhook gets delayed.
+	expt = expt.Add(24 * time.Hour)
+
+	if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
+		return err
+	}
+
+	// Skip updating payment processor if it's already Stripe.
+	if ord.IsStripe() {
+		return nil
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+}
+
+func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID string) (string, error) {
+	oldSess, err := s.stripeCl.Session(ctx, oldSessID, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req := createStripeSessionRequest{
+		orderID:    ord.ID.String(),
+		email:      xstripe.CustomerEmailFromSession(oldSess),
+		successURL: oldSess.SuccessURL,
+		cancelURL:  oldSess.CancelURL,
+		trialDays:  ord.GetTrialDays(),
+		items:      buildStripeLineItems(ord.Items),
+	}
+
+	sessID, err := createStripeSession(ctx, s.stripeCl, req)
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeCheckoutSessionId", sessID); err != nil {
+		return "", err
+	}
+
+	return sessID, nil
+}
+
 func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem, merchID, status string) (*model.OrderNew, error) {
 	// Check for number of items to be above 0.
 	//
@@ -2487,4 +2493,85 @@ func shouldUpdateOrderStripeSubID(ord *model.Order, subID string) bool {
 	}
 
 	return false
+}
+
+func shouldTransformStripeOrder(ord *model.Order) bool {
+	if ord.IsIOS() {
+		return false
+	}
+
+	if ord.IsAndroid() {
+		return false
+	}
+
+	return !ord.IsPaid() && ord.IsStripePayable()
+}
+
+func chooseStripeSessID(ord *model.Order, canBeNewSessID string) (string, bool) {
+	if canBeNewSessID != "" {
+		return canBeNewSessID, true
+	}
+
+	return ord.StripeSessID()
+}
+
+type createStripeSessionRequest struct {
+	orderID    string
+	email      string
+	successURL string
+	cancelURL  string
+	trialDays  int64
+	items      []*stripe.CheckoutSessionLineItemParams
+}
+
+func createStripeSession(ctx context.Context, cl stripeClient, req createStripeSessionRequest) (string, error) {
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: []*string{ptrTo("card")},
+		Mode:               ptrTo(string(stripe.CheckoutSessionModeSubscription)),
+		SuccessURL:         &req.successURL,
+		CancelURL:          &req.cancelURL,
+		ClientReferenceID:  &req.orderID,
+		SubscriptionData:   &stripe.CheckoutSessionSubscriptionDataParams{},
+		LineItems:          req.items,
+	}
+
+	if custID, ok := cl.FindCustomer(ctx, req.email); ok {
+		params.Customer = &custID.ID
+	} else {
+		if req.email != "" {
+			params.CustomerEmail = &req.email
+		}
+	}
+
+	if req.trialDays > 0 {
+		params.SubscriptionData.TrialPeriodDays = &req.trialDays
+	}
+
+	params.SubscriptionData.AddMetadata("orderID", req.orderID)
+	params.AddExtra("allow_promotion_codes", "true")
+
+	sess, err := cl.CreateSession(ctx, params)
+	if err != nil {
+		return "", err
+	}
+
+	return sess.ID, nil
+}
+
+func buildStripeLineItems(items []model.OrderItem) []*stripe.CheckoutSessionLineItemParams {
+	var result []*stripe.CheckoutSessionLineItemParams
+
+	for i := range items {
+		priceID, ok := items[i].StripeItemID()
+		if !ok {
+			continue
+		}
+
+		result = append(result, &stripe.CheckoutSessionLineItemParams{
+			Price:    ptrTo(priceID),
+			Quantity: ptrTo(int64(items[i].Quantity)),
+		})
+	}
+
+	return result
 }

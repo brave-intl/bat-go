@@ -72,7 +72,7 @@ func Router(
 	{
 		corsMwrGet := NewCORSMwr(copts, http.MethodGet)
 		r.Method(http.MethodOptions, "/{orderID}", metricsMwr("GetOrderOptions", corsMwrGet(nil)))
-		r.Method(http.MethodGet, "/{orderID}", metricsMwr("GetOrder", corsMwrGet(GetOrder(svc))))
+		r.Method(http.MethodGet, "/{orderID}", metricsMwr("GetOrder", corsMwrGet(handleGetOrder(svc))))
 	}
 
 	r.Method(
@@ -370,30 +370,30 @@ func CancelOrder(service *Service) handlers.AppHandler {
 	})
 }
 
-// GetOrder is the handler for getting an order
-func GetOrder(service *Service) handlers.AppHandler {
+func handleGetOrder(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
-			)
-		}
+		ctx := r.Context()
 
-		order, err := service.GetOrder(*orderID.UUID())
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
-			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		status := http.StatusOK
-		if order == nil {
-			status = http.StatusNotFound
+		order, err := svc.getTransformOrder(ctx, orderID)
+		if err != nil {
+			switch {
+			case errors.Is(err, context.Canceled):
+				return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+			case errors.Is(err, model.ErrOrderNotFound):
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+			default:
+				return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
+			}
 		}
 
-		return handlers.RenderContent(r.Context(), order, w, status)
+		return handlers.RenderContent(ctx, order, w, http.StatusOK)
 	})
 }
 
