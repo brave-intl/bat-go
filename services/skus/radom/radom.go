@@ -3,8 +3,11 @@ package radom
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/services/skus/model"
+	uuid "github.com/satori/go.uuid"
 )
 
 type Client struct {
@@ -71,4 +74,56 @@ func (c *Client) CreateCheckoutSession(ctx context.Context, creq CheckoutSession
 	}
 
 	return resp, nil
+}
+
+func (c *Client) GetSubscription(ctx context.Context, subID uuid.UUID) (SubscriptionResponse, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "/subscription/"+subID.String(), nil, nil)
+	if err != nil {
+		return SubscriptionResponse{}, err
+	}
+
+	req.Header.Add("Authorization", c.authToken)
+
+	var resp SubscriptionResponse
+	if _, err := c.client.Do(ctx, req, &resp); err != nil {
+		return SubscriptionResponse{}, err
+	}
+
+	return resp, nil
+}
+
+type SubscriptionResponse struct {
+	ID                string    `json:"id"`
+	NextBillingDateAt string    `json:"nextBillingDateAt"`
+	Payments          []Payment `json:"payments"`
+}
+
+type Payment struct {
+	Date string `json:"date"`
+}
+
+// TODO set to UTC
+func (s *SubscriptionResponse) NextBillingDate() (time.Time, error) {
+	return time.Parse(time.RFC3339, s.NextBillingDateAt)
+}
+
+func (s *SubscriptionResponse) LastPaid() (time.Time, error) {
+	if len(s.Payments) <= 0 {
+		return time.Time{}, model.Error("radom: payments is empty")
+	}
+
+	var paidAt time.Time
+
+	for i := range s.Payments {
+		pat, err := time.Parse(time.RFC3339, s.Payments[i].Date)
+		if err != nil {
+			return time.Time{}, err
+		}
+
+		if pat.After(paidAt) {
+			paidAt = pat
+		}
+	}
+
+	return paidAt, nil
 }
