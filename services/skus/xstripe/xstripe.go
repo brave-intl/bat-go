@@ -29,9 +29,7 @@ func (c *Client) Subscription(_ context.Context, id string, params *stripe.Subsc
 }
 
 func (c *Client) FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool) {
-	iter := c.Customers(ctx, &stripe.CustomerListParams{
-		Email: stripe.String(email),
-	})
+	iter := c.Customers(ctx, &stripe.CustomerListParams{Email: &email})
 
 	for iter.Next() {
 		return iter.Customer(), true
