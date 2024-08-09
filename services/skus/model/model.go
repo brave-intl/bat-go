@@ -13,9 +13,6 @@ import (
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/v72"
-	"github.com/stripe/stripe-go/v72/checkout/session"
-	"github.com/stripe/stripe-go/v72/customer"
 
 	"github.com/brave-intl/bat-go/libs/clients/radom"
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -136,71 +133,6 @@ func (o *Order) IsRadomPayable() bool {
 
 func (o *Order) ShouldSetTrialDays() bool {
 	return !o.IsPaid() && o.IsStripePayable()
-}
-
-// CreateStripeCheckoutSession creates a Stripe checkout session for the order.
-//
-// Deprecated: Use CreateStripeCheckoutSession function instead of this method.
-func (o *Order) CreateStripeCheckoutSession(
-	email, successURI, cancelURI string,
-	freeTrialDays int64,
-) (CreateCheckoutSessionResponse, error) {
-	return CreateStripeCheckoutSession(o.ID.String(), email, successURI, cancelURI, freeTrialDays, o.Items)
-}
-
-// CreateStripeCheckoutSession creates a Stripe checkout session for the order.
-func CreateStripeCheckoutSession(
-	oid, email, successURI, cancelURI string,
-	trialDays int64,
-	items []OrderItem,
-) (CreateCheckoutSessionResponse, error) {
-	var custID string
-	if email != "" {
-		// Find the existing customer by email to use the customer id instead email.
-		l := customer.List(&stripe.CustomerListParams{
-			Email: stripe.String(email),
-		})
-
-		for l.Next() {
-			custID = l.Customer().ID
-		}
-	}
-
-	params := &stripe.CheckoutSessionParams{
-		// TODO: Get rid of this stripe.* nonsense, and use ptrTo instead.
-		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
-		Mode:               stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL:         stripe.String(successURI),
-		CancelURL:          stripe.String(cancelURI),
-		ClientReferenceID:  stripe.String(oid),
-		SubscriptionData:   &stripe.CheckoutSessionSubscriptionDataParams{},
-		LineItems:          OrderItemList(items).stripeLineItems(),
-	}
-
-	// If a free trial is set, apply it.
-	if trialDays > 0 {
-		params.SubscriptionData.TrialPeriodDays = &trialDays
-	}
-
-	if custID != "" {
-		// Use existing customer if found.
-		params.Customer = stripe.String(custID)
-	} else if email != "" {
-		// Otherwise, create a new using email.
-		params.CustomerEmail = stripe.String(email)
-	}
-	// Otherwise, we have no record of this email for this checkout session.
-	// ? The user will be asked for the email, we cannot send an empty customer email as a param.
-
-	params.SubscriptionData.AddMetadata("orderID", oid)
-	params.AddExtra("allow_promotion_codes", "true")
-
-	session, err := session.New(params)
-	if err != nil {
-		return EmptyCreateCheckoutSessionResponse(), fmt.Errorf("failed to create stripe session: %w", err)
-	}
-
-	return CreateCheckoutSessionResponse{SessionID: session.ID}, nil
 }
 
 // CreateRadomCheckoutSession creates a Radom checkout session for o.
@@ -341,6 +273,12 @@ func (o *Order) StripeSubID() (string, bool) {
 	return sid, ok
 }
 
+func (o *Order) StripeSessID() (string, bool) {
+	sessID, ok := o.Metadata["stripeCheckoutSessionId"].(string)
+
+	return sessID, ok
+}
+
 func (o *Order) IsIOS() bool {
 	pp, ok := o.PaymentProc()
 	if !ok {
@@ -367,6 +305,15 @@ func (o *Order) IsAndroid() bool {
 	}
 
 	return pp == "android" && vn == VendorGoogle
+}
+
+func (o *Order) IsStripe() bool {
+	pp, ok := o.PaymentProc()
+	if !ok {
+		return false
+	}
+
+	return pp == StripePaymentMethod
 }
 
 func (o *Order) PaymentProc() (string, bool) {
@@ -417,6 +364,12 @@ func (x *OrderItem) IsLeo() bool {
 	return x.SKU == "brave-leo-premium"
 }
 
+func (x *OrderItem) StripeItemID() (string, bool) {
+	itemID, ok := x.Metadata["stripe_item_id"].(string)
+
+	return itemID, ok
+}
+
 // OrderNew represents a request to create an order in the database.
 type OrderNew struct {
 	MerchantID            string          `db:"merchant_id"`
@@ -464,27 +417,6 @@ func (l OrderItemList) HasItem(id uuid.UUID) (*OrderItem, bool) {
 
 	return nil, false
 
-}
-
-func (l OrderItemList) stripeLineItems() []*stripe.CheckoutSessionLineItemParams {
-	result := make([]*stripe.CheckoutSessionLineItemParams, 0, len(l))
-
-	for _, item := range l {
-		// Obtain the item id from the metadata.
-		priceID, ok := item.Metadata["stripe_item_id"].(string)
-		if !ok {
-			continue
-		}
-
-		// Assume that the stripe product is embedded in macaroon as metadata
-		// because a stripe line item is being created.
-		result = append(result, &stripe.CheckoutSessionLineItemParams{
-			Price:    stripe.String(priceID),
-			Quantity: stripe.Int64(int64(item.Quantity)),
-		})
-	}
-
-	return result
 }
 
 type Error string

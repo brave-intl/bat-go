@@ -1,4 +1,4 @@
-package skus
+package xstripe
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/stripe/stripe-go/v72"
 )
 
-func TestGetCustEmailFromStripeCheckout(t *testing.T) {
+func TestCustomerEmailFromSession(t *testing.T) {
 	tests := []struct {
 		name  string
 		exp   string
@@ -60,7 +60,7 @@ func TestGetCustEmailFromStripeCheckout(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := getCustEmailFromStripeCheckout(tc.given)
+			actual := CustomerEmailFromSession(tc.given)
 			should.Equal(t, tc.exp, actual)
 		})
 	}

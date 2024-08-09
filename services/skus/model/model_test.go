@@ -317,7 +317,7 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 				"price": "1"
 			}`),
 			exp: &model.OrderItemRequestNew{
-				Price: mustDecimalFromString("1"),
+				Price: decimal.RequireFromString("1"),
 			},
 		},
 
@@ -379,7 +379,7 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 				}
 			}`),
 			exp: &model.OrderItemRequestNew{
-				Price:                       mustDecimalFromString("1"),
+				Price:                       decimal.RequireFromString("1"),
 				CredentialValidDurationEach: ptrTo("P1D"),
 				IssuanceInterval:            ptrTo("P1M"),
 				StripeMetadata: &model.ItemStripeMetadata{
@@ -764,6 +764,71 @@ func TestOrder_StripeSubID(t *testing.T) {
 	}
 }
 
+func TestOrder_StripeSessID(t *testing.T) {
+	type tcExpected struct {
+		val string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeCheckoutSessionId": 42,
+				},
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeCheckoutSessionId": "",
+				},
+			},
+			exp: tcExpected{ok: true},
+		},
+
+		{
+			name: "sess_id",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"stripeCheckoutSessionId": "sess_id",
+				},
+			},
+			exp: tcExpected{val: "sess_id", ok: true},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.StripeSessID()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
 func TestOrder_IsIOS(t *testing.T) {
 	type testCase struct {
 		name  string
@@ -919,6 +984,64 @@ func TestOrder_IsAndroid(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := tc.given.IsAndroid()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestOrder_IsStripe(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_pp",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "false_pp_ios",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "ios",
+				},
+			},
+		},
+
+		{
+			name: "false_pp_android",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "android",
+				},
+			},
+		},
+
+		{
+			name: "pp_stripe",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "stripe",
+				},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.IsStripe()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -1143,13 +1266,69 @@ func TestOrder_ShouldSetTrialDays(t *testing.T) {
 	}
 }
 
-func mustDecimalFromString(v string) decimal.Decimal {
-	result, err := decimal.NewFromString(v)
-	if err != nil {
-		panic(err)
+func TestOrderItem_StripeItemID(t *testing.T) {
+	type tcExpected struct {
+		val string
+		ok  bool
 	}
 
-	return result
+	type testCase struct {
+		name  string
+		given model.OrderItem
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{
+					"stripe_item_id": 42,
+				},
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{
+					"stripe_item_id": "",
+				},
+			},
+			exp: tcExpected{ok: true},
+		},
+
+		{
+			name: "stripe_item_id",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{
+					"stripe_item_id": "stripe_item_id",
+				},
+			},
+			exp: tcExpected{val: "stripe_item_id", ok: true},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.StripeItemID()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
 }
 
 func ptrTo[T any](v T) *T {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/v72"
 	"gopkg.in/macaroon.v2"
 
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -154,19 +153,4 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
 	return &orderItem, allowedPaymentMethods, issuerConfig, nil
-}
-
-func getCustEmailFromStripeCheckout(sess *stripe.CheckoutSession) string {
-	// Use the customer email if the customer has completed the payment flow.
-	if sess.Customer != nil && sess.Customer.Email != "" {
-		return sess.Customer.Email
-	}
-
-	// This is unlikely to be set, but in case it is, use it.
-	if sess.CustomerEmail != "" {
-		return sess.CustomerEmail
-	}
-
-	// Default to empty, Stripe will ask the customer.
-	return ""
 }
