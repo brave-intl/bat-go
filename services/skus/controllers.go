@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/go-playground/validator/v10"
@@ -1186,10 +1187,51 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 }
 
 // handleRadomWebhook handles Radom checkout session webhooks.
-func handleRadomWebhook(_ *Service) handlers.AppHandler {
+func handleRadomWebhook(s *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return handlers.RenderContent(context.Background(), struct{}{}, w, http.StatusNotImplemented)
+		return handleRadomWebhookH(w, r, s)
 	}
+}
+
+func handleRadomWebhookH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
+	ctx := r.Context()
+
+	l := logging.Logger(ctx, "skus").With().Str("func", "handleRadomWebhookH").Logger()
+
+	if err := svc.radomAuth.Authenticate(ctx, r.Header.Get("radom-verification-key")); err != nil {
+		l.Error().Err(err).Msg("invalid request")
+
+		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+	}
+
+	b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		l.Err(err).Msg("failed to read payload")
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	}
+
+	event, err := radom.ParseEvent(b)
+	if err != nil {
+		l.Err(err).Msg("failed to parse radom event")
+
+		return handlers.WrapError(err, "failed to parse radom event", http.StatusBadRequest)
+	}
+
+	if err := svc.processRadomEvent(ctx, event); err != nil {
+		l.Err(err).Msg("failed to process radom event")
+
+		return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+	}
+
+	msg := "skipped radom notification"
+	if event.ShouldProcess() {
+		msg = "processed radom notification"
+	}
+
+	l.Info().Str("ntf_type", event.EventType).Str("ntf_effect", event.Effect()).Msg(msg)
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func handleStripeWebhook(svc *Service) handlers.AppHandler {
