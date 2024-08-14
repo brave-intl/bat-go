@@ -407,7 +407,7 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
 	suite.Require().NoError(err)
 
-	getOrderHandler := GetOrder(suite.service)
+	getOrderHandler := handleGetOrder(suite.service)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -435,7 +435,7 @@ func (suite *ControllersTestSuite) TestGetMissingOrder() {
 	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
 	suite.Require().NoError(err)
 
-	getOrderHandler := GetOrder(suite.service)
+	getOrderHandler := handleGetOrder(suite.service)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", "9645ca16-bc93-4e37-8edf-cb35b1763216")
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))

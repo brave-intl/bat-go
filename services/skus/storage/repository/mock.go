@@ -13,15 +13,16 @@ import (
 )
 
 type MockOrder struct {
-	FnGet                 func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
-	FnGetByExternalID     func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
-	FnCreate              func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
-	FnSetStatus           func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
-	FnSetExpiresAt        func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
-	FnSetLastPaidAt       func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
-	FnAppendMetadata      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
-	FnAppendMetadataInt   func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
-	FnAppendMetadataInt64 func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
+	FnGet                               func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
+	FnGetByExternalID                   func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnCreate                            func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
+	FnSetStatus                         func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
+	FnSetExpiresAt                      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnSetLastPaidAt                     func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnAppendMetadata                    func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
+	FnAppendMetadataInt                 func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
+	FnAppendMetadataInt64               func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
+	FnGetExpiredStripeCheckoutSessionID func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
 }
 
 func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -113,6 +114,14 @@ func (r *MockOrder) AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerCont
 	}
 
 	return r.FnAppendMetadataInt64(ctx, dbi, id, key, val)
+}
+
+func (r *MockOrder) GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+	if r.FnGetExpiredStripeCheckoutSessionID == nil {
+		return "sub_id", nil
+	}
+
+	return r.FnGetExpiredStripeCheckoutSessionID(ctx, dbi, orderID)
 }
 
 type MockOrderItem struct {

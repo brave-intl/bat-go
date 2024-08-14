@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
+	"github.com/brave-intl/bat-go/services/skus/xstripe"
 )
 
 func TestService_uniqBatchesTxTime(t *testing.T) {
@@ -2327,44 +2329,6 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 		},
 
 		{
-			name: "renew_should_update_sub_id_error",
-			given: tcGiven{
-				ntf: &stripeNotification{
-					raw: &stripe.Event{Type: "invoice.paid"},
-					invoice: &stripe.Invoice{
-						Subscription: &stripe.Subscription{ID: "sub_id"},
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{
-									Metadata: map[string]string{
-										"orderID": "facade00-0000-4000-a000-000000000000",
-									},
-								},
-							},
-						},
-					},
-				},
-				ordRepo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						result := &model.Order{
-							ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
-							Metadata: datastore.Metadata{
-								"stripeSubscriptionId": "wrong_sub_id",
-							},
-						}
-
-						return result, nil
-					},
-					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
-						return model.Error("something_went_wrong")
-					},
-				},
-				phRepo: &repository.MockOrderPayHistory{},
-			},
-			exp: model.Error("something_went_wrong"),
-		},
-
-		{
 			name: "renew_expires_time_error",
 			given: tcGiven{
 				ntf: &stripeNotification{
@@ -2395,6 +2359,48 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 				phRepo: &repository.MockOrderPayHistory{},
 			},
 			exp: errStripeInvalidSubPeriod,
+		},
+
+		{
+			name: "renew_should_update_sub_id_error",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "invoice.paid"},
+					invoice: &stripe.Invoice{
+						Subscription: &stripe.Subscription{ID: "sub_id"},
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+									Period: &stripe.Period{
+										Start: 1719792001,
+										End:   1722470400,
+									},
+								},
+							},
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{
+								"stripeSubscriptionId": "wrong_sub_id",
+							},
+						}
+
+						return result, nil
+					},
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+			exp: model.Error("something_went_wrong"),
 		},
 
 		{
@@ -2690,6 +2696,1627 @@ func TestShouldUpdateOrderStripeSubID(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := shouldUpdateOrderStripeSubID(tc.given.ord, tc.given.subID)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestShouldTransformStripeOrder(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *model.Order
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "false_ios",
+			given: &model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "ios",
+					"vendor":           "ios",
+				},
+			},
+		},
+
+		{
+			name: "false_android",
+			given: &model.Order{
+				Metadata: datastore.Metadata{
+					"paymentProcessor": "android",
+					"vendor":           "android",
+				},
+			},
+		},
+
+		{
+			name:  "false_paid",
+			given: &model.Order{Status: model.OrderStatusPaid},
+		},
+
+		{
+			name:  "false_non_stripe",
+			given: &model.Order{Status: model.OrderStatusPending},
+		},
+
+		{
+			name: "true_unpaid_stripe",
+			given: &model.Order{
+				Status:                model.OrderStatusPending,
+				AllowedPaymentMethods: pq.StringArray([]string{"stripe"}),
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := shouldTransformStripeOrder(tc.given)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestChooseStripeSessID(t *testing.T) {
+	type tcGiven struct {
+		ord       *model.Order
+		newSessID string
+	}
+
+	type tcExpected struct {
+		val string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "new_sess_id_no_old_sess_id",
+			given: tcGiven{
+				ord:       &model.Order{},
+				newSessID: "new_sess_id",
+			},
+			exp: tcExpected{
+				val: "new_sess_id",
+				ok:  true,
+			},
+		},
+
+		{
+			name: "new_sess_id_old_sess_id",
+			given: tcGiven{
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "sess_id",
+					},
+				},
+				newSessID: "new_sess_id",
+			},
+			exp: tcExpected{
+				val: "new_sess_id",
+				ok:  true,
+			},
+		},
+
+		{
+			name: "no_new_sess_id_no_old_sess_id",
+			given: tcGiven{
+				ord: &model.Order{},
+			},
+			exp: tcExpected{},
+		},
+
+		{
+			name: "new_sess_id_old_sess_id",
+			given: tcGiven{
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "sess_id",
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "sess_id",
+				ok:  true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := chooseStripeSessID(tc.given.ord, tc.given.newSessID)
+			should.Equal(t, tc.exp.ok, ok)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestService_getTransformOrderTx(t *testing.T) {
+	type tcGiven struct {
+		ordRepo  *repository.MockOrder
+		itemRepo *repository.MockOrderItem
+		payRepo  *repository.MockOrderPayHistory
+		cl       *xstripe.MockClient
+		id       uuid.UUID
+	}
+
+	type tcExpected struct {
+		ord *model.Order
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_first_get_order_full",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				payRepo:  &repository.MockOrderPayHistory{},
+				cl:       &xstripe.MockClient{},
+				id:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "skip_has_sub_id",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{
+								"stripeSubscriptionId": "sub_id",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := model.OrderItem{
+							ID:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							OrderID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+						}
+
+						return []model.OrderItem{result}, nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl:      &xstripe.MockClient{},
+				id:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "sub_id",
+					},
+					Items: []model.OrderItem{
+						{
+							ID:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							OrderID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "skip_no_transform",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:                    uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Status:                model.OrderStatusPaid,
+							AllowedPaymentMethods: pq.StringArray{"stripe"},
+						}
+
+						return result, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := model.OrderItem{
+							ID:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							OrderID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+						}
+
+						return []model.OrderItem{result}, nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl:      &xstripe.MockClient{},
+				id:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				ord: &model.Order{
+					ID:                    uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Status:                model.OrderStatusPaid,
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+					Items: []model.OrderItem{
+						{
+							ID:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							OrderID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_update_stripe_session_failed",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:                    uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							AllowedPaymentMethods: pq.StringArray{"stripe"},
+						}
+
+						return result, nil
+					},
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", model.Error("something_went_wrong")
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := model.OrderItem{
+							ID:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							OrderID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+						}
+
+						return []model.OrderItem{result}, nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl:      &xstripe.MockClient{},
+				id:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "success_after_update_order_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{
+								"stripeCheckoutSessionId": "cs_test_id",
+							},
+							AllowedPaymentMethods: pq.StringArray{"stripe"},
+						}
+
+						return result, nil
+					},
+
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := model.OrderItem{
+							ID:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							OrderID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+						}
+
+						return []model.OrderItem{result}, nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl:      &xstripe.MockClient{},
+				id:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id",
+					},
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+					Items: []model.OrderItem{
+						{
+							ID:      uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							OrderID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itemRepo,
+				payHistRepo:   tc.given.payRepo,
+				stripeCl:      tc.given.cl,
+			}
+
+			ctx := context.Background()
+
+			actual, err := svc.getTransformOrderTx(ctx, nil, tc.given.id)
+			must.Equal(t, true, errors.Is(err, tc.exp.err))
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.ord, actual)
+		})
+	}
+}
+
+func TestService_updateOrderStripeSession(t *testing.T) {
+	type tcGiven struct {
+		ordRepo *repository.MockOrder
+		payRepo *repository.MockOrderPayHistory
+		cl      *xstripe.MockClient
+		ord     *model.Order
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "get_exp_session_error",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", model.Error("something_went_wrong")
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl:      &xstripe.MockClient{},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "recreate_session_error",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "cs_test_id_old", nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_old" {
+							return nil, model.Error("something_went_wrong")
+						}
+
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_old",
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "return_early_no_new_sess_id_no_old_sess_id",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", model.ErrExpiredStripeCheckoutSessionIDNotFound
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				},
+			},
+		},
+
+		{
+			name: "return_early_no_new_sess_id_empty_old_sess_id",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "",
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_fetch_new_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "cs_test_id_old", nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_old" {
+							result := &stripe.CheckoutSession{
+								ID:         id,
+								Customer:   &stripe.Customer{Email: "you@example.com"},
+								SuccessURL: "https://example.com/success",
+								CancelURL:  "https://example.com/cancel",
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_old",
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_fetch_existing_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", model.ErrExpiredStripeCheckoutSessionIDNotFound
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_existing" {
+							return nil, model.Error("something_went_wrong")
+						}
+
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_existing",
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "skip_unpaid_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "cs_test_id_old", nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_old" {
+							result := &stripe.CheckoutSession{
+								ID:         id,
+								Customer:   &stripe.Customer{Email: "you@example.com"},
+								SuccessURL: "https://example.com/success",
+								CancelURL:  "https://example.com/cancel",
+							}
+
+							return result, nil
+						}
+
+						if id == "cs_test_id" {
+							result := &stripe.CheckoutSession{
+								ID:                 "cs_test_id",
+								PaymentMethodTypes: []string{"card"},
+								Mode:               stripe.CheckoutSessionModeSubscription,
+								SuccessURL:         "https://example.com/success",
+								CancelURL:          "https://example.com/cancel",
+								ClientReferenceID:  "facade00-0000-4000-a000-000000000000",
+								Subscription: &stripe.Subscription{
+									ID: "sub_id",
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+								AllowPromotionCodes: true,
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_old",
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_handle_paid_fetch_sub",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "cs_test_id_old", nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_old" {
+							result := &stripe.CheckoutSession{
+								ID:         id,
+								Customer:   &stripe.Customer{Email: "you@example.com"},
+								SuccessURL: "https://example.com/success",
+								CancelURL:  "https://example.com/cancel",
+							}
+
+							return result, nil
+						}
+
+						if id == "cs_test_id" {
+							result := &stripe.CheckoutSession{
+								ID:                 "cs_test_id",
+								PaymentStatus:      stripe.CheckoutSessionPaymentStatusPaid,
+								PaymentMethodTypes: []string{"card"},
+								Mode:               stripe.CheckoutSessionModeSubscription,
+								SuccessURL:         "https://example.com/success",
+								CancelURL:          "https://example.com/cancel",
+								ClientReferenceID:  "facade00-0000-4000-a000-000000000000",
+								Subscription: &stripe.Subscription{
+									ID: "sub_id",
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+								AllowPromotionCodes: true,
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("unexpected")
+					},
+					FnSubscription: func(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error) {
+						if id == "sub_id" {
+							return nil, model.Error("something_went_wrong")
+						}
+
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_old",
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "success_handle_paid_new_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "cs_test_id_old", nil
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !when.Equal(time.Date(2024, time.August, 2, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+
+					FnSetLastPaidAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !when.Equal(time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_old" {
+							result := &stripe.CheckoutSession{
+								ID:         id,
+								Customer:   &stripe.Customer{Email: "you@example.com"},
+								SuccessURL: "https://example.com/success",
+								CancelURL:  "https://example.com/cancel",
+							}
+
+							return result, nil
+						}
+
+						if id == "cs_test_id" {
+							result := &stripe.CheckoutSession{
+								ID:                 "cs_test_id",
+								PaymentStatus:      stripe.CheckoutSessionPaymentStatusPaid,
+								PaymentMethodTypes: []string{"card"},
+								Mode:               stripe.CheckoutSessionModeSubscription,
+								SuccessURL:         "https://example.com/success",
+								CancelURL:          "https://example.com/cancel",
+								ClientReferenceID:  "facade00-0000-4000-a000-000000000000",
+								Subscription: &stripe.Subscription{
+									ID: "sub_id",
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+								AllowPromotionCodes: true,
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("unexpected")
+					},
+					FnSubscription: func(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error) {
+						if id == "sub_id" {
+							result := &stripe.Subscription{
+								ID:                 id,
+								CurrentPeriodEnd:   1722470400,
+								CurrentPeriodStart: 1719792000,
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_old",
+					},
+				},
+			},
+		},
+
+		{
+			name: "success_handle_paid_existing_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", nil
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !when.Equal(time.Date(2024, time.August, 2, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+
+					FnSetLastPaidAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !when.Equal(time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_existing" {
+							result := &stripe.CheckoutSession{
+								ID:                 "cs_test_id",
+								PaymentStatus:      stripe.CheckoutSessionPaymentStatusPaid,
+								PaymentMethodTypes: []string{"card"},
+								Mode:               stripe.CheckoutSessionModeSubscription,
+								SuccessURL:         "https://example.com/success",
+								CancelURL:          "https://example.com/cancel",
+								ClientReferenceID:  "facade00-0000-4000-a000-000000000000",
+								Subscription: &stripe.Subscription{
+									ID: "sub_id",
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+								AllowPromotionCodes: true,
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("unexpected")
+					},
+					FnSubscription: func(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error) {
+						if id == "sub_id" {
+							result := &stripe.Subscription{
+								ID:                 id,
+								CurrentPeriodEnd:   1722470400,
+								CurrentPeriodStart: 1719792000,
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_existing",
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo:   tc.given.ordRepo,
+				payHistRepo: tc.given.payRepo,
+				stripeCl:    tc.given.cl,
+			}
+
+			ctx := context.Background()
+
+			actual := svc.updateOrderStripeSession(ctx, nil, tc.given.ord)
+			should.Equal(t, true, errors.Is(actual, tc.exp))
+		})
+	}
+}
+
+func TestService_renewOrderStripe(t *testing.T) {
+	type tcGiven struct {
+		ordRepo *repository.MockOrder
+		payRepo *repository.MockOrderPayHistory
+		ord     *model.Order
+		subID   string
+		expt    time.Time
+		paidt   time.Time
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "error_should_update_sub_id",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "old_sub_id",
+					},
+				},
+				subID: "sub_id",
+				expt:  time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC),
+				paidt: time.Date(2024, time.June, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_renew_order",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "old_sub_id",
+					},
+				},
+				subID: "sub_id",
+				expt:  time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC),
+				paidt: time.Date(2024, time.June, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_save_payment_proc",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "paymentProcessor" {
+							return model.Error("something_went_wrong")
+						}
+
+						return nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "sub_id",
+					},
+				},
+				subID: "sub_id",
+				expt:  time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC),
+				paidt: time.Date(2024, time.June, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "success_should_update_sub_id_no_payment_proc_update",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeSubscriptionId" && val == "sub_id" {
+							return nil
+						}
+
+						if key == "paymentProcessor" && val == "stripe" {
+							return model.Error("unexpected")
+						}
+
+						return nil
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "old_sub_id",
+						"paymentProcessor":     "stripe",
+					},
+				},
+				subID: "sub_id",
+				expt:  time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC),
+				paidt: time.Date(2024, time.June, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+
+		{
+			name: "success_should_update_sub_id_should_update_payment_proc",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeSubscriptionId" && val == "sub_id" {
+							return nil
+						}
+
+						if key == "paymentProcessor" && val == "stripe" {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "old_sub_id",
+					},
+				},
+				subID: "sub_id",
+				expt:  time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC),
+				paidt: time.Date(2024, time.June, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+
+		{
+			name: "success_no_update_sub_id_should_update_payment_proc",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeSubscriptionId" {
+							return model.Error("unexpected")
+						}
+
+						if key == "paymentProcessor" && val == "stripe" {
+							return nil
+						}
+
+						return nil
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "sub_id",
+					},
+				},
+				subID: "sub_id",
+				expt:  time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC),
+				paidt: time.Date(2024, time.June, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+
+		{
+			name: "success_no_update_sub_id_no_update_payment_proc",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("unexpected")
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if when.Equal(time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)) {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				ord: &model.Order{
+					Metadata: datastore.Metadata{
+						"stripeSubscriptionId": "sub_id",
+						"paymentProcessor":     "stripe",
+					},
+				},
+				subID: "sub_id",
+				expt:  time.Date(2024, time.July, 1, 0, 0, 0, 0, time.UTC),
+				paidt: time.Date(2024, time.June, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.ordRepo, payHistRepo: tc.given.payRepo}
+
+			ctx := context.Background()
+
+			actual := svc.renewOrderStripe(ctx, nil, tc.given.ord, tc.given.subID, tc.given.expt, tc.given.paidt)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestService_createStripeSession(t *testing.T) {
+	type tcGiven struct {
+		cl  *xstripe.MockClient
+		req *model.CreateOrderRequestNew
+		ord *model.Order
+	}
+
+	type tcExpected struct {
+		val string
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_success_url",
+			given: tcGiven{
+				cl: &xstripe.MockClient{},
+				req: &model.CreateOrderRequestNew{
+					Email:    "you@example.com",
+					Currency: "USD",
+					StripeMetadata: &model.OrderStripeMetadata{
+						SuccessURI: "://example.com/success",
+						CancelURI:  "https://example.com/cancel",
+					},
+					PaymentMethods: []string{"stripe"},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				},
+			},
+			exp: tcExpected{
+				err: &url.Error{
+					Op:  "parse",
+					URL: "://example.com/success",
+					Err: errors.New("missing protocol scheme"),
+				},
+			},
+		},
+
+		{
+			name: "invalid_cancel_url",
+			given: tcGiven{
+				cl: &xstripe.MockClient{},
+				req: &model.CreateOrderRequestNew{
+					Email:    "you@example.com",
+					Currency: "USD",
+					StripeMetadata: &model.OrderStripeMetadata{
+						SuccessURI: "https://example.com/success",
+						CancelURI:  "://example.com/cancel",
+					},
+					PaymentMethods: []string{"stripe"},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				},
+			},
+			exp: tcExpected{
+				err: &url.Error{
+					Op:  "parse",
+					URL: "://example.com/cancel",
+					Err: errors.New("missing protocol scheme"),
+				},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				cl: &xstripe.MockClient{},
+				req: &model.CreateOrderRequestNew{
+					Email:    "you@example.com",
+					Currency: "USD",
+					StripeMetadata: &model.OrderStripeMetadata{
+						SuccessURI: "https://example.com/success",
+						CancelURI:  "https://example.com/cancel",
+					},
+					PaymentMethods: []string{"stripe"},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Items: []model.OrderItem{
+						{
+							ID:       uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+							OrderID:  uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Quantity: 1,
+							Metadata: datastore.Metadata{
+								"stripe_item_id": "stripe_item_id",
+							},
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{stripeCl: tc.given.cl}
+
+			ctx := context.Background()
+
+			actual, err := svc.createStripeSession(ctx, tc.given.req, tc.given.ord)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestService_recreateStripeSession(t *testing.T) {
+	type tcGiven struct {
+		ordRepo   *repository.MockOrder
+		cl        *xstripe.MockClient
+		ord       *model.Order
+		oldSessID string
+	}
+
+	type tcExpected struct {
+		val string
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "unable_fetch_old_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				ord:       &model.Order{},
+				oldSessID: "cs_test_id_old",
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "unable_create_session",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							ID:         "cs_test_id_old",
+							SuccessURL: "https://example.com/success",
+							CancelURL:  "https://example.com/cancel",
+							Customer:   &stripe.Customer{Email: "you@example.com"},
+						}
+
+						return result, nil
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Items: []model.OrderItem{
+						{
+							Quantity: 1,
+							Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+						},
+					},
+				},
+				oldSessID: "cs_test_id_old",
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "unable_append_metadata",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							ID:         "cs_test_id_old",
+							SuccessURL: "https://example.com/success",
+							CancelURL:  "https://example.com/cancel",
+							Customer:   &stripe.Customer{Email: "you@example.com"},
+						}
+
+						return result, nil
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Items: []model.OrderItem{
+						{
+							Quantity: 1,
+							Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+						},
+					},
+				},
+				oldSessID: "cs_test_id_old",
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeCheckoutSessionId" && val == "cs_test_id" {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							ID:         "cs_test_id_old",
+							SuccessURL: "https://example.com/success",
+							CancelURL:  "https://example.com/cancel",
+							Customer:   &stripe.Customer{Email: "you@example.com"},
+						}
+
+						return result, nil
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Items: []model.OrderItem{
+						{
+							Quantity: 1,
+							Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+						},
+					},
+				},
+				oldSessID: "cs_test_id_old",
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.ordRepo, stripeCl: tc.given.cl}
+
+			ctx := context.Background()
+
+			actual, err := svc.recreateStripeSession(ctx, nil, tc.given.ord, tc.given.oldSessID)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestCreateStripeSession(t *testing.T) {
+	type tcGiven struct {
+		cl  *xstripe.MockClient
+		req createStripeSessionRequest
+	}
+
+	type tcExpected struct {
+		val string
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "success_found_customer",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if params.Customer == nil || *params.Customer != "cus_id" {
+							return nil, model.Error("unexpected")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+				},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					email:      "you@example.com",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					trialDays:  7,
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_customer_not_found",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						return nil, false
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if params.CustomerEmail == nil || *params.CustomerEmail != "you@example.com" {
+							return nil, model.Error("unexpected")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+				},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					email:      "you@example.com",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					trialDays:  7,
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_no_customer_email",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						return nil, false
+					},
+				},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					trialDays:  7,
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_no_trial_days",
+			given: tcGiven{
+				cl: &xstripe.MockClient{},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					email:      "you@example.com",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "create_error",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					email:      "you@example.com",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					trialDays:  7,
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			actual, err := createStripeSession(ctx, tc.given.cl, tc.given.req)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestBuildStripeLineItems(t *testing.T) {
+	tests := []struct {
+		name  string
+		given []model.OrderItem
+		exp   []*stripe.CheckoutSessionLineItemParams
+	}{
+		{
+			name: "nil",
+		},
+
+		{
+			name:  "empty_nil",
+			given: []model.OrderItem{},
+		},
+
+		{
+			name: "empty_no_price_id",
+			given: []model.OrderItem{
+				{
+					Metadata: datastore.Metadata{"key": "value"},
+				},
+			},
+		},
+
+		{
+			name: "one_item",
+			given: []model.OrderItem{
+				{
+					Quantity: 1,
+					Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+				},
+			},
+			exp: []*stripe.CheckoutSessionLineItemParams{
+				{
+					Price:    ptrTo("stripe_item_id"),
+					Quantity: ptrTo[int64](1),
+				},
+			},
+		},
+
+		{
+			name: "two_items",
+			given: []model.OrderItem{
+				{
+					Quantity: 1,
+					Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id_01"},
+				},
+
+				{
+					Quantity: 1,
+					Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id_02"},
+				},
+			},
+			exp: []*stripe.CheckoutSessionLineItemParams{
+				{
+					Price:    ptrTo("stripe_item_id_01"),
+					Quantity: ptrTo[int64](1),
+				},
+
+				{
+					Price:    ptrTo("stripe_item_id_02"),
+					Quantity: ptrTo[int64](1),
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := buildStripeLineItems(tc.given)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
