@@ -77,10 +77,7 @@ const (
 	VendorGoogle  Vendor = "android"
 )
 
-var (
-	emptyCreateCheckoutSessionResp CreateCheckoutSessionResponse
-	emptyOrderTimeBounds           OrderTimeBounds
-)
+var emptyOrderTimeBounds OrderTimeBounds
 
 // Vendor represents an app store vendor.
 type Vendor string
