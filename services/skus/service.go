@@ -352,7 +352,7 @@ func InitService(
 		geminiClient:     geminiClient,
 		geminiConf:       geminiConf,
 		cbClient:         cbClient,
-		stripeCl:           xstripe.NewClient(scClient),
+		stripeCl:         xstripe.NewClient(scClient),
 		pauseVoteUntilMu: sync.RWMutex{},
 		retry:            backoff.Retry,
 
@@ -1830,7 +1830,7 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 
 		// Backporting this from the legacy method CreateOrderFromRequest.
 		case order.IsRadomPayable():
-			ssid, err := s.createRadomSessID(ctx, req, order)
+			ssid, err := s.createRadomSession(ctx, req, order)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
 			}
@@ -1924,7 +1924,7 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 	return createStripeSession(ctx, s.stripeCl, sreq)
 }
 
-func (s *Service) createRadomSessID(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
+func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
 	oid := order.ID.String()
 
 	surl, err := req.RadomMetadata.SuccessURL(oid)

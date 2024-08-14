@@ -4470,7 +4470,7 @@ func TestService_createRadomSessID(t *testing.T) {
 			}
 			ctx := context.Background()
 
-			actual, err := s.createRadomSessID(ctx, tc.given.req, tc.given.order)
+			actual, err := s.createRadomSession(ctx, tc.given.req, tc.given.order)
 			tc.exp.mustErr(t, err)
 
 			should.Equal(t, tc.exp.sessionID, actual)
