@@ -45,7 +45,7 @@ type Metadata struct {
 
 type CheckoutSessionRequest struct {
 	LineItems  []LineItem `json:"lineItems"`
-	Gateway    Gateway    `json:"gateway"`
+	Gateway    *Gateway   `json:"gateway"`
 	SuccessURL string     `json:"successUrl"`
 	CancelURL  string     `json:"cancelUrl"`
 	Metadata   []Metadata `json:"metadata"`
@@ -57,7 +57,7 @@ type CheckoutSessionResponse struct {
 	SessionURL string `json:"checkoutSessionUrl"`
 }
 
-func (c *Client) CreateCheckoutSession(ctx context.Context, creq CheckoutSessionRequest) (CheckoutSessionResponse, error) {
+func (c *Client) CreateCheckoutSession(ctx context.Context, creq *CheckoutSessionRequest) (CheckoutSessionResponse, error) {
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/checkout_session", creq, nil)
 	if err != nil {
 		return CheckoutSessionResponse{}, err

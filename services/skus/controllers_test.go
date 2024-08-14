@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/golang/mock/gomock"
@@ -47,12 +46,13 @@ import (
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/skus/handler"
-	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 
+	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
+	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
@@ -1766,7 +1766,7 @@ func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
 	sessID := uuid.NewV4().String()
 
 	suite.service.radomClient = &mockRadomClient{
-		fnCreateCheckoutSession: func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+		fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
 			return radom.CheckoutSessionResponse{
 				SessionID: sessID,
 			}, nil

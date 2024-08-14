@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/awa/go-iap/appstore"
-	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -25,6 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/skus/xstripe"
 )
@@ -4416,7 +4416,7 @@ func TestService_createRadomSessID(t *testing.T) {
 					},
 				},
 				radCl: &mockRadomClient{
-					fnCreateCheckoutSession: func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+					fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
 						return radom.CheckoutSessionResponse{}, model.Error("some error")
 					},
 				},
@@ -4447,7 +4447,7 @@ func TestService_createRadomSessID(t *testing.T) {
 					},
 				},
 				radCl: &mockRadomClient{
-					fnCreateCheckoutSession: func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+					fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
 						return radom.CheckoutSessionResponse{SessionID: "session_id"}, nil
 					},
 				},
@@ -4506,20 +4506,6 @@ func Test_orderItemsToLineItems(t *testing.T) {
 		},
 
 		{
-			name: "product_id_invalid_type",
-			given: tcGiven{
-				orderItems: []OrderItem{{
-					Metadata: map[string]interface{}{
-						"radom_product_id": 12345,
-					},
-				}},
-			},
-			exp: tcExpected{
-				err: errRadomInvalidType,
-			},
-		},
-
-		{
 			name: "success",
 			given: tcGiven{
 				orderItems: []OrderItem{
@@ -4552,7 +4538,7 @@ func Test_orderItemsToLineItems(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := orderItemsToLineItems(tc.given.orderItems)
+			actual, err := orderItemsToRadomLineItems(tc.given.orderItems)
 			must.Equal(t, tc.exp.err, err)
 
 			should.Equal(t, tc.exp.lineItems, actual)
@@ -4566,7 +4552,7 @@ func Test_newRadomGateway(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		gateway radom.Gateway
+		gateway *radom.Gateway
 		err     error
 	}
 
@@ -4583,7 +4569,7 @@ func Test_newRadomGateway(t *testing.T) {
 				"development",
 			},
 			exp: tcExpected{
-				gateway: radom.Gateway{
+				gateway: &radom.Gateway{
 					Managed: radom.Managed{
 						Methods: []radom.Method{
 							{
@@ -4606,7 +4592,7 @@ func Test_newRadomGateway(t *testing.T) {
 				"staging",
 			},
 			exp: tcExpected{
-				gateway: radom.Gateway{
+				gateway: &radom.Gateway{
 					Managed: radom.Managed{
 						Methods: []radom.Method{
 							{
@@ -4629,7 +4615,7 @@ func Test_newRadomGateway(t *testing.T) {
 				"production",
 			},
 			exp: tcExpected{
-				gateway: radom.Gateway{
+				gateway: &radom.Gateway{
 					Managed: radom.Managed{
 						Methods: []radom.Method{
 							{
@@ -4671,10 +4657,10 @@ func Test_newRadomGateway(t *testing.T) {
 }
 
 type mockRadomClient struct {
-	fnCreateCheckoutSession func(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	fnCreateCheckoutSession func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
 }
 
-func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
 	if m.fnCreateCheckoutSession == nil {
 		return radom.CheckoutSessionResponse{}, nil
 	}

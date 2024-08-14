@@ -290,6 +290,12 @@ func (x *OrderItem) StripeItemID() (string, bool) {
 	return itemID, ok
 }
 
+func (x *OrderItem) RadomProductID() (string, bool) {
+	itemID, ok := x.Metadata["radom_product_id"].(string)
+
+	return itemID, ok
+}
+
 // OrderNew represents a request to create an order in the database.
 type OrderNew struct {
 	MerchantID            string          `db:"merchant_id"`
@@ -304,10 +310,6 @@ type OrderNew struct {
 // CreateCheckoutSessionResponse represents a checkout session response.
 type CreateCheckoutSessionResponse struct {
 	SessionID string `json:"checkoutSessionId"`
-}
-
-func EmptyCreateCheckoutSessionResponse() CreateCheckoutSessionResponse {
-	return emptyCreateCheckoutSessionResp
 }
 
 type OrderItemList []OrderItem

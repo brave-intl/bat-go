@@ -128,7 +128,7 @@ type stripeClient interface {
 
 // Service contains datastore
 type radomClient interface {
-	CreateCheckoutSession(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
 }
 
 type Service struct {
@@ -155,7 +155,7 @@ type Service struct {
 	retry            backoff.RetryFunc
 
 	radomClient  radomClient
-	radomGateway radom.Gateway
+	radomGateway *radom.Gateway
 
 	vendorReceiptValid vendorReceiptValidator
 	gpsAuth            gpsMessageAuthenticator
@@ -238,7 +238,7 @@ func InitService(
 	}
 
 	var radomCl *radom.Client
-	var radomGateway radom.Gateway
+	var radomGateway *radom.Gateway
 
 	if enabled, _ := strconv.ParseBool(os.Getenv("RADOM_ENABLED")); enabled {
 		srvURL := os.Getenv("RADOM_SERVER")
@@ -1937,12 +1937,12 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 		return "", err
 	}
 
-	items, err := orderItemsToLineItems(order.Items)
+	items, err := orderItemsToRadomLineItems(order.Items)
 	if err != nil {
 		return "", err
 	}
 
-	reqx := radom.CheckoutSessionRequest{
+	reqx := &radom.CheckoutSessionRequest{
 		LineItems:  items,
 		Gateway:    s.radomGateway,
 		SuccessURL: surl,
@@ -1953,7 +1953,7 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 				Value: oid,
 			},
 		},
-		ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+		ExpiresAt: time.Now().Add(24 * time.Hour).UTC().Unix(),
 	}
 
 	resp, err := s.radomClient.CreateCheckoutSession(ctx, reqx)
@@ -1964,29 +1964,21 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 	return resp.SessionID, nil
 }
 
-const (
-	errRadomProductIDNotFound = model.Error("product id not found in metadata")
-	errRadomInvalidType       = model.Error("invalid type for product id")
-)
+const errRadomProductIDNotFound = model.Error("product id not found in metadata")
 
-func orderItemsToLineItems(orderItems []model.OrderItem) ([]radom.LineItem, error) {
+func orderItemsToRadomLineItems(orderItems []model.OrderItem) ([]radom.LineItem, error) {
 	lineItems := make([]radom.LineItem, 0, len(orderItems))
 	for i := range orderItems {
-		m, ok := orderItems[i].Metadata["radom_product_id"]
+		pid, ok := orderItems[i].RadomProductID()
 		if !ok {
 			return nil, errRadomProductIDNotFound
 		}
 
-		pid, ok := m.(string)
-		if !ok {
-			return nil, errRadomInvalidType
-		}
-
-		li := radom.LineItem{
+		item := radom.LineItem{
 			ProductID: pid,
 		}
 
-		lineItems = append(lineItems, li)
+		lineItems = append(lineItems, item)
 	}
 
 	return lineItems, nil
@@ -2644,10 +2636,10 @@ func shouldRetryRedeemFn(kind, issuer string, err error) bool {
 	return kind == timeLimitedV2 && issuer == leo && err.Error() == cbr.ErrBadRequest.Error()
 }
 
-func newRadomGateway(env string) (radom.Gateway, error) {
+func newRadomGateway(env string) (*radom.Gateway, error) {
 	switch env {
 	case "development", "staging":
-		return radom.Gateway{
+		return &radom.Gateway{
 			Managed: radom.Managed{
 				Methods: []radom.Method{
 					{
@@ -2663,7 +2655,7 @@ func newRadomGateway(env string) (radom.Gateway, error) {
 			},
 		}, nil
 	case "production":
-		return radom.Gateway{
+		return &radom.Gateway{
 			Managed: radom.Managed{
 				Methods: []radom.Method{
 					{
@@ -2679,6 +2671,6 @@ func newRadomGateway(env string) (radom.Gateway, error) {
 			},
 		}, nil
 	default:
-		return radom.Gateway{}, model.Error("skus: unknown environment")
+		return nil, model.Error("skus: unknown environment")
 	}
 }
