@@ -1225,6 +1225,71 @@ func TestOrderItem_StripeItemID(t *testing.T) {
 	}
 }
 
+func TestOrderItem_RadomProductID(t *testing.T) {
+	type tcExpected struct {
+		val string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given model.OrderItem
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{
+					"radom_product_id": 42,
+				},
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{
+					"radom_product_id": "",
+				},
+			},
+			exp: tcExpected{ok: true},
+		},
+
+		{
+			name: "radom_product_id",
+			given: model.OrderItem{
+				Metadata: datastore.Metadata{
+					"radom_product_id": "radom_product_id",
+				},
+			},
+			exp: tcExpected{val: "radom_product_id", ok: true},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.RadomProductID()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
 func TestOrderItemRequestNew_Metadata(t *testing.T) {
 	type tcGiven struct {
 		oreq model.OrderItemRequestNew
