@@ -1212,6 +1212,19 @@ func TestOrderItem_StripeItemID(t *testing.T) {
 			},
 			exp: tcExpected{val: "stripe_item_id", ok: true},
 		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.StripeItemID()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
 func TestOrderItemRequestNew_Metadata(t *testing.T) {
 	type tcGiven struct {
 		oreq model.OrderItemRequestNew
