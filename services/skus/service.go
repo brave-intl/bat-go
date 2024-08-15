@@ -42,10 +42,10 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/brave-intl/bat-go/services/wallet"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/brave-intl/bat-go/services/skus/xstripe"
 )
 
