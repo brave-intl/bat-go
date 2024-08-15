@@ -128,7 +128,7 @@ type stripeClient interface {
 
 // Service contains datastore
 type radomClient interface {
-	CreateCheckoutSession(ctx context.Context, creq radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
 	GetSubscription(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error)
 }
 
