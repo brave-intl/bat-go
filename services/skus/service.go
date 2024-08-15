@@ -1953,7 +1953,7 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 				Value: oid,
 			},
 		},
-		ExpiresAt: time.Now().Add(24 * time.Hour).UTC().Unix(),
+		ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
 	}
 
 	resp, err := s.radomClient.CreateCheckoutSession(ctx, reqx)
