@@ -144,8 +144,8 @@ func ParseEvent(b []byte) (Event, error) {
 }
 
 type MessageAuthConfig struct {
-	Token   []byte
 	Enabled bool
+	Token   []byte
 }
 
 type MessageAuthenticator struct {

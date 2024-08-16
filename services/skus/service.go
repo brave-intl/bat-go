@@ -245,6 +245,7 @@ func InitService(
 
 	var radomCl *radom.Client
 	var radomGateway *radom.Gateway
+	var radomAuthCfg radom.MessageAuthConfig
 
 	if enabled, _ := strconv.ParseBool(os.Getenv("RADOM_ENABLED")); enabled {
 		srvURL := os.Getenv("RADOM_SERVER")
@@ -257,21 +258,32 @@ func InitService(
 			return nil, model.Error("skus: radom secret not found")
 		}
 
-		var err error
+		{
+			var err error
 
-		radomCl, err = radom.New(srvURL, authToken)
-		if err != nil {
-			return nil, err
+			radomCl, err = radom.New(srvURL, authToken)
+			if err != nil {
+				return nil, err
+			}
+
+			radomGateway, err = newRadomGateway(env)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		radomGateway, err = newRadomGateway(env)
-		if err != nil {
-			return nil, err
+		radKey := os.Getenv("RADOM_VERIFICATION_KEY")
+		if radKey == "" {
+			return nil, model.Error("skus: radom verification key not found")
+		}
+
+		radomAuthCfg = radom.MessageAuthConfig{
+			Enabled: enabled,
+			Token:   []byte(radKey),
 		}
 	}
 
-	// Radom is disabled for now.
-	radAuth := radom.NewMessageAuthenticator(radom.MessageAuthConfig{})
+	radomAuth := radom.NewMessageAuthenticator(radomAuthCfg)
 
 	cbClient, err := cbr.New()
 	if err != nil {
@@ -367,7 +379,7 @@ func InitService(
 
 		radomClient:  radomCl,
 		radomGateway: radomGateway,
-		radomAuth:    radAuth,
+		radomAuth:    radomAuth,
 
 		vendorReceiptValid: rcptValidator,
 		gpsAuth:            newGPSNtfAuthenticator(gpsCfg, idv),

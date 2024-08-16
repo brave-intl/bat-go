@@ -839,8 +839,8 @@ func TestMessageAuthenticator_Authenticate(t *testing.T) {
 			given: tcGiven{
 				mAuth: MessageAuthenticator{
 					cfg: MessageAuthConfig{
-						Token:   []byte("token"),
 						Enabled: true,
+						Token:   []byte("token"),
 					},
 				},
 			},
@@ -854,8 +854,8 @@ func TestMessageAuthenticator_Authenticate(t *testing.T) {
 			given: tcGiven{
 				mAuth: MessageAuthenticator{
 					cfg: MessageAuthConfig{
-						Token:   []byte("token_1"),
 						Enabled: true,
+						Token:   []byte("token_1"),
 					},
 				},
 				token: "token_2",
@@ -870,8 +870,8 @@ func TestMessageAuthenticator_Authenticate(t *testing.T) {
 			given: tcGiven{
 				mAuth: MessageAuthenticator{
 					cfg: MessageAuthConfig{
-						Token:   []byte("token_1"),
 						Enabled: true,
+						Token:   []byte("token_1"),
 					},
 				},
 				token: "token_1",
