@@ -12,7 +12,6 @@ import (
 	"strconv"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/go-playground/validator/v10"
@@ -26,8 +25,10 @@ import (
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/responses"
+
 	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 )
 
 const (
