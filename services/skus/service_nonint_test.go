@@ -4656,9 +4656,43 @@ func Test_newRadomGateway(t *testing.T) {
 	}
 }
 
+func TestService_processRadomEvent(t *testing.T) {
+	type tcGiven struct {
+		event *radom.Event
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "event_nil",
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := Service{}
+
+			actual := s.processRadomEvent(context.Background(), tc.given.event)
+
+			should.ErrorIs(t, actual, tc.exp.err)
+		})
+	}
+}
+
 func TestService_processRadomEventTx(t *testing.T) {
 	type tcGiven struct {
-		event           radom.Event
+		event           *radom.Event
 		orderRepo       orderStoreSvc
 		orderPayHistory orderPayHistoryStore
 		radomCl         radomClient
@@ -4678,14 +4712,14 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "new_subscription",
 			given: tcGiven{
-				event: radom.Event{
-					EventData: radom.EventData{
-						NewSubscription: &radom.NewSubscription{
+				event: &radom.Event{
+					EventData: &radom.EventData{
+						New: &radom.NewSubscription{
 							SubscriptionID: uuid.NewV4(),
 						},
 					},
-					RadomData: radom.RadData{
-						CheckoutSession: radom.CheckoutSession{
+					RadomData: &radom.Data{
+						CheckoutSession: &radom.CheckoutSession{
 							Metadata: []radom.Metadata{
 								{
 									Key:   "brave_order_id",
@@ -4720,11 +4754,11 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "subscription_payment",
 			given: tcGiven{
-				event: radom.Event{
-					EventData: radom.EventData{
-						SubscriptionPayment: &radom.SubscriptionPayment{
-							RadomData: radom.RadData{
-								Subscription: radom.Subscription{
+				event: &radom.Event{
+					EventData: &radom.EventData{
+						Payment: &radom.SubscriptionPayment{
+							RadomData: &radom.Data{
+								Subscription: &radom.Subscription{
 									SubscriptionID: uuid.NewV4(),
 								},
 							},
@@ -4756,9 +4790,9 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "subscription_cancelled",
 			given: tcGiven{
-				event: radom.Event{
-					EventData: radom.EventData{
-						SubscriptionCancelled: &radom.SubscriptionCancelled{
+				event: &radom.Event{
+					EventData: &radom.EventData{
+						Cancelled: &radom.SubscriptionCancelled{
 							SubscriptionID: uuid.NewV4(),
 						},
 					},
@@ -4775,9 +4809,9 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "subscription_expired",
 			given: tcGiven{
-				event: radom.Event{
-					EventData: radom.EventData{
-						SubscriptionExpired: &radom.SubscriptionExpired{
+				event: &radom.Event{
+					EventData: &radom.EventData{
+						Expired: &radom.SubscriptionExpired{
 							SubscriptionID: uuid.NewV4(),
 						},
 					},

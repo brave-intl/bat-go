@@ -9,72 +9,132 @@ import (
 )
 
 const (
-	ErrUnsupportedEvent       = Error("radom: unsupported event type for brave order id")
+	ErrUnsupportedEvent       = Error("radom: unsupported event")
+	ErrNoCheckoutSessionData  = Error("radom: no checkout session data")
 	ErrBraveOrderIDNotFound   = Error("radom: brave order id not found")
 	ErrSubscriptionIDNotFound = Error("radom: subscription id not found")
 
-	ErrDisabled               = Error("radom: radom disabled")
+	ErrDisabled               = Error("radom: disabled")
 	ErrVerificationKeyEmpty   = Error("radom: verification key is empty")
 	ErrVerificationKeyInvalid = Error("radom: verification key is invalid")
 )
 
 type Event struct {
-	EventType string    `json:"eventType"`
-	EventData EventData `json:"eventData"`
-	RadomData RadData   `json:"radomData"`
+	EventType string     `json:"eventType"`
+	EventData *EventData `json:"eventData"`
+	RadomData *Data      `json:"radomData"`
+}
+
+type EventData struct {
+	New       *NewSubscription       `json:"newSubscription"`
+	Payment   *SubscriptionPayment   `json:"subscriptionPayment"`
+	Cancelled *SubscriptionCancelled `json:"subscriptionCancelled"`
+	Expired   *SubscriptionExpired   `json:"subscriptionExpired"`
+}
+
+type NewSubscription struct {
+	SubscriptionID uuid.UUID `json:"subscriptionId"`
+}
+
+type SubscriptionPayment struct {
+	RadomData *Data `json:"radomData"`
+}
+
+type SubscriptionCancelled struct {
+	SubscriptionID uuid.UUID `json:"subscriptionId"`
+}
+
+type SubscriptionExpired struct {
+	SubscriptionID uuid.UUID `json:"subscriptionId"`
+}
+
+type Data struct {
+	CheckoutSession *CheckoutSession `json:"checkoutSession"`
+	Subscription    *Subscription    `json:"subscription"`
+}
+
+type CheckoutSession struct {
+	CheckoutSessionID string     `json:"checkoutSessionId"`
+	Metadata          []Metadata `json:"metadata"`
+}
+
+type Subscription struct {
+	SubscriptionID uuid.UUID `json:"subscriptionId"`
 }
 
 func (e *Event) OrderID() (uuid.UUID, error) {
-	if e.EventData.NewSubscription == nil {
+	switch {
+	case e.EventData == nil || e.EventData.New == nil:
 		return uuid.Nil, ErrUnsupportedEvent
-	}
 
-	mdata := e.RadomData.CheckoutSession.Metadata
+	case e.RadomData == nil || e.RadomData.CheckoutSession == nil:
+		return uuid.Nil, ErrNoCheckoutSessionData
 
-	for i := range mdata {
-		d := mdata[i]
-		if d.Key == "brave_order_id" {
-			return uuid.FromString(d.Value)
+	default:
+		mdata := e.RadomData.CheckoutSession.Metadata
+
+		for i := range mdata {
+			d := mdata[i]
+			if d.Key == "brave_order_id" {
+				return uuid.FromString(d.Value)
+			}
 		}
-	}
 
-	return uuid.Nil, ErrBraveOrderIDNotFound
+		return uuid.Nil, ErrBraveOrderIDNotFound
+	}
 }
 
 func (e *Event) SubID() (uuid.UUID, error) {
-	var subID uuid.UUID
-
 	switch {
-	case e.EventData.NewSubscription != nil:
-		subID = e.EventData.NewSubscription.SubscriptionID
+	case e.EventData == nil:
+		return uuid.Nil, ErrUnsupportedEvent
 
-	case e.EventData.SubscriptionPayment != nil:
-		subID = e.EventData.SubscriptionPayment.RadomData.Subscription.SubscriptionID
+	case e.EventData.New != nil:
+		return e.EventData.New.SubscriptionID, nil
 
-	case e.EventData.SubscriptionCancelled != nil:
-		subID = e.EventData.SubscriptionCancelled.SubscriptionID
+	case e.EventData.Payment != nil:
+		if e.EventData.Payment.RadomData == nil || e.EventData.Payment.RadomData.Subscription == nil {
+			return uuid.Nil, ErrSubscriptionIDNotFound
+		}
 
-	case e.EventData.SubscriptionExpired != nil:
-		subID = e.EventData.SubscriptionExpired.SubscriptionID
+		return e.EventData.Payment.RadomData.Subscription.SubscriptionID, nil
+
+	case e.EventData.Cancelled != nil:
+		return e.EventData.Cancelled.SubscriptionID, nil
+
+	case e.EventData.Expired != nil:
+		return e.EventData.Expired.SubscriptionID, nil
+
+	default:
+		return uuid.Nil, ErrUnsupportedEvent
 	}
-
-	if uuid.Equal(subID, uuid.Nil) {
-		return uuid.Nil, ErrSubscriptionIDNotFound
-	}
-
-	return subID, nil
 }
 
 func (e *Event) IsNewSub() bool {
-	return e.EventData.NewSubscription != nil
+	return e != nil && e.EventData != nil && e.EventData.New != nil
 }
 
 func (e *Event) ShouldRenew() bool {
-	return e.EventData.SubscriptionPayment != nil
+	return e != nil && e.EventData != nil && e.EventData.Payment != nil
 }
 
 func (e *Event) ShouldCancel() bool {
-	return e.EventData.SubscriptionCancelled != nil || e.EventData.SubscriptionExpired != nil
+	switch {
+	case e == nil:
+		return false
+
+	case e.EventData == nil:
+		return false
+
+	case e.EventData.Cancelled != nil:
+		return true
+
+	case e.EventData.Expired != nil:
+		return true
+
+	default:
+		return false
+	}
 }
 
 func (e *Event) ShouldProcess() bool {
@@ -97,47 +157,10 @@ func (e *Event) Effect() string {
 	}
 }
 
-type EventData struct {
-	NewSubscription       *NewSubscription       `json:"newSubscription"`
-	SubscriptionPayment   *SubscriptionPayment   `json:"subscriptionPayment"`
-	SubscriptionCancelled *SubscriptionCancelled `json:"subscriptionCancelled"`
-	SubscriptionExpired   *SubscriptionExpired   `json:"subscriptionExpired"`
-}
-
-type NewSubscription struct {
-	SubscriptionID uuid.UUID `json:"subscriptionId"`
-}
-
-type SubscriptionPayment struct {
-	RadomData RadData `json:"radomData"`
-}
-
-type SubscriptionCancelled struct {
-	SubscriptionID uuid.UUID `json:"subscriptionId"`
-}
-
-type SubscriptionExpired struct {
-	SubscriptionID uuid.UUID `json:"subscriptionId"`
-}
-
-type RadData struct {
-	CheckoutSession CheckoutSession `json:"checkoutSession"`
-	Subscription    Subscription    `json:"subscription"`
-}
-
-type CheckoutSession struct {
-	CheckoutSessionID string     `json:"checkoutSessionId"`
-	Metadata          []Metadata `json:"metadata"`
-}
-
-type Subscription struct {
-	SubscriptionID uuid.UUID `json:"subscriptionId"`
-}
-
-func ParseEvent(b []byte) (Event, error) {
-	var event Event
-	if err := json.Unmarshal(b, &event); err != nil {
-		return Event{}, err
+func ParseEvent(b []byte) (*Event, error) {
+	event := &Event{}
+	if err := json.Unmarshal(b, event); err != nil {
+		return nil, err
 	}
 
 	return event, nil

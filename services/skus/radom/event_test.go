@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	uuid "github.com/satori/go.uuid"
-
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 )
@@ -16,7 +15,7 @@ func TestParseEvent(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		event   Event
+		event   *Event
 		mustErr must.ErrorAssertionFunc
 	}
 
@@ -51,15 +50,15 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: Event{
+				event: &Event{
 					EventType: "newSubscription",
-					EventData: EventData{
-						NewSubscription: &NewSubscription{
+					EventData: &EventData{
+						New: &NewSubscription{
 							SubscriptionID: uuid.FromStringOrNil("54453f86-8cfa-4eee-8818-050fc61f560b"),
 						},
 					},
-					RadomData: RadData{
-						CheckoutSession: CheckoutSession{
+					RadomData: &Data{
+						CheckoutSession: &CheckoutSession{
 							CheckoutSessionID: "71da4f76-0ac7-47ee-bb51-9d9577232245",
 							Metadata: []Metadata{
 								{
@@ -98,19 +97,19 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: Event{
+				event: &Event{
 					EventType: "subscriptionPayment",
-					EventData: EventData{
-						SubscriptionPayment: &SubscriptionPayment{
-							RadomData: RadData{
-								Subscription: Subscription{
+					EventData: &EventData{
+						Payment: &SubscriptionPayment{
+							RadomData: &Data{
+								Subscription: &Subscription{
 									SubscriptionID: uuid.FromStringOrNil("2eb2fcf0-8c73-4e2b-9e94-50f76f8caabe"),
 								},
 							},
 						},
 					},
-					RadomData: RadData{
-						Subscription: Subscription{
+					RadomData: &Data{
+						Subscription: &Subscription{
 							SubscriptionID: uuid.FromStringOrNil("2eb2fcf0-8c73-4e2b-9e94-50f76f8caabe"),
 						},
 					},
@@ -134,10 +133,10 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: Event{
+				event: &Event{
 					EventType: "subscriptionCancelled",
-					EventData: EventData{
-						SubscriptionCancelled: &SubscriptionCancelled{
+					EventData: &EventData{
+						Cancelled: &SubscriptionCancelled{
 							SubscriptionID: uuid.FromStringOrNil("56786d4e-a994-4392-952a-a648a0d2870a"),
 						},
 					},
@@ -161,10 +160,10 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: Event{
+				event: &Event{
 					EventType: "subscriptionExpired",
-					EventData: EventData{
-						SubscriptionExpired: &SubscriptionExpired{
+					EventData: &EventData{
+						Expired: &SubscriptionExpired{
 							SubscriptionID: uuid.FromStringOrNil("56786d4e-a994-4392-952a-a648a0d2870a"),
 						},
 					},
@@ -188,7 +187,30 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: Event{
+				event: &Event{
+					EventType: "unknownEvent",
+					EventData: &EventData{},
+				},
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "unknown_event_data",
+			given: tcGiven{
+				rawEvent: `{
+				  "eventType": "unknownEvent",
+				  "unknownEventData": {
+					"unknownEvent": {
+					  "subscriptionId": "56786d4e-a994-4392-952a-a648a0d2870a"
+					}
+				  }
+				}`,
+			},
+			exp: tcExpected{
+				event: &Event{
 					EventType: "unknownEvent",
 				},
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
@@ -228,7 +250,7 @@ func TestEvent_OrderID(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "unsupported_type",
+			name: "no_event_data",
 			exp: tcExpected{
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
 					must.ErrorIs(t, err, ErrUnsupportedEvent)
@@ -237,14 +259,61 @@ func TestEvent_OrderID(t *testing.T) {
 		},
 
 		{
+			name: "unsupported_event",
+			given: tcGiven{
+				event: Event{
+					EventData: &EventData{},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, ErrUnsupportedEvent)
+				},
+			},
+		},
+
+		{
+			name: "no_radom_data",
+			given: tcGiven{
+				event: Event{
+					EventData: &EventData{
+						New: &NewSubscription{},
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, ErrNoCheckoutSessionData)
+				},
+			},
+		},
+
+		{
+			name: "no_checkout_data",
+			given: tcGiven{
+				event: Event{
+					EventData: &EventData{
+						New: &NewSubscription{},
+					},
+					RadomData: &Data{},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, ErrNoCheckoutSessionData)
+				},
+			},
+		},
+
+		{
 			name: "invalid_id",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{},
+					EventData: &EventData{
+						New: &NewSubscription{},
 					},
-					RadomData: RadData{
-						CheckoutSession: CheckoutSession{
+					RadomData: &Data{
+						CheckoutSession: &CheckoutSession{
 							Metadata: []Metadata{
 								{
 									Key:   "brave_order_id",
@@ -266,11 +335,11 @@ func TestEvent_OrderID(t *testing.T) {
 			name: "order_id_found",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{},
+					EventData: &EventData{
+						New: &NewSubscription{},
 					},
-					RadomData: RadData{
-						CheckoutSession: CheckoutSession{
+					RadomData: &Data{
+						CheckoutSession: &CheckoutSession{
 							Metadata: []Metadata{
 								{
 									Key:   "brave_order_id",
@@ -293,11 +362,11 @@ func TestEvent_OrderID(t *testing.T) {
 			name: "order_id_not_found",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{},
+					EventData: &EventData{
+						New: &NewSubscription{},
 					},
-					RadomData: RadData{
-						CheckoutSession: CheckoutSession{
+					RadomData: &Data{
+						CheckoutSession: &CheckoutSession{
 							Metadata: []Metadata{
 								{
 									Key:   "some_key",
@@ -350,8 +419,8 @@ func TestEvent_SubID(t *testing.T) {
 			name: "new_subscription",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{
+					EventData: &EventData{
+						New: &NewSubscription{
 							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
 						},
 					},
@@ -366,11 +435,30 @@ func TestEvent_SubID(t *testing.T) {
 		},
 
 		{
-			name: "new_subscription_nil",
+			name: "subscription_payment_no_radom_data",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{},
+					EventData: &EventData{
+						Payment: &SubscriptionPayment{},
+					},
+				},
+			},
+			exp: tcExpected{
+				sid: uuid.Nil,
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, ErrSubscriptionIDNotFound)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment_no_subscription",
+			given: tcGiven{
+				event: Event{
+					EventData: &EventData{
+						Payment: &SubscriptionPayment{
+							RadomData: &Data{},
+						},
 					},
 				},
 			},
@@ -386,10 +474,10 @@ func TestEvent_SubID(t *testing.T) {
 			name: "subscription_payment",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionPayment: &SubscriptionPayment{
-							RadomData: RadData{
-								Subscription: Subscription{
+					EventData: &EventData{
+						Payment: &SubscriptionPayment{
+							RadomData: &Data{
+								Subscription: &Subscription{
 									SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
 								},
 							},
@@ -406,28 +494,11 @@ func TestEvent_SubID(t *testing.T) {
 		},
 
 		{
-			name: "subscription_payment_nil",
-			given: tcGiven{
-				event: Event{
-					EventData: EventData{
-						SubscriptionPayment: &SubscriptionPayment{},
-					},
-				},
-			},
-			exp: tcExpected{
-				sid: uuid.Nil,
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
-					must.ErrorIs(t, err, ErrSubscriptionIDNotFound)
-				},
-			},
-		},
-
-		{
 			name: "subscription_cancelled",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionCancelled: &SubscriptionCancelled{
+					EventData: &EventData{
+						Cancelled: &SubscriptionCancelled{
 							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
 						},
 					},
@@ -437,23 +508,6 @@ func TestEvent_SubID(t *testing.T) {
 				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
 					must.NoError(t, err)
-				},
-			},
-		},
-
-		{
-			name: "subscription_cancelled_nil",
-			given: tcGiven{
-				event: Event{
-					EventData: EventData{
-						SubscriptionCancelled: &SubscriptionCancelled{},
-					},
-				},
-			},
-			exp: tcExpected{
-				sid: uuid.Nil,
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
-					must.ErrorIs(t, err, ErrSubscriptionIDNotFound)
 				},
 			},
 		},
@@ -462,8 +516,8 @@ func TestEvent_SubID(t *testing.T) {
 			name: "subscription_expired",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionExpired: &SubscriptionExpired{
+					EventData: &EventData{
+						Expired: &SubscriptionExpired{
 							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
 						},
 					},
@@ -478,28 +532,27 @@ func TestEvent_SubID(t *testing.T) {
 		},
 
 		{
-			name: "subscription_expired_nil",
-			given: tcGiven{
-				event: Event{
-					EventData: EventData{
-						SubscriptionExpired: &SubscriptionExpired{},
-					},
-				},
-			},
+			name:  "no_event_data",
+			given: tcGiven{event: Event{}},
 			exp: tcExpected{
 				sid: uuid.Nil,
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
-					must.ErrorIs(t, err, ErrSubscriptionIDNotFound)
+					must.ErrorIs(t, err, ErrUnsupportedEvent)
 				},
 			},
 		},
 
 		{
-			name: "subscription_id_not_found",
+			name: "unknown_event",
+			given: tcGiven{
+				event: Event{
+					EventData: &EventData{},
+				},
+			},
 			exp: tcExpected{
 				sid: uuid.Nil,
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
-					must.ErrorIs(t, err, ErrSubscriptionIDNotFound)
+					must.ErrorIs(t, err, ErrUnsupportedEvent)
 				},
 			},
 		},
@@ -534,8 +587,8 @@ func TestEvent_IsNewSub(t *testing.T) {
 			name: "new_subscription",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{},
+					EventData: &EventData{
+						New: &NewSubscription{},
 					},
 				},
 			},
@@ -544,6 +597,16 @@ func TestEvent_IsNewSub(t *testing.T) {
 
 		{
 			name: "not_new_subscription",
+			given: tcGiven{
+				event: Event{
+					EventData: &EventData{},
+				},
+			},
+			exp: false,
+		},
+
+		{
+			name: "not_new_subscription_event_data",
 			exp:  false,
 		},
 	}
@@ -574,8 +637,8 @@ func TestEvent_ShouldRenew(t *testing.T) {
 			name: "subscription_payment",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionPayment: &SubscriptionPayment{},
+					EventData: &EventData{
+						Payment: &SubscriptionPayment{},
 					},
 				},
 			},
@@ -584,6 +647,16 @@ func TestEvent_ShouldRenew(t *testing.T) {
 
 		{
 			name: "not_subscription_payment",
+			given: tcGiven{
+				event: Event{
+					EventData: &EventData{},
+				},
+			},
+			exp: false,
+		},
+
+		{
+			name: "not_subscription_payment_event_data",
 			exp:  false,
 		},
 	}
@@ -600,7 +673,7 @@ func TestEvent_ShouldRenew(t *testing.T) {
 
 func TestEvent_ShouldCancel(t *testing.T) {
 	type tcGiven struct {
-		event Event
+		event *Event
 	}
 
 	type testCase struct {
@@ -611,28 +684,36 @@ func TestEvent_ShouldCancel(t *testing.T) {
 
 	tests := []testCase{
 		{
+			name: "event_nil",
+			exp:  false,
+		},
+
+		{
+			name: "event_data_nil",
+			given: tcGiven{
+				event: &Event{},
+			},
+			exp: false,
+		},
+
+		{
 			name: "subscription_cancelled",
 			given: tcGiven{
-				event: Event{
-					EventData: EventData{
-						SubscriptionCancelled: &SubscriptionCancelled{},
+				event: &Event{
+					EventData: &EventData{
+						Cancelled: &SubscriptionCancelled{},
 					},
 				},
 			},
 			exp: true,
-		},
-
-		{
-			name: "not_subscription_cancelled",
-			exp:  false,
 		},
 
 		{
 			name: "subscription_expired",
 			given: tcGiven{
-				event: Event{
-					EventData: EventData{
-						SubscriptionExpired: &SubscriptionExpired{},
+				event: &Event{
+					EventData: &EventData{
+						Expired: &SubscriptionExpired{},
 					},
 				},
 			},
@@ -640,8 +721,13 @@ func TestEvent_ShouldCancel(t *testing.T) {
 		},
 
 		{
-			name: "not_subscription_expired",
-			exp:  false,
+			name: "unknown_action",
+			given: tcGiven{
+				event: &Event{
+					EventData: &EventData{},
+				},
+			},
+			exp: false,
 		},
 	}
 
@@ -668,11 +754,11 @@ func TestEvent_ShouldProcess(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "should_process_new_subscription",
+			name: "new_subscription",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{},
+					EventData: &EventData{
+						New: &NewSubscription{},
 					},
 				},
 			},
@@ -680,11 +766,11 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		},
 
 		{
-			name: "should_process_subscription_payment",
+			name: "subscription_payment",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionPayment: &SubscriptionPayment{},
+					EventData: &EventData{
+						Payment: &SubscriptionPayment{},
 					},
 				},
 			},
@@ -692,11 +778,11 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		},
 
 		{
-			name: "should_process_subscription_cancelled",
+			name: "subscription_cancelled",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionCancelled: &SubscriptionCancelled{},
+					EventData: &EventData{
+						Cancelled: &SubscriptionCancelled{},
 					},
 				},
 			},
@@ -704,11 +790,11 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		},
 
 		{
-			name: "should_process_subscription_expired",
+			name: "subscription_expired",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionExpired: &SubscriptionExpired{},
+					EventData: &EventData{
+						Expired: &SubscriptionExpired{},
 					},
 				},
 			},
@@ -747,8 +833,8 @@ func TestEvent_Effect(t *testing.T) {
 			name: "new",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						NewSubscription: &NewSubscription{},
+					EventData: &EventData{
+						New: &NewSubscription{},
 					},
 				},
 			},
@@ -759,8 +845,8 @@ func TestEvent_Effect(t *testing.T) {
 			name: "renew",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionPayment: &SubscriptionPayment{},
+					EventData: &EventData{
+						Payment: &SubscriptionPayment{},
 					},
 				},
 			},
@@ -771,8 +857,8 @@ func TestEvent_Effect(t *testing.T) {
 			name: "cancel",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionCancelled: &SubscriptionCancelled{},
+					EventData: &EventData{
+						Cancelled: &SubscriptionCancelled{},
 					},
 				},
 			},
@@ -783,8 +869,8 @@ func TestEvent_Effect(t *testing.T) {
 			name: "expired",
 			given: tcGiven{
 				event: Event{
-					EventData: EventData{
-						SubscriptionExpired: &SubscriptionExpired{},
+					EventData: &EventData{
+						Expired: &SubscriptionExpired{},
 					},
 				},
 			},

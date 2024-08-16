@@ -1859,14 +1859,14 @@ func (suite *ControllersTestSuite) TestWebhook_Radom() {
 
 	suite.service.payHistRepo = repository.NewOrderPayHistory()
 
-	event := radom.Event{
-		EventData: radom.EventData{
-			NewSubscription: &radom.NewSubscription{
+	event := &radom.Event{
+		EventData: &radom.EventData{
+			New: &radom.NewSubscription{
 				SubscriptionID: subID,
 			},
 		},
-		RadomData: radom.RadData{
-			CheckoutSession: radom.CheckoutSession{
+		RadomData: &radom.Data{
+			CheckoutSession: &radom.CheckoutSession{
 				Metadata: []radom.Metadata{
 					{
 						Key:   "brave_order_id",
