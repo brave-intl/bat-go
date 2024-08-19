@@ -4673,7 +4673,10 @@ func TestService_processRadomEvent(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "event_nil",
+			name: "should_not_process",
+			given: tcGiven{
+				event: &radom.Event{},
+			},
 		},
 	}
 
@@ -4827,6 +4830,9 @@ func TestService_processRadomEventTx(t *testing.T) {
 
 		{
 			name: "unknown_action",
+			given: tcGiven{
+				event: &radom.Event{},
+			},
 			exp: tcExpected{
 				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
 					return should.ErrorIs(t, err, errUnknownAction)

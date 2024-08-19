@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	ErrUnsupportedEvent       = Error("radom: unsupported event")
-	ErrNoCheckoutSessionData  = Error("radom: no checkout session data")
-	ErrBraveOrderIDNotFound   = Error("radom: brave order id not found")
-	ErrSubscriptionIDNotFound = Error("radom: subscription id not found")
+	ErrUnsupportedEvent      = Error("radom: unsupported event")
+	ErrNoCheckoutSessionData = Error("radom: no checkout session data")
+	ErrBraveOrderIDNotFound  = Error("radom: brave order id not found")
+	ErrNoRadomPaymentData    = Error("radom: no radom payment data")
 
 	ErrDisabled               = Error("radom: disabled")
 	ErrVerificationKeyEmpty   = Error("radom: verification key is empty")
@@ -94,7 +94,7 @@ func (e *Event) SubID() (uuid.UUID, error) {
 
 	case e.EventData.Payment != nil:
 		if e.EventData.Payment.RadomData == nil || e.EventData.Payment.RadomData.Subscription == nil {
-			return uuid.Nil, ErrSubscriptionIDNotFound
+			return uuid.Nil, ErrNoRadomPaymentData
 		}
 
 		return e.EventData.Payment.RadomData.Subscription.SubscriptionID, nil
@@ -111,18 +111,15 @@ func (e *Event) SubID() (uuid.UUID, error) {
 }
 
 func (e *Event) IsNewSub() bool {
-	return e != nil && e.EventData != nil && e.EventData.New != nil
+	return e.EventData != nil && e.EventData.New != nil
 }
 
 func (e *Event) ShouldRenew() bool {
-	return e != nil && e.EventData != nil && e.EventData.Payment != nil
+	return e.EventData != nil && e.EventData.Payment != nil
 }
 
 func (e *Event) ShouldCancel() bool {
 	switch {
-	case e == nil:
-		return false
-
 	case e.EventData == nil:
 		return false
 

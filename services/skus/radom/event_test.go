@@ -446,7 +446,7 @@ func TestEvent_SubID(t *testing.T) {
 			exp: tcExpected{
 				sid: uuid.Nil,
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
-					must.ErrorIs(t, err, ErrSubscriptionIDNotFound)
+					must.ErrorIs(t, err, ErrNoRadomPaymentData)
 				},
 			},
 		},
@@ -465,7 +465,7 @@ func TestEvent_SubID(t *testing.T) {
 			exp: tcExpected{
 				sid: uuid.Nil,
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
-					must.ErrorIs(t, err, ErrSubscriptionIDNotFound)
+					must.ErrorIs(t, err, ErrNoRadomPaymentData)
 				},
 			},
 		},
@@ -573,7 +573,7 @@ func TestEvent_SubID(t *testing.T) {
 
 func TestEvent_IsNewSub(t *testing.T) {
 	type tcGiven struct {
-		event Event
+		event *Event
 	}
 
 	type testCase struct {
@@ -586,7 +586,7 @@ func TestEvent_IsNewSub(t *testing.T) {
 		{
 			name: "new_subscription",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -598,7 +598,7 @@ func TestEvent_IsNewSub(t *testing.T) {
 		{
 			name: "not_new_subscription",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{},
 				},
 			},
@@ -607,7 +607,10 @@ func TestEvent_IsNewSub(t *testing.T) {
 
 		{
 			name: "not_new_subscription_event_data",
-			exp:  false,
+			given: tcGiven{
+				event: &Event{},
+			},
+			exp: false,
 		},
 	}
 
@@ -623,7 +626,7 @@ func TestEvent_IsNewSub(t *testing.T) {
 
 func TestEvent_ShouldRenew(t *testing.T) {
 	type tcGiven struct {
-		event Event
+		event *Event
 	}
 
 	type testCase struct {
@@ -636,7 +639,7 @@ func TestEvent_ShouldRenew(t *testing.T) {
 		{
 			name: "subscription_payment",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{},
 					},
@@ -648,7 +651,7 @@ func TestEvent_ShouldRenew(t *testing.T) {
 		{
 			name: "not_subscription_payment",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{},
 				},
 			},
@@ -656,8 +659,11 @@ func TestEvent_ShouldRenew(t *testing.T) {
 		},
 
 		{
-			name: "not_subscription_payment_event_data",
-			exp:  false,
+			name: "no_event_data",
+			given: tcGiven{
+				event: &Event{},
+			},
+			exp: false,
 		},
 	}
 
@@ -683,11 +689,6 @@ func TestEvent_ShouldCancel(t *testing.T) {
 	}
 
 	tests := []testCase{
-		{
-			name: "event_nil",
-			exp:  false,
-		},
-
 		{
 			name: "event_data_nil",
 			given: tcGiven{
@@ -743,7 +744,7 @@ func TestEvent_ShouldCancel(t *testing.T) {
 
 func TestEvent_ShouldProcess(t *testing.T) {
 	type tcGiven struct {
-		event Event
+		event *Event
 	}
 
 	type testCase struct {
@@ -756,7 +757,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "new_subscription",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -768,7 +769,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "subscription_payment",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{},
 					},
@@ -780,7 +781,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "subscription_cancelled",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						Cancelled: &SubscriptionCancelled{},
 					},
@@ -792,7 +793,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "subscription_expired",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{},
 					},
@@ -803,7 +804,10 @@ func TestEvent_ShouldProcess(t *testing.T) {
 
 		{
 			name: "not_should_process",
-			exp:  false,
+			given: tcGiven{
+				event: &Event{},
+			},
+			exp: false,
 		},
 	}
 
@@ -819,7 +823,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 
 func TestEvent_Effect(t *testing.T) {
 	type tcGiven struct {
-		event Event
+		event *Event
 	}
 
 	type testCase struct {
@@ -832,7 +836,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "new",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -844,7 +848,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "renew",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{},
 					},
@@ -856,7 +860,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "cancel",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						Cancelled: &SubscriptionCancelled{},
 					},
@@ -868,7 +872,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "expired",
 			given: tcGiven{
-				event: Event{
+				event: &Event{
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{},
 					},
@@ -879,7 +883,10 @@ func TestEvent_Effect(t *testing.T) {
 
 		{
 			name: "skip",
-			exp:  "skip",
+			given: tcGiven{
+				event: &Event{},
+			},
+			exp: "skip",
 		},
 	}
 
