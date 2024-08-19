@@ -4735,8 +4735,8 @@ func TestService_processRadomEventTx(t *testing.T) {
 				orderRepo:       &repository.MockOrder{},
 				orderPayHistory: &repository.MockOrderPayHistory{},
 				radomCl: &mockRadomClient{
-					fnGetSubscription: func(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error) {
-						return radom.SubscriptionResponse{
+					fnGetSubscription: func(ctx context.Context, subID uuid.UUID) (*radom.SubscriptionResponse, error) {
+						return &radom.SubscriptionResponse{
 							NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
 							Payments: []radom.Payment{
 								{
@@ -4771,8 +4771,8 @@ func TestService_processRadomEventTx(t *testing.T) {
 				orderRepo:       &repository.MockOrder{},
 				orderPayHistory: &repository.MockOrderPayHistory{},
 				radomCl: &mockRadomClient{
-					fnGetSubscription: func(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error) {
-						return radom.SubscriptionResponse{
+					fnGetSubscription: func(ctx context.Context, subID uuid.UUID) (*radom.SubscriptionResponse, error) {
+						return &radom.SubscriptionResponse{
 							NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
 							Payments: []radom.Payment{
 								{
@@ -4857,7 +4857,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 
 type mockRadomClient struct {
 	fnCreateCheckoutSession func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
-	fnGetSubscription       func(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error)
+	fnGetSubscription       func(ctx context.Context, subID uuid.UUID) (*radom.SubscriptionResponse, error)
 }
 
 func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
@@ -4868,9 +4868,9 @@ func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq *radom
 	return m.fnCreateCheckoutSession(ctx, creq)
 }
 
-func (m *mockRadomClient) GetSubscription(ctx context.Context, subID uuid.UUID) (radom.SubscriptionResponse, error) {
+func (m *mockRadomClient) GetSubscription(ctx context.Context, subID uuid.UUID) (*radom.SubscriptionResponse, error) {
 	if m.fnGetSubscription == nil {
-		return radom.SubscriptionResponse{}, nil
+		return &radom.SubscriptionResponse{}, nil
 	}
 
 	return m.fnGetSubscription(ctx, subID)

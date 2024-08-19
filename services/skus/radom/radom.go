@@ -75,17 +75,17 @@ func (c *Client) CreateCheckoutSession(ctx context.Context, creq *CheckoutSessio
 	return resp, nil
 }
 
-func (c *Client) GetSubscription(ctx context.Context, subID uuid.UUID) (SubscriptionResponse, error) {
+func (c *Client) GetSubscription(ctx context.Context, subID uuid.UUID) (*SubscriptionResponse, error) {
 	req, err := c.client.NewRequest(ctx, http.MethodGet, "/subscription/"+subID.String(), nil, nil)
 	if err != nil {
-		return SubscriptionResponse{}, err
+		return nil, err
 	}
 
 	req.Header.Add("Authorization", c.authToken)
 
-	var resp SubscriptionResponse
-	if _, err := c.client.Do(ctx, req, &resp); err != nil {
-		return SubscriptionResponse{}, err
+	resp := &SubscriptionResponse{}
+	if _, err := c.client.Do(ctx, req, resp); err != nil {
+		return nil, err
 	}
 
 	return resp, nil
