@@ -20,7 +20,7 @@ func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerCont
 	}
 
 	const q = `SELECT EXISTS(
-		SELECT 1 FROM time_limited_v2_order_creds WHERE blinded_creds->>0 = $2
+		SELECT 1 FROM time_limited_v2_order_creds WHERE blinded_creds->>0 = $2 AND request_id = $1
 	) AS submitted, EXISTS(
 		SELECT 1 FROM time_limited_v2_order_creds WHERE blinded_creds->>0 != $2 AND request_id = $1
 	) AS req_id_mismatch`
