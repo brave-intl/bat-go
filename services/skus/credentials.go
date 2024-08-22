@@ -331,7 +331,7 @@ func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	// Check TLV2 to see if we have credentials signed that match incoming blinded tokens.
-	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, dbi, reqID, bcreds...)
+	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, dbi, item.OrderID, item.ID, reqID, bcreds...)
 	if err != nil {
 		return err
 	}

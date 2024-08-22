@@ -218,17 +218,17 @@ func (r *MockOrderPayHistory) Insert(ctx context.Context, dbi sqlx.ExecerContext
 }
 
 type MockTLV2 struct {
-	FnGetCredSubmissionReport func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
+	FnGetCredSubmissionReport func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error)
 	FnUniqBatches             func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
 	FnDeleteLegacy            func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
 }
 
-func (r *MockTLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+func (r *MockTLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
 	if r.FnGetCredSubmissionReport == nil {
 		return model.TLV2CredSubmissionReport{}, nil
 	}
 
-	return r.FnGetCredSubmissionReport(ctx, dbi, reqID, creds...)
+	return r.FnGetCredSubmissionReport(ctx, dbi, orderID, itemID, reqID, creds...)
 }
 
 func (r *MockTLV2) UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
