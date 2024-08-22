@@ -1883,7 +1883,7 @@ func TestService_doTLV2ExistTxTime(t *testing.T) {
 				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				repo: &repository.MockTLV2{
-					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
 						return model.TLV2CredSubmissionReport{}, model.Error("something_went_wrong")
 					},
 				},
@@ -1904,7 +1904,7 @@ func TestService_doTLV2ExistTxTime(t *testing.T) {
 				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				repo: &repository.MockTLV2{
-					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
 						return model.TLV2CredSubmissionReport{Submitted: true}, nil
 					},
 				},
@@ -1925,7 +1925,7 @@ func TestService_doTLV2ExistTxTime(t *testing.T) {
 				from:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				to:    time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 				repo: &repository.MockTLV2{
-					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
+					FnGetCredSubmissionReport: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
 						return model.TLV2CredSubmissionReport{ReqIDMismatch: true}, nil
 					},
 				},
