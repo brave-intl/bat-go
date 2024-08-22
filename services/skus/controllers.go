@@ -1200,7 +1200,7 @@ func handleRadomWebhookH(w http.ResponseWriter, r *http.Request, svc *Service) *
 	l := logging.Logger(ctx, "skus").With().Str("func", "handleRadomWebhookH").Logger()
 
 	if err := svc.radomAuth.Authenticate(ctx, r.Header.Get("radom-verification-key")); err != nil {
-		l.Error().Err(err).Msg("invalid request")
+		l.Err(err).Msg("invalid request")
 
 		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
 	}
