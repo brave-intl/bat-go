@@ -4845,7 +4845,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			svc := Service{orderRepo: tc.given.orderRepo, payHistRepo: tc.given.orderPayHistory, radomClient: tc.given.radomCl}
+			svc := &Service{orderRepo: tc.given.orderRepo, payHistRepo: tc.given.orderPayHistory, radomClient: tc.given.radomCl}
 
 			ctx := context.Background()
 
