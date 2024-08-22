@@ -9,6 +9,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/tools/settlement"
@@ -248,13 +249,22 @@ func setupSettlementTransactions(
 }
 
 func createBitflyerRequest(
+	ctx context.Context,
 	dryRun *bitflyer.DryRunOption,
 	token string,
 	settlementRequests []settlement.AggregateTransaction,
 ) (*bitflyer.WithdrawToDepositIDBulkPayload, error) {
 	set := []custodian.Transaction{}
 	sourceFrom := ""
+	maxAmount, ok := ctx.Value(appctx.PayoutTxnMaxAmountCTXKey).(decimal.Decimal)
+	if !ok {
+		return nil, errors.New("provided max amount is not an integer")
+	}
+
 	for _, tx := range settlementRequests {
+		if tx.Transaction.Amount.GreaterThan(maxAmount) {
+			return nil, fmt.Errorf("amount %s exceeds the max %s", tx.Transaction.Amount, maxAmount)
+		}
 		set = append(set, tx.Transaction)
 		sourceFrom = tx.SourceFrom
 	}
@@ -406,6 +416,7 @@ func IterateRequest(
 		}
 
 		request, err := createBitflyerRequest(
+			ctx,
 			dryRun,
 			quote.PriceToken,
 			batch,
