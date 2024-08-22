@@ -4835,7 +4835,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 			},
 			exp: tcExpected{
 				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
-					return should.ErrorIs(t, err, errUnknownAction)
+					return should.ErrorIs(t, err, errRadomUnknownAction)
 				},
 			},
 		},

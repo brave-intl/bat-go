@@ -2238,7 +2238,7 @@ func (s *Service) processSubmitReceipt(ctx context.Context, req model.ReceiptReq
 	return rcpt, nil
 }
 
-const errUnknownAction = model.Error("skus: unknown radom action")
+const errRadomUnknownAction = model.Error("skus: unknown radom action")
 
 func (s *Service) processRadomEvent(ctx context.Context, event *radom.Event) error {
 	if !event.ShouldProcess() {
@@ -2354,7 +2354,7 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 		return nil
 
 	default:
-		return errUnknownAction
+		return errRadomUnknownAction
 	}
 }
 
