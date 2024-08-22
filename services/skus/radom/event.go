@@ -74,9 +74,8 @@ func (e *Event) OrderID() (uuid.UUID, error) {
 		mdata := e.RadomData.CheckoutSession.Metadata
 
 		for i := range mdata {
-			d := mdata[i]
-			if d.Key == "brave_order_id" {
-				return uuid.FromString(d.Value)
+			if mdata[i].Key == "brave_order_id" {
+				return uuid.FromString(mdata[i].Value)
 			}
 		}
 
