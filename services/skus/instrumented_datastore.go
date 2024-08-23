@@ -353,7 +353,7 @@ func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrder(ctx contex
 }
 
 // GetSigningOrderRequestOutboxByOrderItem implements Datastore
-func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) (sa1 []SigningOrderRequestOutbox, err error) {
+func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, orderID, itemID uuid.UUID) (sa1 []SigningOrderRequestOutbox, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -363,7 +363,7 @@ func (_d DatastoreWithPrometheus) GetSigningOrderRequestOutboxByOrderItem(ctx co
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningOrderRequestOutboxByOrderItem", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
+	return _d.base.GetSigningOrderRequestOutboxByOrderItem(ctx, orderID, itemID)
 }
 
 // GetSigningOrderRequestOutboxByRequestID implements Datastore

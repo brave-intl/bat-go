@@ -87,7 +87,7 @@ type Datastore interface {
 	InsertSigningOrderRequestOutbox(ctx context.Context, requestID uuid.UUID, orderID uuid.UUID, itemID uuid.UUID, signingOrderRequest SigningOrderRequest) error
 	GetSigningOrderRequestOutboxByRequestID(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID) (*SigningOrderRequestOutbox, error)
 	GetSigningOrderRequestOutboxByOrder(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
-	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
+	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, orderID, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID, completedAt time.Time) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
@@ -1078,15 +1078,15 @@ func (pg *Postgres) GetSigningOrderRequestOutboxByOrder(ctx context.Context, ord
 
 // GetSigningOrderRequestOutboxByOrderItem retrieves the latest signing order from the outbox.
 // An empty result set is returned if no rows are found.
-func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
-	var signingRequestOutbox []SigningOrderRequestOutbox
-	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select request_id, order_id, item_id, completed_at, message_data
-				from signing_order_request_outbox where item_id = $1`, itemID)
-	if err != nil {
+func (pg *Postgres) GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, orderID, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
+	var result []SigningOrderRequestOutbox
+
+	const q = `SELECT request_id, order_id, item_id, completed_at, message_data FROM signing_order_request_outbox WHERE order_id=$1 AND item_id=$2;`
+	if err := pg.RawDB().SelectContext(ctx, &result, q, orderID, itemID); err != nil {
 		return nil, fmt.Errorf("error retrieving signing requests from outbox: %w", err)
 	}
-	return signingRequestOutbox, nil
+
+	return result, nil
 }
 
 // GetSigningOrderRequestOutboxByRequestID retrieves the SigningOrderRequestOutbox by requestID.
