@@ -1953,7 +1953,7 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 
 		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
 		const leoa = "brave.com?sku=brave-leo-premium-year"
-		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, leoa); err != nil {
+		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
 			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
 	}
