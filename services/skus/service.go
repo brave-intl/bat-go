@@ -1415,32 +1415,21 @@ func (s *Service) verifyCredential(ctx context.Context, cred credential, w http.
 		return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
 	}
 
-	logger.Debug().Str("merchant", merchant).Msg("got merchant from the context")
-
 	caveats := caveatsFromCtx(ctx)
 
-	if cred.GetMerchantID(ctx) != merchant {
-		logger.Warn().
-			Str("req.MerchantID", cred.GetMerchantID(ctx)).
-			Str("merchant", merchant).
-			Msg("merchant does not match the key's merchant")
+	if merchID := cred.GetMerchantID(ctx); merchID != merchant {
+		logger.Warn().Str("req.MerchantID", merchID).Str("merchant", merchant).Msg("merchant does not match the key's merchant")
 		return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
 	}
 
-	logger.Debug().Str("merchant", merchant).Msg("merchant matches the key's merchant")
-
 	if caveats != nil {
 		if sku, ok := caveats["sku"]; ok {
-			if cred.GetSku(ctx) != sku {
-				logger.Warn().
-					Str("req.SKU", cred.GetSku(ctx)).
-					Str("sku", sku).
-					Msg("sku caveat does not match")
+			if csku := cred.GetSku(ctx); csku != sku {
+				logger.Warn().Str("req.SKU", csku).Str("sku", sku).Msg("sku caveat does not match")
 				return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
 			}
 		}
 	}
-	logger.Debug().Msg("caveats validated")
 
 	kind := cred.GetType(ctx)
 	switch kind {
@@ -1958,27 +1947,22 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
 	// to allow for more flexible idempotent behavior.
 	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
-		msg := err.Error()
-
-		// Time limited v2: Expose a credential id so the caller can decide whether to allow multiple redemptions.
-		if kind == timeLimitedV2 && msg == cbr.ErrDupRedeem.Error() {
-			data := &blindedCredVrfResult{ID: cred.TokenPreimage, Duplicate: true}
-
-			return handlers.RenderContent(ctx, data, w, http.StatusOK)
+		if !shouldRetryRedeemFn(kind, cred.Issuer, err) {
+			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
 
-		// Duplicate redemptions are not verified.
-		if msg == cbr.ErrDupRedeem.Error() || msg == cbr.ErrBadRequest.Error() {
-			return handlers.WrapError(err, "invalid credentials", http.StatusForbidden)
+		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
+		const leoa = "brave.com?sku=brave-leo-premium-year"
+		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, leoa); err != nil {
+			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
-
-		return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
 	}
 
 	// TODO(clD11): cleanup after quick fix
 	if kind == timeLimitedV2 {
 		return handlers.RenderContent(ctx, &blindedCredVrfResult{ID: cred.TokenPreimage}, w, http.StatusOK)
 	}
+
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
 }
 
@@ -2574,4 +2558,28 @@ func buildStripeLineItems(items []model.OrderItem) []*stripe.CheckoutSessionLine
 	}
 
 	return result
+}
+
+func handleRedeemFnError(ctx context.Context, w http.ResponseWriter, kind string, cred *cbr.CredentialRedemption, err error) *handlers.AppError {
+	msg := err.Error()
+
+	// Time limited v2: Expose a credential id so the caller can decide whether to allow multiple redemptions.
+	if kind == timeLimitedV2 && msg == cbr.ErrDupRedeem.Error() {
+		data := &blindedCredVrfResult{ID: cred.TokenPreimage, Duplicate: true}
+
+		return handlers.RenderContent(ctx, data, w, http.StatusOK)
+	}
+
+	// Duplicate redemptions are not verified.
+	if msg == cbr.ErrDupRedeem.Error() || msg == cbr.ErrBadRequest.Error() {
+		return handlers.WrapError(err, "invalid credentials", http.StatusForbidden)
+	}
+
+	return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+}
+
+func shouldRetryRedeemFn(kind, issuer string, err error) bool {
+	const leo = "brave.com?sku=brave-leo-premium"
+
+	return kind == timeLimitedV2 && issuer == leo && err.Error() == cbr.ErrBadRequest.Error()
 }
