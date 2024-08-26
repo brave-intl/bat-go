@@ -943,14 +943,13 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 	})
 }
 
-// VerifyCredentialV2 - version 2 of verify credential
 func VerifyCredentialV2(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
 		ctx := r.Context()
-		l := logging.Logger(ctx, "VerifyCredentialV2")
 
-		var req = new(VerifyCredentialRequestV2)
+		l := logging.Logger(ctx, "skus").With().Str("func", "VerifyCredentialV2").Logger()
+
+		req := &VerifyCredentialRequestV2{}
 		if err := inputs.DecodeAndValidateReader(ctx, req, r.Body); err != nil {
 			l.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
