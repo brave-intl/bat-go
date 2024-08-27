@@ -2296,11 +2296,7 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 			return err
 		}
 
-		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod); err != nil {
-			return err
-		}
-
-		return nil
+		return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
 
 	case event.ShouldRenew():
 		subID, err := event.SubID()
@@ -2330,11 +2326,7 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 			return err
 		}
 
-		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt); err != nil {
-			return err
-		}
-
-		return nil
+		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt)
 
 	case event.ShouldCancel():
 		subID, err := event.SubID()
@@ -2347,11 +2339,7 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 			return err
 		}
 
-		if err := s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled); err != nil {
-			return err
-		}
-
-		return nil
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
 
 	default:
 		return errRadomUnknownAction
