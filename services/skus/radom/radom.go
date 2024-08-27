@@ -111,11 +111,11 @@ func (s *SubscriptionResponse) NextBillingDate() (time.Time, error) {
 	return nxtB.UTC(), nil
 }
 
-const ErrPaymentsEmpty = Error("radom: payments is empty")
+const ErrSubPaymentsEmpty = Error("radom: subscription payments empty")
 
 func (s *SubscriptionResponse) LastPaid() (time.Time, error) {
 	if len(s.Payments) <= 0 {
-		return time.Time{}, ErrPaymentsEmpty
+		return time.Time{}, ErrSubPaymentsEmpty
 	}
 
 	var paidAt time.Time

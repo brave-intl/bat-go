@@ -90,7 +90,7 @@ func TestSubscriptionResponse_LastPaid(t *testing.T) {
 			exp: tcExpected{
 				lastPaid: time.Time{},
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
-					must.ErrorIs(t, err, ErrPaymentsEmpty)
+					must.ErrorIs(t, err, ErrSubPaymentsEmpty)
 				},
 			},
 		},
