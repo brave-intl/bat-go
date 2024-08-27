@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/clients"
 	uuid "github.com/satori/go.uuid"
+
+	"github.com/brave-intl/bat-go/libs/clients"
 )
 
 type Client struct {
