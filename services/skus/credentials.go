@@ -362,7 +362,7 @@ func (s *Service) doCredsExist(ctx context.Context, item *model.OrderItem) error
 	// Check if we already have a signing request for this order, delete order creds will
 	// delete the prior signing request.
 	// This allows subscriptions to manage how many order creds are handed out.
-	signingOrderRequests, err := s.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, item.ID)
+	signingOrderRequests, err := s.Datastore.GetSigningOrderRequestOutboxByOrderItem(ctx, item.OrderID, item.ID)
 	if err != nil {
 		return fmt.Errorf("error validating no credentials exist for order item: %w", err)
 	}

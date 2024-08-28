@@ -446,7 +446,7 @@ func (suite *PostgresTestSuite) TestInsertSigningOrderRequestOutbox() {
 	err := suite.storage.InsertSigningOrderRequestOutbox(ctx, requestID, orderID, itemID, signingOrderRequest)
 	suite.Require().NoError(err)
 
-	signingOrderRequests, err := suite.storage.GetSigningOrderRequestOutboxByOrderItem(ctx, itemID)
+	signingOrderRequests, err := suite.storage.GetSigningOrderRequestOutboxByOrderItem(ctx, orderID, itemID)
 	suite.Require().NoError(err)
 
 	suite.Require().Len(signingOrderRequests, 1)
