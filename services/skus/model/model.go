@@ -483,6 +483,7 @@ type CreateOrderRequestNew struct {
 type OrderItemRequestNew struct {
 	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
 	SKU                         string              `json:"sku" validate:"required"`
+	Period                      string              `json:"period"` // Not used yet.
 	Location                    string              `json:"location" validate:"required"`
 	Description                 string              `json:"description" validate:"required"`
 	CredentialType              string              `json:"credential_type" validate:"required"`

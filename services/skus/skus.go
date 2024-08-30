@@ -246,7 +246,6 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(3),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		IssuanceInterval:            ptrTo("P1D"),
 		// StripeMetadata depends on env.
 	}
 
@@ -256,12 +255,11 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		// Location depends on env.
 		Description:                 "Premium access to Leo Yearly",
 		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1Y",
+		CredentialValidDuration:     "P1M",
 		Price:                       decimal.RequireFromString("149.99"),
 		IssuerTokenBuffer:           ptrTo(3),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		IssuanceInterval:            ptrTo("P1D"),
 		// StripeMetadata depends on env.
 	}
 
@@ -290,7 +288,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		leoa.Location = "leo.brave.com"
 		leoa.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_O9uKDYsRPXNgfB",
-			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+			ItemID:    "price_1PqvBPBSm1mtrN9nYgXdiP2h",
 		}
 
 		vpnm.Location = "vpn.brave.com"
@@ -309,7 +307,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		leoa.Location = "leo.bravesoftware.com"
 		leoa.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_OKRYJ77wYOk771",
-			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+			ItemID:    "price_1PpSAWBSm1mtrN9nF66jM7fk",
 		}
 
 		vpnm.Location = "vpn.bravesoftware.com"

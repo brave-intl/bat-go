@@ -370,6 +370,7 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 		{
 			name: "optional_fields_together",
 			given: []byte(`{
+				"period": "month",
 				"price": "1",
 				"each_credential_valid_duration": "P1D",
 				"issuance_interval": "P1M",
@@ -379,6 +380,7 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 				}
 			}`),
 			exp: &model.OrderItemRequestNew{
+				Period:                      "month",
 				Price:                       decimal.RequireFromString("1"),
 				CredentialValidDurationEach: ptrTo("P1D"),
 				IssuanceInterval:            ptrTo("P1M"),
