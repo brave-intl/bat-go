@@ -240,19 +240,12 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return model.ErrOrderNotPaid
 	}
 
-	var orderItem *OrderItem
-	for _, item := range order.Items {
-		if item.ID == itemID {
-			orderItem = &item
-			break
-		}
-	}
-
-	if orderItem == nil {
+	item, ok := order.HasItem(itemID)
+	if !ok {
 		return errItemDoesNotExist
 	}
 
-	if err := s.doCredentialsExist(ctx, requestID, orderItem, blindedCreds); err != nil {
+	if err := s.doCredentialsExist(ctx, requestID, item, blindedCreds); err != nil {
 		if errors.Is(err, errCredsAlreadySubmitted) {
 			return nil
 		}
@@ -260,11 +253,14 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return err
 	}
 
-	if err := checkNumBlindedCreds(order, orderItem, len(blindedCreds)); err != nil {
+	// Check if the order is for Leo and numIntervals is 8.
+	// If yes, then truncate credentials to the desired number 576.
+
+	if err := checkNumBlindedCreds(order, item, len(blindedCreds)); err != nil {
 		return err
 	}
 
-	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
+	issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}
@@ -275,10 +271,10 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 	}
 
 	metadata := &Metadata{
-		ItemID:         orderItem.ID,
+		ItemID:         item.ID,
 		OrderID:        order.ID,
 		IssuerID:       issuer.ID,
-		CredentialType: orderItem.CredentialType,
+		CredentialType: item.CredentialType,
 	}
 
 	associatedData, err := json.Marshal(metadata)
@@ -298,7 +294,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		},
 	}
 
-	if err := s.Datastore.InsertSigningOrderRequestOutbox(ctx, requestID, order.ID, orderItem.ID, signReq); err != nil {
+	if err := s.Datastore.InsertSigningOrderRequestOutbox(ctx, requestID, order.ID, item.ID, signReq); err != nil {
 		return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
 	}
 
