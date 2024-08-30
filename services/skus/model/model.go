@@ -482,14 +482,14 @@ type CreateOrderRequestNew struct {
 // OrderItemRequestNew represents an item in an order request.
 type OrderItemRequestNew struct {
 	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
-	IssuerTokenBuffer           int                 `json:"issuer_token_buffer"`
-	IssuerTokenOverlap          int                 `json:"issuer_token_overlap"`
 	SKU                         string              `json:"sku" validate:"required"`
 	Location                    string              `json:"location" validate:"required"`
 	Description                 string              `json:"description" validate:"required"`
 	CredentialType              string              `json:"credential_type" validate:"required"`
 	CredentialValidDuration     string              `json:"credential_valid_duration" validate:"required"`
 	Price                       decimal.Decimal     `json:"price"`
+	IssuerTokenBuffer           *int                `json:"issuer_token_buffer"`
+	IssuerTokenOverlap          *int                `json:"issuer_token_overlap"`
 	CredentialValidDurationEach *string             `json:"each_credential_valid_duration"`
 	IssuanceInterval            *string             `json:"issuance_interval"`
 	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
@@ -500,11 +500,15 @@ func (r *OrderItemRequestNew) TokenBufferOrDefault() int {
 		return 0
 	}
 
-	if r.IssuerTokenBuffer == 0 {
+	if !r.IsTLV2() {
+		return 1
+	}
+
+	if r.IssuerTokenBuffer == nil {
 		return issuerBufferDefault
 	}
 
-	return r.IssuerTokenBuffer
+	return *r.IssuerTokenBuffer
 }
 
 func (r *OrderItemRequestNew) TokenOverlapOrDefault() int {
@@ -512,11 +516,23 @@ func (r *OrderItemRequestNew) TokenOverlapOrDefault() int {
 		return 0
 	}
 
-	if r.IssuerTokenOverlap == 0 {
+	if !r.IsTLV2() {
+		return 0
+	}
+
+	if r.IssuerTokenOverlap == nil {
 		return issuerOverlapDefault
 	}
 
-	return r.IssuerTokenOverlap
+	return *r.IssuerTokenOverlap
+}
+
+func (r *OrderItemRequestNew) IsTLV2() bool {
+	if r == nil {
+		return false
+	}
+
+	return r.CredentialType == "time-limited-v2"
 }
 
 // OrderStripeMetadata holds data relevant to the order in Stripe.
