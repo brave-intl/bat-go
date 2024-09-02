@@ -808,37 +808,25 @@ func checkTLV2BatchLimit(lim, nact int) error {
 	return nil
 }
 
-func truncateTLV2BCreds(ord *model.Order, item *model.OrderItem, ncreds int, srcCreds []string) []string {
+func truncateTLV2BCreds(ord *model.Order, item *model.OrderItem, nSrcCreds int, srcCreds []string) []string {
 	result := srcCreds
-	if targetn, ok := shouldTruncateTLV2Creds(ord, item, ncreds); ok {
+	if targetn, ok := shouldTruncateTLV2Creds(ord, item, nSrcCreds); ok {
 		result = srcCreds[:targetn]
 	}
 
 	return result
 }
 
+// shouldTruncateTLV2Creds reports whether supplied blinded tokens should be truncated.
+//
+// At present, the function is only concerned with Leo.
 func shouldTruncateTLV2Creds(ord *model.Order, item *model.OrderItem, ncreds int) (int, bool) {
 	if !item.IsLeo() {
 		return 0, false
 	}
 
-	numi, err := ord.NumIntervals()
-	if err != nil {
-		// Safe fallback.
-		return 0, false
-	}
+	const target = 3 * 192
 
-	if numi == 3 {
-		return 0, false
-	}
-
-	numpi, err := ord.NumPerInterval()
-	if err != nil {
-		// Safe fallback.
-		return 0, false
-	}
-
-	target := numi * numpi
 	if ncreds <= target {
 		return 0, false
 	}
