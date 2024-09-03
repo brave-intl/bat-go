@@ -258,8 +258,8 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return err
 	}
 
-	// Check if the order is for Leo and numIntervals is 8.
-	// If yes, then truncate credentials to the desired number 576.
+	// Check if truncation is necessary for in case of a Leo order with 8*192=1536 nbcreds.
+	// If yes, then truncate credentials to the desired number, 576.
 	creds := truncateTLV2BCreds(order, item, nbcreds, blindedCreds)
 
 	if err := checkNumBlindedCreds(order, item, len(creds)); err != nil {
