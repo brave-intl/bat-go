@@ -7,6 +7,7 @@ cid="4"
 
 set -eux
 
+nitro-cli terminate-enclave --enclave-id 4 || true
 nitro-cli run-enclave \
     --enclave-cid "${cid}" \
     --cpu-count ${cpu_count} \
