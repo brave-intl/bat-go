@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
-
 	"github.com/brave-intl/bat-go/libs/clients"
 )
 
@@ -76,8 +74,8 @@ func (c *Client) CreateCheckoutSession(ctx context.Context, creq *CheckoutSessio
 	return resp, nil
 }
 
-func (c *Client) GetSubscription(ctx context.Context, subID uuid.UUID) (*SubscriptionResponse, error) {
-	req, err := c.client.NewRequest(ctx, http.MethodGet, "/subscription/"+subID.String(), nil, nil)
+func (c *Client) GetSubscription(ctx context.Context, subID string) (*SubscriptionResponse, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "/subscription/"+subID, nil, nil)
 	if err != nil {
 		return nil, err
 	}

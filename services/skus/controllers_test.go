@@ -1839,9 +1839,9 @@ func (suite *ControllersTestSuite) TestWebhook_Radom() {
 	subID := uuid.NewV4()
 
 	suite.service.radomClient = &mockRadomClient{
-		fnGetSubscription: func(ctx context.Context, subID uuid.UUID) (*radom.SubscriptionResponse, error) {
+		fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
 			return &radom.SubscriptionResponse{
-				ID:                subID.String(),
+				ID:                subID,
 				NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
 				Payments: []radom.Payment{
 					{

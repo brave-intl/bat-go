@@ -129,7 +129,7 @@ type stripeClient interface {
 // Service contains datastore
 type radomClient interface {
 	CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
-	GetSubscription(ctx context.Context, subID uuid.UUID) (*radom.SubscriptionResponse, error)
+	GetSubscription(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
 }
 
 type radomMessageAuthenticator interface {
@@ -2271,7 +2271,7 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 			return err
 		}
 
-		rsub, err := s.radomClient.GetSubscription(ctx, subID)
+		rsub, err := s.radomClient.GetSubscription(ctx, subID.String())
 		if err != nil {
 			return err
 		}
@@ -2309,7 +2309,7 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 			return err
 		}
 
-		rsub, err := s.radomClient.GetSubscription(ctx, subID)
+		rsub, err := s.radomClient.GetSubscription(ctx, subID.String())
 		if err != nil {
 			return err
 		}
