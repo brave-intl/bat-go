@@ -14,11 +14,7 @@ type TLV2 struct{}
 
 func NewTLV2() *TLV2 { return &TLV2{} }
 
-func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, creds ...string) (model.TLV2CredSubmissionReport, error) {
-	if len(creds) == 0 {
-		return model.TLV2CredSubmissionReport{}, model.ErrTLV2InvalidCredNum
-	}
-
+func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error) {
 	const q = `SELECT EXISTS(
 		SELECT 1 FROM time_limited_v2_order_creds WHERE order_id=$1 AND item_id=$2 AND blinded_creds->>0 = $4
 	) AS submitted, EXISTS(
@@ -26,7 +22,7 @@ func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerCont
 	) AS req_id_mismatch`
 
 	result := model.TLV2CredSubmissionReport{}
-	if err := sqlx.GetContext(ctx, dbi, &result, q, orderID, itemID, reqID, creds[0]); err != nil {
+	if err := sqlx.GetContext(ctx, dbi, &result, q, orderID, itemID, reqID, firstBCred); err != nil {
 		return model.TLV2CredSubmissionReport{}, err
 	}
 

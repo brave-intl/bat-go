@@ -26,10 +26,10 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 	}()
 
 	type tcGiven struct {
-		orderID uuid.UUID
-		itemID  uuid.UUID
-		reqID   uuid.UUID
-		creds   []string
+		orderID    uuid.UUID
+		itemID     uuid.UUID
+		reqID      uuid.UUID
+		firstBCred string
 
 		fnBefore func(ctx context.Context, dbi sqlx.ExtContext) error
 	}
@@ -47,23 +47,12 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "invalid_param",
-			given: tcGiven{
-				orderID:  uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
-				itemID:   uuid.Must(uuid.FromString("decade00-0000-4000-a000-000000000000")),
-				reqID:    uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
-				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error { return nil },
-			},
-			exp: tcExpected{err: model.ErrTLV2InvalidCredNum},
-		},
-
-		{
 			name: "submitted",
 			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
-				reqID:   uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
-				creds:   []string{"cred_01", "cred_02", "cred_03"},
+				orderID:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:     uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				reqID:      uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				firstBCred: "cred_01",
 
 				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
 					qs := []string{
@@ -97,10 +86,10 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 		{
 			name: "mismatch",
 			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
-				reqID:   uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
-				creds:   []string{"cred_01", "cred_02", "cred_03"},
+				orderID:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:     uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				reqID:      uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				firstBCred: "cred_01",
 
 				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
 					qs := []string{
@@ -151,7 +140,7 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 				must.Equal(t, nil, err)
 			}
 
-			actual, err := repo.GetCredSubmissionReport(ctx, tx, tc.given.orderID, tc.given.itemID, tc.given.reqID, tc.given.creds...)
+			actual, err := repo.GetCredSubmissionReport(ctx, tx, tc.given.orderID, tc.given.itemID, tc.given.reqID, tc.given.firstBCred)
 			must.Equal(t, tc.exp.err, err)
 
 			if tc.exp.err != nil {

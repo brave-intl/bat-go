@@ -370,6 +370,7 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 		{
 			name: "optional_fields_together",
 			given: []byte(`{
+				"period": "month",
 				"price": "1",
 				"each_credential_valid_duration": "P1D",
 				"issuance_interval": "P1M",
@@ -379,6 +380,7 @@ func TestOrderItemRequestNew_Unmarshal(t *testing.T) {
 				}
 			}`),
 			exp: &model.OrderItemRequestNew{
+				Period:                      "month",
 				Price:                       decimal.RequireFromString("1"),
 				CredentialValidDurationEach: ptrTo("P1D"),
 				IssuanceInterval:            ptrTo("P1M"),
@@ -1327,6 +1329,155 @@ func TestOrderItem_StripeItemID(t *testing.T) {
 			actual, ok := tc.given.StripeItemID()
 			should.Equal(t, tc.exp.ok, ok)
 			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestOrderItemRequestNew_TokenBufferOrDefault(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *model.OrderItemRequestNew
+		exp   int
+	}
+
+	tests := []testCase{
+		{
+			name: "zero_nil",
+		},
+
+		{
+			name: "one_non_tlv2",
+			given: &model.OrderItemRequestNew{
+				CredentialType: "time-limited",
+			},
+			exp: 1,
+		},
+
+		{
+			name: "default",
+			given: &model.OrderItemRequestNew{
+				CredentialType: "time-limited-v2",
+			},
+			exp: 30,
+		},
+
+		{
+			name: "set_value",
+			given: &model.OrderItemRequestNew{
+				CredentialType:    "time-limited-v2",
+				IssuerTokenBuffer: ptrTo(3),
+			},
+			exp: 3,
+		},
+
+		{
+			name: "set_value_zero",
+			given: &model.OrderItemRequestNew{
+				CredentialType:    "time-limited-v2",
+				IssuerTokenBuffer: ptrTo(0),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.TokenBufferOrDefault()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestOrderItemRequestNew_TokenOverlapOrDefault(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *model.OrderItemRequestNew
+		exp   int
+	}
+
+	tests := []testCase{
+		{
+			name: "zero_nil",
+		},
+
+		{
+			name: "one_non_tlv2",
+			given: &model.OrderItemRequestNew{
+				CredentialType: "time-limited",
+			},
+		},
+
+		{
+			name: "default",
+			given: &model.OrderItemRequestNew{
+				CredentialType: "time-limited-v2",
+			},
+			exp: 5,
+		},
+
+		{
+			name: "set_value",
+			given: &model.OrderItemRequestNew{
+				CredentialType:     "time-limited-v2",
+				IssuerTokenOverlap: ptrTo(2),
+			},
+			exp: 2,
+		},
+
+		{
+			name: "set_value_zero",
+			given: &model.OrderItemRequestNew{
+				CredentialType:     "time-limited-v2",
+				IssuerTokenOverlap: ptrTo(0),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.TokenOverlapOrDefault()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestOrderItemRequestNew_IsTLV2(t *testing.T) {
+	type testCase struct {
+		name  string
+		given *model.OrderItemRequestNew
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "false_nil",
+		},
+
+		{
+			name: "false_non_tlv2",
+			given: &model.OrderItemRequestNew{
+				CredentialType: "time-limited",
+			},
+		},
+
+		{
+			name: "true_tlv2",
+			given: &model.OrderItemRequestNew{
+				CredentialType: "time-limited-v2",
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.IsTLV2()
+			should.Equal(t, tc.exp, actual)
 		})
 	}
 }
