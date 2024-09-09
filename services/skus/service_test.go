@@ -1,5 +1,3 @@
-//go:build integration
-
 package skus
 
 import (
@@ -135,8 +133,7 @@ func TestCreateOrderItems(t *testing.T) {
 							},
 						},
 						IssuerConfig: &model.IssuerConfig{
-							Buffer:  30,
-							Overlap: 5,
+							Buffer: 1,
 						},
 						Subtotal: decimal.NewFromInt(0),
 					},
@@ -158,8 +155,7 @@ func TestCreateOrderItems(t *testing.T) {
 						},
 
 						IssuerConfig: &model.IssuerConfig{
-							Buffer:  30,
-							Overlap: 5,
+							Buffer: 1,
 						},
 						Subtotal: decimal.NewFromInt(0),
 					},
@@ -241,7 +237,6 @@ func TestCreateOrderItem(t *testing.T) {
 					ProductID: "product_id",
 					ItemID:    "item_id",
 				},
-				IssuerTokenBuffer: 10,
 			},
 			exp: tcExpected{
 				result: &model.OrderItem{
@@ -271,8 +266,7 @@ func TestCreateOrderItem(t *testing.T) {
 					},
 					Subtotal: decimal.NewFromInt(10).Mul(decimal.NewFromInt(int64(2))),
 					IssuerConfig: &model.IssuerConfig{
-						Buffer:  10,
-						Overlap: 5,
+						Buffer: 1,
 					},
 				},
 			},

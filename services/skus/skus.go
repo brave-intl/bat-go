@@ -236,43 +236,43 @@ func newPaymentProcessorConfig(env string) *premiumPaymentProcConfig {
 
 func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNew {
 	leom := model.OrderItemRequestNew{
-		Quantity:          1,
-		IssuerTokenBuffer: 3,
-		SKU:               "brave-leo-premium",
+		Quantity: 1,
+		SKU:      "brave-leo-premium",
 		// Location depends on env.
 		Description:                 "Premium access to Leo",
 		CredentialType:              "time-limited-v2",
 		CredentialValidDuration:     "P1M",
 		Price:                       decimal.RequireFromString("14.99"),
+		IssuerTokenBuffer:           ptrTo(3),
+		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		IssuanceInterval:            ptrTo("P1D"),
 		// StripeMetadata depends on env.
 	}
 
 	leoa := model.OrderItemRequestNew{
-		Quantity:          1,
-		IssuerTokenBuffer: 3,
-		SKU:               "brave-leo-premium-year",
+		Quantity: 1,
+		SKU:      "brave-leo-premium-year",
 		// Location depends on env.
 		Description:                 "Premium access to Leo Yearly",
 		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1Y",
-		Price:                       decimal.RequireFromString("150.00"),
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("149.99"),
+		IssuerTokenBuffer:           ptrTo(3),
+		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		IssuanceInterval:            ptrTo("P1D"),
 		// StripeMetadata depends on env.
 	}
 
 	vpnm := model.OrderItemRequestNew{
-		Quantity:           1,
-		IssuerTokenBuffer:  31,
-		IssuerTokenOverlap: 2,
-		SKU:                "brave-vpn-premium",
+		Quantity: 1,
+		SKU:      "brave-vpn-premium",
 		// Location depends on env.
 		Description:                 "brave-vpn-premium",
 		CredentialType:              "time-limited-v2",
 		CredentialValidDuration:     "P1M",
 		Price:                       decimal.RequireFromString("9.99"),
+		IssuerTokenBuffer:           ptrTo(31),
+		IssuerTokenOverlap:          ptrTo(2),
 		CredentialValidDurationEach: ptrTo("P1D"),
 		// StripeMetadata depends on env.
 	}
@@ -288,7 +288,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		leoa.Location = "leo.brave.com"
 		leoa.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_O9uKDYsRPXNgfB",
-			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+			ItemID:    "price_1PqvBPBSm1mtrN9nYgXdiP2h",
 		}
 
 		vpnm.Location = "vpn.brave.com"
@@ -307,7 +307,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		leoa.Location = "leo.bravesoftware.com"
 		leoa.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_OKRYJ77wYOk771",
-			ItemID:    "price_1NXmfTBSm1mtrN9nybnyolId",
+			ItemID:    "price_1PpSAWBSm1mtrN9nF66jM7fk",
 		}
 
 		vpnm.Location = "vpn.bravesoftware.com"

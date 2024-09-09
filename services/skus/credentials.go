@@ -240,19 +240,17 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return model.ErrOrderNotPaid
 	}
 
-	var orderItem *OrderItem
-	for _, item := range order.Items {
-		if item.ID == itemID {
-			orderItem = &item
-			break
-		}
-	}
-
-	if orderItem == nil {
+	item, ok := order.HasItem(itemID)
+	if !ok {
 		return errItemDoesNotExist
 	}
 
-	if err := s.doCredentialsExist(ctx, requestID, orderItem, blindedCreds); err != nil {
+	nbcreds := len(blindedCreds)
+	if nbcreds == 0 {
+		return model.ErrTLV2InvalidCredNum
+	}
+
+	if err := s.doCredentialsExist(ctx, requestID, item, blindedCreds[0]); err != nil {
 		if errors.Is(err, errCredsAlreadySubmitted) {
 			return nil
 		}
@@ -260,11 +258,15 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return err
 	}
 
-	if err := checkNumBlindedCreds(order, orderItem, len(blindedCreds)); err != nil {
+	// Check if truncation is necessary for in case of a Leo order with 8*192=1536 nbcreds.
+	// If yes, then truncate credentials to the desired number, 576.
+	creds := truncateTLV2BCreds(order, item, nbcreds, blindedCreds)
+
+	if err := checkNumBlindedCreds(order, item, len(creds)); err != nil {
 		return err
 	}
 
-	issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
+	issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}
@@ -275,10 +277,10 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 	}
 
 	metadata := &Metadata{
-		ItemID:         orderItem.ID,
+		ItemID:         item.ID,
 		OrderID:        order.ID,
 		IssuerID:       issuer.ID,
-		CredentialType: orderItem.CredentialType,
+		CredentialType: item.CredentialType,
 	}
 
 	associatedData, err := json.Marshal(metadata)
@@ -292,20 +294,20 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 			{
 				IssuerType:     issuerID,
 				IssuerCohort:   defaultCohort,
-				BlindedTokens:  blindedCreds,
+				BlindedTokens:  creds,
 				AssociatedData: associatedData,
 			},
 		},
 	}
 
-	if err := s.Datastore.InsertSigningOrderRequestOutbox(ctx, requestID, order.ID, orderItem.ID, signReq); err != nil {
+	if err := s.Datastore.InsertSigningOrderRequestOutbox(ctx, requestID, order.ID, item.ID, signReq); err != nil {
 		return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
 	}
 
 	return nil
 }
 
-func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, blindedCreds []string) error {
+func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, item *model.OrderItem, firstBCred string) error {
 	switch item.CredentialType {
 	case timeLimitedV2:
 		// NOTE: There was a possible race condition that would allow exceeding limits on the number of cred batches.
@@ -313,25 +315,25 @@ func (s *Service) doCredentialsExist(ctx context.Context, requestID uuid.UUID, i
 		// - checking the number of active batches before accepting a request to create creds;
 		// - checking the number of active batches before inserting the signed creds.
 
-		return s.doTLV2Exist(ctx, requestID, item, blindedCreds)
+		return s.doTLV2Exist(ctx, requestID, item, firstBCred)
 	default:
 		return s.doCredsExist(ctx, item)
 	}
 }
 
-func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.OrderItem, bcreds []string) error {
+func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.OrderItem, firstBCred string) error {
 	now := time.Now()
 
-	return s.doTLV2ExistTxTime(ctx, s.Datastore.RawDB(), reqID, item, bcreds, now, now)
+	return s.doTLV2ExistTxTime(ctx, s.Datastore.RawDB(), reqID, item, firstBCred, now, now)
 }
 
-func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, item *model.OrderItem, bcreds []string, from, to time.Time) error {
+func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, item *model.OrderItem, firstBCred string, from, to time.Time) error {
 	if item.CredentialType != timeLimitedV2 {
 		return model.ErrUnsupportedCredType
 	}
 
 	// Check TLV2 to see if we have credentials signed that match incoming blinded tokens.
-	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, dbi, item.OrderID, item.ID, reqID, bcreds...)
+	report, err := s.tlv2Repo.GetCredSubmissionReport(ctx, dbi, item.OrderID, item.ID, reqID, firstBCred)
 	if err != nil {
 		return err
 	}
@@ -804,4 +806,30 @@ func checkTLV2BatchLimit(lim, nact int) error {
 	}
 
 	return nil
+}
+
+func truncateTLV2BCreds(ord *model.Order, item *model.OrderItem, nSrcCreds int, srcCreds []string) []string {
+	result := srcCreds
+	if targetn, ok := shouldTruncateTLV2Creds(ord, item, nSrcCreds); ok {
+		result = srcCreds[:targetn]
+	}
+
+	return result
+}
+
+// shouldTruncateTLV2Creds reports whether supplied blinded tokens should be truncated.
+//
+// At present, the function is only concerned with Leo.
+func shouldTruncateTLV2Creds(ord *model.Order, item *model.OrderItem, ncreds int) (int, bool) {
+	if !item.IsLeo() {
+		return 0, false
+	}
+
+	const target = 3 * 192
+
+	if ncreds <= target {
+		return 0, false
+	}
+
+	return target, true
 }
