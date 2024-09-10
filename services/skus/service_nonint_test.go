@@ -4658,7 +4658,7 @@ func Test_newRadomGateway(t *testing.T) {
 
 func TestService_processRadomEvent(t *testing.T) {
 	type tcGiven struct {
-		event *radom.Event
+		event *radom.Notification
 	}
 
 	type tcExpected struct {
@@ -4675,7 +4675,7 @@ func TestService_processRadomEvent(t *testing.T) {
 		{
 			name: "should_not_process",
 			given: tcGiven{
-				event: &radom.Event{},
+				event: &radom.Notification{},
 			},
 		},
 	}
@@ -4686,7 +4686,7 @@ func TestService_processRadomEvent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := Service{}
 
-			actual := s.processRadomEvent(context.Background(), tc.given.event)
+			actual := s.processRadomNotification(context.Background(), tc.given.event)
 
 			should.ErrorIs(t, actual, tc.exp.err)
 		})
@@ -4695,7 +4695,7 @@ func TestService_processRadomEvent(t *testing.T) {
 
 func TestService_processRadomEventTx(t *testing.T) {
 	type tcGiven struct {
-		event           *radom.Event
+		event           *radom.Notification
 		orderRepo       orderStoreSvc
 		orderPayHistory orderPayHistoryStore
 		radomCl         radomClient
@@ -4715,7 +4715,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "new_subscription",
 			given: tcGiven{
-				event: &radom.Event{
+				event: &radom.Notification{
 					EventData: &radom.EventData{
 						New: &radom.NewSubscription{
 							SubscriptionID: uuid.NewV4(),
@@ -4757,7 +4757,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "subscription_payment",
 			given: tcGiven{
-				event: &radom.Event{
+				event: &radom.Notification{
 					EventData: &radom.EventData{
 						Payment: &radom.SubscriptionPayment{
 							RadomData: &radom.Data{
@@ -4793,7 +4793,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "subscription_cancelled",
 			given: tcGiven{
-				event: &radom.Event{
+				event: &radom.Notification{
 					EventData: &radom.EventData{
 						Cancelled: &radom.SubscriptionCancelled{
 							SubscriptionID: uuid.NewV4(),
@@ -4812,7 +4812,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "subscription_expired",
 			given: tcGiven{
-				event: &radom.Event{
+				event: &radom.Notification{
 					EventData: &radom.EventData{
 						Expired: &radom.SubscriptionExpired{
 							SubscriptionID: uuid.NewV4(),
@@ -4831,7 +4831,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 		{
 			name: "unknown_action",
 			given: tcGiven{
-				event: &radom.Event{},
+				event: &radom.Notification{},
 			},
 			exp: tcExpected{
 				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
@@ -4849,7 +4849,7 @@ func TestService_processRadomEventTx(t *testing.T) {
 
 			ctx := context.Background()
 
-			actual := svc.processRadomEventTx(ctx, nil, tc.given.event)
+			actual := svc.processRadomNotificationTx(ctx, nil, tc.given.event)
 			tc.exp.shouldErr(t, actual)
 		})
 	}

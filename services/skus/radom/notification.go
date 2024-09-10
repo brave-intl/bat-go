@@ -19,7 +19,7 @@ const (
 	ErrVerificationKeyInvalid = Error("radom: verification key is invalid")
 )
 
-type Event struct {
+type Notification struct {
 	EventType string     `json:"eventType"`
 	EventData *EventData `json:"eventData"`
 	RadomData *Data      `json:"radomData"`
@@ -62,16 +62,16 @@ type Subscription struct {
 	SubscriptionID uuid.UUID `json:"subscriptionId"`
 }
 
-func (e *Event) OrderID() (uuid.UUID, error) {
+func (n *Notification) OrderID() (uuid.UUID, error) {
 	switch {
-	case e.EventData == nil || e.EventData.New == nil:
+	case n.EventData == nil || n.EventData.New == nil:
 		return uuid.Nil, ErrUnsupportedEvent
 
-	case e.RadomData == nil || e.RadomData.CheckoutSession == nil:
+	case n.RadomData == nil || n.RadomData.CheckoutSession == nil:
 		return uuid.Nil, ErrNoCheckoutSessionData
 
 	default:
-		mdata := e.RadomData.CheckoutSession.Metadata
+		mdata := n.RadomData.CheckoutSession.Metadata
 
 		for i := range mdata {
 			if mdata[i].Key == "brave_order_id" {
@@ -83,49 +83,49 @@ func (e *Event) OrderID() (uuid.UUID, error) {
 	}
 }
 
-func (e *Event) SubID() (uuid.UUID, error) {
+func (n *Notification) SubID() (uuid.UUID, error) {
 	switch {
-	case e.EventData == nil:
+	case n.EventData == nil:
 		return uuid.Nil, ErrUnsupportedEvent
 
-	case e.EventData.New != nil:
-		return e.EventData.New.SubscriptionID, nil
+	case n.EventData.New != nil:
+		return n.EventData.New.SubscriptionID, nil
 
-	case e.EventData.Payment != nil:
-		if e.EventData.Payment.RadomData == nil || e.EventData.Payment.RadomData.Subscription == nil {
+	case n.EventData.Payment != nil:
+		if n.EventData.Payment.RadomData == nil || n.EventData.Payment.RadomData.Subscription == nil {
 			return uuid.Nil, ErrNoRadomPaymentData
 		}
 
-		return e.EventData.Payment.RadomData.Subscription.SubscriptionID, nil
+		return n.EventData.Payment.RadomData.Subscription.SubscriptionID, nil
 
-	case e.EventData.Cancelled != nil:
-		return e.EventData.Cancelled.SubscriptionID, nil
+	case n.EventData.Cancelled != nil:
+		return n.EventData.Cancelled.SubscriptionID, nil
 
-	case e.EventData.Expired != nil:
-		return e.EventData.Expired.SubscriptionID, nil
+	case n.EventData.Expired != nil:
+		return n.EventData.Expired.SubscriptionID, nil
 
 	default:
 		return uuid.Nil, ErrUnsupportedEvent
 	}
 }
 
-func (e *Event) IsNewSub() bool {
-	return e.EventData != nil && e.EventData.New != nil
+func (n *Notification) IsNewSub() bool {
+	return n.EventData != nil && n.EventData.New != nil
 }
 
-func (e *Event) ShouldRenew() bool {
-	return e.EventData != nil && e.EventData.Payment != nil
+func (n *Notification) ShouldRenew() bool {
+	return n.EventData != nil && n.EventData.Payment != nil
 }
 
-func (e *Event) ShouldCancel() bool {
+func (n *Notification) ShouldCancel() bool {
 	switch {
-	case e.EventData == nil:
+	case n.EventData == nil:
 		return false
 
-	case e.EventData.Cancelled != nil:
+	case n.EventData.Cancelled != nil:
 		return true
 
-	case e.EventData.Expired != nil:
+	case n.EventData.Expired != nil:
 		return true
 
 	default:
@@ -133,19 +133,19 @@ func (e *Event) ShouldCancel() bool {
 	}
 }
 
-func (e *Event) ShouldProcess() bool {
-	return e.IsNewSub() || e.ShouldRenew() || e.ShouldCancel()
+func (n *Notification) ShouldProcess() bool {
+	return n.IsNewSub() || n.ShouldRenew() || n.ShouldCancel()
 }
 
-func (e *Event) Effect() string {
+func (n *Notification) Effect() string {
 	switch {
-	case e.IsNewSub():
+	case n.IsNewSub():
 		return "new"
 
-	case e.ShouldRenew():
+	case n.ShouldRenew():
 		return "renew"
 
-	case e.ShouldCancel():
+	case n.ShouldCancel():
 		return "cancel"
 
 	default:
@@ -153,13 +153,17 @@ func (e *Event) Effect() string {
 	}
 }
 
-func ParseEvent(b []byte) (*Event, error) {
-	event := &Event{}
-	if err := json.Unmarshal(b, event); err != nil {
+func (n *Notification) NtfType() string {
+	return n.EventType
+}
+
+func ParseNotification(b []byte) (*Notification, error) {
+	ntf := &Notification{}
+	if err := json.Unmarshal(b, ntf); err != nil {
 		return nil, err
 	}
 
-	return event, nil
+	return ntf, nil
 }
 
 type MessageAuthConfig struct {

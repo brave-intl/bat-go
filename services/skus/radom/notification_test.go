@@ -9,13 +9,13 @@ import (
 	must "github.com/stretchr/testify/require"
 )
 
-func TestParseEvent(t *testing.T) {
+func TestParseNotification(t *testing.T) {
 	type tcGiven struct {
 		rawEvent string
 	}
 
 	type tcExpected struct {
-		event   *Event
+		ntf     *Notification
 		mustErr must.ErrorAssertionFunc
 	}
 
@@ -50,7 +50,7 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: &Event{
+				ntf: &Notification{
 					EventType: "newSubscription",
 					EventData: &EventData{
 						New: &NewSubscription{
@@ -97,7 +97,7 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: &Event{
+				ntf: &Notification{
 					EventType: "subscriptionPayment",
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{
@@ -133,7 +133,7 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: &Event{
+				ntf: &Notification{
 					EventType: "subscriptionCancelled",
 					EventData: &EventData{
 						Cancelled: &SubscriptionCancelled{
@@ -160,7 +160,7 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: &Event{
+				ntf: &Notification{
 					EventType: "subscriptionExpired",
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{
@@ -187,7 +187,7 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: &Event{
+				ntf: &Notification{
 					EventType: "unknownEvent",
 					EventData: &EventData{},
 				},
@@ -210,7 +210,7 @@ func TestParseEvent(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
-				event: &Event{
+				ntf: &Notification{
 					EventType: "unknownEvent",
 				},
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
@@ -224,17 +224,17 @@ func TestParseEvent(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := ParseEvent([]byte(tc.given.rawEvent))
+			actual, err := ParseNotification([]byte(tc.given.rawEvent))
 			tc.exp.mustErr(t, err)
 
-			should.Equal(t, tc.exp.event, actual)
+			should.Equal(t, tc.exp.ntf, actual)
 		})
 	}
 }
 
 func TestEvent_OrderID(t *testing.T) {
 	type tcGiven struct {
-		event Event
+		ntf Notification
 	}
 
 	type tcExpected struct {
@@ -261,7 +261,7 @@ func TestEvent_OrderID(t *testing.T) {
 		{
 			name: "unsupported_event",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{},
 				},
 			},
@@ -275,7 +275,7 @@ func TestEvent_OrderID(t *testing.T) {
 		{
 			name: "no_radom_data",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -291,7 +291,7 @@ func TestEvent_OrderID(t *testing.T) {
 		{
 			name: "no_checkout_data",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -308,7 +308,7 @@ func TestEvent_OrderID(t *testing.T) {
 		{
 			name: "invalid_id",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -334,7 +334,7 @@ func TestEvent_OrderID(t *testing.T) {
 		{
 			name: "order_id_found",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -361,7 +361,7 @@ func TestEvent_OrderID(t *testing.T) {
 		{
 			name: "order_id_not_found",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -390,7 +390,7 @@ func TestEvent_OrderID(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			actual, err := tc.given.event.OrderID()
+			actual, err := tc.given.ntf.OrderID()
 			tc.exp.mustErr(t, err)
 
 			should.Equal(t, tc.exp.oid, actual)
@@ -398,9 +398,9 @@ func TestEvent_OrderID(t *testing.T) {
 	}
 }
 
-func TestEvent_SubID(t *testing.T) {
+func TestNotification_SubID(t *testing.T) {
 	type tcGiven struct {
-		event Event
+		ntf Notification
 	}
 
 	type tcExpected struct {
@@ -418,7 +418,7 @@ func TestEvent_SubID(t *testing.T) {
 		{
 			name: "new_subscription",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						New: &NewSubscription{
 							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
@@ -437,7 +437,7 @@ func TestEvent_SubID(t *testing.T) {
 		{
 			name: "subscription_payment_no_radom_data",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{},
 					},
@@ -454,7 +454,7 @@ func TestEvent_SubID(t *testing.T) {
 		{
 			name: "subscription_payment_no_subscription",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{
 							RadomData: &Data{},
@@ -473,7 +473,7 @@ func TestEvent_SubID(t *testing.T) {
 		{
 			name: "subscription_payment",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{
 							RadomData: &Data{
@@ -496,7 +496,7 @@ func TestEvent_SubID(t *testing.T) {
 		{
 			name: "subscription_cancelled",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						Cancelled: &SubscriptionCancelled{
 							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
@@ -515,7 +515,7 @@ func TestEvent_SubID(t *testing.T) {
 		{
 			name: "subscription_expired",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{
 							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
@@ -533,7 +533,7 @@ func TestEvent_SubID(t *testing.T) {
 
 		{
 			name:  "no_event_data",
-			given: tcGiven{event: Event{}},
+			given: tcGiven{ntf: Notification{}},
 			exp: tcExpected{
 				sid: uuid.Nil,
 				mustErr: func(t must.TestingT, err error, i ...interface{}) {
@@ -545,7 +545,7 @@ func TestEvent_SubID(t *testing.T) {
 		{
 			name: "unknown_event",
 			given: tcGiven{
-				event: Event{
+				ntf: Notification{
 					EventData: &EventData{},
 				},
 			},
@@ -563,7 +563,7 @@ func TestEvent_SubID(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			actual, err := tc.given.event.SubID()
+			actual, err := tc.given.ntf.SubID()
 			tc.exp.mustErr(t, err)
 
 			should.Equal(t, tc.exp.sid, actual)
@@ -571,9 +571,9 @@ func TestEvent_SubID(t *testing.T) {
 	}
 }
 
-func TestEvent_IsNewSub(t *testing.T) {
+func TestParseNotification2_IsNewSub(t *testing.T) {
 	type tcGiven struct {
-		event *Event
+		ntf *Notification
 	}
 
 	type testCase struct {
@@ -586,7 +586,7 @@ func TestEvent_IsNewSub(t *testing.T) {
 		{
 			name: "new_subscription",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -598,7 +598,7 @@ func TestEvent_IsNewSub(t *testing.T) {
 		{
 			name: "not_new_subscription",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{},
 				},
 			},
@@ -608,7 +608,7 @@ func TestEvent_IsNewSub(t *testing.T) {
 		{
 			name: "not_new_subscription_event_data",
 			given: tcGiven{
-				event: &Event{},
+				ntf: &Notification{},
 			},
 			exp: false,
 		},
@@ -618,15 +618,15 @@ func TestEvent_IsNewSub(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.event.IsNewSub()
+			actual := tc.given.ntf.IsNewSub()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
 }
 
-func TestEvent_ShouldRenew(t *testing.T) {
+func TestNotification_ShouldRenew(t *testing.T) {
 	type tcGiven struct {
-		event *Event
+		ntf *Notification
 	}
 
 	type testCase struct {
@@ -639,7 +639,7 @@ func TestEvent_ShouldRenew(t *testing.T) {
 		{
 			name: "subscription_payment",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{},
 					},
@@ -651,7 +651,7 @@ func TestEvent_ShouldRenew(t *testing.T) {
 		{
 			name: "not_subscription_payment",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{},
 				},
 			},
@@ -661,7 +661,7 @@ func TestEvent_ShouldRenew(t *testing.T) {
 		{
 			name: "no_event_data",
 			given: tcGiven{
-				event: &Event{},
+				ntf: &Notification{},
 			},
 			exp: false,
 		},
@@ -671,15 +671,15 @@ func TestEvent_ShouldRenew(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.event.ShouldRenew()
+			actual := tc.given.ntf.ShouldRenew()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
 }
 
-func TestEvent_ShouldCancel(t *testing.T) {
+func TestNotification_ShouldCancel(t *testing.T) {
 	type tcGiven struct {
-		event *Event
+		ntf *Notification
 	}
 
 	type testCase struct {
@@ -692,7 +692,7 @@ func TestEvent_ShouldCancel(t *testing.T) {
 		{
 			name: "event_data_nil",
 			given: tcGiven{
-				event: &Event{},
+				ntf: &Notification{},
 			},
 			exp: false,
 		},
@@ -700,7 +700,7 @@ func TestEvent_ShouldCancel(t *testing.T) {
 		{
 			name: "subscription_cancelled",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Cancelled: &SubscriptionCancelled{},
 					},
@@ -712,7 +712,7 @@ func TestEvent_ShouldCancel(t *testing.T) {
 		{
 			name: "subscription_expired",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{},
 					},
@@ -724,7 +724,7 @@ func TestEvent_ShouldCancel(t *testing.T) {
 		{
 			name: "unknown_action",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{},
 				},
 			},
@@ -736,15 +736,15 @@ func TestEvent_ShouldCancel(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.event.ShouldCancel()
+			actual := tc.given.ntf.ShouldCancel()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
 }
 
-func TestEvent_ShouldProcess(t *testing.T) {
+func TestNotification_ShouldProcess(t *testing.T) {
 	type tcGiven struct {
-		event *Event
+		ntf *Notification
 	}
 
 	type testCase struct {
@@ -757,7 +757,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "new_subscription",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -769,7 +769,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "subscription_payment",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{},
 					},
@@ -781,7 +781,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "subscription_cancelled",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Cancelled: &SubscriptionCancelled{},
 					},
@@ -793,7 +793,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "subscription_expired",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{},
 					},
@@ -805,7 +805,7 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		{
 			name: "not_should_process",
 			given: tcGiven{
-				event: &Event{},
+				ntf: &Notification{},
 			},
 			exp: false,
 		},
@@ -815,15 +815,15 @@ func TestEvent_ShouldProcess(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.event.ShouldProcess()
+			actual := tc.given.ntf.ShouldProcess()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
 }
 
-func TestEvent_Effect(t *testing.T) {
+func TestNotification_Effect(t *testing.T) {
 	type tcGiven struct {
-		event *Event
+		ntf *Notification
 	}
 
 	type testCase struct {
@@ -836,7 +836,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "new",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						New: &NewSubscription{},
 					},
@@ -848,7 +848,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "renew",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Payment: &SubscriptionPayment{},
 					},
@@ -860,7 +860,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "cancel",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Cancelled: &SubscriptionCancelled{},
 					},
@@ -872,7 +872,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "expired",
 			given: tcGiven{
-				event: &Event{
+				ntf: &Notification{
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{},
 					},
@@ -884,7 +884,7 @@ func TestEvent_Effect(t *testing.T) {
 		{
 			name: "skip",
 			given: tcGiven{
-				event: &Event{},
+				ntf: &Notification{},
 			},
 			exp: "skip",
 		},
@@ -894,7 +894,7 @@ func TestEvent_Effect(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.event.Effect()
+			actual := tc.given.ntf.Effect()
 			should.Equal(t, tc.exp, actual)
 		})
 	}

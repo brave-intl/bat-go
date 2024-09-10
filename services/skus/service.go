@@ -2240,8 +2240,8 @@ func (s *Service) processSubmitReceipt(ctx context.Context, req model.ReceiptReq
 
 const errRadomUnknownAction = model.Error("skus: unknown radom action")
 
-func (s *Service) processRadomEvent(ctx context.Context, event *radom.Event) error {
-	if !event.ShouldProcess() {
+func (s *Service) processRadomNotification(ctx context.Context, ntf *radom.Notification) error {
+	if !ntf.ShouldProcess() {
 		return nil
 	}
 
@@ -2251,22 +2251,22 @@ func (s *Service) processRadomEvent(ctx context.Context, event *radom.Event) err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.processRadomEventTx(ctx, tx, event); err != nil {
+	if err := s.processRadomNotificationTx(ctx, tx, ntf); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, event *radom.Event) error {
+func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *radom.Notification) error {
 	switch {
-	case event.IsNewSub():
-		oid, err := event.OrderID()
+	case ntf.IsNewSub():
+		oid, err := ntf.OrderID()
 		if err != nil {
 			return err
 		}
 
-		subID, err := event.SubID()
+		subID, err := ntf.SubID()
 		if err != nil {
 			return err
 		}
@@ -2298,8 +2298,8 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 
 		return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
 
-	case event.ShouldRenew():
-		subID, err := event.SubID()
+	case ntf.ShouldRenew():
+		subID, err := ntf.SubID()
 		if err != nil {
 			return err
 		}
@@ -2328,8 +2328,8 @@ func (s *Service) processRadomEventTx(ctx context.Context, dbi sqlx.ExtContext, 
 
 		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt)
 
-	case event.ShouldCancel():
-		subID, err := event.SubID()
+	case ntf.ShouldCancel():
+		subID, err := ntf.SubID()
 		if err != nil {
 			return err
 		}

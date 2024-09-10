@@ -1859,7 +1859,7 @@ func (suite *ControllersTestSuite) TestWebhook_Radom() {
 
 	suite.service.payHistRepo = repository.NewOrderPayHistory()
 
-	event := &radom.Event{
+	event := &radom.Notification{
 		EventData: &radom.EventData{
 			New: &radom.NewSubscription{
 				SubscriptionID: subID,

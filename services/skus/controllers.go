@@ -1212,25 +1212,25 @@ func handleRadomWebhookH(w http.ResponseWriter, r *http.Request, svc *Service) *
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 	}
 
-	event, err := radom.ParseEvent(b)
+	ntf, err := radom.ParseNotification(b)
 	if err != nil {
 		l.Err(err).Msg("failed to parse radom event")
 
 		return handlers.WrapError(err, "failed to parse radom event", http.StatusBadRequest)
 	}
 
-	if err := svc.processRadomEvent(ctx, event); err != nil {
-		l.Err(err).Msg("failed to process radom event")
+	if err := svc.processRadomNotification(ctx, ntf); err != nil {
+		l.Err(err).Msg("failed to process radom notification")
 
 		return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 	}
 
 	msg := "skipped radom notification"
-	if event.ShouldProcess() {
+	if ntf.ShouldProcess() {
 		msg = "processed radom notification"
 	}
 
-	l.Info().Str("ntf_type", event.EventType).Str("ntf_effect", event.Effect()).Msg(msg)
+	l.Info().Str("ntf_type", ntf.NtfType()).Str("ntf_effect", ntf.Effect()).Msg(msg)
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
