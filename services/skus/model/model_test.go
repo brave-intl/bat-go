@@ -1362,23 +1362,6 @@ func TestOrderItemRequestNew_Metadata(t *testing.T) {
 	}
 }
 
-func mustDecimalFromString(v string) decimal.Decimal {
-	result, err := decimal.NewFromString(v)
-	if err != nil {
-		panic(err)
-	}
-
-	for i := range tests {
-		tc := tests[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			actual, ok := tc.given.StripeItemID()
-			should.Equal(t, tc.exp.ok, ok)
-			should.Equal(t, tc.exp.val, actual)
-		})
-	}
-}
-
 func TestOrderItemRequestNew_TokenBufferOrDefault(t *testing.T) {
 	type testCase struct {
 		name  string
