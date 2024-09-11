@@ -1676,7 +1676,7 @@ func parseVerifyCredRequestV2(raw []byte) (*model.VerifyCredentialRequestV2, err
 		return nil, err
 	}
 
-	copaque, err := parseVerifyCredeOpaque(result.Credential)
+	copaque, err := parseVerifyCredOpaque(result.Credential)
 	if err != nil {
 		return nil, err
 	}
@@ -1686,7 +1686,7 @@ func parseVerifyCredRequestV2(raw []byte) (*model.VerifyCredentialRequestV2, err
 	return result, nil
 }
 
-func parseVerifyCredeOpaque(raw string) (*model.VerifyCredentialOpaque, error) {
+func parseVerifyCredOpaque(raw string) (*model.VerifyCredentialOpaque, error) {
 	data, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil {
 		return nil, err
