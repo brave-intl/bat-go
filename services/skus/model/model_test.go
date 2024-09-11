@@ -12,6 +12,7 @@ import (
 	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 

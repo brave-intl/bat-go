@@ -129,6 +129,11 @@ type stripeClient interface {
 // Service contains datastore
 type radomClient interface {
 	CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	GetSubscription(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
+}
+
+type radomMessageAuthenticator interface {
+	Authenticate(ctx context.Context, token string) error
 }
 
 type Service struct {
@@ -156,6 +161,7 @@ type Service struct {
 
 	radomClient  radomClient
 	radomGateway *radom.Gateway
+	radomAuth    radomMessageAuthenticator
 
 	vendorReceiptValid vendorReceiptValidator
 	gpsAuth            gpsMessageAuthenticator
@@ -239,6 +245,7 @@ func InitService(
 
 	var radomCl *radom.Client
 	var radomGateway *radom.Gateway
+	var radomAuthCfg radom.MessageAuthConfig
 
 	if enabled, _ := strconv.ParseBool(os.Getenv("RADOM_ENABLED")); enabled {
 		srvURL := os.Getenv("RADOM_SERVER")
@@ -251,18 +258,32 @@ func InitService(
 			return nil, model.Error("skus: radom secret not found")
 		}
 
-		var err error
+		{
+			var err error
 
-		radomCl, err = radom.New(srvURL, authToken)
-		if err != nil {
-			return nil, err
+			radomCl, err = radom.New(srvURL, authToken)
+			if err != nil {
+				return nil, err
+			}
+
+			radomGateway, err = newRadomGateway(env)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		radomGateway, err = newRadomGateway(env)
-		if err != nil {
-			return nil, err
+		radKey := os.Getenv("RADOM_VERIFICATION_KEY")
+		if radKey == "" {
+			return nil, model.Error("skus: radom verification key not found")
+		}
+
+		radomAuthCfg = radom.MessageAuthConfig{
+			Enabled: enabled,
+			Token:   []byte(radKey),
 		}
 	}
+
+	radomAuth := radom.NewMessageAuthenticator(radomAuthCfg)
 
 	cbClient, err := cbr.New()
 	if err != nil {
@@ -358,6 +379,7 @@ func InitService(
 
 		radomClient:  radomCl,
 		radomGateway: radomGateway,
+		radomAuth:    radomAuth,
 
 		vendorReceiptValid: rcptValidator,
 		gpsAuth:            newGPSNtfAuthenticator(gpsCfg, idv),
@@ -2214,6 +2236,114 @@ func (s *Service) processSubmitReceipt(ctx context.Context, req model.ReceiptReq
 	}
 
 	return rcpt, nil
+}
+
+const errRadomUnknownAction = model.Error("skus: unknown radom action")
+
+func (s *Service) processRadomNotification(ctx context.Context, ntf *radom.Notification) error {
+	if !ntf.ShouldProcess() {
+		return nil
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processRadomNotificationTx(ctx, tx, ntf); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *radom.Notification) error {
+	switch {
+	case ntf.IsNewSub():
+		oid, err := ntf.OrderID()
+		if err != nil {
+			return err
+		}
+
+		subID, err := ntf.SubID()
+		if err != nil {
+			return err
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, subID.String())
+		if err != nil {
+			return err
+		}
+
+		nxtB, err := rsub.NextBillingDate()
+		if err != nil {
+			return err
+		}
+
+		expAt := nxtB.Add(24 * time.Hour)
+
+		paidAt, err := rsub.LastPaid()
+		if err != nil {
+			return err
+		}
+
+		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
+			return err
+		}
+
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "externalID", subID.String()); err != nil {
+			return err
+		}
+
+		return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
+
+	case ntf.ShouldRenew():
+		subID, err := ntf.SubID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		if err != nil {
+			return err
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, subID.String())
+		if err != nil {
+			return err
+		}
+
+		nxtB, err := rsub.NextBillingDate()
+		if err != nil {
+			return err
+		}
+
+		expAt := nxtB.Add(24 * time.Hour)
+
+		paidAt, err := rsub.LastPaid()
+		if err != nil {
+			return err
+		}
+
+		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt)
+
+	case ntf.ShouldCancel():
+		subID, err := ntf.SubID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		if err != nil {
+			return err
+		}
+
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
+	default:
+		return errRadomUnknownAction
+	}
 }
 
 func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {

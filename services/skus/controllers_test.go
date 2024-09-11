@@ -1826,6 +1826,79 @@ func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
 	suite.Equal(sessID, actual)
 }
 
+func (suite *ControllersTestSuite) TestWebhook_Radom() {
+	ctx := context.Background()
+
+	oreq := &model.OrderNew{
+		Status: OrderStatusPending,
+	}
+
+	res, err := suite.service.orderRepo.Create(ctx, suite.service.Datastore.RawDB(), oreq)
+	suite.Require().NoError(err)
+
+	subID := uuid.NewV4()
+
+	suite.service.radomClient = &mockRadomClient{
+		fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+			return &radom.SubscriptionResponse{
+				ID:                subID,
+				NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
+				Payments: []radom.Payment{
+					{
+						Date: "2023-06-12T09:38:13.604410Z",
+					},
+				},
+			}, nil
+		},
+	}
+
+	suite.service.radomAuth = radom.NewMessageAuthenticator(radom.MessageAuthConfig{
+		Token:   []byte("test-token"),
+		Enabled: true,
+	})
+
+	suite.service.payHistRepo = repository.NewOrderPayHistory()
+
+	event := &radom.Notification{
+		EventData: &radom.EventData{
+			New: &radom.NewSubscription{
+				SubscriptionID: subID,
+			},
+		},
+		RadomData: &radom.Data{
+			CheckoutSession: &radom.CheckoutSession{
+				Metadata: []radom.Metadata{
+					{
+						Key:   "brave_order_id",
+						Value: res.ID.String(),
+					},
+				},
+			},
+		},
+	}
+
+	b, err := json.Marshal(event)
+	suite.Require().NoError(err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer(b))
+
+	req.Header.Add("radom-verification-key", "test-token")
+
+	rw := httptest.NewRecorder()
+
+	oh := handleRadomWebhook(suite.service)
+	svr := &http.Server{Addr: ":8080", Handler: oh}
+
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+
+	order, err := suite.service.orderRepo.Get(ctx, suite.service.Datastore.RawDB(), res.ID)
+	suite.Require().NoError(err)
+
+	suite.Equal(model.OrderStatusPaid, order.Status)
+}
+
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
 func (suite *ControllersTestSuite) ReadSigningOrderRequestMessage(ctx context.Context, topic string) SigningOrderRequest {
 	kafkaReader, err := kafkautils.NewKafkaReader(ctx, test.RandomString(), topic)

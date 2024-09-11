@@ -4656,8 +4656,208 @@ func Test_newRadomGateway(t *testing.T) {
 	}
 }
 
+func TestService_processRadomEvent(t *testing.T) {
+	type tcGiven struct {
+		event *radom.Notification
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "should_not_process",
+			given: tcGiven{
+				event: &radom.Notification{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := Service{}
+
+			actual := s.processRadomNotification(context.Background(), tc.given.event)
+
+			should.ErrorIs(t, actual, tc.exp.err)
+		})
+	}
+}
+
+func TestService_processRadomEventTx(t *testing.T) {
+	type tcGiven struct {
+		event           *radom.Notification
+		orderRepo       orderStoreSvc
+		orderPayHistory orderPayHistoryStore
+		radomCl         radomClient
+	}
+
+	type tcExpected struct {
+		shouldErr should.ErrorAssertionFunc
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "new_subscription",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						New: &radom.NewSubscription{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+					RadomData: &radom.Data{
+						CheckoutSession: &radom.CheckoutSession{
+							Metadata: []radom.Metadata{
+								{
+									Key:   "brave_order_id",
+									Value: "d14c5b2e-b719-4504-b034-86e74a932295",
+								},
+							},
+						},
+					},
+				},
+				orderRepo:       &repository.MockOrder{},
+				orderPayHistory: &repository.MockOrderPayHistory{},
+				radomCl: &mockRadomClient{
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						return &radom.SubscriptionResponse{
+							NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
+							Payments: []radom.Payment{
+								{
+									Date: "2023-06-12T09:38:13.604410Z",
+								},
+							},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Payment: &radom.SubscriptionPayment{
+							RadomData: &radom.Data{
+								Subscription: &radom.Subscription{
+									SubscriptionID: uuid.NewV4(),
+								},
+							},
+						},
+					},
+				},
+				orderRepo:       &repository.MockOrder{},
+				orderPayHistory: &repository.MockOrderPayHistory{},
+				radomCl: &mockRadomClient{
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						return &radom.SubscriptionResponse{
+							NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
+							Payments: []radom.Payment{
+								{
+									Date: "2023-06-12T09:38:13.604410Z",
+								},
+							},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_cancelled",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Cancelled: &radom.SubscriptionCancelled{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_expired",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Expired: &radom.SubscriptionExpired{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "unknown_action",
+			given: tcGiven{
+				event: &radom.Notification{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, errRadomUnknownAction)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.orderRepo, payHistRepo: tc.given.orderPayHistory, radomClient: tc.given.radomCl}
+
+			ctx := context.Background()
+
+			actual := svc.processRadomNotificationTx(ctx, nil, tc.given.event)
+			tc.exp.shouldErr(t, actual)
+		})
+	}
+}
+
 type mockRadomClient struct {
 	fnCreateCheckoutSession func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	fnGetSubscription       func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
 }
 
 func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
@@ -4666,6 +4866,14 @@ func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq *radom
 	}
 
 	return m.fnCreateCheckoutSession(ctx, creq)
+}
+
+func (m *mockRadomClient) GetSubscription(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+	if m.fnGetSubscription == nil {
+		return &radom.SubscriptionResponse{}, nil
+	}
+
+	return m.fnGetSubscription(ctx, subID)
 }
 
 type mockPaidOrderCreator struct {
