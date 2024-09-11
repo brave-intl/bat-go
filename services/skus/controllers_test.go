@@ -46,12 +46,13 @@ import (
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/skus/handler"
-	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/wallet"
 	macaroon "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 
+	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
+	"github.com/brave-intl/bat-go/services/skus/skustest"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
@@ -275,8 +276,8 @@ func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	suite.mockCtrl.Finish()
 }
 
-func (s *ControllersTestSuite) TearDownSuite(sn, tn string) {
-	skustest.CleanDB(s.T(), s.storage.RawDB())
+func (suite *ControllersTestSuite) TearDownSuite(sn, tn string) {
+	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macaroon.Token, quantity int) (Order, *Issuer) {
@@ -1757,6 +1758,145 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 
 	suite.Assert().Equal(http.StatusBadRequest, appError.Code)
 	suite.Assert().Contains(appError.Error(), ErrCredsAlreadyExist.Error())
+}
+
+func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
+	suite.service.issuerRepo = &repository.MockIssuer{}
+
+	sessID := uuid.NewV4().String()
+
+	suite.service.radomClient = &mockRadomClient{
+		fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+			return radom.CheckoutSessionResponse{
+				SessionID: sessID,
+			}, nil
+		}}
+
+	oreq := model.CreateOrderRequestNew{
+		Email:    "example@example.com",
+		Currency: "USD",
+		RadomMetadata: &model.OrderRadomMetadata{
+			SuccessURI: "https://example-success.com",
+			CancelURI:  "https://example-cancel.com",
+		},
+		PaymentMethods: []string{model.RadomPaymentMethod},
+		Items: []model.OrderItemRequestNew{
+			{
+				Quantity:                    1,
+				SKU:                         "sku",
+				Location:                    "https://example.com",
+				Description:                 "description",
+				CredentialType:              timeLimitedV2,
+				CredentialValidDuration:     "P1M",
+				CredentialValidDurationEach: ptrTo("P1M"),
+				Price:                       decimal.NewFromInt(1),
+				RadomMetadata: &model.ItemRadomMetadata{
+					ProductID: "product_1",
+				},
+			},
+		},
+	}
+
+	b, err := json.Marshal(oreq)
+	suite.Require().NoError(err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer(b))
+
+	rw := httptest.NewRecorder()
+
+	oh := handlers.AppHandler(handler.NewOrder(suite.service).CreateNew)
+	svr := &http.Server{Addr: ":8080", Handler: oh}
+
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusCreated, rw.Code)
+
+	var resp model.Order
+	{
+		err := json.Unmarshal(rw.Body.Bytes(), &resp)
+		suite.Require().NoError(err)
+	}
+
+	order, err := suite.service.orderRepo.Get(context.Background(), suite.service.Datastore.RawDB(), resp.ID)
+	suite.Require().NoError(err)
+
+	actual, ok := order.Metadata["radomCheckoutSessionId"].(string)
+	suite.Require().True(ok)
+
+	suite.Equal(sessID, actual)
+}
+
+func (suite *ControllersTestSuite) TestWebhook_Radom() {
+	ctx := context.Background()
+
+	oreq := &model.OrderNew{
+		Status: OrderStatusPending,
+	}
+
+	res, err := suite.service.orderRepo.Create(ctx, suite.service.Datastore.RawDB(), oreq)
+	suite.Require().NoError(err)
+
+	subID := uuid.NewV4()
+
+	suite.service.radomClient = &mockRadomClient{
+		fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+			return &radom.SubscriptionResponse{
+				ID:                subID,
+				NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
+				Payments: []radom.Payment{
+					{
+						Date: "2023-06-12T09:38:13.604410Z",
+					},
+				},
+			}, nil
+		},
+	}
+
+	suite.service.radomAuth = radom.NewMessageAuthenticator(radom.MessageAuthConfig{
+		Token:   []byte("test-token"),
+		Enabled: true,
+	})
+
+	suite.service.payHistRepo = repository.NewOrderPayHistory()
+
+	event := &radom.Notification{
+		EventData: &radom.EventData{
+			New: &radom.NewSubscription{
+				SubscriptionID: subID,
+			},
+		},
+		RadomData: &radom.Data{
+			CheckoutSession: &radom.CheckoutSession{
+				Metadata: []radom.Metadata{
+					{
+						Key:   "brave_order_id",
+						Value: res.ID.String(),
+					},
+				},
+			},
+		},
+	}
+
+	b, err := json.Marshal(event)
+	suite.Require().NoError(err)
+
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer(b))
+
+	req.Header.Add("radom-verification-key", "test-token")
+
+	rw := httptest.NewRecorder()
+
+	oh := handleRadomWebhook(suite.service)
+	svr := &http.Server{Addr: ":8080", Handler: oh}
+
+	svr.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+
+	order, err := suite.service.orderRepo.Get(ctx, suite.service.Datastore.RawDB(), res.ID)
+	suite.Require().NoError(err)
+
+	suite.Equal(model.OrderStatusPaid, order.Status)
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic

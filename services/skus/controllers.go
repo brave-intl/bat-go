@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,7 +18,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/stripe/stripe-go/v72/webhook"
 
-	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
@@ -30,6 +28,7 @@ import (
 
 	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 )
 
 const (
@@ -998,7 +997,7 @@ func WebhookRouter(svc *Service) chi.Router {
 	r := chi.NewRouter()
 
 	r.Method(http.MethodPost, "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(svc)))
-	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(svc)))
+	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("handleRadomWebhook", handleRadomWebhook(svc)))
 	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("handleWebhookPlayStore", handleWebhookPlayStore(svc)))
 	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
 
@@ -1188,89 +1187,52 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
-// HandleRadomWebhook handles Radom checkout session webhooks.
-func HandleRadomWebhook(service *Service) handlers.AppHandler {
+// handleRadomWebhook handles Radom checkout session webhooks.
+func handleRadomWebhook(s *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-
-		lg := logging.Logger(ctx, "payments").With().Str("func", "HandleRadomWebhook").Logger()
-
-		// Get webhook secret.
-		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.RadomWebhookSecretCTXKey)
-		if err != nil {
-			lg.Error().Err(err).Msg("failed to get radom_webhook_secret from context")
-			return handlers.WrapError(err, "error getting radom_webhook_secret from context", http.StatusInternalServerError)
-		}
-
-		// Check verification key.
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("radom-verification-key")), []byte(endpointSecret)) != 1 {
-			lg.Error().Err(err).Msg("invalid verification key from webhook")
-			return handlers.WrapError(err, "invalid verification key", http.StatusBadRequest)
-		}
-
-		req := radom.WebhookRequest{}
-		if err := requestutils.ReadJSON(ctx, r.Body, &req); err != nil {
-			lg.Error().Err(err).Msg("failed to read request body")
-			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
-		}
-
-		lg.Debug().Str("event_type", req.EventType).Str("data", fmt.Sprintf("%+v", req)).Msg("webhook event captured")
-
-		// Handle only successful payment events.
-		if req.EventType != "managedRecurringPayment" && req.EventType != "newSubscription" {
-			return handlers.WrapError(err, "event type not implemented", http.StatusBadRequest)
-		}
-
-		// Lookup the order, the checkout session was created with orderId in metadata.
-		rawOrderID, err := req.Data.CheckoutSession.Metadata.Get("braveOrderId")
-		if err != nil || rawOrderID == "" {
-			return handlers.WrapError(err, "brave metadata not found in webhook", http.StatusBadRequest)
-		}
-
-		orderID, err := uuid.FromString(rawOrderID)
-		if err != nil {
-			return handlers.WrapError(err, "invalid braveOrderId in request", http.StatusBadRequest)
-		}
-
-		// Set order id to paid, and update metadata values.
-		if err := service.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
-			lg.Error().Err(err).Msg("failed to update order status")
-			return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
-		}
-
-		if err := service.Datastore.AppendOrderMetadata(
-			ctx, &orderID, "radomCheckoutSession", req.Data.CheckoutSession.CheckoutSessionID); err != nil {
-			lg.Error().Err(err).Msg("failed to update order metadata")
-			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-		}
-
-		if req.EventType == "newSubscription" {
-
-			if err := service.Datastore.AppendOrderMetadata(
-				ctx, &orderID, "subscriptionId", req.EventData.NewSubscription.SubscriptionID); err != nil {
-				lg.Error().Err(err).Msg("failed to update order metadata")
-				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-			}
-
-			if err := service.Datastore.AppendOrderMetadata(
-				ctx, &orderID, "subscriptionContractAddress",
-				req.EventData.NewSubscription.Subscription.AutomatedEVMSubscription.SubscriptionContractAddress); err != nil {
-
-				lg.Error().Err(err).Msg("failed to update order metadata")
-				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-			}
-
-		}
-
-		// Set paymentProcessor to Radom.
-		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.RadomPaymentMethod); err != nil {
-			lg.Error().Err(err).Msg("failed to update order to add the payment processor")
-			return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
-		}
-
-		lg.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
-		return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
+		return handleRadomWebhookH(w, r, s)
 	}
+}
+
+func handleRadomWebhookH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
+	ctx := r.Context()
+
+	l := logging.Logger(ctx, "skus").With().Str("func", "handleRadomWebhookH").Logger()
+
+	if err := svc.radomAuth.Authenticate(ctx, r.Header.Get("radom-verification-key")); err != nil {
+		l.Err(err).Msg("invalid request")
+
+		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+	}
+
+	b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		l.Err(err).Msg("failed to read payload")
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	}
+
+	ntf, err := radom.ParseNotification(b)
+	if err != nil {
+		l.Err(err).Msg("failed to parse radom event")
+
+		return handlers.WrapError(err, "failed to parse radom event", http.StatusBadRequest)
+	}
+
+	if err := svc.processRadomNotification(ctx, ntf); err != nil {
+		l.Err(err).Msg("failed to process radom notification")
+
+		return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+	}
+
+	msg := "skipped radom notification"
+	if ntf.ShouldProcess() {
+		msg = "processed radom notification"
+	}
+
+	l.Info().Str("ntf_type", ntf.NtfType()).Str("ntf_effect", ntf.Effect()).Msg(msg)
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func handleStripeWebhook(svc *Service) handlers.AppHandler {
