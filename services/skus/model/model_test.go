@@ -1333,6 +1333,93 @@ func TestOrderItem_StripeItemID(t *testing.T) {
 	}
 }
 
+func TestOrderItem_SKUForIssuer(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.OrderItem
+		exp   string
+	}
+
+	tests := []testCase{
+		{
+			name: "empty",
+		},
+
+		{
+			name: "talk",
+			given: model.OrderItem{
+				SKU: "brave-talk-premium",
+			},
+			exp: "brave-talk-premium",
+		},
+
+		{
+			name: "talka",
+			given: model.OrderItem{
+				SKU: "brave-talk-premium-year",
+			},
+			exp: "brave-talk-premium",
+		},
+
+		{
+			name: "search",
+			given: model.OrderItem{
+				SKU: "brave-search-premium",
+			},
+			exp: "brave-search-premium",
+		},
+
+		{
+			name: "searcha",
+			given: model.OrderItem{
+				SKU: "brave-search-premium-year",
+			},
+			exp: "brave-search-premium",
+		},
+
+		{
+			name: "vpn",
+			given: model.OrderItem{
+				SKU: "brave-vpn-premium",
+			},
+			exp: "brave-vpn-premium",
+		},
+
+		{
+			name: "vpna",
+			given: model.OrderItem{
+				SKU: "brave-vpn-premium-year",
+			},
+			exp: "brave-vpn-premium",
+		},
+
+		{
+			name: "leo",
+			given: model.OrderItem{
+				SKU: "brave-leo-premium",
+			},
+			exp: "brave-leo-premium",
+		},
+
+		{
+			name: "leoa",
+			given: model.OrderItem{
+				SKU: "brave-leo-premium-year",
+			},
+			exp: "brave-leo-premium",
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.SKUForIssuer()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestOrderItemRequestNew_TokenBufferOrDefault(t *testing.T) {
 	type testCase struct {
 		name  string
@@ -1477,6 +1564,76 @@ func TestOrderItemRequestNew_IsTLV2(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := tc.given.IsTLV2()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestVerifyCredentialRequestV1_GetSKU(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.VerifyCredentialRequestV1
+		exp   string
+	}
+
+	tests := []testCase{
+		{
+			name: "anything",
+			given: model.VerifyCredentialRequestV1{
+				SKU: "anything",
+			},
+			exp: "anything",
+		},
+
+		{
+			name: "leoa",
+			given: model.VerifyCredentialRequestV1{
+				SKU: "brave-leo-premium-year",
+			},
+			exp: "brave-leo-premium",
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.GetSKU()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestVerifyCredentialRequestV2_GetSKU(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.VerifyCredentialRequestV2
+		exp   string
+	}
+
+	tests := []testCase{
+		{
+			name: "anything",
+			given: model.VerifyCredentialRequestV2{
+				SKU: "anything",
+			},
+			exp: "anything",
+		},
+
+		{
+			name: "leoa",
+			given: model.VerifyCredentialRequestV2{
+				SKU: "brave-leo-premium-year",
+			},
+			exp: "brave-leo-premium",
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.GetSKU()
 			should.Equal(t, tc.exp, actual)
 		})
 	}

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -370,6 +371,10 @@ func (x *OrderItem) StripeItemID() (string, bool) {
 	return itemID, ok
 }
 
+func (x *OrderItem) SKUForIssuer() string {
+	return fixPremiumSKUForIssuer(x.SKU)
+}
+
 // OrderNew represents a request to create an order in the database.
 type OrderNew struct {
 	MerchantID            string          `db:"merchant_id"`
@@ -675,6 +680,71 @@ type ReceiptData struct {
 
 type CreateOrderWithReceiptResponse struct {
 	ID string `json:"orderId"`
+}
+
+type VerifyCredentialRequestV1 struct {
+	Type         string  `json:"type" validate:"oneof=single-use time-limited time-limited-v2"`
+	SKU          string  `json:"sku" validate:"-"`
+	MerchantID   string  `json:"merchantId" validate:"-"`
+	Presentation string  `json:"presentation" validate:"base64"`
+	Version      float64 `json:"version" validate:"-"`
+}
+
+func (r *VerifyCredentialRequestV1) GetSKU() string {
+	return fixPremiumSKUForIssuer(r.SKU)
+}
+
+func (r *VerifyCredentialRequestV1) GetType() string {
+	return r.Type
+}
+
+func (r *VerifyCredentialRequestV1) GetMerchantID() string {
+	return r.MerchantID
+}
+
+func (r *VerifyCredentialRequestV1) GetPresentation() string {
+	return r.Presentation
+}
+
+type VerifyCredentialRequestV2 struct {
+	SKU              string                  `json:"sku" validate:"-"`
+	MerchantID       string                  `json:"merchantId" validate:"-"`
+	Credential       string                  `json:"credential" validate:"base64"`
+	CredentialOpaque *VerifyCredentialOpaque `json:"-" validate:"-"`
+}
+
+func (r *VerifyCredentialRequestV2) GetSKU() string {
+	return fixPremiumSKUForIssuer(r.SKU)
+}
+
+func (r *VerifyCredentialRequestV2) GetType() string {
+	if r.CredentialOpaque == nil {
+		return ""
+	}
+
+	return r.CredentialOpaque.Type
+}
+
+func (r *VerifyCredentialRequestV2) GetMerchantID() string {
+	return r.MerchantID
+}
+
+func (r *VerifyCredentialRequestV2) GetPresentation() string {
+	if r.CredentialOpaque == nil {
+		return ""
+	}
+
+	return r.CredentialOpaque.Presentation
+}
+
+type VerifyCredentialOpaque struct {
+	Type         string  `json:"type" validate:"oneof=single-use time-limited time-limited-v2"`
+	Presentation string  `json:"presentation" validate:"base64"`
+	Version      float64 `json:"version" validate:"-"`
+}
+
+func fixPremiumSKUForIssuer(val string) string {
+	return strings.TrimSuffix(val, "-year")
 }
 
 func addURLParam(src, name, val string) (string, error) {

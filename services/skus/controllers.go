@@ -141,10 +141,12 @@ func Router(
 func CredentialRouter(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
 
+	valid := validator.New()
+
 	r.Method(
 		http.MethodPost,
 		"/subscription/verifications",
-		middleware.InstrumentHandler("VerifyCredentialV1", authMwr(VerifyCredentialV1(svc))),
+		middleware.InstrumentHandler("handleVerifyCredV1", authMwr(handleVerifyCredV1(svc, valid))),
 	)
 
 	return r
@@ -154,10 +156,12 @@ func CredentialRouter(svc *Service, authMwr middlewareFn) chi.Router {
 func CredentialV2Router(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
 
+	valid := validator.New()
+
 	r.Method(
 		http.MethodPost,
 		"/subscription/verifications",
-		middleware.InstrumentHandler("VerifyCredentialV2", authMwr(VerifyCredentialV2(svc))),
+		middleware.InstrumentHandler("handleVerifyCredV2", authMwr(handleVerifyCredV2(svc, valid))),
 	)
 
 	return r
@@ -943,54 +947,79 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 	})
 }
 
-func VerifyCredentialV2(service *Service) handlers.AppHandler {
+func handleVerifyCredV2(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		l := logging.Logger(ctx, "skus").With().Str("func", "VerifyCredentialV2").Logger()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleVerifyCredV2").Logger()
 
-		req := &VerifyCredentialRequestV2{}
-		if err := inputs.DecodeAndValidateReader(ctx, req, r.Body); err != nil {
-			l.Error().Err(err).Msg("failed to read request")
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		if err != nil {
+			lg.Warn().Err(err).Msg("failed to read body")
+
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		appErr := service.verifyCredential(ctx, req, w)
-		if appErr != nil {
-			l.Error().Err(appErr).Msg("failed to verify credential")
+		req, err := parseVerifyCredRequestV2(data)
+		if err != nil {
+			lg.Warn().Err(err).Msg("failed to deserialize request")
+
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		return appErr
+		if err := validateVerifyCredRequestV2(valid, req); err != nil {
+			verrs, ok := collectValidationErrors(err)
+			if !ok {
+				return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+			}
+
+			return handlers.ValidationError("request", verrs)
+		}
+
+		aerr := svc.verifyCredential(ctx, req, w)
+		if aerr != nil {
+			lg.Err(aerr).Msg("failed to verify credential")
+		}
+
+		return aerr
 	}
 }
 
-// VerifyCredentialV1 is the handler for verifying subscription credentials
-func VerifyCredentialV1(service *Service) handlers.AppHandler {
+func handleVerifyCredV1(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		l := logging.Logger(r.Context(), "VerifyCredentialV1")
 
-		var req = new(VerifyCredentialRequestV1)
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleVerifyCredV1").Logger()
 
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			l.Error().Err(err).Msg("failed to read request")
+			lg.Warn().Err(err).Msg("failed to read body")
+
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
-		l.Debug().Msg("read verify credential post body")
 
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			l.Error().Err(err).Msg("failed to validate request")
-			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
+		req := &model.VerifyCredentialRequestV1{}
+		if err := json.Unmarshal(data, req); err != nil {
+			lg.Warn().Err(err).Msg("failed to deserialize request")
+
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		appErr := service.verifyCredential(ctx, req, w)
-		if appErr != nil {
-			l.Error().Err(appErr).Msg("failed to verify credential")
+		if err := valid.StructCtx(ctx, req); err != nil {
+			verrs, ok := collectValidationErrors(err)
+			if !ok {
+				return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+			}
+
+			return handlers.ValidationError("request", verrs)
 		}
 
-		return appErr
+		aerr := svc.verifyCredential(ctx, req, w)
+		if aerr != nil {
+			lg.Err(aerr).Msg("failed to verify credential")
+		}
+
+		return aerr
 	}
 }
 
@@ -1638,4 +1667,43 @@ func collectValidationErrors(err error) (map[string]string, bool) {
 	}
 
 	return result, true
+}
+
+func parseVerifyCredRequestV2(raw []byte) (*model.VerifyCredentialRequestV2, error) {
+	result := &model.VerifyCredentialRequestV2{}
+
+	if err := json.Unmarshal(raw, result); err != nil {
+		return nil, err
+	}
+
+	copaque, err := parseVerifyCredeOpaque(result.Credential)
+	if err != nil {
+		return nil, err
+	}
+
+	result.CredentialOpaque = copaque
+
+	return result, nil
+}
+
+func parseVerifyCredeOpaque(raw string) (*model.VerifyCredentialOpaque, error) {
+	data, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &model.VerifyCredentialOpaque{}
+	if err = json.Unmarshal(data, result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func validateVerifyCredRequestV2(valid *validator.Validate, req *model.VerifyCredentialRequestV2) error {
+	if err := valid.Struct(req); err != nil {
+		return err
+	}
+
+	return valid.Struct(req.CredentialOpaque)
 }
