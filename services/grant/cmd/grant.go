@@ -630,13 +630,6 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
 
-	// Variables for Radom.
-	ctx = context.WithValue(ctx, appctx.RadomEnabledCTXKey, viper.GetBool("radom-enabled"))
-	ctx = context.WithValue(ctx, appctx.RadomWebhookSecretCTXKey, viper.GetString("radom-webhook-secret"))
-	ctx = context.WithValue(ctx, appctx.RadomSecretCTXKey, viper.GetString("radom-secret"))
-	ctx = context.WithValue(ctx, appctx.RadomServerCTXKey, viper.GetString("radom-server"))
-	ctx = context.WithValue(ctx, appctx.RadomSellerAddressCTXKey, viper.GetString("radom-seller-address"))
-
 	// require country present from uphold txs
 	ctx = context.WithValue(ctx, appctx.RequireUpholdCountryCTXKey, viper.GetBool("require-uphold-destination-country"))
 

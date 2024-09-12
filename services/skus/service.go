@@ -30,7 +30,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
-	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
@@ -46,6 +45,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/brave-intl/bat-go/services/skus/xstripe"
 )
 
@@ -84,7 +84,6 @@ const (
 
 	errSetRetryAfter             = model.Error("set retry-after")
 	errClosingResource           = model.Error("error closing resource")
-	errInvalidRadomURL           = model.Error("service: invalid radom url")
 	errGeminiClientNotConfigured = model.Error("service: gemini client not configured")
 	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
 	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
@@ -128,6 +127,15 @@ type stripeClient interface {
 }
 
 // Service contains datastore
+type radomClient interface {
+	CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	GetSubscription(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
+}
+
+type radomMessageAuthenticator interface {
+	Authenticate(ctx context.Context, token string) error
+}
+
 type Service struct {
 	orderRepo     orderStoreSvc
 	orderItemRepo orderItemStore
@@ -138,20 +146,22 @@ type Service struct {
 	// TODO: Eventually remove it.
 	Datastore Datastore
 
-	wallet             *wallet.Service
-	cbClient           cbr.Client
-	geminiClient       gemini.Client
-	geminiConf         *gemini.Conf
-	stripeCl           stripeClient
-	codecs             map[string]*goavro.Codec
-	kafkaWriter        *kafka.Writer
-	kafkaDialer        *kafka.Dialer
-	jobs               []srv.Job
-	pauseVoteUntil     time.Time
-	pauseVoteUntilMu   sync.RWMutex
-	retry              backoff.RetryFunc
-	radomClient        *radom.InstrumentedClient
-	radomSellerAddress string
+	wallet           *wallet.Service
+	cbClient         cbr.Client
+	geminiClient     gemini.Client
+	geminiConf       *gemini.Conf
+	stripeCl         stripeClient
+	codecs           map[string]*goavro.Codec
+	kafkaWriter      *kafka.Writer
+	kafkaDialer      *kafka.Dialer
+	jobs             []srv.Job
+	pauseVoteUntil   time.Time
+	pauseVoteUntilMu sync.RWMutex
+	retry            backoff.RetryFunc
+
+	radomClient  radomClient
+	radomGateway *radom.Gateway
+	radomAuth    radomMessageAuthenticator
 
 	vendorReceiptValid vendorReceiptValidator
 	gpsAuth            gpsMessageAuthenticator
@@ -213,7 +223,7 @@ func InitService(
 	payHistRepo orderPayHistoryStore,
 	tlv2repo tlv2Store,
 ) (*Service, error) {
-	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
+	lg := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
 	scClient := &client.API{}
 	if enabled, ok := ctx.Value(appctx.StripeEnabledCTXKey).(bool); ok && enabled {
@@ -222,40 +232,58 @@ func InitService(
 		var err error
 		stripe.Key, err = appctx.GetStringFromContext(ctx, appctx.StripeSecretCTXKey)
 		if err != nil {
-			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
+			lg.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
 		}
 
 		scClient.Init(stripe.Key, nil)
 	}
 
-	var (
-		radomSellerAddress string
-		radomClient        *radom.InstrumentedClient
-	)
+	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
+	if err != nil {
+		return nil, err
+	}
 
-	// setup radom if exists in context and enabled
-	if enabled, ok := ctx.Value(appctx.RadomEnabledCTXKey).(bool); ok && enabled {
-		sublogger.Debug().Msg("radom enabled")
-		var err error
-		radomSellerAddress, err = appctx.GetStringFromContext(ctx, appctx.RadomSellerAddressCTXKey)
-		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
-			return nil, err
-		}
+	var radomCl *radom.Client
+	var radomGateway *radom.Gateway
+	var radomAuthCfg radom.MessageAuthConfig
 
+	if enabled, _ := strconv.ParseBool(os.Getenv("RADOM_ENABLED")); enabled {
 		srvURL := os.Getenv("RADOM_SERVER")
 		if srvURL == "" {
-			return nil, errInvalidRadomURL
+			return nil, model.Error("skus: invalid radom url")
 		}
 
-		rdSecret := os.Getenv("RADOM_SECRET")
-		proxyAddr := os.Getenv("HTTP_PROXY")
+		authToken := os.Getenv("RADOM_SECRET")
+		if authToken == "" {
+			return nil, model.Error("skus: radom secret not found")
+		}
 
-		radomClient, err = radom.NewInstrumented(srvURL, rdSecret, proxyAddr)
-		if err != nil {
-			return nil, err
+		{
+			var err error
+
+			radomCl, err = radom.New(srvURL, authToken)
+			if err != nil {
+				return nil, err
+			}
+
+			radomGateway, err = newRadomGateway(env)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		radKey := os.Getenv("RADOM_VERIFICATION_KEY")
+		if radKey == "" {
+			return nil, model.Error("skus: radom verification key not found")
+		}
+
+		radomAuthCfg = radom.MessageAuthConfig{
+			Enabled: enabled,
+			Token:   []byte(radKey),
 		}
 	}
+
+	radomAuth := radom.NewMessageAuthenticator(radomAuthCfg)
 
 	cbClient, err := cbr.New()
 	if err != nil {
@@ -300,11 +328,6 @@ func InitService(
 		return nil, err
 	}
 
-	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
-	if err != nil {
-		return nil, err
-	}
-
 	idv, err := idtoken.NewValidator(ctx, option.WithTelemetryDisabled())
 	if err != nil {
 		return nil, err
@@ -312,22 +335,22 @@ func InitService(
 
 	disabled, _ := strconv.ParseBool(os.Getenv("GCP_PUSH_NOTIFICATION"))
 	if disabled {
-		sublogger.Warn().Msg("gcp push notification is disabled")
+		lg.Warn().Msg("gcp push notification is disabled")
 	}
 
 	aud := os.Getenv("GCP_PUSH_SUBSCRIPTION_AUDIENCE")
 	if aud == "" {
-		sublogger.Warn().Msg("gcp push subscription audience is empty")
+		lg.Warn().Msg("gcp push subscription audience is empty")
 	}
 
 	iss := os.Getenv("GCP_CERT_ISSUER")
 	if iss == "" {
-		sublogger.Warn().Msg("gcp cert issuer is empty")
+		lg.Warn().Msg("gcp cert issuer is empty")
 	}
 
 	sa := os.Getenv("GCP_PUSH_SUBSCRIPTION_SERVICE_ACCOUNT")
 	if sa == "" {
-		sublogger.Warn().Msg("gcp push subscription service account is empty")
+		lg.Warn().Msg("gcp push subscription service account is empty")
 	}
 
 	gpsCfg := gpsValidatorConfig{
@@ -346,15 +369,17 @@ func InitService(
 
 		Datastore: datastore,
 
-		wallet:             walletService,
-		geminiClient:       geminiClient,
-		geminiConf:         geminiConf,
-		cbClient:           cbClient,
-		stripeCl:           xstripe.NewClient(scClient),
-		pauseVoteUntilMu:   sync.RWMutex{},
-		retry:              backoff.Retry,
-		radomClient:        radomClient,
-		radomSellerAddress: radomSellerAddress,
+		wallet:           walletService,
+		geminiClient:     geminiClient,
+		geminiConf:       geminiConf,
+		cbClient:         cbClient,
+		stripeCl:         xstripe.NewClient(scClient),
+		pauseVoteUntilMu: sync.RWMutex{},
+		retry:            backoff.Retry,
+
+		radomClient:  radomCl,
+		radomGateway: radomGateway,
+		radomAuth:    radomAuth,
 
 		vendorReceiptValid: rcptValidator,
 		gpsAuth:            newGPSNtfAuthenticator(gpsCfg, idv),
@@ -364,7 +389,6 @@ func InitService(
 		newItemReqSet: newOrderItemReqNewMobileSet(env),
 	}
 
-	// setup runnable jobs
 	service.jobs = []srv.Job{
 		{
 			Func:    service.RunNextVoteDrainJob,
@@ -1828,7 +1852,7 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 
 		// Backporting this from the legacy method CreateOrderFromRequest.
 		case order.IsRadomPayable():
-			ssid, err := s.createRadomSessID(ctx, req, order)
+			ssid, err := s.createRadomSession(ctx, req, order)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
 			}
@@ -1922,14 +1946,64 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 	return createStripeSession(ctx, s.stripeCl, sreq)
 }
 
-// TODO: Refactor the Radom-related logic.
-func (s *Service) createRadomSessID(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
-	sess, err := order.CreateRadomCheckoutSession(ctx, s.radomClient, s.radomSellerAddress)
+func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
+	oid := order.ID.String()
+
+	surl, err := req.RadomMetadata.SuccessURL(oid)
 	if err != nil {
 		return "", err
 	}
 
-	return sess.SessionID, nil
+	curl, err := req.RadomMetadata.CancelURL(oid)
+	if err != nil {
+		return "", err
+	}
+
+	items, err := orderItemsToRadomLineItems(order.Items)
+	if err != nil {
+		return "", err
+	}
+
+	reqx := &radom.CheckoutSessionRequest{
+		LineItems:  items,
+		Gateway:    s.radomGateway,
+		SuccessURL: surl,
+		CancelURL:  curl,
+		Metadata: []radom.Metadata{
+			{
+				Key:   "brave_order_id",
+				Value: oid,
+			},
+		},
+		ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+	}
+
+	resp, err := s.radomClient.CreateCheckoutSession(ctx, reqx)
+	if err != nil {
+		return "", err
+	}
+
+	return resp.SessionID, nil
+}
+
+const errRadomProductIDNotFound = model.Error("product id not found in metadata")
+
+func orderItemsToRadomLineItems(orderItems []model.OrderItem) ([]radom.LineItem, error) {
+	lineItems := make([]radom.LineItem, 0, len(orderItems))
+	for i := range orderItems {
+		pid, ok := orderItems[i].RadomProductID()
+		if !ok {
+			return nil, errRadomProductIDNotFound
+		}
+
+		item := radom.LineItem{
+			ProductID: pid,
+		}
+
+		lineItems = append(lineItems, item)
+	}
+
+	return lineItems, nil
 }
 
 func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, kind string, cred *cbr.CredentialRedemption) *handlers.AppError {
@@ -2162,6 +2236,114 @@ func (s *Service) processSubmitReceipt(ctx context.Context, req model.ReceiptReq
 	}
 
 	return rcpt, nil
+}
+
+const errRadomUnknownAction = model.Error("skus: unknown radom action")
+
+func (s *Service) processRadomNotification(ctx context.Context, ntf *radom.Notification) error {
+	if !ntf.ShouldProcess() {
+		return nil
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.processRadomNotificationTx(ctx, tx, ntf); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtContext, ntf *radom.Notification) error {
+	switch {
+	case ntf.IsNewSub():
+		oid, err := ntf.OrderID()
+		if err != nil {
+			return err
+		}
+
+		subID, err := ntf.SubID()
+		if err != nil {
+			return err
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, subID.String())
+		if err != nil {
+			return err
+		}
+
+		nxtB, err := rsub.NextBillingDate()
+		if err != nil {
+			return err
+		}
+
+		expAt := nxtB.Add(24 * time.Hour)
+
+		paidAt, err := rsub.LastPaid()
+		if err != nil {
+			return err
+		}
+
+		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
+			return err
+		}
+
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "externalID", subID.String()); err != nil {
+			return err
+		}
+
+		return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
+
+	case ntf.ShouldRenew():
+		subID, err := ntf.SubID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		if err != nil {
+			return err
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, subID.String())
+		if err != nil {
+			return err
+		}
+
+		nxtB, err := rsub.NextBillingDate()
+		if err != nil {
+			return err
+		}
+
+		expAt := nxtB.Add(24 * time.Hour)
+
+		paidAt, err := rsub.LastPaid()
+		if err != nil {
+			return err
+		}
+
+		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt)
+
+	case ntf.ShouldCancel():
+		subID, err := ntf.SubID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		if err != nil {
+			return err
+		}
+
+		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+
+	default:
+		return errRadomUnknownAction
+	}
 }
 
 func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderStoreSvc, orderID uuid.UUID, extID string) error {
@@ -2400,7 +2582,7 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 			},
 		},
 		Quantity: req.Quantity,
-		Metadata: req.StripeMetadata.Metadata(),
+		Metadata: req.Metadata(),
 		Subtotal: req.Price.Mul(decimal.NewFromInt(int64(req.Quantity))),
 		IssuerConfig: &model.IssuerConfig{
 			Buffer:  req.TokenBufferOrDefault(),
@@ -2582,4 +2764,43 @@ func shouldRetryRedeemFn(kind, issuer string, err error) bool {
 	const leo = "brave.com?sku=brave-leo-premium"
 
 	return kind == timeLimitedV2 && issuer == leo && err.Error() == cbr.ErrBadRequest.Error()
+}
+
+func newRadomGateway(env string) (*radom.Gateway, error) {
+	switch env {
+	case "development", "staging":
+		return &radom.Gateway{
+			Managed: radom.Managed{
+				Methods: []radom.Method{
+					{
+						Network: "SepoliaTestnet",
+						Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+					},
+
+					{
+						Network: "PolygonTestnet",
+						Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+					},
+				},
+			},
+		}, nil
+	case "production":
+		return &radom.Gateway{
+			Managed: radom.Managed{
+				Methods: []radom.Method{
+					{
+						Network: "Polygon",
+						Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+					},
+
+					{
+						Network: "Ethereum",
+						Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+					},
+				},
+			},
+		}, nil
+	default:
+		return nil, model.Error("skus: unknown environment")
+	}
 }
