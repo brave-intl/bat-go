@@ -967,12 +967,9 @@ func handleVerifyCredV2(svc *Service, valid *validator.Validate) handlers.AppHan
 		}
 
 		if err := validateVerifyCredRequestV2(valid, req); err != nil {
-			verrs, ok := collectValidationErrors(err)
-			if !ok {
-				return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
-			}
+			lg.Warn().Err(err).Msg("failed to validate request")
 
-			return handlers.ValidationError("request", verrs)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
 		aerr := svc.verifyCredential(ctx, req, w)
@@ -1005,12 +1002,9 @@ func handleVerifyCredV1(svc *Service, valid *validator.Validate) handlers.AppHan
 		}
 
 		if err := valid.StructCtx(ctx, req); err != nil {
-			verrs, ok := collectValidationErrors(err)
-			if !ok {
-				return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
-			}
+			lg.Warn().Err(err).Msg("failed to validate request")
 
-			return handlers.ValidationError("request", verrs)
+			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
 		aerr := svc.verifyCredential(ctx, req, w)

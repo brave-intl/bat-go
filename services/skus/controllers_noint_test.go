@@ -226,8 +226,8 @@ func TestHandleReceiptErr(t *testing.T) {
 
 func TestParseVerifyCredRequestV2(t *testing.T) {
 	type tcExpected struct {
-		val   *model.VerifyCredentialRequestV2
-		errFn must.ErrorAssertionFunc
+		val     *model.VerifyCredentialRequestV2
+		mustErr must.ErrorAssertionFunc
 	}
 
 	type testCase struct {
@@ -241,7 +241,7 @@ func TestParseVerifyCredRequestV2(t *testing.T) {
 			name:  "error_malformed_payload",
 			given: []byte(`nonsense`),
 			exp: tcExpected{
-				errFn: func(tt must.TestingT, err error, i ...interface{}) {
+				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
 					must.Equal(tt, true, err != nil)
 				},
 			},
@@ -251,7 +251,7 @@ func TestParseVerifyCredRequestV2(t *testing.T) {
 			name:  "error_malformed_credential",
 			given: []byte(`{"sku":"sku","merchantId":"merchantId"}`),
 			exp: tcExpected{
-				errFn: func(tt must.TestingT, err error, i ...interface{}) {
+				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
 					must.Equal(tt, true, err != nil)
 				},
 			},
@@ -270,7 +270,7 @@ func TestParseVerifyCredRequestV2(t *testing.T) {
 						Presentation: "TmF0dXJlIGFiaG9ycyBhIHZhY3V1bS4K",
 					},
 				},
-				errFn: func(tt must.TestingT, err error, i ...interface{}) {
+				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
 					must.Equal(tt, true, err == nil)
 				},
 			},
@@ -282,7 +282,7 @@ func TestParseVerifyCredRequestV2(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual, err := parseVerifyCredRequestV2(tc.given)
-			tc.exp.errFn(t, err)
+			tc.exp.mustErr(t, err)
 
 			should.Equal(t, tc.exp.val, actual)
 		})
