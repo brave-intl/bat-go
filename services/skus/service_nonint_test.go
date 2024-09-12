@@ -24,6 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/skus/xstripe"
 )
@@ -4320,6 +4321,559 @@ func TestBuildStripeLineItems(t *testing.T) {
 			should.Equal(t, tc.exp, actual)
 		})
 	}
+}
+
+func TestService_createRadomSessID(t *testing.T) {
+	type tcExpected struct {
+		sessionID string
+		mustErr   must.ErrorAssertionFunc
+	}
+
+	type tcGiven struct {
+		req   *model.CreateOrderRequestNew
+		order *model.Order
+		radCl radomClient
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "err_success_url",
+			given: tcGiven{
+				order: &model.Order{},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://invalid%.com",
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NotNil(t, err)
+				},
+			},
+		},
+
+		{
+			name: "err_cancel_url",
+			given: tcGiven{
+				order: &model.Order{},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://invalid%.com",
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NotNil(t, err)
+				},
+			},
+		},
+
+		{
+			name: "err_order_items_to_line_items",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []OrderItem{{}},
+				},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://example.com",
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, errRadomProductIDNotFound)
+				},
+			},
+		},
+
+		{
+			name: "err_create_checkout_session",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []OrderItem{
+						{
+							Metadata: datastore.Metadata{
+								"radom_product_id": "product_1",
+							},
+						},
+					},
+				},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://example.com",
+					},
+				},
+				radCl: &mockRadomClient{
+					fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+						return radom.CheckoutSessionResponse{}, model.Error("some error")
+					},
+				},
+			},
+			exp: tcExpected{
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.ErrorIs(t, err, model.Error("some error"))
+				},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				order: &model.Order{
+					Items: []OrderItem{
+						{
+							Metadata: datastore.Metadata{
+								"radom_product_id": "product_1",
+							},
+						},
+					},
+				},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SuccessURI: "https://example.com",
+						CancelURI:  "https://example.com",
+					},
+				},
+				radCl: &mockRadomClient{
+					fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+						return radom.CheckoutSessionResponse{SessionID: "session_id"}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				sessionID: "session_id",
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.Nil(t, err)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := Service{
+				radomClient: tc.given.radCl,
+			}
+			ctx := context.Background()
+
+			actual, err := s.createRadomSession(ctx, tc.given.req, tc.given.order)
+			tc.exp.mustErr(t, err)
+
+			should.Equal(t, tc.exp.sessionID, actual)
+		})
+	}
+}
+
+func Test_orderItemsToLineItems(t *testing.T) {
+	type tcGiven struct {
+		orderItems []model.OrderItem
+	}
+
+	type tcExpected struct {
+		lineItems []radom.LineItem
+		err       error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "product_id_not_found",
+			given: tcGiven{
+				orderItems: []OrderItem{{}},
+			},
+			exp: tcExpected{
+				err: errRadomProductIDNotFound,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				orderItems: []OrderItem{
+					{
+						Metadata: map[string]interface{}{
+							"radom_product_id": "product_1",
+						},
+					},
+					{
+						Metadata: map[string]interface{}{
+							"radom_product_id": "product_2",
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				lineItems: []radom.LineItem{
+					{
+						ProductID: "product_1",
+					},
+					{
+						ProductID: "product_2",
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := orderItemsToRadomLineItems(tc.given.orderItems)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.lineItems, actual)
+		})
+	}
+}
+
+func Test_newRadomGateway(t *testing.T) {
+	type tcGiven struct {
+		env string
+	}
+
+	type tcExpected struct {
+		gateway *radom.Gateway
+		err     error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "development",
+			given: tcGiven{
+				"development",
+			},
+			exp: tcExpected{
+				gateway: &radom.Gateway{
+					Managed: radom.Managed{
+						Methods: []radom.Method{
+							{
+								Network: "SepoliaTestnet",
+								Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+							},
+							{
+								Network: "PolygonTestnet",
+								Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "staging",
+			given: tcGiven{
+				"staging",
+			},
+			exp: tcExpected{
+				gateway: &radom.Gateway{
+					Managed: radom.Managed{
+						Methods: []radom.Method{
+							{
+								Network: "SepoliaTestnet",
+								Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+							},
+							{
+								Network: "PolygonTestnet",
+								Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "production",
+			given: tcGiven{
+				"production",
+			},
+			exp: tcExpected{
+				gateway: &radom.Gateway{
+					Managed: radom.Managed{
+						Methods: []radom.Method{
+							{
+								Network: "Polygon",
+								Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+							},
+
+							{
+								Network: "Ethereum",
+								Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "unknown",
+			given: tcGiven{
+				"random_env",
+			},
+			exp: tcExpected{
+				err: model.Error("skus: unknown environment"),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := newRadomGateway(tc.given.env)
+			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.gateway, actual)
+		})
+	}
+}
+
+func TestService_processRadomEvent(t *testing.T) {
+	type tcGiven struct {
+		event *radom.Notification
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "should_not_process",
+			given: tcGiven{
+				event: &radom.Notification{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := Service{}
+
+			actual := s.processRadomNotification(context.Background(), tc.given.event)
+
+			should.ErrorIs(t, actual, tc.exp.err)
+		})
+	}
+}
+
+func TestService_processRadomEventTx(t *testing.T) {
+	type tcGiven struct {
+		event           *radom.Notification
+		orderRepo       orderStoreSvc
+		orderPayHistory orderPayHistoryStore
+		radomCl         radomClient
+	}
+
+	type tcExpected struct {
+		shouldErr should.ErrorAssertionFunc
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "new_subscription",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						New: &radom.NewSubscription{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+					RadomData: &radom.Data{
+						CheckoutSession: &radom.CheckoutSession{
+							Metadata: []radom.Metadata{
+								{
+									Key:   "brave_order_id",
+									Value: "d14c5b2e-b719-4504-b034-86e74a932295",
+								},
+							},
+						},
+					},
+				},
+				orderRepo:       &repository.MockOrder{},
+				orderPayHistory: &repository.MockOrderPayHistory{},
+				radomCl: &mockRadomClient{
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						return &radom.SubscriptionResponse{
+							NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
+							Payments: []radom.Payment{
+								{
+									Date: "2023-06-12T09:38:13.604410Z",
+								},
+							},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Payment: &radom.SubscriptionPayment{
+							RadomData: &radom.Data{
+								Subscription: &radom.Subscription{
+									SubscriptionID: uuid.NewV4(),
+								},
+							},
+						},
+					},
+				},
+				orderRepo:       &repository.MockOrder{},
+				orderPayHistory: &repository.MockOrderPayHistory{},
+				radomCl: &mockRadomClient{
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						return &radom.SubscriptionResponse{
+							NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
+							Payments: []radom.Payment{
+								{
+									Date: "2023-06-12T09:38:13.604410Z",
+								},
+							},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_cancelled",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Cancelled: &radom.SubscriptionCancelled{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_expired",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Expired: &radom.SubscriptionExpired{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "unknown_action",
+			given: tcGiven{
+				event: &radom.Notification{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, errRadomUnknownAction)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.orderRepo, payHistRepo: tc.given.orderPayHistory, radomClient: tc.given.radomCl}
+
+			ctx := context.Background()
+
+			actual := svc.processRadomNotificationTx(ctx, nil, tc.given.event)
+			tc.exp.shouldErr(t, actual)
+		})
+	}
+}
+
+type mockRadomClient struct {
+	fnCreateCheckoutSession func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	fnGetSubscription       func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
+}
+
+func (m *mockRadomClient) CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
+	if m.fnCreateCheckoutSession == nil {
+		return radom.CheckoutSessionResponse{}, nil
+	}
+
+	return m.fnCreateCheckoutSession(ctx, creq)
+}
+
+func (m *mockRadomClient) GetSubscription(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+	if m.fnGetSubscription == nil {
+		return &radom.SubscriptionResponse{}, nil
+	}
+
+	return m.fnGetSubscription(ctx, subID)
 }
 
 type mockPaidOrderCreator struct {

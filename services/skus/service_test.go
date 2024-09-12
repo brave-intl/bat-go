@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/ptr"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
+
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 

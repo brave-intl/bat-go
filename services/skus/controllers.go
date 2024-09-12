@@ -2,7 +2,6 @@ package skus
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,7 +18,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/stripe/stripe-go/v72/webhook"
 
-	"github.com/brave-intl/bat-go/libs/clients/radom"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
@@ -30,6 +28,7 @@ import (
 
 	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
+	"github.com/brave-intl/bat-go/services/skus/radom"
 )
 
 const (
@@ -141,10 +140,12 @@ func Router(
 func CredentialRouter(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
 
+	valid := validator.New()
+
 	r.Method(
 		http.MethodPost,
 		"/subscription/verifications",
-		middleware.InstrumentHandler("VerifyCredentialV1", authMwr(VerifyCredentialV1(svc))),
+		middleware.InstrumentHandler("handleVerifyCredV1", authMwr(handleVerifyCredV1(svc, valid))),
 	)
 
 	return r
@@ -154,10 +155,12 @@ func CredentialRouter(svc *Service, authMwr middlewareFn) chi.Router {
 func CredentialV2Router(svc *Service, authMwr middlewareFn) chi.Router {
 	r := chi.NewRouter()
 
+	valid := validator.New()
+
 	r.Method(
 		http.MethodPost,
 		"/subscription/verifications",
-		middleware.InstrumentHandler("VerifyCredentialV2", authMwr(VerifyCredentialV2(svc))),
+		middleware.InstrumentHandler("handleVerifyCredV2", authMwr(handleVerifyCredV2(svc, valid))),
 	)
 
 	return r
@@ -943,54 +946,73 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 	})
 }
 
-func VerifyCredentialV2(service *Service) handlers.AppHandler {
+func handleVerifyCredV2(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		l := logging.Logger(ctx, "skus").With().Str("func", "VerifyCredentialV2").Logger()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleVerifyCredV2").Logger()
 
-		req := &VerifyCredentialRequestV2{}
-		if err := inputs.DecodeAndValidateReader(ctx, req, r.Body); err != nil {
-			l.Error().Err(err).Msg("failed to read request")
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+		if err != nil {
+			lg.Warn().Err(err).Msg("failed to read body")
+
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		appErr := service.verifyCredential(ctx, req, w)
-		if appErr != nil {
-			l.Error().Err(appErr).Msg("failed to verify credential")
+		req, err := parseVerifyCredRequestV2(data)
+		if err != nil {
+			lg.Warn().Err(err).Msg("failed to parse request")
+
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		return appErr
+		if err := validateVerifyCredRequestV2(valid, req); err != nil {
+			lg.Warn().Err(err).Msg("failed to validate request")
+
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		aerr := svc.verifyCredential(ctx, req, w)
+		if aerr != nil {
+			lg.Err(aerr).Msg("failed to verify credential")
+		}
+
+		return aerr
 	}
 }
 
-// VerifyCredentialV1 is the handler for verifying subscription credentials
-func VerifyCredentialV1(service *Service) handlers.AppHandler {
+func handleVerifyCredV1(svc *Service, valid *validator.Validate) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		l := logging.Logger(r.Context(), "VerifyCredentialV1")
 
-		var req = new(VerifyCredentialRequestV1)
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleVerifyCredV1").Logger()
 
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
+		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
-			l.Error().Err(err).Msg("failed to read request")
+			lg.Warn().Err(err).Msg("failed to read body")
+
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
-		l.Debug().Msg("read verify credential post body")
 
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			l.Error().Err(err).Msg("failed to validate request")
+		req := &model.VerifyCredentialRequestV1{}
+		if err := json.Unmarshal(data, req); err != nil {
+			lg.Warn().Err(err).Msg("failed to parse request")
+
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		if err := valid.StructCtx(ctx, req); err != nil {
+			lg.Warn().Err(err).Msg("failed to validate request")
+
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
-		appErr := service.verifyCredential(ctx, req, w)
-		if appErr != nil {
-			l.Error().Err(appErr).Msg("failed to verify credential")
+		aerr := svc.verifyCredential(ctx, req, w)
+		if aerr != nil {
+			lg.Err(aerr).Msg("failed to verify credential")
 		}
 
-		return appErr
+		return aerr
 	}
 }
 
@@ -998,7 +1020,7 @@ func WebhookRouter(svc *Service) chi.Router {
 	r := chi.NewRouter()
 
 	r.Method(http.MethodPost, "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", handleStripeWebhook(svc)))
-	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("HandleRadomWebhook", HandleRadomWebhook(svc)))
+	r.Method(http.MethodPost, "/radom", middleware.InstrumentHandler("handleRadomWebhook", handleRadomWebhook(svc)))
 	r.Method(http.MethodPost, "/android", middleware.InstrumentHandler("handleWebhookPlayStore", handleWebhookPlayStore(svc)))
 	r.Method(http.MethodPost, "/ios", middleware.InstrumentHandler("handleWebhookAppStore", handleWebhookAppStore(svc)))
 
@@ -1188,89 +1210,52 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
-// HandleRadomWebhook handles Radom checkout session webhooks.
-func HandleRadomWebhook(service *Service) handlers.AppHandler {
+// handleRadomWebhook handles Radom checkout session webhooks.
+func handleRadomWebhook(s *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-
-		lg := logging.Logger(ctx, "payments").With().Str("func", "HandleRadomWebhook").Logger()
-
-		// Get webhook secret.
-		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.RadomWebhookSecretCTXKey)
-		if err != nil {
-			lg.Error().Err(err).Msg("failed to get radom_webhook_secret from context")
-			return handlers.WrapError(err, "error getting radom_webhook_secret from context", http.StatusInternalServerError)
-		}
-
-		// Check verification key.
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("radom-verification-key")), []byte(endpointSecret)) != 1 {
-			lg.Error().Err(err).Msg("invalid verification key from webhook")
-			return handlers.WrapError(err, "invalid verification key", http.StatusBadRequest)
-		}
-
-		req := radom.WebhookRequest{}
-		if err := requestutils.ReadJSON(ctx, r.Body, &req); err != nil {
-			lg.Error().Err(err).Msg("failed to read request body")
-			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
-		}
-
-		lg.Debug().Str("event_type", req.EventType).Str("data", fmt.Sprintf("%+v", req)).Msg("webhook event captured")
-
-		// Handle only successful payment events.
-		if req.EventType != "managedRecurringPayment" && req.EventType != "newSubscription" {
-			return handlers.WrapError(err, "event type not implemented", http.StatusBadRequest)
-		}
-
-		// Lookup the order, the checkout session was created with orderId in metadata.
-		rawOrderID, err := req.Data.CheckoutSession.Metadata.Get("braveOrderId")
-		if err != nil || rawOrderID == "" {
-			return handlers.WrapError(err, "brave metadata not found in webhook", http.StatusBadRequest)
-		}
-
-		orderID, err := uuid.FromString(rawOrderID)
-		if err != nil {
-			return handlers.WrapError(err, "invalid braveOrderId in request", http.StatusBadRequest)
-		}
-
-		// Set order id to paid, and update metadata values.
-		if err := service.Datastore.UpdateOrder(orderID, OrderStatusPaid); err != nil {
-			lg.Error().Err(err).Msg("failed to update order status")
-			return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
-		}
-
-		if err := service.Datastore.AppendOrderMetadata(
-			ctx, &orderID, "radomCheckoutSession", req.Data.CheckoutSession.CheckoutSessionID); err != nil {
-			lg.Error().Err(err).Msg("failed to update order metadata")
-			return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-		}
-
-		if req.EventType == "newSubscription" {
-
-			if err := service.Datastore.AppendOrderMetadata(
-				ctx, &orderID, "subscriptionId", req.EventData.NewSubscription.SubscriptionID); err != nil {
-				lg.Error().Err(err).Msg("failed to update order metadata")
-				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-			}
-
-			if err := service.Datastore.AppendOrderMetadata(
-				ctx, &orderID, "subscriptionContractAddress",
-				req.EventData.NewSubscription.Subscription.AutomatedEVMSubscription.SubscriptionContractAddress); err != nil {
-
-				lg.Error().Err(err).Msg("failed to update order metadata")
-				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
-			}
-
-		}
-
-		// Set paymentProcessor to Radom.
-		if err := service.Datastore.AppendOrderMetadata(ctx, &orderID, "paymentProcessor", model.RadomPaymentMethod); err != nil {
-			lg.Error().Err(err).Msg("failed to update order to add the payment processor")
-			return handlers.WrapError(err, "failed to update order to add the payment processor", http.StatusInternalServerError)
-		}
-
-		lg.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
-		return handlers.RenderContent(ctx, "payment successful", w, http.StatusOK)
+		return handleRadomWebhookH(w, r, s)
 	}
+}
+
+func handleRadomWebhookH(w http.ResponseWriter, r *http.Request, svc *Service) *handlers.AppError {
+	ctx := r.Context()
+
+	l := logging.Logger(ctx, "skus").With().Str("func", "handleRadomWebhookH").Logger()
+
+	if err := svc.radomAuth.Authenticate(ctx, r.Header.Get("radom-verification-key")); err != nil {
+		l.Err(err).Msg("invalid request")
+
+		return handlers.WrapError(err, "invalid request", http.StatusUnauthorized)
+	}
+
+	b, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		l.Err(err).Msg("failed to read payload")
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	}
+
+	ntf, err := radom.ParseNotification(b)
+	if err != nil {
+		l.Err(err).Msg("failed to parse radom event")
+
+		return handlers.WrapError(err, "failed to parse radom event", http.StatusBadRequest)
+	}
+
+	if err := svc.processRadomNotification(ctx, ntf); err != nil {
+		l.Err(err).Msg("failed to process radom notification")
+
+		return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+	}
+
+	msg := "skipped radom notification"
+	if ntf.ShouldProcess() {
+		msg = "processed radom notification"
+	}
+
+	l.Info().Str("ntf_type", ntf.NtfType()).Str("ntf_effect", ntf.Effect()).Msg(msg)
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func handleStripeWebhook(svc *Service) handlers.AppHandler {
@@ -1383,7 +1368,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 
 		req, err := parseSubmitReceiptRequest(payload)
 		if err != nil {
-			l.Warn().Err(err).Msg("failed to deserialize request")
+			l.Warn().Err(err).Msg("failed to parse request")
 
 			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 		}
@@ -1450,7 +1435,7 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 
 	req, err := parseSubmitReceiptRequest(raw)
 	if err != nil {
-		lg.Warn().Err(err).Msg("failed to deserialize request")
+		lg.Warn().Err(err).Msg("failed to parse request")
 
 		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 	}
@@ -1518,7 +1503,7 @@ func handleCheckOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Servi
 
 	req, err := parseSubmitReceiptRequest(raw)
 	if err != nil {
-		lg.Warn().Err(err).Msg("failed to deserialize request")
+		lg.Warn().Err(err).Msg("failed to parse request")
 
 		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 	}
@@ -1638,4 +1623,43 @@ func collectValidationErrors(err error) (map[string]string, bool) {
 	}
 
 	return result, true
+}
+
+func parseVerifyCredRequestV2(raw []byte) (*model.VerifyCredentialRequestV2, error) {
+	result := &model.VerifyCredentialRequestV2{}
+
+	if err := json.Unmarshal(raw, result); err != nil {
+		return nil, err
+	}
+
+	copaque, err := parseVerifyCredOpaque(result.Credential)
+	if err != nil {
+		return nil, err
+	}
+
+	result.CredentialOpaque = copaque
+
+	return result, nil
+}
+
+func parseVerifyCredOpaque(raw string) (*model.VerifyCredentialOpaque, error) {
+	data, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &model.VerifyCredentialOpaque{}
+	if err = json.Unmarshal(data, result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func validateVerifyCredRequestV2(valid *validator.Validate, req *model.VerifyCredentialRequestV2) error {
+	if err := valid.Struct(req); err != nil {
+		return err
+	}
+
+	return valid.Struct(req.CredentialOpaque)
 }
