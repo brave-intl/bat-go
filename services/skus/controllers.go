@@ -961,7 +961,7 @@ func handleVerifyCredV2(svc *Service, valid *validator.Validate) handlers.AppHan
 
 		req, err := parseVerifyCredRequestV2(data)
 		if err != nil {
-			lg.Warn().Err(err).Msg("failed to deserialize request")
+			lg.Warn().Err(err).Msg("failed to parse request")
 
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -996,7 +996,7 @@ func handleVerifyCredV1(svc *Service, valid *validator.Validate) handlers.AppHan
 
 		req := &model.VerifyCredentialRequestV1{}
 		if err := json.Unmarshal(data, req); err != nil {
-			lg.Warn().Err(err).Msg("failed to deserialize request")
+			lg.Warn().Err(err).Msg("failed to parse request")
 
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -1368,7 +1368,7 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 
 		req, err := parseSubmitReceiptRequest(payload)
 		if err != nil {
-			l.Warn().Err(err).Msg("failed to deserialize request")
+			l.Warn().Err(err).Msg("failed to parse request")
 
 			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 		}
@@ -1435,7 +1435,7 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 
 	req, err := parseSubmitReceiptRequest(raw)
 	if err != nil {
-		lg.Warn().Err(err).Msg("failed to deserialize request")
+		lg.Warn().Err(err).Msg("failed to parse request")
 
 		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 	}
@@ -1503,7 +1503,7 @@ func handleCheckOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Servi
 
 	req, err := parseSubmitReceiptRequest(raw)
 	if err != nil {
-		lg.Warn().Err(err).Msg("failed to deserialize request")
+		lg.Warn().Err(err).Msg("failed to parse request")
 
 		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 	}
