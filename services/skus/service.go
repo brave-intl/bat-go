@@ -1405,7 +1405,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 		return nil, http.StatusInternalServerError, model.Error("unable to parse issuance interval for credentials")
 	}
 
-	issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
+	issuerID, err := encodeIssuerID(order.MerchantID, item.SKUForIssuer())
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 	}
@@ -1423,10 +1423,10 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 }
 
 type credential interface {
-	GetSku(context.Context) string
-	GetType(context.Context) string
-	GetMerchantID(context.Context) string
-	GetPresentation(context.Context) string
+	GetSKU() string
+	GetType() string
+	GetMerchantID() string
+	GetPresentation() string
 }
 
 // verifyCredential - given a credential, verify it.
@@ -1441,21 +1441,21 @@ func (s *Service) verifyCredential(ctx context.Context, cred credential, w http.
 
 	caveats := caveatsFromCtx(ctx)
 
-	if merchID := cred.GetMerchantID(ctx); merchID != merchant {
+	if merchID := cred.GetMerchantID(); merchID != merchant {
 		logger.Warn().Str("req.MerchantID", merchID).Str("merchant", merchant).Msg("merchant does not match the key's merchant")
 		return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
 	}
 
 	if caveats != nil {
 		if sku, ok := caveats["sku"]; ok {
-			if csku := cred.GetSku(ctx); csku != sku {
+			if csku := cred.GetSKU(); csku != sku {
 				logger.Warn().Str("req.SKU", csku).Str("sku", sku).Msg("sku caveat does not match")
 				return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
 			}
 		}
 	}
 
-	kind := cred.GetType(ctx)
+	kind := cred.GetType()
 	switch kind {
 	case singleUse, timeLimitedV2:
 		return s.verifyBlindedTokenCredential(ctx, cred, w)
@@ -1468,7 +1468,7 @@ func (s *Service) verifyCredential(ctx context.Context, cred credential, w http.
 
 // verifyBlindedTokenCredential verifies a single use or time limited v2 credential.
 func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
-	bytes, err := base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
+	bytes, err := base64.StdEncoding.DecodeString(req.GetPresentation())
 	if err != nil {
 		return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
 	}
@@ -1479,7 +1479,7 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 	}
 
 	// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details.
-	issuerID, err := encodeIssuerID(req.GetMerchantID(ctx), req.GetSku(ctx))
+	issuerID, err := encodeIssuerID(req.GetMerchantID(), req.GetSKU())
 	if err != nil {
 		return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
 	}
@@ -1488,12 +1488,12 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 		return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 	}
 
-	return s.redeemBlindedCred(ctx, w, req.GetType(ctx), decodedCred)
+	return s.redeemBlindedCred(ctx, w, req.GetType(), decodedCred)
 }
 
 // verifyTimeLimitedV1Credential verifies a time limited v1 credential.
 func (s *Service) verifyTimeLimitedV1Credential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
-	data, err := base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
+	data, err := base64.StdEncoding.DecodeString(req.GetPresentation())
 	if err != nil {
 		return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
 	}
@@ -1503,10 +1503,10 @@ func (s *Service) verifyTimeLimitedV1Credential(ctx context.Context, req credent
 		return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 	}
 
-	merchID := req.GetMerchantID(ctx)
+	merchID := req.GetMerchantID()
 
 	// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details.
-	issuerID, err := encodeIssuerID(merchID, req.GetSku(ctx))
+	issuerID, err := encodeIssuerID(merchID, req.GetSKU())
 	if err != nil {
 		return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
 	}

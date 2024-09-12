@@ -237,7 +237,7 @@ func TestCreateIssuer_NewIssuer(t *testing.T) {
 		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
-	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKUForIssuer())
 	must.Equal(t, nil, err)
 
 	cbrClient := mock_cbr.NewMockClient(ctrl)
@@ -291,7 +291,7 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
-	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKUForIssuer())
 	must.Equal(t, nil, err)
 
 	issuerConfig := model.IssuerConfig{
@@ -360,7 +360,7 @@ func TestCreateIssuer_AlreadyExists(t *testing.T) {
 		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
-	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKUForIssuer())
 	must.Equal(t, nil, err)
 
 	issuer := &Issuer{
@@ -402,7 +402,7 @@ func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
 		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
-	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKUForIssuer())
 	must.Equal(t, nil, err)
 
 	issuer := &Issuer{
@@ -477,7 +477,7 @@ func TestCreateOrderCredentials(t *testing.T) {
 		EachCredentialValidForISO: ptr.FromString("P1D"),
 	}
 
-	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKUForIssuer())
 	must.Equal(t, nil, err)
 
 	issuer := &Issuer{
@@ -543,7 +543,6 @@ func TestDeduplicateCredentialBindings(t *testing.T) {
 }
 
 func TestIssuerID(t *testing.T) {
-
 	cases := []struct {
 		MerchantID string
 		SKU        string

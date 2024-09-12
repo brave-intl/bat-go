@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/go-playground/validator/v10"
@@ -218,6 +219,154 @@ func TestHandleReceiptErr(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actual := handleReceiptErr(tc.given)
 
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestParseVerifyCredRequestV2(t *testing.T) {
+	type tcExpected struct {
+		val     *model.VerifyCredentialRequestV2
+		mustErr must.ErrorAssertionFunc
+	}
+
+	type testCase struct {
+		name  string
+		given []byte
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name:  "error_malformed_payload",
+			given: []byte(`nonsense`),
+			exp: tcExpected{
+				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
+					must.Equal(tt, true, err != nil)
+				},
+			},
+		},
+
+		{
+			name:  "error_malformed_credential",
+			given: []byte(`{"sku":"sku","merchantId":"merchantId"}`),
+			exp: tcExpected{
+				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
+					must.Equal(tt, true, err != nil)
+				},
+			},
+		},
+
+		{
+			name:  "success_complete",
+			given: []byte(`{"sku": "sku","merchantId": "merchantId","credential":"eyJ0eXBlIjoidGltZS1saW1pdGVkLXYyIiwicHJlc2VudGF0aW9uIjoiVG1GMGRYSmxJR0ZpYUc5eWN5QmhJSFpoWTNWMWJTNEsifQo="}`),
+			exp: tcExpected{
+				val: &model.VerifyCredentialRequestV2{
+					SKU:        "sku",
+					MerchantID: "merchantId",
+					Credential: "eyJ0eXBlIjoidGltZS1saW1pdGVkLXYyIiwicHJlc2VudGF0aW9uIjoiVG1GMGRYSmxJR0ZpYUc5eWN5QmhJSFpoWTNWMWJTNEsifQo=",
+					CredentialOpaque: &model.VerifyCredentialOpaque{
+						Type:         "time-limited-v2",
+						Presentation: "TmF0dXJlIGFiaG9ycyBhIHZhY3V1bS4K",
+					},
+				},
+				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
+					must.Equal(tt, true, err == nil)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := parseVerifyCredRequestV2(tc.given)
+			tc.exp.mustErr(t, err)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestValidateVerifyCredRequestV2(t *testing.T) {
+	type tcGiven struct {
+		valid *validator.Validate
+		req   *model.VerifyCredentialRequestV2
+	}
+
+	tests := []struct {
+		name  string
+		given tcGiven
+		exp   error
+	}{
+		{
+			name: "error_credential_opaque_nil",
+			given: tcGiven{
+				valid: validator.New(),
+				req: &model.VerifyCredentialRequestV2{
+					SKU:        "sku",
+					MerchantID: "merchantId",
+					Credential: "eyJ0eXBlIjoic2luZ2xlLXVzZSIsInByZXNlbnRhdGlvbiI6IlRtRjBkWEpsSUdGaWFHOXljeUJoSUhaaFkzVjFiUzRLIn0K",
+				},
+			},
+			exp: &validator.InvalidValidationError{Type: reflect.TypeOf((*model.VerifyCredentialOpaque)(nil))},
+		},
+
+		{
+			name: "valid_single_use",
+			given: tcGiven{
+				valid: validator.New(),
+				req: &model.VerifyCredentialRequestV2{
+					SKU:        "sku",
+					MerchantID: "merchantId",
+					Credential: "eyJ0eXBlIjoic2luZ2xlLXVzZSIsInByZXNlbnRhdGlvbiI6IlRtRjBkWEpsSUdGaWFHOXljeUJoSUhaaFkzVjFiUzRLIn0K",
+					CredentialOpaque: &model.VerifyCredentialOpaque{
+						Type:         "single-use",
+						Presentation: "TmF0dXJlIGFiaG9ycyBhIHZhY3V1bS4K",
+					},
+				},
+			},
+		},
+
+		{
+			name: "valid_time_limited",
+			given: tcGiven{
+				valid: validator.New(),
+				req: &model.VerifyCredentialRequestV2{
+					SKU:        "sku",
+					MerchantID: "merchantId",
+					Credential: "eyJ0eXBlIjoidGltZS1saW1pdGVkIiwicHJlc2VudGF0aW9uIjoiVG1GMGRYSmxJR0ZpYUc5eWN5QmhJSFpoWTNWMWJTNEsifQo=",
+					CredentialOpaque: &model.VerifyCredentialOpaque{
+						Type:         "time-limited",
+						Presentation: "TmF0dXJlIGFiaG9ycyBhIHZhY3V1bS4K",
+					},
+				},
+			},
+		},
+
+		{
+			name: "valid_time_limited_v2",
+			given: tcGiven{
+				valid: validator.New(),
+				req: &model.VerifyCredentialRequestV2{
+					SKU:        "sku",
+					MerchantID: "merchantId",
+					Credential: "eyJ0eXBlIjoidGltZS1saW1pdGVkLXYyIiwicHJlc2VudGF0aW9uIjoiVG1GMGRYSmxJR0ZpYUc5eWN5QmhJSFpoWTNWMWJTNEsifQo=",
+					CredentialOpaque: &model.VerifyCredentialOpaque{
+						Type:         "time-limited-v2",
+						Presentation: "TmF0dXJlIGFiaG9ycyBhIHZhY3V1bS4K",
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := validateVerifyCredRequestV2(tc.given.valid, tc.given.req)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
