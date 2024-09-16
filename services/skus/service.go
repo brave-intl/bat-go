@@ -677,7 +677,21 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 }
 
 func (s *Service) CancelOrder(ctx context.Context, id uuid.UUID) error {
-	return nil
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.cancelOrderTx(ctx, tx, id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) cancelOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
+	return s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusCanceled)
 }
 
 // CancelOrderLegacy cancels an order, propagates to stripe if needed.
@@ -1673,7 +1687,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		return s.orderRepo.SetStatus(ctx, dbi, oid, model.OrderStatusCanceled)
+		return s.cancelOrderTx(ctx, dbi, oid)
 
 	default:
 		return nil
@@ -1720,7 +1734,7 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
 
 	case ntf.shouldCancel():
-		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+		return s.cancelOrderTx(ctx, dbi, ord.ID)
 
 	default:
 		return nil
@@ -1771,11 +1785,11 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 
 	// Sub cancellation.
 	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldCancel():
-		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+		return s.cancelOrderTx(ctx, dbi, ord.ID)
 
 	// Voiding.
 	case ntf.VoidedPurchaseNtf != nil && ntf.VoidedPurchaseNtf.shouldProcess():
-		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+		return s.cancelOrderTx(ctx, dbi, ord.ID)
 
 	default:
 		return nil
@@ -2341,7 +2355,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		return s.orderRepo.SetStatus(ctx, dbi, ord.ID, model.OrderStatusCanceled)
+		return s.cancelOrderTx(ctx, dbi, ord.ID)
 
 	default:
 		return errRadomUnknownAction
