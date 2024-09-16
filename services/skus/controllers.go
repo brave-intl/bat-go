@@ -365,7 +365,7 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
-		if err := service.CancelOrder(oid); err != nil {
+		if err := service.CancelOrderLegacy(oid); err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 

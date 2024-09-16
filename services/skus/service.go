@@ -676,10 +676,12 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 	return s.renewOrderStripe(ctx, dbi, ord, sub.ID, expt, paidt)
 }
 
-// CancelOrder cancels an order, propagates to stripe if needed.
-//
-// TODO(pavelb): Refactor this.
-func (s *Service) CancelOrder(orderID uuid.UUID) error {
+func (s *Service) CancelOrder(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+// CancelOrderLegacy cancels an order, propagates to stripe if needed.
+func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
 	// TODO: Refactor this later. Now here's a quick fix.
 	ord, err := s.Datastore.GetOrder(orderID)
 	if err != nil {

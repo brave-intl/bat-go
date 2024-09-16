@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
@@ -30,6 +31,7 @@ func TestMain(m *testing.M) {
 type mockOrderService struct {
 	fnCreateOrderFromRequest func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	fnCreateOrder            func(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
+	fnCancelOrder            func(ctx context.Context, id uuid.UUID) error
 }
 
 func (s *mockOrderService) CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error) {
@@ -46,6 +48,14 @@ func (s *mockOrderService) CreateOrder(ctx context.Context, req *model.CreateOrd
 	}
 
 	return s.fnCreateOrder(ctx, req)
+}
+
+func (s *mockOrderService) CancelOrder(ctx context.Context, id uuid.UUID) error {
+	if s.fnCancelOrder == nil {
+		return nil
+	}
+
+	return s.fnCancelOrder(ctx, id)
 }
 
 func TestOrder_Create(t *testing.T) {
