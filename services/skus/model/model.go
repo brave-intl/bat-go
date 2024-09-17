@@ -279,7 +279,7 @@ func (x *OrderItem) IsLeo() bool {
 		return false
 	}
 
-	return x.SKU == "brave-leo-premium"
+	return x.SKU == "brave-leo-premium" || x.SKU == "brave-leo-premium-year"
 }
 
 func (x *OrderItem) StripeItemID() (string, bool) {
