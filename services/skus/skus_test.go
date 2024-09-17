@@ -84,6 +84,18 @@ func TestSKUNameByMobileName(t *testing.T) {
 		},
 
 		{
+			name:  "ios_leo_annual_release_new",
+			given: "braveleo2.yearly",
+			exp:   tcExpected{sku: "brave-leo-premium-year"},
+		},
+
+		{
+			name:  "ios_leo_annual_release_new2",
+			given: "braveleo.yearly.2",
+			exp:   tcExpected{sku: "brave-leo-premium-year"},
+		},
+
+		{
 			name:  "android_vpn_monthly_release",
 			given: "brave.vpn.monthly",
 			exp:   tcExpected{sku: "brave-vpn-premium"},
