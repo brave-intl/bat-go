@@ -10,6 +10,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/go-chi/chi"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -510,6 +511,129 @@ func TestOrder_CreateNew(t *testing.T) {
 			must.Equal(t, nil, err)
 
 			should.Equal(t, tc.exp.result, act2)
+		})
+	}
+}
+
+func TestOrder_Cancel(t *testing.T) {
+	type tcGiven struct {
+		ctx context.Context
+		svc *mockOrderService
+		oid uuid.UUID
+	}
+
+	type tcExpected struct {
+		err *handlers.AppError
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_orderID",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"invalid_id"},
+					},
+				}),
+				svc: &mockOrderService{},
+				oid: uuid.Nil,
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: invalid_id"}),
+			},
+		},
+
+		{
+			name: "context_cancelled",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				svc: &mockOrderService{
+					fnCancelOrder: func(ctx context.Context, id uuid.UUID) error {
+						return context.Canceled
+					},
+				},
+				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "client ended request", model.StatusClientClosedConn),
+			},
+		},
+
+		{
+			name: "something_went_wrong",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				svc: &mockOrderService{
+					fnCancelOrder: func(ctx context.Context, id uuid.UUID) error {
+						return model.Error("any_error")
+					},
+				},
+				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "could not cancel order", http.StatusInternalServerError),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				svc: &mockOrderService{},
+				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewOrder(tc.given.svc)
+
+			uri := "http://localhost/v1/orders-new/" + tc.given.oid.String()
+			req := httptest.NewRequest(http.MethodDelete, uri, nil)
+			req = req.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			actual1 := h.Cancel(rw, req)
+			must.Equal(t, tc.exp.err, actual1)
+
+			if tc.exp.err != nil {
+				actual1.ServeHTTP(rw, req)
+				resp := rw.Body.Bytes()
+
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+
+				should.Equal(t, exp, bytes.TrimSpace(resp))
+				return
+			}
 		})
 	}
 }

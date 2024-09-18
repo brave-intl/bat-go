@@ -134,7 +134,7 @@ func (h *Order) Cancel(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 		lg.Err(err).Str("order_id", orderID.String()).Msg("failed to cancel order")
 
 		if errors.Is(err, context.Canceled) {
-			return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+			return handlers.WrapError(model.ErrSomethingWentWrong, "client ended request", model.StatusClientClosedConn)
 		}
 
 		return handlers.WrapError(model.ErrSomethingWentWrong, "could not cancel order", http.StatusInternalServerError)
