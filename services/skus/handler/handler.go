@@ -125,7 +125,7 @@ func (h *Order) Cancel(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID})
 	}
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "CancelOrderNew").Logger()

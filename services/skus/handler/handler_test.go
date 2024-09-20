@@ -546,7 +546,7 @@ func TestOrder_Cancel(t *testing.T) {
 				oid: uuid.Nil,
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: invalid_id"}),
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID}),
 			},
 		},
 
