@@ -1899,6 +1899,34 @@ func (suite *ControllersTestSuite) TestWebhook_Radom() {
 	suite.Equal(model.OrderStatusPaid, order.Status)
 }
 
+func (suite *ControllersTestSuite) TestOrder_Cancel() {
+	ctx := context.Background()
+
+	oreq := &model.OrderNew{
+		Status: OrderStatusPaid,
+	}
+
+	ord, err := suite.service.orderRepo.Create(ctx, suite.service.Datastore.RawDB(), oreq)
+	suite.Require().NoError(err)
+
+	uri := "/v1/orders-new/" + ord.ID.String()
+
+	req := httptest.NewRequest(http.MethodPost, uri, bytes.NewBuffer([]byte{}))
+
+	rw := httptest.NewRecorder()
+
+	oh := handlers.AppHandler(handler.NewOrder(suite.service).CreateNew)
+	srv := &http.Server{Addr: ":8080", Handler: oh}
+	srv.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
+
+	ord2, err := suite.service.orderRepo.Get(ctx, suite.service.Datastore.RawDB(), ord.ID)
+	suite.Require().NoError(err)
+
+	suite.Equal(model.OrderStatusCanceled, ord2.Status)
+}
+
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
 func (suite *ControllersTestSuite) ReadSigningOrderRequestMessage(ctx context.Context, topic string) SigningOrderRequest {
 	kafkaReader, err := kafkautils.NewKafkaReader(ctx, test.RandomString(), topic)
