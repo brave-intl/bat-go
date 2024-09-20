@@ -629,7 +629,7 @@ func TestOrder_Cancel(t *testing.T) {
 				resp := rw.Body.Bytes()
 
 				exp, err := json.Marshal(tc.exp.err)
-				must.Equal(t, nil, err)
+				must.NoError(t, err)
 
 				should.Equal(t, exp, bytes.TrimSpace(resp))
 				return
