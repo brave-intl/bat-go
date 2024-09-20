@@ -1911,12 +1911,23 @@ func (suite *ControllersTestSuite) TestOrder_Cancel() {
 
 	uri := "/v1/orders-new/" + ord.ID.String()
 
-	req := httptest.NewRequest(http.MethodPost, uri, bytes.NewBuffer([]byte{}))
+	req := httptest.NewRequest(http.MethodDelete, uri, nil)
 
 	rw := httptest.NewRecorder()
 
-	oh := handlers.AppHandler(handler.NewOrder(suite.service).CreateNew)
-	srv := &http.Server{Addr: ":8080", Handler: oh}
+	oh := handler.NewOrder(suite.service)
+
+	rtr := chi.NewRouter()
+	subr := chi.NewRouter()
+	subr.Method(
+		http.MethodDelete,
+		"/{orderID}",
+		handlers.AppHandler(oh.Cancel),
+	)
+
+	rtr.Mount("/v1/orders-new", subr)
+
+	srv := &http.Server{Addr: ":8080", Handler: rtr}
 	srv.Handler.ServeHTTP(rw, req)
 
 	suite.Require().Equal(http.StatusOK, rw.Code)
