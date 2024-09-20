@@ -8,7 +8,9 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
 	"github.com/go-playground/validator/v10"
+	uuid "github.com/satori/go.uuid"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -24,6 +26,7 @@ const (
 type orderService interface {
 	CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
+	CancelOrder(ctx context.Context, id uuid.UUID) error
 }
 
 type Order struct {
@@ -115,6 +118,29 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	}
 
 	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
+}
+
+func (h *Order) Cancel(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID})
+	}
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "CancelOrderNew").Logger()
+
+	if err := h.svc.CancelOrder(ctx, orderID); err != nil {
+		lg.Err(err).Str("order_id", orderID.String()).Msg("failed to cancel order")
+
+		if errors.Is(err, context.Canceled) {
+			return handlers.WrapError(model.ErrSomethingWentWrong, "client ended request", model.StatusClientClosedConn)
+		}
+
+		return handlers.WrapError(model.ErrSomethingWentWrong, "could not cancel order", http.StatusInternalServerError)
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
 func collectValidationErrors(err error) (map[string]string, bool) {

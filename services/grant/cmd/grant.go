@@ -507,6 +507,17 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 			)
 		}
 
+		corsMwrDelete := skus.NewCORSMwr(corsOpts, http.MethodDelete)
+
+		subr.Method(
+			http.MethodDelete,
+			"/{orderID}",
+			middleware.InstrumentHandler(
+				"CancelOrderNew",
+				corsMwrDelete(authMwr(handlers.AppHandler(orderh.Cancel))),
+			),
+		)
+
 		r.Mount("/v1/orders-new", subr)
 	}
 
