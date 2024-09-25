@@ -28,6 +28,7 @@ const (
 	ErrInvalidOrderNoItems                    Error = "model: invalid order: no items"
 	ErrNoStripeCheckoutSessID                 Error = "model: order: no stripe checkout session id"
 	ErrInvalidOrderMetadataType               Error = "model: order: invalid metadata type"
+	ErrInvalidUUID                            Error = "model: invalid uuid"
 
 	ErrNumPerIntervalNotSet  Error = "model: invalid order: numPerInterval must be set"
 	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"

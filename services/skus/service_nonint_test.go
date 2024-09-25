@@ -4855,6 +4855,67 @@ func TestService_processRadomEventTx(t *testing.T) {
 	}
 }
 
+func TestService_cancelOrderTx(t *testing.T) {
+	type tcGiven struct {
+		orepo *repository.MockOrder
+		id    uuid.UUID
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "error",
+			given: tcGiven{
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				id: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected_id")
+						}
+
+						if status != model.OrderStatusCanceled {
+							return model.Error("unexpected_status")
+						}
+
+						return nil
+					},
+				},
+				id: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{orderRepo: tc.given.orepo}
+
+			ctx := context.Background()
+
+			actual := svc.cancelOrderTx(ctx, nil, tc.given.id)
+			should.ErrorIs(t, actual, tc.exp)
+		})
+	}
+}
+
 type mockRadomClient struct {
 	fnCreateCheckoutSession func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
 	fnGetSubscription       func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)

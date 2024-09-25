@@ -38,7 +38,7 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
-			return handlers.WrapError(err, "cliend ended request", model.StatusClientClosedConn)
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
 
 		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
 			return handlers.WrapError(err, "order not found", http.StatusNotFound)

@@ -82,7 +82,7 @@ func TestCred_CountBatches(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				err: handlers.WrapError(context.Canceled, "cliend ended request", model.StatusClientClosedConn),
+				err: handlers.WrapError(context.Canceled, "client ended request", model.StatusClientClosedConn),
 			},
 		},
 
