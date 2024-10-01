@@ -1,6 +1,6 @@
 module github.com/brave-intl/bat-go/tools
 
-go 1.22.5
+go 1.22
 
 replace github.com/brave-intl/bat-go/cmd => ../cmd
 
