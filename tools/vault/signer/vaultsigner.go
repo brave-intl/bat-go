@@ -5,11 +5,11 @@ import (
 	"encoding/base64"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/hashicorp/vault/api"
 	util "github.com/hashicorp/vault/command/config"
 	"github.com/hashicorp/vault/sdk/helper/jsonutil"
 	"github.com/hashicorp/vault/sdk/helper/keysutil"
-	"golang.org/x/crypto/ed25519"
 )
 
 // WrappedClient holds an api client for interacting with vault
@@ -17,14 +17,14 @@ type WrappedClient struct {
 	Client *api.Client
 }
 
-// FromKeypair create a new vault transit key by importing privKey and pubKey under importName
-func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, importName string) (*Ed25519Signer, error) {
+// FromKey create a new vault transit key by importing privKey under importName
+func (wc *WrappedClient) FromKey(privKey httpsignature.Ed25519PrivKey, importName string) (*Ed25519Signer, error) {
 	client := wc.Client
 	key := keysutil.KeyEntry{}
 
 	key.Key = privKey
 
-	pk := base64.StdEncoding.EncodeToString(pubKey)
+	pk := base64.StdEncoding.EncodeToString(privKey.Public())
 	key.FormattedPublicKey = pk
 
 	{

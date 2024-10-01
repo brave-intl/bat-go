@@ -1,8 +1,6 @@
 package wallet
 
 import (
-	"crypto"
-	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -81,8 +79,8 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 
 	uwallet := uphold.Wallet{
 		Info:    *info,
-		PrivKey: ed25519.PrivateKey{},
-		PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
+		PrivKey: httpsignature.Ed25519PrivKey{},
+		PubKey:  httpsignature.Ed25519PubKey(publicKey),
 	}
 	if err := uwallet.SubmitRegistration(ctx, ucReq.SignedCreationRequest); err != nil {
 		return handlers.WrapError(
@@ -109,7 +107,6 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 			Headers:   []string{"digest", "(request-target)"},
 		},
 		Keystore: &DecodeEd25519Keystore{},
-		Opts:     crypto.Hash(0),
 	}
 
 	// perform validation based on public key that the user submits
@@ -428,8 +425,8 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 		uwallet := uphold.Wallet{
 			Info:    *wallet,
-			PrivKey: ed25519.PrivateKey{},
-			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
+			PrivKey: httpsignature.Ed25519PrivKey{},
+			PubKey:  httpsignature.Ed25519PubKey(publicKey),
 		}
 
 		country, err := s.LinkUpholdWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)

@@ -1,7 +1,6 @@
 package wallet
 
 import (
-	"crypto"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -46,7 +45,6 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 				Headers:   []string{"digest", "(request-target)"},
 			},
 			Keystore: &DecodeEd25519Keystore{},
-			Opts:     crypto.Hash(0),
 		}
 
 		ctx, publicKey, err := verifier.VerifyRequest(r)

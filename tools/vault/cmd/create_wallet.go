@@ -15,7 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ed25519"
 )
 
 // State contains the current state of the registration
@@ -138,7 +137,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 			return err
 		}
 
-		wallet := uphold.Wallet{Info: state.WalletInfo, PrivKey: ed25519.PrivateKey{}, PubKey: publicKey}
+		wallet := uphold.Wallet{Info: state.WalletInfo, PrivKey: httpsignature.Ed25519PrivKey{}, PubKey: publicKey}
 
 		err = wallet.SubmitRegistration(ctx, state.Registration)
 		if err != nil {

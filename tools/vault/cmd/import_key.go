@@ -10,6 +10,7 @@ import (
 
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -91,7 +92,6 @@ func ImportKey(command *cobra.Command, args []string) error {
 	ReadConfig(command)
 	walletRefs := viper.GetViper().GetStringSlice("wallet-refs")
 	ed25519PrivateKey := viper.GetViper().GetString("ed25519-private-key")
-	ed25519PublicKey := viper.GetViper().GetString("ed25519-public-key")
 	upholdProviderID := viper.GetViper().GetString("uphold-provider-id")
 	geminiClientID := viper.GetViper().GetString("gemini-client-id")
 	geminiClientKey := viper.GetViper().GetString("gemini-client-key")
@@ -106,13 +106,12 @@ func ImportKey(command *cobra.Command, args []string) error {
 		parts := strings.Split(key, "-")
 		switch parts[0] {
 		case "uphold":
-			if len(ed25519PrivateKey) != 0 && len(ed25519PublicKey) != 0 {
+			if len(ed25519PrivateKey) != 0 {
 				err = upholdVaultImportKey(
 					command.Context(),
 					wrappedClient,
 					key,
 					ed25519PrivateKey,
-					ed25519PublicKey,
 					upholdProviderID,
 				)
 				if err != nil {
@@ -148,7 +147,6 @@ func upholdVaultImportKey(
 	wrappedClient *vaultsigner.WrappedClient,
 	key string,
 	ed25519PrivateKey string,
-	ed25519PublicKey string,
 	upholdProviderID string,
 ) error {
 	logger, err := appctx.GetLogger(ctx)
@@ -156,12 +154,8 @@ func upholdVaultImportKey(
 		return err
 	}
 	importName := Config.GetWalletKey(key)
-	privKey, err := hex.DecodeString(ed25519PrivateKey)
-	if err != nil {
-		return errors.New("ERROR: Key material must be passed as hex")
-	}
-
-	pubKey, err := hex.DecodeString(ed25519PublicKey)
+	var privKey httpsignature.Ed25519PrivKey
+	privKey, err = hex.DecodeString(ed25519PrivateKey)
 	if err != nil {
 		return errors.New("ERROR: Key material must be passed as hex")
 	}
@@ -173,10 +167,9 @@ func upholdVaultImportKey(
 		Str("provider", "uphold").
 		Str("config-key", key).
 		Str("vault-key", importName).
-		Int("public-length", len(pubKey)).
 		Int("private-length", len(privKey)).
 		Msg("importing secret")
-	_, err = wrappedClient.FromKeypair(privKey, pubKey, importName)
+	_, err = wrappedClient.FromKey(privKey, importName)
 	if err != nil {
 		return err
 	}
