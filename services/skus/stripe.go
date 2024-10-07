@@ -57,7 +57,7 @@ func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
 }
 
 func (x *stripeNotification) shouldProcess() bool {
-	return x.shouldRenew() || x.shouldCancel()
+	return x.shouldRenew() || x.shouldCancel() || x.shouldUpdate()
 }
 
 func (x *stripeNotification) shouldRenew() bool {

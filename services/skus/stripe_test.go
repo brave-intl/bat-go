@@ -156,8 +156,8 @@ func TestStripeNotification_shouldProcess(t *testing.T) {
 		{
 			name: "update",
 			given: &stripeNotification{
-				raw: &stripe.Event{Type: "invoice.payment_failed"},
-				sub: &stripe.Subscription{},
+				raw:     &stripe.Event{Type: "invoice.payment_failed"},
+				invoice: &stripe.Invoice{},
 			},
 			exp: true,
 		},
