@@ -31,7 +31,7 @@ func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
 	}
 
 	switch raw.Type {
-	case "invoice.paid":
+	case "invoice.paid", "invoice.payment_failed":
 		val, err := parseStripeEventData[stripe.Invoice](raw.Data.Raw)
 		if err != nil {
 			return nil, err
@@ -68,6 +68,10 @@ func (x *stripeNotification) shouldCancel() bool {
 	return x.sub != nil && x.raw.Type == "customer.subscription.deleted"
 }
 
+func (x *stripeNotification) shouldUpdate() bool {
+	return x.invoice != nil && x.raw.Type == "invoice.payment_failed"
+}
+
 func (x *stripeNotification) ntfType() string {
 	return x.raw.Type
 }
@@ -92,6 +96,9 @@ func (x *stripeNotification) effect() string {
 
 	case x.shouldCancel():
 		return "cancel"
+
+	case x.shouldUpdate():
+		return "update"
 
 	default:
 		return "skip"
