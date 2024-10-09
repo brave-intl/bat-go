@@ -1691,6 +1691,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
+		// Reset numPaymentFailed.
 		if err := s.updateNumPaymentFailed(ctx, dbi, oid, 0); err != nil {
 			return err
 		}
@@ -1714,7 +1715,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 		}
 
 		val := ord.NumPaymentFailed()
-		val += 1
+		val++
 
 		return s.recordPayFailureStripe(ctx, dbi, ord, subID, val)
 
