@@ -57,7 +57,7 @@ func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
 }
 
 func (x *stripeNotification) shouldProcess() bool {
-	return x.shouldRenew() || x.shouldCancel() || x.shouldUpdate()
+	return x.shouldRenew() || x.shouldCancel() || x.shouldRecordPayFailure()
 }
 
 func (x *stripeNotification) shouldRenew() bool {
@@ -68,7 +68,7 @@ func (x *stripeNotification) shouldCancel() bool {
 	return x.sub != nil && x.raw.Type == "customer.subscription.deleted"
 }
 
-func (x *stripeNotification) shouldUpdate() bool {
+func (x *stripeNotification) shouldRecordPayFailure() bool {
 	return x.invoice != nil && x.raw.Type == "invoice.payment_failed"
 }
 
@@ -97,8 +97,8 @@ func (x *stripeNotification) effect() string {
 	case x.shouldCancel():
 		return "cancel"
 
-	case x.shouldUpdate():
-		return "update"
+	case x.shouldRecordPayFailure():
+		return "record_payment_failure"
 
 	default:
 		return "skip"

@@ -154,7 +154,7 @@ func TestStripeNotification_shouldProcess(t *testing.T) {
 		},
 
 		{
-			name: "update",
+			name: "record_payment_failure",
 			given: &stripeNotification{
 				raw:     &stripe.Event{Type: "invoice.payment_failed"},
 				invoice: &stripe.Invoice{},
@@ -277,7 +277,7 @@ func TestStripeNotification_shouldCancel(t *testing.T) {
 	}
 }
 
-func TestStripeNotification_shouldUpdate(t *testing.T) {
+func TestStripeNotification_shouldRecordPayFailure(t *testing.T) {
 	tests := []struct {
 		name  string
 		given *stripeNotification
@@ -319,7 +319,7 @@ func TestStripeNotification_shouldUpdate(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.shouldUpdate()
+			actual := tc.given.shouldRecordPayFailure()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -439,12 +439,12 @@ func TestStripeNotification_effect(t *testing.T) {
 		},
 
 		{
-			name: "update",
+			name: "record_payment_failure",
 			given: &stripeNotification{
 				raw:     &stripe.Event{Type: "invoice.payment_failed"},
 				invoice: &stripe.Invoice{},
 			},
-			exp: "update",
+			exp: "record_payment_failure",
 		},
 
 		{
