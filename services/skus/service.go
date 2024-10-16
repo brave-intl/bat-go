@@ -1228,6 +1228,16 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, orderID, itemID, reqID 
 //
 // Browser's api_request_helper does not understand Go's nil slices, hence explicit empty slice is returned.
 func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, reqID uuid.UUID) ([]TimeAwareSubIssuedCreds, int, error) {
+	creds, err := s.Datastore.GetTLV2Creds(ctx, s.Datastore.RawDB(), orderID, itemID, reqID)
+	if err != nil {
+		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	// We found creds so filter active.
+	if len(creds.Credentials) > 0 {
+		return filterActiveCreds(creds.Credentials, time.Now().UTC()), http.StatusOK, nil
+	}
+
 	obmsg, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1242,21 +1252,22 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, re
 	}
 
 	if obmsg.CompletedAt == nil {
-		// Get average of last 10 outbox messages duration as the retry after.
 		return []TimeAwareSubIssuedCreds{}, http.StatusAccepted, errSetRetryAfter
 	}
 
-	creds, err := s.Datastore.GetTLV2Creds(ctx, s.Datastore.RawDB(), orderID, itemID, reqID)
-	if err != nil {
-		if errors.Is(err, errNoTLV2Creds) {
-			// Credentials could be signed, but nothing to return as they are all expired.
-			return []TimeAwareSubIssuedCreds{}, http.StatusOK, nil
-		}
+	// We have neither credentials nor a signing request so return an error.
+	return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+}
 
-		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+func filterActiveCreds(creds []TimeAwareSubIssuedCreds, now time.Time) []TimeAwareSubIssuedCreds {
+	act := make([]TimeAwareSubIssuedCreds, 0)
+	for i := range creds {
+		if creds[i].ValidTo.After(now) {
+			act = append(act, creds[i])
+		}
 	}
 
-	return creds.Credentials, http.StatusOK, nil
+	return act
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
