@@ -293,6 +293,91 @@ func TestCreateOrderItem(t *testing.T) {
 	}
 }
 
+func TestFilterActiveCreds(t *testing.T) {
+	type tcGiven struct {
+		creds []TimeAwareSubIssuedCreds
+		now   time.Time
+	}
+
+	type tcExpected struct {
+		activeCreds []TimeAwareSubIssuedCreds
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "valid_creds",
+			given: tcGiven{
+				creds: []TimeAwareSubIssuedCreds{
+					{
+						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+					},
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				activeCreds: []TimeAwareSubIssuedCreds{
+					{
+						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+					},
+				},
+			},
+		},
+
+		{
+			name: "expired_creds",
+			given: tcGiven{
+				creds: []TimeAwareSubIssuedCreds{
+					{
+						ValidTo: time.Date(2020, time.January, 20, 0, 0, 0, 0, time.UTC),
+					},
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				activeCreds: []TimeAwareSubIssuedCreds{},
+			},
+		},
+
+		{
+			name: "expired_and_active_mix",
+			given: tcGiven{
+				creds: []TimeAwareSubIssuedCreds{
+					{
+						ValidTo: time.Date(2020, time.January, 20, 0, 0, 0, 0, time.UTC),
+					},
+
+					{
+						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+					},
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				activeCreds: []TimeAwareSubIssuedCreds{
+					{
+						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := filterActiveCreds(tc.given.creds, tc.given.now)
+			should.Equal(t, tc.exp.activeCreds, actual)
+		})
+	}
+}
+
 func mustDurationFromISO(v string) *time.Duration {
 	result, err := durationFromISO(v)
 	if err != nil {

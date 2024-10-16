@@ -983,15 +983,15 @@ func (pg *Postgres) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContext, o
 		order_id, item_id, issuer_id, blinded_creds, signed_creds,
 		batch_proof, public_key, valid_from, valid_to
 	FROM time_limited_v2_order_creds
-	WHERE order_id = $1 AND item_id = $2 AND request_id = $3 AND valid_to > now()`
+	WHERE order_id = $1 AND item_id = $2 AND request_id = $3`
 
 	creds := make([]TimeAwareSubIssuedCreds, 0)
 	if err := sqlx.SelectContext(ctx, dbi, &creds, q, ordID, itemID, reqID); err != nil {
-		return nil, err
+		return &TimeLimitedV2Creds{}, err
 	}
 
 	if len(creds) == 0 {
-		return nil, errNoTLV2Creds
+		return &TimeLimitedV2Creds{}, nil
 	}
 
 	result := &TimeLimitedV2Creds{
