@@ -1234,7 +1234,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, re
 	}
 
 	// We found creds so filter active.
-	if len(creds.Credentials) > 0 {
+	if creds != nil && len(creds.Credentials) > 0 {
 		return filterActiveCreds(creds.Credentials, time.Now().UTC()), http.StatusOK, nil
 	}
 
