@@ -12,7 +12,7 @@ and_run="${3}"
 run_cpu_count="${4}"
 run_memory="${5}"
 
-set -eux
+set -ex
 
 # wait for a few seconds for eks to pull down the right version
 sleep 20
