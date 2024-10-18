@@ -1505,6 +1505,9 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 		return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 	}
 
+	// Fix the issuer mismatch issue until its origin is found.
+	decodedCred.Issuer = strings.TrimSuffix(decodedCred.Issuer, "-year")
+
 	// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details.
 	issuerID, err := encodeIssuerID(req.GetMerchantID(), req.GetSKU())
 	if err != nil {
