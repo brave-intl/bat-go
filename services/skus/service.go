@@ -1512,6 +1512,9 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 	}
 
 	if issuerID != decodedCred.Issuer {
+		lg := logging.Logger(ctx, "skus").With().Str("func", "verifyBlindedTokenCredential").Logger()
+		lg.Err(model.Error("tlv2 issuer mismatch")).Str("issuer_id", issuerID).Str("decoded_issuer", decodedCred.Issuer).Msg("tlv2 issuer mismatch")
+
 		return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 	}
 
