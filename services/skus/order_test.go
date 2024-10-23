@@ -194,6 +194,7 @@ func (suite *OrderTestSuite) assertSuccess(item *OrderItem, apm []string, expCfg
 	suite.Assert().Equal("stripe", strings.Join(apm, ","))
 	suite.Assert().Equal("usd", item.Currency)
 	suite.Assert().Equal("sku", item.SKU)
+	suite.Assert().Equal("sku", item.SKUVnt)
 	suite.Assert().Equal("5.01", item.Price.String())
 	suite.Assert().Equal("coffee", item.Description.String)
 	suite.Assert().Equal("brave.com", item.Location.String)

@@ -226,6 +226,7 @@ func TestCreateOrderItem(t *testing.T) {
 			name: "full_example",
 			given: &model.OrderItemRequestNew{
 				SKU:                         "sku",
+				SKUVnt:                      "sku_vnt",
 				CredentialType:              "credential_type",
 				CredentialValidDuration:     "P1M",
 				CredentialValidDurationEach: ptr.To("P1D"),
@@ -242,6 +243,7 @@ func TestCreateOrderItem(t *testing.T) {
 			exp: tcExpected{
 				result: &model.OrderItem{
 					SKU:                       "sku",
+					SKUVnt:                    "sku_vnt",
 					CredentialType:            "credential_type",
 					ValidFor:                  mustDurationFromISO("P1M"),
 					ValidForISO:               ptr.To("P1M"),

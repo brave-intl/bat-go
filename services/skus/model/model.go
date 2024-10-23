@@ -255,6 +255,7 @@ type OrderItem struct {
 	ID                        uuid.UUID            `json:"id" db:"id"`
 	OrderID                   uuid.UUID            `json:"orderId" db:"order_id"`
 	SKU                       string               `json:"sku" db:"sku"`
+	SKUVnt                    string               `json:"sku_variant" db:"sku_variant"`
 	CreatedAt                 *time.Time           `json:"createdAt" db:"created_at"`
 	UpdatedAt                 *time.Time           `json:"updatedAt" db:"updated_at"`
 	Currency                  string               `json:"currency" db:"currency"`
@@ -409,6 +410,7 @@ type CreateOrderRequestNew struct {
 type OrderItemRequestNew struct {
 	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
 	SKU                         string              `json:"sku" validate:"required"`
+	SKUVnt                      string              `json:"sku_variant" validate:"required"`
 	Period                      string              `json:"period"` // Not used yet.
 	Location                    string              `json:"location" validate:"required"`
 	Description                 string              `json:"description" validate:"required"`
