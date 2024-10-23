@@ -380,7 +380,7 @@ func TestFilterActiveCreds(t *testing.T) {
 	}
 }
 
-func TestFilterExpCreds(t *testing.T) {
+func TestFindLastExpCred(t *testing.T) {
 	type tcGiven struct {
 		creds []TimeAwareSubIssuedCreds
 		now   time.Time
