@@ -62,8 +62,8 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000000', '2024-01-01 00:00:02', '2024-01-02 00:00:02', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
@@ -99,8 +99,8 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000000', '2024-01-01 00:00:02', '2024-01-02 00:00:02', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_11", "cred_12", "cred_13"]', '["scred_11", "scred_12", "scred_13"]');`,
@@ -210,8 +210,8 @@ func TestTLV2_UniqBatches(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000000', '2024-01-01 00:00:01', '2024-01-02 00:00:01', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
@@ -247,8 +247,8 @@ func TestTLV2_UniqBatches(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000000', '2024-01-01 00:00:01', '2024-01-02 00:00:01', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
@@ -287,8 +287,8 @@ func TestTLV2_UniqBatches(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000000', '2024-01-01 00:00:01', '2024-01-02 00:00:01', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
@@ -403,8 +403,8 @@ func TestTLV2_DeleteLegacy(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', '2024-01-01 00:00:01', '2024-01-02 00:00:01', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
@@ -437,8 +437,8 @@ func TestTLV2_DeleteLegacy(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', '2024-01-01 00:00:01', '2024-01-02 00:00:01', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
@@ -474,8 +474,8 @@ func TestTLV2_DeleteLegacy(t *testing.T) {
 						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
 							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
-						`INSERT INTO order_items (id, order_id, sku, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
-							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
 
 						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
 							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', '2024-01-01 00:00:01', '2024-01-02 00:00:01', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,

@@ -45,6 +45,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 			given: []model.OrderItem{
 				{
 					SKU:            "sku_01_01",
+					SKUVnt:         "sku_vnt_01_01",
 					Quantity:       1,
 					Price:          mustDecimalFromString("2"),
 					Currency:       "USD",
@@ -56,6 +57,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 			exp: []model.OrderItem{
 				{
 					SKU:            "sku_01_01",
+					SKUVnt:         "sku_vnt_01_01",
 					Quantity:       1,
 					Price:          mustDecimalFromString("2"),
 					Currency:       "USD",
@@ -70,6 +72,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 			given: []model.OrderItem{
 				{
 					SKU:            "sku_02_01",
+					SKUVnt:         "sku_vnt_02_01",
 					Quantity:       2,
 					Price:          mustDecimalFromString("3"),
 					Currency:       "USD",
@@ -79,6 +82,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 
 				{
 					SKU:            "sku_02_02",
+					SKUVnt:         "sku_vnt_02_02",
 					Quantity:       3,
 					Price:          mustDecimalFromString("4"),
 					Currency:       "USD",
@@ -90,6 +94,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 			exp: []model.OrderItem{
 				{
 					SKU:            "sku_02_01",
+					SKUVnt:         "sku_vnt_02_01",
 					Quantity:       2,
 					Price:          mustDecimalFromString("3"),
 					Currency:       "USD",
@@ -99,6 +104,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 
 				{
 					SKU:            "sku_02_02",
+					SKUVnt:         "sku_vnt_02_02",
 					Quantity:       3,
 					Price:          mustDecimalFromString("4"),
 					Currency:       "USD",

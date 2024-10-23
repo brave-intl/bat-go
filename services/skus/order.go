@@ -85,6 +85,10 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		switch key {
 		case "sku":
 			orderItem.SKU = value
+
+			// Legacy, non-Premium orders.
+			// Use the same value.
+			orderItem.SKUVnt = value
 		case "price", "amount":
 			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {

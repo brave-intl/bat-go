@@ -1784,6 +1784,7 @@ func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
 			{
 				Quantity:                    1,
 				SKU:                         "sku",
+				SKUVnt:                      "sku_vnt",
 				Location:                    "https://example.com",
 				Description:                 "description",
 				CredentialType:              timeLimitedV2,

@@ -19,7 +19,7 @@ func NewOrderItem() *OrderItem { return &OrderItem{} }
 func (r *OrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
 	const q = `
 	SELECT
-		id, order_id, sku, created_at, updated_at, currency,
+		id, order_id, sku, sku_variant, created_at, updated_at, currency,
 		quantity, price, (quantity * price) as subtotal,
 		location, description, credential_type,metadata, valid_for_iso, issuance_interval
 	FROM order_items WHERE id = $1`
@@ -40,7 +40,7 @@ func (r *OrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UU
 func (r *OrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
 	const q = `
 	SELECT
-		id, order_id, sku, created_at, updated_at, currency,
+		id, order_id, sku, sku_variant, created_at, updated_at, currency,
 		quantity, price, (quantity * price) as subtotal,
 		location, description, credential_type, metadata, valid_for_iso, issuance_interval
 	FROM order_items WHERE order_id = $1`
@@ -61,10 +61,10 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 
 	const q = `
 	INSERT INTO order_items (
-		order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval
+		order_id, sku, sku_variant, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval
 	) VALUES (
-		:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type, :metadata, :valid_for, :valid_for_iso, :issuance_interval
-	) RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for`
+		:order_id, :sku, :sku_variant, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type, :metadata, :valid_for, :valid_for_iso, :issuance_interval
+	) RETURNING id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for`
 
 	rows, err := sqlx.NamedQueryContext(ctx, dbi, q, items)
 	if err != nil {
