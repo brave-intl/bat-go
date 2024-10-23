@@ -305,6 +305,7 @@ func TestOrder_CreateNew(t *testing.T) {
 						{
 							"quantity": 1,
 							"sku": "sku",
+							"sku_variant": "sku_vnt",
 							"location": "location",
 							"description": "description",
 							"credential_type": "credential_type",
@@ -348,6 +349,7 @@ func TestOrder_CreateNew(t *testing.T) {
 						{
 							"quantity": 1,
 							"sku": "sku",
+							"sku_variant": "sku_vnt",
 							"location": "location",
 							"description": "description",
 							"credential_type": "credential_type",
@@ -384,6 +386,7 @@ func TestOrder_CreateNew(t *testing.T) {
 							Items: []model.OrderItem{
 								{
 									SKU:      "sku",
+									SKUVnt:   "sku_vnt",
 									Quantity: 1,
 									Price:    mustDecimalFromString("1"),
 									Subtotal: mustDecimalFromString("1"),
@@ -425,6 +428,7 @@ func TestOrder_CreateNew(t *testing.T) {
 						{
 							"quantity": 1,
 							"sku": "sku",
+							"sku_variant": "sku_vnt",
 							"location": "location",
 							"description": "description",
 							"credential_type": "credential_type",
@@ -448,6 +452,7 @@ func TestOrder_CreateNew(t *testing.T) {
 					Items: []model.OrderItem{
 						{
 							SKU:      "sku",
+							SKUVnt:   "sku_vnt",
 							Quantity: 1,
 							Price:    mustDecimalFromString("1"),
 							Subtotal: mustDecimalFromString("1"),

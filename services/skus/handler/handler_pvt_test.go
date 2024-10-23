@@ -45,6 +45,7 @@ func TestCollectValidationErrors_CreateOrderRequestNew(t *testing.T) {
 					{
 						Quantity:                1,
 						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
 						Location:                "location",
 						Description:             "description",
 						CredentialType:          "credential_type",
@@ -72,6 +73,7 @@ func TestCollectValidationErrors_CreateOrderRequestNew(t *testing.T) {
 					{
 						Quantity:                1,
 						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
 						Location:                "location",
 						Description:             "description",
 						CredentialType:          "credential_type",
@@ -100,6 +102,7 @@ func TestCollectValidationErrors_CreateOrderRequestNew(t *testing.T) {
 					{
 						Quantity:                1,
 						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
 						Location:                "location",
 						Description:             "description",
 						CredentialType:          "credential_type",
@@ -133,6 +136,7 @@ func TestCollectValidationErrors_CreateOrderRequestNew(t *testing.T) {
 					{
 						Quantity:                1,
 						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
 						Location:                "location",
 						Description:             "description",
 						CredentialType:          "credential_type",
