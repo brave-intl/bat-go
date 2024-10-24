@@ -1270,6 +1270,7 @@ func TestNewOrderNewForReq(t *testing.T) {
 				items: []model.OrderItem{
 					{
 						SKU:            "sku",
+						SKUVnt:         "sku",
 						Currency:       "USD",
 						CredentialType: "credential_type",
 						Price:          decimal.NewFromInt(0),
@@ -1302,6 +1303,7 @@ func TestNewOrderNewForReq(t *testing.T) {
 				items: []model.OrderItem{
 					{
 						SKU:            "sku",
+						SKUVnt:         "sku",
 						Currency:       "USD",
 						CredentialType: "credential_type",
 						Price:          decimal.NewFromInt(1),
@@ -1344,6 +1346,7 @@ func TestNewOrderNewForReq(t *testing.T) {
 				items: []model.OrderItem{
 					{
 						SKU:            "sku01",
+						SKUVnt:         "sku01",
 						Currency:       "USD",
 						CredentialType: "credential_type",
 						Price:          decimal.NewFromInt(1),
@@ -1359,6 +1362,7 @@ func TestNewOrderNewForReq(t *testing.T) {
 
 					{
 						SKU:            "sku02",
+						SKUVnt:         "sku02",
 						Currency:       "USD",
 						CredentialType: "credential_type",
 						Price:          decimal.NewFromInt(1),
@@ -1397,6 +1401,7 @@ func TestNewOrderNewForReq(t *testing.T) {
 				items: []model.OrderItem{
 					{
 						SKU:            "sku01",
+						SKUVnt:         "sku01",
 						Currency:       "USD",
 						CredentialType: "credential_type",
 						Price:          decimal.NewFromInt(1),
@@ -1413,6 +1418,7 @@ func TestNewOrderNewForReq(t *testing.T) {
 
 					{
 						SKU:            "sku02",
+						SKUVnt:         "sku02",
 						Currency:       "USD",
 						CredentialType: "credential_type",
 						Price:          decimal.NewFromInt(1),
@@ -1451,6 +1457,7 @@ func TestNewOrderNewForReq(t *testing.T) {
 				items: []model.OrderItem{
 					{
 						SKU:            "sku",
+						SKUVnt:         "sku",
 						Currency:       "USD",
 						CredentialType: "credential_type",
 						Price:          decimal.NewFromInt(1),
