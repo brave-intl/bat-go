@@ -227,6 +227,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium",
+					SKUVnt:                      "brave-leo-premium",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
@@ -253,6 +254,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium",
+					SKUVnt:                      "brave-leo-premium",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
@@ -279,6 +281,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium-year",
+					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",
 					CredentialType:              "time-limited-v2",
@@ -305,6 +308,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium-year",
+					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",
 					CredentialType:              "time-limited-v2",
@@ -331,6 +335,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.brave.software",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",
@@ -357,6 +362,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.brave.software",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",
@@ -383,6 +389,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.brave.software",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",
@@ -409,6 +416,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.brave.software",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",
@@ -470,6 +478,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 					{
 						Quantity:                    1,
 						SKU:                         "brave-leo-premium",
+						SKUVnt:                      "brave-leo-premium",
 						Location:                    "leo.brave.software",
 						Description:                 "Premium access to Leo",
 						CredentialType:              "time-limited-v2",
@@ -505,6 +514,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 					{
 						Quantity:                    1,
 						SKU:                         "brave-leo-premium-year",
+						SKUVnt:                      "brave-leo-premium-year",
 						Location:                    "leo.bravesoftware.com",
 						Description:                 "Premium access to Leo Yearly",
 						CredentialType:              "time-limited-v2",
@@ -540,6 +550,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 					{
 						Quantity:                    1,
 						SKU:                         "brave-leo-premium",
+						SKUVnt:                      "brave-leo-premium",
 						Location:                    "leo.brave.com",
 						Description:                 "Premium access to Leo",
 						CredentialType:              "time-limited-v2",
@@ -576,6 +587,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 					{
 						Quantity:                    1,
 						SKU:                         "brave-vpn-premium",
+						SKUVnt:                      "brave-vpn-premium",
 						Location:                    "vpn.brave.software",
 						Description:                 "brave-vpn-premium",
 						CredentialType:              "time-limited-v2",
@@ -611,6 +623,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 					{
 						Quantity:                    1,
 						SKU:                         "brave-vpn-premium",
+						SKUVnt:                      "brave-vpn-premium",
 						Location:                    "vpn.bravesoftware.com",
 						Description:                 "brave-vpn-premium",
 						CredentialType:              "time-limited-v2",
@@ -646,6 +659,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 					{
 						Quantity:                    1,
 						SKU:                         "brave-vpn-premium",
+						SKUVnt:                      "brave-vpn-premium",
 						Location:                    "vpn.brave.com",
 						Description:                 "brave-vpn-premium",
 						CredentialType:              "time-limited-v2",
@@ -689,6 +703,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium",
+					SKUVnt:                      "brave-leo-premium",
 					Location:                    "leo.brave.com",
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
@@ -706,6 +721,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium-year",
+					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.com",
 					Description:                 "Premium access to Leo Yearly",
 					CredentialType:              "time-limited-v2",
@@ -723,6 +739,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-vpn-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.brave.com",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",
@@ -746,6 +763,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium",
+					SKUVnt:                      "brave-leo-premium",
 					Location:                    "leo.bravesoftware.com",
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
@@ -763,6 +781,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium-year",
+					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.bravesoftware.com",
 					Description:                 "Premium access to Leo Yearly",
 					CredentialType:              "time-limited-v2",
@@ -780,6 +799,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-vpn-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.bravesoftware.com",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",
@@ -803,6 +823,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium",
+					SKUVnt:                      "brave-leo-premium",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
@@ -820,6 +841,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium-year",
+					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",
 					CredentialType:              "time-limited-v2",
@@ -837,6 +859,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-vpn-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.brave.software",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",
@@ -860,6 +883,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium",
+					SKUVnt:                      "brave-leo-premium",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo",
 					CredentialType:              "time-limited-v2",
@@ -877,6 +901,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-leo-premium-year",
+					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",
 					CredentialType:              "time-limited-v2",
@@ -894,6 +919,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 				"brave-vpn-premium": model.OrderItemRequestNew{
 					Quantity:                    1,
 					SKU:                         "brave-vpn-premium",
+					SKUVnt:                      "brave-vpn-premium",
 					Location:                    "vpn.brave.software",
 					Description:                 "brave-vpn-premium",
 					CredentialType:              "time-limited-v2",

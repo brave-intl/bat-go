@@ -238,6 +238,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 	leom := model.OrderItemRequestNew{
 		Quantity: 1,
 		SKU:      "brave-leo-premium",
+		SKUVnt:   "brave-leo-premium",
 		// Location depends on env.
 		Description:                 "Premium access to Leo",
 		CredentialType:              "time-limited-v2",
@@ -252,6 +253,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 	leoa := model.OrderItemRequestNew{
 		Quantity: 1,
 		SKU:      "brave-leo-premium-year",
+		SKUVnt:   "brave-leo-premium-year",
 		// Location depends on env.
 		Description:                 "Premium access to Leo Yearly",
 		CredentialType:              "time-limited-v2",
@@ -266,6 +268,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 	vpnm := model.OrderItemRequestNew{
 		Quantity: 1,
 		SKU:      "brave-vpn-premium",
+		SKUVnt:   "brave-vpn-premium",
 		// Location depends on env.
 		Description:                 "brave-vpn-premium",
 		CredentialType:              "time-limited-v2",
