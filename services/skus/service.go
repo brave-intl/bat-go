@@ -1233,9 +1233,12 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, re
 		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	// We found creds so filter active.
-	if creds != nil && len(creds.Credentials) > 0 {
-		return filterActiveCreds(creds.Credentials, time.Now().UTC()), http.StatusOK, nil
+	if haveCreds(creds) {
+		if active := filterActiveCreds(creds.Credentials, time.Now().UTC()); len(active) > 0 {
+			return active, http.StatusOK, nil
+		}
+
+		return creds.Credentials, http.StatusOK, nil
 	}
 
 	obmsg, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
@@ -1268,6 +1271,10 @@ func filterActiveCreds(creds []TimeAwareSubIssuedCreds, now time.Time) []TimeAwa
 	}
 
 	return act
+}
+
+func haveCreds(creds *TimeLimitedV2Creds) bool {
+	return creds != nil && len(creds.Credentials) > 0
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
