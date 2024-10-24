@@ -1505,9 +1505,6 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 		return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 	}
 
-	// Fix the issuer mismatch issue until its origin is found.
-	decodedCred.Issuer = strings.TrimSuffix(decodedCred.Issuer, "-year")
-
 	// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details.
 	issuerID, err := encodeIssuerID(req.GetMerchantID(), req.GetSKU())
 	if err != nil {
@@ -1515,10 +1512,13 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 	}
 
 	if issuerID != decodedCred.Issuer {
-		lg := logging.Logger(ctx, "skus").With().Str("func", "verifyBlindedTokenCredential").Logger()
-		lg.Err(model.Error("tlv2 issuer mismatch")).Str("issuer_id", issuerID).Str("decoded_issuer", decodedCred.Issuer).Msg("tlv2 issuer mismatch")
+		// Check again for Annual.
+		if issuerID != strings.TrimSuffix(decodedCred.Issuer, "-year") {
+			lg := logging.Logger(ctx, "skus").With().Str("func", "verifyBlindedTokenCredential").Logger()
+			lg.Err(model.Error("tlv2 issuer mismatch")).Str("issuer_id", issuerID).Str("decoded_issuer", decodedCred.Issuer).Msg("tlv2 issuer mismatch")
 
-		return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
+			return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
+		}
 	}
 
 	return s.redeemBlindedCred(ctx, w, req.GetType(), decodedCred)
@@ -2051,9 +2051,14 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", kind), "unknown credential type %s", http.StatusBadRequest)
 	}
 
+	// Fix for Annual:
+	// - use the trimmed value to identify the issuer;
+	// - use the original value as in payload.
+	issuer := strings.TrimSuffix(cred.Issuer, "-year")
+
 	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
 	// to allow for more flexible idempotent behavior.
-	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
+	if err := redeemFn(ctx, issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
 		if !shouldRetryRedeemFn(kind, cred.Issuer, err) {
 			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
