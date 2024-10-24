@@ -1233,14 +1233,12 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, re
 		return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	now := time.Now().UTC()
-
 	if haveCreds(creds) {
-		if active := filterActiveCreds(creds.Credentials, now); len(active) > 0 {
+		if active := filterActiveCreds(creds.Credentials, time.Now().UTC()); len(active) > 0 {
 			return active, http.StatusOK, nil
 		}
 
-		return findLastExpCred(creds.Credentials, now), http.StatusOK, nil
+		return creds.Credentials, http.StatusOK, nil
 	}
 
 	obmsg, err := s.Datastore.GetSigningOrderRequestOutboxByRequestID(ctx, s.Datastore.RawDB(), reqID)
@@ -1273,37 +1271,6 @@ func filterActiveCreds(creds []TimeAwareSubIssuedCreds, now time.Time) []TimeAwa
 	}
 
 	return act
-}
-
-func findLastExpCred(creds []TimeAwareSubIssuedCreds, now time.Time) []TimeAwareSubIssuedCreds {
-	res := make([]TimeAwareSubIssuedCreds, 0)
-
-	if len(creds) == 0 {
-		return res
-	}
-
-	expIdx := -1
-
-	for i := range creds {
-		if now.After(creds[i].ValidTo) {
-			expIdx = i
-			break
-		}
-	}
-
-	if expIdx == -1 {
-		return res
-	}
-
-	for i := expIdx; i < len(creds); i++ {
-		if now.After(creds[i].ValidTo) && creds[i].ValidTo.After(creds[expIdx].ValidTo) {
-			expIdx = i
-		}
-	}
-
-	res = append(res, creds[expIdx])
-
-	return res
 }
 
 func haveCreds(creds *TimeLimitedV2Creds) bool {
