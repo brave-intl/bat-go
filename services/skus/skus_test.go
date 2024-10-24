@@ -12,8 +12,8 @@ import (
 
 func TestSKUNameByMobileName(t *testing.T) {
 	type tcExpected struct {
-		sku string
-		err error
+		skuVnt string
+		err    error
 	}
 
 	type testCase struct {
@@ -26,121 +26,121 @@ func TestSKUNameByMobileName(t *testing.T) {
 		{
 			name:  "android_leo_monthly_release",
 			given: "brave.leo.monthly",
-			exp:   tcExpected{sku: "brave-leo-premium"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium"},
 		},
 
 		{
 			name:  "android_leo_monthly_beta",
 			given: "beta.leo.monthly",
-			exp:   tcExpected{sku: "brave-leo-premium"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium"},
 		},
 
 		{
 			name:  "android_leo_monthly_nightly",
 			given: "nightly.leo.monthly",
-			exp:   tcExpected{sku: "brave-leo-premium"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium"},
 		},
 
 		{
 			name:  "ios_leo_monthly_release",
 			given: "braveleo.monthly",
-			exp:   tcExpected{sku: "brave-leo-premium"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium"},
 		},
 
 		{
 			name:  "ios_leo_monthly_nightly",
 			given: "nightly.braveleo.monthly",
-			exp:   tcExpected{sku: "brave-leo-premium"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium"},
 		},
 
 		{
 			name:  "android_leo_annual_release",
 			given: "brave.leo.yearly",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium-year"},
 		},
 
 		{
 			name:  "android_leo_annual_beta",
 			given: "beta.leo.yearly",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium-year"},
 		},
 
 		{
 			name:  "android_leo_annual_nightly",
 			given: "nightly.leo.yearly",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium-year"},
 		},
 
 		{
 			name:  "ios_leo_annual_release",
 			given: "braveleo.yearly",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium-year"},
 		},
 
 		{
 			name:  "ios_leo_annual_nightly",
 			given: "nightly.braveleo.yearly",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium-year"},
 		},
 
 		{
 			name:  "ios_leo_annual_release_new",
 			given: "braveleo2.yearly",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium-year"},
 		},
 
 		{
 			name:  "ios_leo_annual_release_new2",
 			given: "braveleo.yearly.2",
-			exp:   tcExpected{sku: "brave-leo-premium-year"},
+			exp:   tcExpected{skuVnt: "brave-leo-premium-year"},
 		},
 
 		{
 			name:  "android_vpn_monthly_release",
 			given: "brave.vpn.monthly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "android_vpn_monthly_beta",
 			given: "beta.bravevpn.monthly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "android_vpn_monthly_nightly",
 			given: "nightly.bravevpn.monthly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "ios_vpn_monthly_release",
 			given: "bravevpn.monthly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "android_vpn_annual_release",
 			given: "brave.vpn.yearly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "android_vpn_annual_beta",
 			given: "beta.bravevpn.yearly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "android_vpn_annual_nightly",
 			given: "nightly.bravevpn.yearly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "ios_vpn_annual_release",
 			given: "bravevpn.yearly",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
@@ -152,13 +152,13 @@ func TestSKUNameByMobileName(t *testing.T) {
 		{
 			name:  "ios_vpn_monthly_legacy",
 			given: "brave-firewall-vpn-premium",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 
 		{
 			name:  "ios_vpn_annual_legacy",
 			given: "brave-firewall-vpn-premium-year",
-			exp:   tcExpected{sku: "brave-vpn-premium"},
+			exp:   tcExpected{skuVnt: "brave-vpn-premium"},
 		},
 	}
 
@@ -166,10 +166,10 @@ func TestSKUNameByMobileName(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := skuNameByMobileName(tc.given)
+			actual, err := skuVntByMobileName(tc.given)
 			must.Equal(t, tc.exp.err, err)
 
-			should.Equal(t, tc.exp.sku, actual)
+			should.Equal(t, tc.exp.skuVnt, actual)
 		})
 	}
 }
@@ -208,7 +208,8 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 				subID: "brave.leo.monthly",
 				set: map[string]model.OrderItemRequestNew{
 					"brave-leo-premium-year": model.OrderItemRequestNew{
-						SKU: "brave-leo-premium-year",
+						SKU:    "brave-leo-premium",
+						SKUVnt: "brave-leo-premium-year",
 					},
 				},
 			},
@@ -280,7 +281,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
-					SKU:                         "brave-leo-premium-year",
+					SKU:                         "brave-leo-premium",
 					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",
@@ -307,7 +308,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			exp: tcExpected{
 				req: model.OrderItemRequestNew{
 					Quantity:                    1,
-					SKU:                         "brave-leo-premium-year",
+					SKU:                         "brave-leo-premium",
 					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",
@@ -513,7 +514,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 				Items: []model.OrderItemRequestNew{
 					{
 						Quantity:                    1,
-						SKU:                         "brave-leo-premium-year",
+						SKU:                         "brave-leo-premium",
 						SKUVnt:                      "brave-leo-premium-year",
 						Location:                    "leo.bravesoftware.com",
 						Description:                 "Premium access to Leo Yearly",
@@ -720,7 +721,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
-					SKU:                         "brave-leo-premium-year",
+					SKU:                         "brave-leo-premium",
 					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.com",
 					Description:                 "Premium access to Leo Yearly",
@@ -780,7 +781,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
-					SKU:                         "brave-leo-premium-year",
+					SKU:                         "brave-leo-premium",
 					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.bravesoftware.com",
 					Description:                 "Premium access to Leo Yearly",
@@ -840,7 +841,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
-					SKU:                         "brave-leo-premium-year",
+					SKU:                         "brave-leo-premium",
 					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",
@@ -900,7 +901,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 
 				"brave-leo-premium-year": model.OrderItemRequestNew{
 					Quantity:                    1,
-					SKU:                         "brave-leo-premium-year",
+					SKU:                         "brave-leo-premium",
 					SKUVnt:                      "brave-leo-premium-year",
 					Location:                    "leo.brave.software",
 					Description:                 "Premium access to Leo Yearly",

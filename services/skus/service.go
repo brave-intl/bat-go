@@ -1432,7 +1432,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 		return nil, http.StatusInternalServerError, model.Error("unable to parse issuance interval for credentials")
 	}
 
-	issuerID, err := encodeIssuerID(order.MerchantID, item.SKUForIssuer())
+	issuerID, err := encodeIssuerID(order.MerchantID, item.Issuer())
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 	}
@@ -1504,9 +1504,6 @@ func (s *Service) verifyBlindedTokenCredential(ctx context.Context, req credenti
 	if err := json.Unmarshal(bytes, decodedCred); err != nil {
 		return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 	}
-
-	// Fix the issuer mismatch issue until its origin is found.
-	decodedCred.Issuer = strings.TrimSuffix(decodedCred.Issuer, "-year")
 
 	// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details.
 	issuerID, err := encodeIssuerID(req.GetMerchantID(), req.GetSKU())
@@ -2058,6 +2055,8 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
 
+		// TODO: remove this as there should be no credentials in Production signed by brave-leo-premium-year.
+		//
 		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
 		const leoa = "brave.com?sku=brave-leo-premium-year"
 		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {

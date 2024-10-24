@@ -144,6 +144,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 				should.NotEqual(t, uuid.Nil, actual[j].ID)
 				should.Equal(t, order.ID, actual[j].OrderID)
 				should.Equal(t, tc.exp[j].SKU, actual[j].SKU)
+				should.Equal(t, tc.exp[j].SKUVnt, actual[j].SKUVnt)
 				should.Equal(t, tc.exp[j].Quantity, actual[j].Quantity)
 				should.Equal(t, tc.exp[j].Price.String(), actual[j].Price.String())
 				should.Equal(t, tc.exp[j].Currency, actual[j].Currency)
