@@ -61,7 +61,7 @@ var (
 //
 // This only happens in the event of a new sku being created.
 func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, merchID string, item *OrderItem) error {
-	encMerchID, err := encodeIssuerID(merchID, item.SKUForIssuer())
+	encMerchID, err := encodeIssuerID(merchID, item.Issuer())
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}
@@ -114,7 +114,7 @@ func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, mer
 //
 // This only happens in the event of a new sku being created.
 func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, merchID string, item *OrderItem, issuerCfg model.IssuerConfig) error {
-	encMerchID, err := encodeIssuerID(merchID, item.SKUForIssuer())
+	encMerchID, err := encodeIssuerID(merchID, item.Issuer())
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}
@@ -266,7 +266,7 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return err
 	}
 
-	issuerID, err := encodeIssuerID(order.MerchantID, item.SKUForIssuer())
+	issuerID, err := encodeIssuerID(order.MerchantID, item.Issuer())
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
 	}

@@ -129,7 +129,7 @@ func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 }
 
 func newOrderItemReqForSubID(set map[string]model.OrderItemRequestNew, subID string) (model.OrderItemRequestNew, error) {
-	key, err := skuNameByMobileName(subID)
+	key, err := skuVntByMobileName(subID)
 	if err != nil {
 		return model.OrderItemRequestNew{}, model.ErrInvalidMobileProduct
 	}
@@ -142,7 +142,7 @@ func newOrderItemReqForSubID(set map[string]model.OrderItemRequestNew, subID str
 	return result, nil
 }
 
-func skuNameByMobileName(subID string) (string, error) {
+func skuVntByMobileName(subID string) (string, error) {
 	switch subID {
 	// Android Leo Monthly.
 	case "brave.leo.monthly", "beta.leo.monthly", "nightly.leo.monthly":
@@ -252,7 +252,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 
 	leoa := model.OrderItemRequestNew{
 		Quantity: 1,
-		SKU:      "brave-leo-premium-year",
+		SKU:      "brave-leo-premium",
 		SKUVnt:   "brave-leo-premium-year",
 		// Location depends on env.
 		Description:                 "Premium access to Leo Yearly",
@@ -360,9 +360,9 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 	}
 
 	result := map[string]model.OrderItemRequestNew{
-		leom.SKU: leom,
-		leoa.SKU: leoa,
-		vpnm.SKU: vpnm,
+		leom.SKUVnt: leom,
+		leoa.SKUVnt: leoa,
+		vpnm.SKUVnt: vpnm,
 	}
 
 	return result

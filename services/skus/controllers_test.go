@@ -357,6 +357,7 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 	suite.Assert().Equal(decimal.New(10, 0), order.Items[0].Subtotal)
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
 	suite.Assert().Equal("user-wallet-vote", order.Items[0].SKU)
+	suite.Assert().Equal("user-wallet-vote", order.Items[0].SKUVnt)
 }
 
 func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
@@ -375,6 +376,7 @@ func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
 	suite.Assert().Equal(decimal.New(0, 0), order.Items[0].Subtotal)
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
 	suite.Assert().Equal("integration-test-free", order.Items[0].SKU)
+	suite.Assert().Equal("integration-test-free", order.Items[0].SKUVnt)
 }
 
 func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
