@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -277,11 +276,7 @@ type OrderItem struct {
 }
 
 func (x *OrderItem) IsLeo() bool {
-	if x == nil {
-		return false
-	}
-
-	return x.SKU == "brave-leo-premium" || x.SKU == "brave-leo-premium-year"
+	return x.SKUVnt == "brave-leo-premium" || x.SKUVnt == "brave-leo-premium-year"
 }
 
 func (x *OrderItem) StripeItemID() (string, bool) {
@@ -296,8 +291,8 @@ func (x *OrderItem) RadomProductID() (string, bool) {
 	return itemID, ok
 }
 
-func (x *OrderItem) SKUForIssuer() string {
-	return fixPremiumSKUForIssuer(x.SKU)
+func (x *OrderItem) Issuer() string {
+	return x.SKU
 }
 
 // OrderNew represents a request to create an order in the database.
@@ -392,7 +387,7 @@ type CreateOrderRequest struct {
 
 // OrderItemRequest represents an item in a order request.
 type OrderItemRequest struct {
-	SKU      string `json:"sku" valid:"-"`
+	SKU      string `json:"sku" valid:"-"` // This is old legacy field representing an encoded macaroon.
 	Quantity int    `json:"quantity" valid:"int"`
 }
 
@@ -674,7 +669,7 @@ type VerifyCredentialRequestV1 struct {
 }
 
 func (r *VerifyCredentialRequestV1) GetSKU() string {
-	return fixPremiumSKUForIssuer(r.SKU)
+	return r.SKU
 }
 
 func (r *VerifyCredentialRequestV1) GetType() string {
@@ -697,7 +692,7 @@ type VerifyCredentialRequestV2 struct {
 }
 
 func (r *VerifyCredentialRequestV2) GetSKU() string {
-	return fixPremiumSKUForIssuer(r.SKU)
+	return r.SKU
 }
 
 func (r *VerifyCredentialRequestV2) GetType() string {
@@ -724,10 +719,6 @@ type VerifyCredentialOpaque struct {
 	Type         string  `json:"type" validate:"oneof=single-use time-limited time-limited-v2"`
 	Presentation string  `json:"presentation" validate:"base64"`
 	Version      float64 `json:"version" validate:"-"`
-}
-
-func fixPremiumSKUForIssuer(val string) string {
-	return strings.TrimSuffix(val, "-year")
 }
 
 func addURLParam(src, name, val string) (string, error) {

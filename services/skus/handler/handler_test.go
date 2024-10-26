@@ -161,6 +161,7 @@ func TestOrder_Create(t *testing.T) {
 							Items: []model.OrderItem{
 								{
 									SKU:      "some_sku",
+									SKUVnt:   "some_sku",
 									Quantity: 1,
 									Price:    mustDecimalFromString("2"),
 									Subtotal: mustDecimalFromString("2"),
@@ -205,6 +206,7 @@ func TestOrder_Create(t *testing.T) {
 					Items: []model.OrderItem{
 						{
 							SKU:      "some_sku",
+							SKUVnt:   "some_sku",
 							Quantity: 1,
 							Price:    mustDecimalFromString("2"),
 							Subtotal: mustDecimalFromString("2"),
