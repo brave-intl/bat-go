@@ -5,11 +5,11 @@
 
 ## Developer Setup
 
-1. [Install Go 1.12](https://golang.org/doc/install) (NOTE: Go 1.10 and earlier will not work!)
+1. [Install Go](https://golang.org/doc/install) (Go 1.22 or later)
 
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 
-3. `go get -u github.com/hexdigest/gowrap/cmd/gowrap`
+3. `go install github.com/hexdigest/gowrap/cmd/gowrap@latest`
 
 4. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
 
@@ -54,7 +54,7 @@ You can run all the unit and integration tests by setting the env `TEST_TAGS=int
 `make docker-dev` 
 
 Services are split up for testing:
-`cd /src/grant-server/payment ; > go test --tags=integration -v`
+`cd /src/services/payments ; go test --tags=integration -v`
 
 For example in `promotion` you can run specific tests by running a command similar to `go test --tags=integration -run TestControllersTestSuite/TestCreateOrder`.
 

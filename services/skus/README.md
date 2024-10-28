@@ -5,19 +5,13 @@
 
 1. Begin with development setup steps 1 through 4 from the [bat-go readme](https://github.com/brave-intl/bat-go/blob/master/README.md)
 
-2. Bring up the SKUs containers locally with ```make docker-refresh-payment```
-
-3. View container logs with ```docker logs grant-payment-refresh```   
-
-4. SKUs API will be available at localhost:3335
-
-5. Commit code and refresh the containers with ```docker restart grant-payment-refresh```!
+2. To bring up an environment to exercise the API run `make docker-up-dev`. Once the containers have started, the API will be available at `localhost:3333`. `curl localhost:3333/health-check` will provide a health check
 
 ### SKU Tokens 
 
-SKU Tokens represent cookie-like objects with domain specific caveats, new tokens can be created following the instructions in [this readme](https://github.com/brave-intl/bat-go/tree/master/cmd#create-a-macaroon)
+SKU Tokens represent cookie-like objects with domain specific caveats, new tokens can be created following the instructions in [this readme](https://github.com/brave-intl/bat-go/tree/master/tools/macaroon/cmd/README.md)
 
-This is an example of one possible [SKU token](https://github.com/brave-intl/bat-go/blob/brave-together-dev/cmd/macaroon/brave-together/brave_together_paid_dev.yaml): 
+This is an example of one possible [SKU token](https://github.com/brave-intl/bat-go/blob/master/tools/macaroon/cmd/brave-together/brave_together_paid_dev.yaml)
 
 ```
 tokens:
