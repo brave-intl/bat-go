@@ -84,7 +84,7 @@ func TestGetParametersController(t *testing.T) {
 	})
 
 	s := &Service{
-		cfg:      Config{TOSVersion: 1},
+		cfg:      &Config{TOSVersion: 1},
 		ratios:   mockRatios,
 		s3Client: mockS3,
 		cacheMu:  new(sync.RWMutex),

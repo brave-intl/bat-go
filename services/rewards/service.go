@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -17,30 +18,39 @@ import (
 	srv "github.com/brave-intl/bat-go/libs/service"
 )
 
-// Config contains the rewards.Service configuration.
-type Config struct {
-	TOSVersion int
+type s3Service interface {
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
-// Service contains datastore
+type CardsConfig struct {
+	Bucket string
+	Key    string
+}
+
+type Config struct {
+	TOSVersion int
+	Cards      *CardsConfig
+}
+
 type Service struct {
-	cfg                  Config
+	cfg                  *Config
 	lastPollTime         time.Time
 	lastPayoutStatus     *custodian.PayoutStatus
 	lastCustodianRegions *custodian.Regions
 	cacheMu              *sync.RWMutex
 	jobs                 []srv.Job
 	ratios               ratios.Client
-	s3Client             appaws.S3GetObjectAPI
+	// Stop using the interface in lib and use s3Service.
+	s3Client appaws.S3GetObjectAPI
+	s3Svc    s3Service
 }
 
-// Jobs - Implement srv.JobService interface
 func (s *Service) Jobs() []srv.Job {
 	return s.jobs
 }
 
 // InitService initializes a new instance of the rewards service.
-func InitService(ctx context.Context, cfg Config) (*Service, error) {
+func InitService(ctx context.Context, cfg *Config) (*Service, error) {
 	ratiosCl, err := ratios.NewWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize ratios client: %w", err)
@@ -61,6 +71,8 @@ func InitService(ctx context.Context, cfg Config) (*Service, error) {
 		jobs:     []srv.Job{},
 		ratios:   ratiosCl,
 		s3Client: s3client,
+
+		s3Svc: s3client,
 	}, nil
 }
 
@@ -166,4 +178,16 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 	}
 
 	return params, nil
+}
+
+type CardBytes []byte
+
+func (s *Service) GetCardsAsBytes(ctx context.Context) (CardBytes, error) {
+	out, err := s.s3Svc.GetObject(ctx, &s3.GetObjectInput{Bucket: &s.cfg.Cards.Bucket, Key: &s.cfg.Cards.Key})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = out.Body.Close() }()
+
+	return io.ReadAll(out.Body)
 }
