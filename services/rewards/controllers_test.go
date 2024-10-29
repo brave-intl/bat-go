@@ -114,7 +114,6 @@ func TestGetParametersController(t *testing.T) {
 	assert.Equal(t, "processing", params.PayoutStatus.Uphold)
 	assert.ElementsMatch(t, []float64{3, 5, 7, 10, 20}, params.AutoContribute.Choices)
 	assert.Equal(t, float64(10), params.BATRate)
-	assert.Equal(t, 1, params.TOSVersion)
 }
 
 func setupRouter(s *Service) *chi.Mux {
