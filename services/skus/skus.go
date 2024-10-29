@@ -170,18 +170,21 @@ func skuVntByMobileName(subID string) (string, error) {
 
 	// Android VPN Annual.
 	case "brave.vpn.yearly", "beta.bravevpn.yearly", "nightly.bravevpn.yearly":
-		// Temporary: use the same sku as for monthly.
-		return "brave-vpn-premium", nil
+		return "brave-vpn-premium-year", nil
 
 	// iOS VPN Annual.
 	case "bravevpn.yearly":
-		// Temporary: use the same sku as for monthly.
+		return "brave-vpn-premium-year", nil
+
+	// Legacy.
+	// Older iOS clients might still send this as subscription_id along with a receipt.
+	case "brave-firewall-vpn-premium":
 		return "brave-vpn-premium", nil
 
 	// Legacy.
 	// Older iOS clients might still send this as subscription_id along with a receipt.
-	case "brave-firewall-vpn-premium", "brave-firewall-vpn-premium-year":
-		return "brave-vpn-premium", nil
+	case "brave-firewall-vpn-premium-year":
+		return "brave-vpn-premium-year", nil
 
 	default:
 		return "", model.ErrInvalidMobileProduct
@@ -280,6 +283,21 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		// StripeMetadata depends on env.
 	}
 
+	vpna := model.OrderItemRequestNew{
+		Quantity: 1,
+		SKU:      "brave-vpn-premium",
+		SKUVnt:   "brave-vpn-premium-year",
+		// Location depends on env.
+		Description:                 "brave-vpn-premium-year",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("99.99"),
+		IssuerTokenBuffer:           ptrTo(31),
+		IssuerTokenOverlap:          ptrTo(2),
+		CredentialValidDurationEach: ptrTo("P1D"),
+		// StripeMetadata depends on env.
+	}
+
 	switch env {
 	case "prod", "production":
 		leom.Location = "leo.brave.com"
@@ -298,6 +316,12 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		vpnm.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_Lhv8qsPsn6WHrx",
 			ItemID:    "price_1L0VHmBSm1mtrN9nT5DPmUZb",
+		}
+
+		vpna.Location = "vpn.brave.com"
+		vpna.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_Lhv8qsPsn6WHrx",
+			ItemID:    "price_1L7lgCBSm1mtrN9nDlAz8WT2",
 		}
 
 	case "sandbox", "staging":
@@ -319,6 +343,12 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ItemID:    "price_1L0VEhBSm1mtrN9nGB4kZkfh",
 		}
 
+		vpna.Location = "vpn.bravesoftware.com"
+		vpna.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_Lhv4OM1aAPxflY",
+			ItemID:    "price_1L8O6dBSm1mtrN9nOYyDqe0F",
+		}
+
 	case "dev", "development":
 		leom.Location = "leo.brave.software"
 		leom.StripeMetadata = &model.ItemStripeMetadata{
@@ -336,6 +366,12 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		vpnm.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_K1c8W3oM4mUsGw",
 			ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
+		}
+
+		vpna.Location = "vpn.brave.software"
+		vpna.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_K1c8W3oM4mUsGw",
+			ItemID:    "price_1L7m0CHof20bphG6AYaCd9OU",
 		}
 
 	default:
@@ -357,12 +393,19 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ProductID: "prod_K1c8W3oM4mUsGw",
 			ItemID:    "price_1JNYuNHof20bphG6BvgeYEnt",
 		}
+
+		vpna.Location = "vpn.brave.software"
+		vpna.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_K1c8W3oM4mUsGw",
+			ItemID:    "price_1L7m0CHof20bphG6AYaCd9OU",
+		}
 	}
 
 	result := map[string]model.OrderItemRequestNew{
 		leom.SKUVnt: leom,
 		leoa.SKUVnt: leoa,
 		vpnm.SKUVnt: vpnm,
+		vpna.SKUVnt: vpna,
 	}
 
 	return result
