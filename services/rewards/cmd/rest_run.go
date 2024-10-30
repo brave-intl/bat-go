@@ -10,15 +10,18 @@ import (
 	"strconv"
 	"time"
 
-	cmdutils "github.com/brave-intl/bat-go/cmd"
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/services/cmd"
-	"github.com/brave-intl/bat-go/services/rewards"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	cmdutils "github.com/brave-intl/bat-go/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/brave-intl/bat-go/services/cmd"
+	"github.com/brave-intl/bat-go/services/rewards"
+	"github.com/brave-intl/bat-go/services/rewards/handler"
 )
 
 // RestRun - Main entrypoint of the REST subcommand
@@ -48,7 +51,6 @@ func RestRun(command *cobra.Command, args []string) {
 
 	ctx = context.WithValue(ctx, appctx.ParametersVBATDeadlineCTXKey, viper.GetTime("vbat-deadline"))
 	ctx = context.WithValue(ctx, appctx.ParametersTransitionCTXKey, viper.GetBool("transition"))
-	// parse default-monthly-choices and default-tip-choices
 
 	var monthlyChoices []float64
 	if err := viper.UnmarshalKey("default-monthly-choices", &monthlyChoices); err != nil {
@@ -75,8 +77,24 @@ func RestRun(command *cobra.Command, args []string) {
 		lg.Fatal().Err(err).Msg("error retrieving rewards terms of service version")
 	}
 
-	cfg := rewards.Config{
+	// Get the bucket from the context and not os.Getenv so we don't diverge. GetParameters uses the context on
+	// each request and this will need to be refactored before we can remove it.
+	cardsBucket, ok := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+	if !ok {
+		lg.Fatal().Err(err).Msg("failed to get envar for cards bucket")
+	}
+
+	cardsKey := "cards.json"
+	if ck := os.Getenv("CARDS-KEY"); ck != "" {
+		cardsKey = ck
+	}
+
+	cfg := &rewards.Config{
 		TOSVersion: tosVersion,
+		Cards: &rewards.CardsConfig{
+			Bucket: cardsBucket,
+			Key:    cardsKey,
+		},
 	}
 
 	s, err := rewards.InitService(ctx, cfg)
@@ -86,12 +104,12 @@ func RestRun(command *cobra.Command, args []string) {
 
 	lg.Info().Str("service", fmt.Sprintf("%+v", s)).Msg("initialized service")
 
-	// do rest endpoints
 	r := cmd.SetupRouter(ctx)
-	r.Get("/v1/parameters", middleware.InstrumentHandler(
-		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
 
-	// make sure exceptions go to sentry
+	r.Get("/v1/parameters", middleware.InstrumentHandler("GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
+
+	r.Mount("/v1/cards", newCardsRouter(s))
+
 	defer sentry.Flush(time.Second * 2)
 
 	go func() {
@@ -102,7 +120,6 @@ func RestRun(command *cobra.Command, args []string) {
 		}
 	}()
 
-	// setup server, and run
 	srv := http.Server{
 		Addr:         viper.GetString("address"),
 		Handler:      chi.ServerBaseContext(ctx, r),
@@ -114,4 +131,14 @@ func RestRun(command *cobra.Command, args []string) {
 		sentry.CaptureException(err)
 		lg.Fatal().Err(err).Msg("HTTP server start failed!")
 	}
+}
+
+func newCardsRouter(svc *rewards.Service) chi.Router {
+	cardsRouter := chi.NewRouter()
+
+	ch := handler.NewCardsHandler(svc)
+
+	cardsRouter.Method(http.MethodGet, "/", middleware.InstrumentHandler("GetCards", handlers.AppHandler(ch.GetCardsHandler)))
+
+	return cardsRouter
 }
