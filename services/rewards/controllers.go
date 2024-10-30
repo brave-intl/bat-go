@@ -28,8 +28,7 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 				return handlers.ValidationError("Error validating currency url parameter", map[string]interface{}{
 					"err":      err.Error(),
 					"currency": "invalid currency",
-				},
-				)
+				})
 			}
 
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
@@ -38,6 +37,7 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 		parameters, err := service.GetParameters(ctx, currency)
 		if err != nil {
 			lg.Error().Err(err).Msg("failed to get reward parameters")
+
 			return handlers.WrapError(err, "failed to get parameters", http.StatusInternalServerError)
 		}
 
