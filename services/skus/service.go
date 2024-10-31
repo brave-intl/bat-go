@@ -2744,9 +2744,8 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 	// Email might not be given.
 	// This could happen while recreating a session, and the email was not extracted from the old one.
 	if req.email != "" {
-		if custID, ok := cl.FindCustomer(ctx, req.email); ok {
-			params.Customer = &custID.ID
-			params.CustomerEmail = &custID.Email // Just to be sure.
+		if cust, ok := cl.FindCustomer(ctx, req.email); ok && cust.Email != "" {
+			params.Customer = &cust.ID
 		} else {
 			params.CustomerEmail = &req.email
 		}
