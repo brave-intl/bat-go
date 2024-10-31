@@ -724,6 +724,64 @@ func TestOrder_StripeSessID(t *testing.T) {
 	}
 }
 
+func TestOrder_NumPaymentFailed(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   int
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_number",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"numPaymentFailed": "something",
+				},
+			},
+		},
+
+		{
+			name: "explicit_zero",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"numPaymentFailed": 0,
+				},
+			},
+		},
+
+		{
+			name: "set",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"numPaymentFailed": 2,
+				},
+			},
+			exp: 2,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.NumPaymentFailed()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestOrder_IsIOS(t *testing.T) {
 	type testCase struct {
 		name  string

@@ -25,19 +25,19 @@ func TestParseStripeNotification(t *testing.T) {
 	// After the version has been updated, this test should still pass.
 	t.Run("invoice_paid", func(t *testing.T) {
 		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_invoice_paid.json"))
-		must.Equal(t, nil, err)
+		must.NoError(t, err)
 
 		event := &stripe.Event{}
 
 		{
 			err := json.Unmarshal(raw, event)
-			must.Equal(t, nil, err)
+			must.NoError(t, err)
 		}
 
 		should.Equal(t, "invoice.paid", event.Type)
 
 		ntf, err := parseStripeNotification(event)
-		must.Equal(t, nil, err)
+		must.NoError(t, err)
 
 		should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", ntf.invoice.Subscription.ID)
 
@@ -49,7 +49,19 @@ func TestParseStripeNotification(t *testing.T) {
 		should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", sub.Subscription)
 		should.Equal(t, "f0eb952b-90df-4fd3-b079-c4ea1effb38d", sub.Metadata["orderID"])
 
-		must.Equal(t, true, sub.Period != nil)
+		{
+			sub, err := ntf.subID()
+			must.NoError(t, err)
+
+			should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", sub)
+		}
+
+		oid, err := ntf.orderID()
+		must.NoError(t, err)
+
+		should.True(t, uuid.Equal(uuid.FromStringOrNil("f0eb952b-90df-4fd3-b079-c4ea1effb38d"), oid))
+
+		must.True(t, sub.Period != nil)
 		should.Equal(t, int64(1720163778), sub.Period.Start)
 		should.Equal(t, time.Date(2024, time.July, 5, 07, 16, 18, 0, time.UTC), time.Unix(sub.Period.Start, 0).UTC())
 
@@ -57,21 +69,60 @@ func TestParseStripeNotification(t *testing.T) {
 		should.Equal(t, time.Date(2024, time.July, 12, 07, 16, 18, 0, time.UTC), time.Unix(sub.Period.End, 0).UTC())
 	})
 
-	t.Run("customer_subscription_deleted", func(t *testing.T) {
-		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_sub_deleted.json"))
-		must.Equal(t, nil, err)
+	t.Run("invoice_payment_failed", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_invoice_payment_failed.json"))
+		must.NoError(t, err)
 
 		event := &stripe.Event{}
 
 		{
 			err := json.Unmarshal(raw, event)
-			must.Equal(t, nil, err)
+			must.NoError(t, err)
+		}
+
+		should.Equal(t, "invoice.payment_failed", event.Type)
+
+		ntf, err := parseStripeNotification(event)
+		must.NoError(t, err)
+
+		should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", ntf.invoice.Subscription.ID)
+
+		must.Equal(t, 1, len(ntf.invoice.Lines.Data))
+
+		sub := ntf.invoice.Lines.Data[0]
+
+		should.Equal(t, "subscription", string(sub.Type))
+		should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", sub.Subscription)
+		should.Equal(t, "f0eb952b-90df-4fd3-b079-c4ea1effb38d", sub.Metadata["orderID"])
+
+		{
+			sub, err := ntf.subID()
+			must.NoError(t, err)
+
+			should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", sub)
+		}
+
+		oid, err := ntf.orderID()
+		must.NoError(t, err)
+
+		should.True(t, uuid.Equal(uuid.FromStringOrNil("f0eb952b-90df-4fd3-b079-c4ea1effb38d"), oid))
+	})
+
+	t.Run("customer_subscription_deleted", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_sub_deleted.json"))
+		must.NoError(t, err)
+
+		event := &stripe.Event{}
+
+		{
+			err := json.Unmarshal(raw, event)
+			must.NoError(t, err)
 		}
 
 		should.Equal(t, "customer.subscription.deleted", event.Type)
 
 		ntf, err := parseStripeNotification(event)
-		must.Equal(t, nil, err)
+		must.NoError(t, err)
 
 		should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", ntf.sub.ID)
 		should.Equal(t, "f0eb952b-90df-4fd3-b079-c4ea1effb38d", ntf.sub.Metadata["orderID"])
@@ -98,6 +149,15 @@ func TestStripeNotification_shouldProcess(t *testing.T) {
 			given: &stripeNotification{
 				raw: &stripe.Event{Type: "customer.subscription.deleted"},
 				sub: &stripe.Subscription{},
+			},
+			exp: true,
+		},
+
+		{
+			name: "record_payment_failure",
+			given: &stripeNotification{
+				raw:     &stripe.Event{Type: "invoice.payment_failed"},
+				invoice: &stripe.Invoice{},
 			},
 			exp: true,
 		},
@@ -217,6 +277,54 @@ func TestStripeNotification_shouldCancel(t *testing.T) {
 	}
 }
 
+func TestStripeNotification_shouldRecordPayFailure(t *testing.T) {
+	tests := []struct {
+		name  string
+		given *stripeNotification
+		exp   bool
+	}{
+		{
+			name: "no_invoice_wrong_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "something_else"},
+			},
+		},
+
+		{
+			name: "invoice_wrong_type",
+			given: &stripeNotification{
+				raw:     &stripe.Event{Type: "something_else"},
+				invoice: &stripe.Invoice{},
+			},
+		},
+
+		{
+			name: "no_invoice_correct_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.payment_failed"},
+			},
+		},
+
+		{
+			name: "renew",
+			given: &stripeNotification{
+				raw:     &stripe.Event{Type: "invoice.payment_failed"},
+				invoice: &stripe.Invoice{},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldRecordPayFailure()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestStripeNotification_ntfType(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -237,6 +345,14 @@ func TestStripeNotification_ntfType(t *testing.T) {
 				raw: &stripe.Event{Type: "customer.subscription.deleted"},
 			},
 			exp: "customer.subscription.deleted",
+		},
+
+		{
+			name: "invoice_payment_failed",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.payment_failed"},
+			},
+			exp: "invoice.payment_failed",
 		},
 	}
 
@@ -320,6 +436,15 @@ func TestStripeNotification_effect(t *testing.T) {
 				sub: &stripe.Subscription{},
 			},
 			exp: "cancel",
+		},
+
+		{
+			name: "record_payment_failure",
+			given: &stripeNotification{
+				raw:     &stripe.Event{Type: "invoice.payment_failed"},
+				invoice: &stripe.Invoice{},
+			},
+			exp: "record_payment_failure",
 		},
 
 		{

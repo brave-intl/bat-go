@@ -694,6 +694,10 @@ func (s *Service) cancelOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id 
 	return s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusCanceled)
 }
 
+func (s *Service) updateNumPaymentFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, val int) error {
+	return s.orderRepo.AppendMetadataInt(ctx, dbi, id, "numPaymentFailed", val)
+}
+
 // CancelOrderLegacy cancels an order, propagates to stripe if needed.
 func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
 	// TODO: Refactor this later. Now here's a quick fix.
@@ -1708,7 +1712,33 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
+		// Reset numPaymentFailed.
+		if err := s.updateNumPaymentFailed(ctx, dbi, oid, 0); err != nil {
+			return err
+		}
+
 		return s.cancelOrderTx(ctx, dbi, oid)
+
+	case ntf.shouldRecordPayFailure():
+		subID, err := ntf.subID()
+		if err != nil {
+			return err
+		}
+
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.Get(ctx, dbi, oid)
+		if err != nil {
+			return err
+		}
+
+		val := ord.NumPaymentFailed()
+		val++
+
+		return s.recordPayFailureStripe(ctx, dbi, ord, subID, val)
 
 	default:
 		return nil
@@ -2471,6 +2501,25 @@ func createOrderWithReceipt(
 	return order, nil
 }
 
+func (s *Service) recordPayFailureStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string, numPF int) error {
+	if shouldUpdateOrderStripeSubID(ord, subID) {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.updateNumPaymentFailed(ctx, dbi, ord.ID, numPF); err != nil {
+		return err
+	}
+
+	// Skip updating payment processor if it's already Stripe.
+	if ord.IsStripe() {
+		return nil
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+}
+
 func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string, expt, paidt time.Time) error {
 	if shouldUpdateOrderStripeSubID(ord, subID) {
 		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
@@ -2482,6 +2531,11 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	expt = expt.Add(24 * time.Hour)
 
 	if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
+		return err
+	}
+
+	// Reset numPaymentFailed.
+	if err := s.updateNumPaymentFailed(ctx, dbi, ord.ID, 0); err != nil {
 		return err
 	}
 
