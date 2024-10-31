@@ -19,6 +19,10 @@ import (
 	srv "github.com/brave-intl/bat-go/libs/service"
 )
 
+const (
+	reqBodyLimit10MB = 10 << 20
+)
+
 type s3Service interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
@@ -176,5 +180,5 @@ func (s *Service) GetCardsAsBytes(ctx context.Context) (CardBytes, error) {
 	}
 	defer func() { _ = out.Body.Close() }()
 
-	return io.ReadAll(out.Body)
+	return io.ReadAll(io.LimitReader(out.Body, reqBodyLimit10MB))
 }
