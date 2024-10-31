@@ -13,7 +13,7 @@ import (
 const (
 	errStripeSkipEvent        = model.Error("stripe: skip webhook event")
 	errStripeUnsupportedEvent = model.Error("stripe: unsupported webhook event")
-	errStripeNoInvoiceSub     = model.Error("strupe: no invoice subscription")
+	errStripeNoInvoiceSub     = model.Error("stripe: no invoice subscription")
 	errStripeNoInvoiceLines   = model.Error("stripe: no invoice lines")
 	errStripeOrderIDMissing   = model.Error("stripe: order_id missing")
 	errStripeInvalidSubPeriod = model.Error("stripe: invalid subscription period")
