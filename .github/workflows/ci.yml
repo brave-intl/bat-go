@@ -45,7 +45,8 @@ jobs:
     strategy:
       matrix:
         goversion:
-        - 1.19
+          - 1.19
+          - 1.21
 
     steps:
     - name: Checkout repository
