@@ -122,10 +122,6 @@ docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -p 3333:3333 dev /bin/bash
 
-docker-refresh-dev:
-	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker compose -f docker-compose.yml -f docker-compose.dev-refresh.yml up -d dev-refresh
-
 settlement-tools:
 	$(eval GOOS?=darwin)
 	$(eval GOARCH?=amd64)
