@@ -86,6 +86,3 @@ jobs:
         export GOMODCACHE=$(go env GOMODCACHE)
         docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -v $GOMODCACHE:/go/pkg/mod dev make
 
-    - name: Ensure Module Directory
-      if: steps.setup-go.outputs.cache-hit != 'true'
-      run: mkdir -p /home/runner/go/pkg
