@@ -27,6 +27,7 @@ services:
     networks:
       - grant
     environment:
+      - GOTOOLCHAIN=local
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
       - DRAIN_RETRY_JOB_ENABLED=true

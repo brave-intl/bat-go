@@ -29,6 +29,7 @@ services:
     depends_on:
       - postgres
     environment:
+      - GOTOOLCHAIN=local
       - PPROF_ENABLED
       - MIGRATE=true
       - ENV=local
