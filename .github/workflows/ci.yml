@@ -46,6 +46,7 @@ jobs:
       matrix:
         goversion:
         - 1.19
+        - 1.22
 
     steps:
     - name: Checkout repository
@@ -61,7 +62,9 @@ jobs:
       id: setup-go
       uses: actions/setup-go@v4
       with:
-        go-version: ${{ matrix.goversion }}
+        # Run both CI jobs explicitly with 1.22.
+        # The 1.19 job is currently marked as required, but it needs to pass before it can be removed.
+        go-version: 1.22
         cache-dependency-path: "**/go.sum"
 
     - name: Ensure Module Path
