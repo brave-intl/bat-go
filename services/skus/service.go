@@ -2210,13 +2210,22 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		return nil, err
 	}
 
+	paidt := time.Now()
+
 	// 3. Return it if found. The caller must handle it accordingly.
 	if err == nil {
+		// 3.1. Handle cases when an existing order is found, and it's often outdated.
+		// Examples:
+		// - annual VPN users on mobile pre-July 2024;
+		// - mobile Developers and QAs using the same store id repeatedly.
+		if err := s.renewOrderWithExpPaidTime(ctx, ord.ID, rcpt.ExpiresAt, paidt); err != nil {
+			return nil, err
+		}
+
 		return ord, model.ErrOrderExistsForReceipt
 	}
 
 	// 4. Create if missing.
-	paidt := time.Now()
 
 	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
 }

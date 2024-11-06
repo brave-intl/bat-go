@@ -12,7 +12,7 @@ services:
   # every time a file changes.
   wallet-dev-refresh:
     container_name: wallet-dev-refresh
-    image: golang:1.19
+    image: golang:1.22
     ports:
       - "3353:3353"
       - "6061:6061"
