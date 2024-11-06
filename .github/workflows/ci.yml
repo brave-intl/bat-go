@@ -10,6 +10,7 @@ on:
 
 env:
   GO111MODULE: on
+  GOTOOLCHAIN: local
   TEST_TAGS: integration
   DATABASE_MIGRATIONS_URL: file://$(pwd)/migrations
   GEMINI_SUBMIT_TYPE: hmac

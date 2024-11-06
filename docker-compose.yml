@@ -56,6 +56,7 @@ services:
       - GEMINI_CLIENT_SECRET
       - GEMINI_SERVER
       - GEMINI_TEST_DESTINATION_ID
+      - GOTOOLCHAIN=local
       - GRANT_CBP_SIGN_CONSUMER_TOPIC=sign.consumer # unsigned order creds request
       - GRANT_CBP_SIGN_CONSUMER_TOPIC_DLQ=sign.consumer.dlq # unsigned order creds request dlq
       - GRANT_CBP_SIGN_PRODUCER_TOPIC=sign.producer # signed orders creds result
