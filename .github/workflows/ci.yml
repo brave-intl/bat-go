@@ -68,21 +68,6 @@ jobs:
         go-version: 1.22
         cache-dependency-path: "**/go.sum"
 
-    # The runner has a rather small / file system, and tests are failing with "no space left on device" error.
-    # This frees up the space by deleteting uninstalling not needed packages.
-    - name: Free Disk Space
-      run: |
-        df -h;
-        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100;
-        sudo apt-get remove -y '^dotnet-.*';
-        sudo apt-get remove -y '^llvm-.*'
-        sudo apt-get remove -y 'php.*'
-        sudo apt-get remove -y azure-cli google-cloud-sdk microsoft-edge-stable google-chrome-stable firefox powershell mono-devel;
-        sudo apt-get autoremove -y;
-        sudo apt-get clean;
-        rm -rf /usr/share/dotnet;
-        df -h;
-
     - name: Ensure Module Path
       run: mkdir -p /opt/go/pkg/mod
 
