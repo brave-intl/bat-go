@@ -68,14 +68,6 @@ jobs:
         go-version: 1.22
         cache-dependency-path: "**/go.sum"
 
-    - name: Ensure Module Path
-      run: mkdir -p /opt/go/pkg/mod
-
-    - name: Copy From Module Cache
-      if: steps.setup-go.outputs.cache-hit == 'true'
-      run: |
-        rsync -au "/home/runner/go/pkg/" "/opt/go/pkg"
-
     - name: Install Docker Compose
       uses: KengoTODA/actions-setup-docker-compose@92cbaf8ac8c113c35e1cedd1182f217043fbdd00
       with:
@@ -91,13 +83,9 @@ jobs:
     - name: Run Tests
       run: |
         export VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 );
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -v /opt/go/pkg:/go/pkg dev make
+        export GOMODCACHE=$(go env GOMODCACHE)
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -v $GOMODCACHE:/go/pkg/mod dev make
 
     - name: Ensure Module Directory
       if: steps.setup-go.outputs.cache-hit != 'true'
       run: mkdir -p /home/runner/go/pkg
-
-    - name: Copy To Module Cache
-      run: |
-        sudo rsync -au "/opt/go/pkg/" "/home/runner/go/pkg"
-        sudo chown -R runner:runner /home/runner/go/pkg
