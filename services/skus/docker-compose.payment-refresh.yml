@@ -25,6 +25,7 @@ services:
     networks:
       - grant
     environment:
+      - GOTOOLCHAIN=local
       - ADDR=:3333
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true

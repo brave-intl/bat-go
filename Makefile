@@ -24,7 +24,7 @@ all: test create-json-schema buildcmd
 codeql: download-mod buildcmd
 
 buildcmd:
-	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
+	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOTOOLCHAIN=local go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
 
 mock:
 	cd services && mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
@@ -138,7 +138,7 @@ settlement-tools:
 	cp tools/settlement/config.hcl target/settlement-tools/
 	cp tools/settlement/README.md target/settlement-tools/
 	cp tools/settlement/hashicorp.asc target/settlement-tools/
-	cd main/ && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ../target/settlement-tools/bat-cli
+	cd main/ && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOTOOLCHAIN=local go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ../target/settlement-tools/bat-cli
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make download-vault
 
 docker-settlement-tools:
