@@ -10,6 +10,7 @@ on:
 
 env:
   GO111MODULE: on
+  GOTOOLCHAIN: local
   TEST_TAGS: integration
   DATABASE_MIGRATIONS_URL: file://$(pwd)/migrations
   GEMINI_SUBMIT_TYPE: hmac
@@ -70,10 +71,10 @@ jobs:
     - name: Ensure Module Path
       run: mkdir -p /opt/go/pkg/mod
 
-    - name: Copy From Module Cache
-      if: steps.setup-go.outputs.cache-hit == 'true'
-      run: |
-        rsync -au "/home/runner/go/pkg/" "/opt/go/pkg"
+    # - name: Copy From Module Cache
+    #   if: steps.setup-go.outputs.cache-hit == 'true'
+    #   run: |
+    #     rsync -au "/home/runner/go/pkg/" "/opt/go/pkg"
 
     - name: Install Docker Compose
       uses: KengoTODA/actions-setup-docker-compose@92cbaf8ac8c113c35e1cedd1182f217043fbdd00
@@ -86,6 +87,22 @@ jobs:
       run: |
         docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault;
         sleep 3
+
+    # The runner has a rather small / file system, and tests are failing with "no space left on device" error.
+    # This frees up the space by deleteting uninstalling not needed packages.
+    - name: Free Disk Space
+      run: |
+        df -h;
+        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100;
+        sudo apt-get remove -y '^dotnet-.*';
+        sudo apt-get remove -y '^llvm-.*'
+        sudo apt-get remove -y 'php.*'
+        sudo apt-get remove -y '^temurin-.*'
+        sudo apt-get remove -y azure-cli google-cloud-sdk google-chrome-stable firefox powershell mono-devel microsoft-edge-stable;
+        sudo apt-get autoremove -y;
+        sudo apt-get clean;
+        rm -rf /usr/share/dotnet;
+        df -h;
 
     - name: Run Tests
       run: |

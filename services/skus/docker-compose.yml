@@ -27,6 +27,7 @@ services:
     depends_on:
       - postgres
     environment:
+      - GOTOOLCHAIN=local
       - PPROF_ENABLED=true
       - ENV=local
       - DEBUG=1

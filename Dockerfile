@@ -16,7 +16,7 @@ RUN chown -R nobody:nobody /src/ && mkdir /.cache && chown -R nobody:nobody /.ca
 
 USER nobody
 
-RUN cd main && go mod download && CGO_ENABLED=0 GOOS=linux go build \
+RUN cd main && go mod download && CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=local go build \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o bat-go main.go
 

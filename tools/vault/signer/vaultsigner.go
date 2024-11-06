@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/api"
-	util "github.com/hashicorp/vault/command/config"
+	"github.com/hashicorp/vault/command"
 	"github.com/hashicorp/vault/sdk/helper/jsonutil"
 	"github.com/hashicorp/vault/sdk/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
@@ -212,7 +212,7 @@ func Connect() (*WrappedClient, error) {
 		return nil, err
 	}
 
-	helper, err := util.DefaultTokenHelper()
+	helper, err := command.DefaultTokenHelper()
 	if err == nil {
 		var token string
 		token, err = helper.Get()
