@@ -4,7 +4,6 @@ replace github.com/brave-intl/bat-go/tools/payments => ../../
 
 go 1.22.1
 
-
 require (
 	filippo.io/age v1.1.1
 	github.com/openbao/openbao/sdk/v2 v2.0.1
