@@ -74,7 +74,7 @@ jobs:
     - name: Copy From Module Cache
       if: steps.setup-go.outputs.cache-hit == 'true'
       run: |
-        rsync -au "/home/runner/go/pkg/" "/opt/go/pkg"
+        if [ -d /home/runner/go/pkg ]; then rsync -au "/home/runner/go/pkg/" "/opt/go/pkg"; fi
 
     - name: Install Docker Compose
       uses: KengoTODA/actions-setup-docker-compose@92cbaf8ac8c113c35e1cedd1182f217043fbdd00
