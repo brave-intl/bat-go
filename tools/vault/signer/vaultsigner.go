@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/api"
-	util "github.com/hashicorp/vault/command/config"
+	util "github.com/hashicorp/vault/api/cliconfig"
 	"github.com/hashicorp/vault/sdk/helper/jsonutil"
 	"github.com/hashicorp/vault/sdk/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
