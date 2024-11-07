@@ -1032,7 +1032,7 @@ func TestOrder_IncrementNumPayFailed(t *testing.T) {
 						9.99,
 						'2024-01-01 00:00:01',
 						'2024-01-01 00:00:01',
-						'{"metadata": {"numPaymentFailed": 1}}'
+						'{"numPaymentFailed": 1}'
 					);`
 
 					_, err := dbi.ExecContext(ctx, q)
@@ -1064,7 +1064,7 @@ func TestOrder_IncrementNumPayFailed(t *testing.T) {
 						9.99,
 						'2024-01-01 00:00:01',
 						'2024-01-01 00:00:01',
-						'{"metadata": {"numPerInterval": 192}}'
+						'{"numPerInterval": 192}'
 					);`
 
 					_, err := dbi.ExecContext(ctx, q)
@@ -1097,7 +1097,7 @@ func TestOrder_IncrementNumPayFailed(t *testing.T) {
 						9.99,
 						'2024-01-01 00:00:01',
 						'2024-01-01 00:00:01',
-						'{"metadata": {"numPerInterval": 192, "numIntervals": 3, "numPaymentFailed": 1}}'
+						'{"numPerInterval": 192, "numIntervals": 3, "numPaymentFailed": 1}'
 					);`
 
 					_, err := dbi.ExecContext(ctx, q)
