@@ -24,7 +24,7 @@ import (
 	"log"
 
 	"filippo.io/age"
-	"github.com/hashicorp/vault/shamir"
+	"github.com/openbao/openbao/sdk/v2/helper/shamir"
 )
 
 func main() {

@@ -24,7 +24,7 @@ all: test create-json-schema buildcmd
 codeql: download-mod buildcmd
 
 buildcmd:
-	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
+	cd main && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOTOOLCHAIN=local go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ${OUTPUT}/bat-go main.go
 
 mock:
 	cd services && mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
@@ -138,7 +138,7 @@ settlement-tools:
 	cp tools/settlement/config.hcl target/settlement-tools/
 	cp tools/settlement/README.md target/settlement-tools/
 	cp tools/settlement/hashicorp.asc target/settlement-tools/
-	cd main/ && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ../target/settlement-tools/bat-cli
+	cd main/ && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) GOTOOLCHAIN=local go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o ../target/settlement-tools/bat-cli
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make download-vault
 
 docker-settlement-tools:
@@ -190,11 +190,11 @@ format-lint:
 	make format && make lint
 
 lint: ensure-gomod-volume
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/main golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/cmd golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/libs golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/services golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/tools golangci/golangci-lint:v1.49.0 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/main golangci/golangci-lint:v1.57.2 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/cmd golangci/golangci-lint:v1.57.2 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/libs golangci/golangci-lint:v1.57.2 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/services golangci/golangci-lint:v1.57.2 golangci-lint run -v ./...
+	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/tools golangci/golangci-lint:v1.57.2 golangci-lint run -v ./...
 
 download-mod:
 	cd ./cmd && go mod download && cd ..
