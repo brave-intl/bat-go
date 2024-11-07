@@ -101,6 +101,7 @@ type orderStoreSvc interface {
 	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 	GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
+	IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error
 }
 
 type tlv2Store interface {
@@ -694,8 +695,8 @@ func (s *Service) cancelOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id 
 	return s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusCanceled)
 }
 
-func (s *Service) updateNumPaymentFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, val int) error {
-	return s.orderRepo.AppendMetadataInt(ctx, dbi, id, "numPaymentFailed", val)
+func (s *Service) resetNumPaymentFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
+	return s.orderRepo.AppendMetadataInt(ctx, dbi, id, "numPaymentFailed", 0)
 }
 
 // CancelOrderLegacy cancels an order, propagates to stripe if needed.
@@ -1713,7 +1714,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 		}
 
 		// Reset numPaymentFailed.
-		if err := s.updateNumPaymentFailed(ctx, dbi, oid, 0); err != nil {
+		if err := s.resetNumPaymentFailed(ctx, dbi, oid); err != nil {
 			return err
 		}
 
@@ -1735,10 +1736,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		val := ord.NumPaymentFailed()
-		val++
-
-		return s.recordPayFailureStripe(ctx, dbi, ord, subID, val)
+		return s.recordPayFailureStripe(ctx, dbi, ord, subID)
 
 	default:
 		return nil
@@ -2510,14 +2508,14 @@ func createOrderWithReceipt(
 	return order, nil
 }
 
-func (s *Service) recordPayFailureStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string, numPF int) error {
+func (s *Service) recordPayFailureStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string) error {
 	if shouldUpdateOrderStripeSubID(ord, subID) {
 		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
 			return err
 		}
 	}
 
-	if err := s.updateNumPaymentFailed(ctx, dbi, ord.ID, numPF); err != nil {
+	if err := s.orderRepo.IncrementNumPayFailed(ctx, dbi, ord.ID); err != nil {
 		return err
 	}
 
@@ -2544,7 +2542,7 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	}
 
 	// Reset numPaymentFailed.
-	if err := s.updateNumPaymentFailed(ctx, dbi, ord.ID, 0); err != nil {
+	if err := s.resetNumPaymentFailed(ctx, dbi, ord.ID); err != nil {
 		return err
 	}
 

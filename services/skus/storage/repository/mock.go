@@ -23,6 +23,7 @@ type MockOrder struct {
 	FnAppendMetadataInt                 func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	FnAppendMetadataInt64               func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 	FnGetExpiredStripeCheckoutSessionID func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
+	FnIncrementNumPayFailed             func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error
 }
 
 func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -122,6 +123,14 @@ func (r *MockOrder) GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi s
 	}
 
 	return r.FnGetExpiredStripeCheckoutSessionID(ctx, dbi, orderID)
+}
+
+func (r *MockOrder) IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
+	if r.FnIncrementNumPayFailed == nil {
+		return nil
+	}
+
+	return r.FnIncrementNumPayFailed(ctx, dbi, id)
 }
 
 type MockOrderItem struct {

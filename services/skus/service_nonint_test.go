@@ -2748,7 +2748,7 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 						return result, nil
 					},
 
-					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+					FnIncrementNumPayFailed: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
 						return model.Error("something_went_wrong")
 					},
 				},
@@ -2797,14 +2797,6 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 						}
 
 						return model.Error("unexpected_metadata_string")
-					},
-
-					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
-						if key == "numPaymentFailed" && val == 2 {
-							return nil
-						}
-
-						return model.Error("unexpected_metadata_int")
 					},
 				},
 				phRepo: &repository.MockOrderPayHistory{},
@@ -3978,7 +3970,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 		payRepo *repository.MockOrderPayHistory
 		ord     *model.Order
 		subID   string
-		numPF   int
 	}
 
 	type testCase struct {
@@ -4008,10 +3999,10 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 		},
 
 		{
-			name: "error_update_num_payment_failed",
+			name: "error_increment_num_payment_failed",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{
-					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+					FnIncrementNumPayFailed: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
 						return model.Error("something_went_wrong")
 					},
 				},
@@ -4022,7 +4013,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 					},
 				},
 				subID: "sub_id",
-				numPF: 1,
 			},
 			exp: model.Error("something_went_wrong"),
 		},
@@ -4046,7 +4036,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 					},
 				},
 				subID: "sub_id",
-				numPF: 1,
 			},
 			exp: model.Error("something_went_wrong"),
 		},
@@ -4066,14 +4055,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 
 						return nil
 					},
-
-					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
-						if key == "numPaymentFailed" && val == 42 {
-							return nil
-						}
-
-						return model.Error("unexpected_metadata_int")
-					},
 				},
 				payRepo: &repository.MockOrderPayHistory{},
 				ord: &model.Order{
@@ -4083,7 +4064,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 					},
 				},
 				subID: "sub_id",
-				numPF: 42,
 			},
 		},
 
@@ -4102,14 +4082,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 
 						return model.Error("unexpected_metadata_string")
 					},
-
-					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
-						if key == "numPaymentFailed" && val == 42 {
-							return nil
-						}
-
-						return model.Error("unexpected_metadata_int")
-					},
 				},
 				payRepo: &repository.MockOrderPayHistory{},
 				ord: &model.Order{
@@ -4118,7 +4090,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 					},
 				},
 				subID: "sub_id",
-				numPF: 42,
 			},
 		},
 
@@ -4137,14 +4108,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 
 						return nil
 					},
-
-					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
-						if key == "numPaymentFailed" && val == 42 {
-							return nil
-						}
-
-						return model.Error("unexpected_metadata_int")
-					},
 				},
 				payRepo: &repository.MockOrderPayHistory{},
 				ord: &model.Order{
@@ -4153,7 +4116,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 					},
 				},
 				subID: "sub_id",
-				numPF: 42,
 			},
 		},
 
@@ -4164,14 +4126,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
 						return model.Error("unexpected")
 					},
-
-					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
-						if key == "numPaymentFailed" && val == 42 {
-							return nil
-						}
-
-						return model.Error("unexpected_metadata_int")
-					},
 				},
 				payRepo: &repository.MockOrderPayHistory{},
 				ord: &model.Order{
@@ -4181,7 +4135,6 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 					},
 				},
 				subID: "sub_id",
-				numPF: 42,
 			},
 		},
 	}
@@ -4194,7 +4147,7 @@ func TestService_recordPayFailureStripe(t *testing.T) {
 
 			ctx := context.Background()
 
-			actual := svc.recordPayFailureStripe(ctx, nil, tc.given.ord, tc.given.subID, tc.given.numPF)
+			actual := svc.recordPayFailureStripe(ctx, nil, tc.given.ord, tc.given.subID)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -5343,7 +5296,6 @@ func TestService_updateNumPaymentFailed(t *testing.T) {
 	type tcGiven struct {
 		orepo *repository.MockOrder
 		id    uuid.UUID
-		val   int
 	}
 
 	type testCase struct {
@@ -5375,15 +5327,14 @@ func TestService_updateNumPaymentFailed(t *testing.T) {
 							return model.Error("unexpected_id")
 						}
 
-						if val != 42 {
+						if val != 0 {
 							return model.Error("unexpected_val")
 						}
 
 						return nil
 					},
 				},
-				id:  uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
-				val: 42,
+				id: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
 			},
 		},
 	}
@@ -5396,7 +5347,7 @@ func TestService_updateNumPaymentFailed(t *testing.T) {
 
 			ctx := context.Background()
 
-			actual := svc.updateNumPaymentFailed(ctx, nil, tc.given.id, tc.given.val)
+			actual := svc.resetNumPaymentFailed(ctx, nil, tc.given.id)
 			should.ErrorIs(t, actual, tc.exp)
 		})
 	}
