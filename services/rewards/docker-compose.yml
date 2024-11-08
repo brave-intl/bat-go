@@ -24,6 +24,7 @@ services:
     networks:
       - rewards
     environment:
+      - GOTOOLCHAIN=local
       - PPROF_ENABLED
       - ENV=local
       - ADDR=:3333
@@ -39,7 +40,7 @@ services:
 
   rewards-dev-refresh:
     container_name: rewards-dev-refresh
-    image: golang:1.19
+    image: golang:1.22
     ports:
       - "3343:3343"
       - "6061:6061"
@@ -50,6 +51,7 @@ services:
     networks:
       - rewards
     environment:
+      - GOTOOLCHAIN=local
       - PPROF_ENABLED
       - ENV=local
       - ADDR=:3343

@@ -101,6 +101,7 @@ type orderStoreSvc interface {
 	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 	GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
+	IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error
 }
 
 type tlv2Store interface {
@@ -692,6 +693,10 @@ func (s *Service) CancelOrder(ctx context.Context, id uuid.UUID) error {
 
 func (s *Service) cancelOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
 	return s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusCanceled)
+}
+
+func (s *Service) resetNumPaymentFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
+	return s.orderRepo.AppendMetadataInt(ctx, dbi, id, "numPaymentFailed", 0)
 }
 
 // CancelOrderLegacy cancels an order, propagates to stripe if needed.
@@ -1708,7 +1713,30 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
+		// Reset numPaymentFailed.
+		if err := s.resetNumPaymentFailed(ctx, dbi, oid); err != nil {
+			return err
+		}
+
 		return s.cancelOrderTx(ctx, dbi, oid)
+
+	case ntf.shouldRecordPayFailure():
+		subID, err := ntf.subID()
+		if err != nil {
+			return err
+		}
+
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.Get(ctx, dbi, oid)
+		if err != nil {
+			return err
+		}
+
+		return s.recordPayFailureStripe(ctx, dbi, ord, subID)
 
 	default:
 		return nil
@@ -2210,13 +2238,22 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		return nil, err
 	}
 
+	paidt := time.Now()
+
 	// 3. Return it if found. The caller must handle it accordingly.
 	if err == nil {
+		// 3.1. Handle cases when an existing order is found, and it's often outdated.
+		// Examples:
+		// - annual VPN users on mobile pre-July 2024;
+		// - mobile Developers and QAs using the same store id repeatedly.
+		if err := s.renewOrderWithExpPaidTime(ctx, ord.ID, rcpt.ExpiresAt, paidt); err != nil {
+			return nil, err
+		}
+
 		return ord, model.ErrOrderExistsForReceipt
 	}
 
 	// 4. Create if missing.
-	paidt := time.Now()
 
 	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
 }
@@ -2471,6 +2508,25 @@ func createOrderWithReceipt(
 	return order, nil
 }
 
+func (s *Service) recordPayFailureStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string) error {
+	if shouldUpdateOrderStripeSubID(ord, subID) {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.orderRepo.IncrementNumPayFailed(ctx, dbi, ord.ID); err != nil {
+		return err
+	}
+
+	// Skip updating payment processor if it's already Stripe.
+	if ord.IsStripe() {
+		return nil
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+}
+
 func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string, expt, paidt time.Time) error {
 	if shouldUpdateOrderStripeSubID(ord, subID) {
 		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
@@ -2482,6 +2538,11 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	expt = expt.Add(24 * time.Hour)
 
 	if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
+		return err
+	}
+
+	// Reset numPaymentFailed.
+	if err := s.resetNumPaymentFailed(ctx, dbi, ord.ID); err != nil {
 		return err
 	}
 

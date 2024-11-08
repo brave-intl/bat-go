@@ -956,6 +956,209 @@ func TestOrder_CreateGet(t *testing.T) {
 	}
 }
 
+func TestOrder_IncrementNumPayFailed(t *testing.T) {
+	dbi, err := setupDBI()
+	must.Equal(t, nil, err)
+
+	defer func() {
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
+	}()
+
+	type tcGiven struct {
+		id       uuid.UUID
+		fnBefore func(ctx context.Context, dbi sqlx.ExecerContext) error
+	}
+
+	type tcExpected struct {
+		num       int
+		mdata     datastore.Metadata
+		updateErr error
+		getErr    error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_metadata",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, created_at, updated_at
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				num: 1,
+				mdata: datastore.Metadata{
+					// Here and below using float64 due to
+					// https://github.com/brave-intl/bat-go/blob/master/libs/datastore/models.go#L29-L36.
+					"numPaymentFailed": float64(1),
+				},
+			},
+		},
+
+		{
+			name: "existing_field_incremented",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, created_at, updated_at, metadata
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01',
+						'{"numPaymentFailed": 1}'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				num: 2,
+				mdata: datastore.Metadata{
+					"numPaymentFailed": float64(2),
+				},
+			},
+		},
+
+		{
+			name: "other_fields_exist_target_missing",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, created_at, updated_at, metadata
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01',
+						'{"numPerInterval": 192}'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				num: 1,
+				mdata: datastore.Metadata{
+					"numPaymentFailed": float64(1),
+					"numPerInterval":   float64(192),
+				},
+			},
+		},
+
+		{
+			name: "existing_field_incremented_other_exist",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, created_at, updated_at, metadata
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01',
+						'{"numPerInterval": 192, "numIntervals": 3, "numPaymentFailed": 1}'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				num: 2,
+				mdata: datastore.Metadata{
+					"numPaymentFailed": float64(2),
+					"numPerInterval":   float64(192),
+					"numIntervals":     float64(3),
+				},
+			},
+		},
+	}
+
+	repo := repository.NewOrder()
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			tx, err := dbi.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadUncommitted})
+			must.NoError(t, err)
+
+			t.Cleanup(func() { _ = tx.Rollback() })
+
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, tx)
+				must.NoError(t, err)
+			}
+
+			{
+				err := repo.IncrementNumPayFailed(ctx, tx, tc.given.id)
+				if err != nil {
+					t.Log(err)
+				}
+				must.Equal(t, tc.exp.updateErr, err)
+			}
+
+			if tc.exp.updateErr != nil {
+				return
+			}
+
+			actual, err := repo.Get(ctx, tx, tc.given.id)
+			must.Equal(t, tc.exp.getErr, err)
+
+			if tc.exp.getErr != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.num, actual.NumPaymentFailed())
+			should.Equal(t, tc.exp.mdata, actual.Metadata)
+		})
+	}
+}
+
 func ptrString(s string) *string {
 	return &s
 }

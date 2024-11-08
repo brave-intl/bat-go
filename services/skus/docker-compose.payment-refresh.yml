@@ -8,7 +8,7 @@ services:
   # every time a file changes.
   payment-refresh:
     container_name: grant-payment-refresh
-    image: golang:1.19
+    image: golang:1.22
     ports:
       - "3335:3333"
       - "6061:6061"
@@ -25,6 +25,7 @@ services:
     networks:
       - grant
     environment:
+      - GOTOOLCHAIN=local
       - ADDR=:3333
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true

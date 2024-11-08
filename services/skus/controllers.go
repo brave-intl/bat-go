@@ -1089,7 +1089,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 
 			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+		case errors.Is(err, model.ErrNoRowsChangedOrder):
 			l.Warn().Err(err).Msg("failed to process play store notification")
 
 			// No rows have changed whilst processing.
@@ -1180,7 +1180,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 
 			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+		case errors.Is(err, model.ErrNoRowsChangedOrder):
 			l.Warn().Err(err).Msg("failed to process app store notification")
 
 			// No rows have changed whilst processing.
@@ -1313,7 +1313,7 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 
 				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-			case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+			case errors.Is(err, model.ErrNoRowsChangedOrder):
 				l.Warn().Err(err).Msg("failed to process stripe notification")
 
 				// No rows have changed whilst processing.

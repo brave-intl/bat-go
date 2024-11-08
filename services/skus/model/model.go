@@ -22,7 +22,6 @@ const (
 	ErrOrderNotPaid                           Error = "order not paid"
 	ErrIssuerNotFound                         Error = "model: issuer not found"
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
-	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
 	ErrInvalidOrderNoItems                    Error = "model: invalid order: no items"
 	ErrNoStripeCheckoutSessID                 Error = "model: order: no stripe checkout session id"
@@ -175,6 +174,17 @@ func (o *Order) NumIntervals() (int, error) {
 	}
 
 	return result, nil
+}
+
+func (o *Order) NumPaymentFailed() int {
+	numRaw, ok := o.Metadata["numPaymentFailed"]
+	if !ok {
+		return 0
+	}
+
+	result, _ := numFromAny(numRaw)
+
+	return result
 }
 
 // HasItem returns the item if found.
