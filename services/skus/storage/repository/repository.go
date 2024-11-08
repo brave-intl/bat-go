@@ -255,6 +255,14 @@ func (r *Order) GetMetadata(ctx context.Context, dbi sqlx.QueryerContext, id uui
 	return result, nil
 }
 
+func (r *Order) IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
+	const q = `UPDATE orders
+	SET metadata['numPaymentFailed'] = to_jsonb(COALESCE((metadata->>'numPaymentFailed')::integer, 0)+1)
+	WHERE id = $1`
+
+	return r.execUpdate(ctx, dbi, q, id)
+}
+
 func (r *Order) execUpdate(ctx context.Context, dbi sqlx.ExecerContext, q string, args ...interface{}) error {
 	result, err := dbi.ExecContext(ctx, q, args...)
 	if err != nil {

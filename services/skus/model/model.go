@@ -176,6 +176,17 @@ func (o *Order) NumIntervals() (int, error) {
 	return result, nil
 }
 
+func (o *Order) NumPaymentFailed() int {
+	numRaw, ok := o.Metadata["numPaymentFailed"]
+	if !ok {
+		return 0
+	}
+
+	result, _ := numFromAny(numRaw)
+
+	return result
+}
+
 // HasItem returns the item if found.
 //
 // It exposes a comma, ok API similar to a map.
