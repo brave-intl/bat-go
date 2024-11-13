@@ -692,21 +692,6 @@ func (mr *MockDatastoreMockRecorder) SendSigningRequest(ctx, signingRequestWrite
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendSigningRequest", reflect.TypeOf((*MockDatastore)(nil).SendSigningRequest), ctx, signingRequestWriter)
 }
 
-// SetOrderTrialDays mocks base method.
-func (m *MockDatastore) SetOrderTrialDays(ctx context.Context, orderID *go_uuid.UUID, days int64) (*Order, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetOrderTrialDays", ctx, orderID, days)
-	ret0, _ := ret[0].(*Order)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetOrderTrialDays indicates an expected call of SetOrderTrialDays.
-func (mr *MockDatastoreMockRecorder) SetOrderTrialDays(ctx, orderID, days interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOrderTrialDays", reflect.TypeOf((*MockDatastore)(nil).SetOrderTrialDays), ctx, orderID, days)
-}
-
 // UpdateOrder mocks base method.
 func (m *MockDatastore) UpdateOrder(orderID go_uuid.UUID, status string) error {
 	m.ctrl.T.Helper()
@@ -974,21 +959,6 @@ func (m *MockorderStore) SetStatus(ctx context.Context, dbi sqlx.ExecerContext, 
 func (mr *MockorderStoreMockRecorder) SetStatus(ctx, dbi, id, status interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStatus", reflect.TypeOf((*MockorderStore)(nil).SetStatus), ctx, dbi, id, status)
-}
-
-// SetTrialDays mocks base method.
-func (m *MockorderStore) SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id go_uuid.UUID, ndays int64) (*model.Order, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetTrialDays", ctx, dbi, id, ndays)
-	ret0, _ := ret[0].(*model.Order)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SetTrialDays indicates an expected call of SetTrialDays.
-func (mr *MockorderStoreMockRecorder) SetTrialDays(ctx, dbi, id, ndays interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTrialDays", reflect.TypeOf((*MockorderStore)(nil).SetTrialDays), ctx, dbi, id, ndays)
 }
 
 // UpdateMetadata mocks base method.

@@ -92,22 +92,10 @@ func (r *Order) SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uu
 }
 
 // SetTrialDays sets trial_days to ndays.
-func (r *Order) SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID, ndays int64) (*model.Order, error) {
-	const q = `UPDATE orders
-	SET trial_days = $2, updated_at = now()
-	WHERE id = $1
-	RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods, metadata, valid_for, last_paid_at, expires_at, trial_days`
+func (r *Order) SetTrialDays(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, ndays int64) error {
+	const q = `UPDATE orders SET trial_days = $2, updated_at = now() WHERE id = $1`
 
-	result := &model.Order{}
-	if err := dbi.QueryRowxContext(ctx, q, id, ndays).StructScan(result); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, model.ErrOrderNotFound
-		}
-
-		return nil, err
-	}
-
-	return result, nil
+	return r.execUpdate(ctx, dbi, q, id, ndays)
 }
 
 // SetStatus sets status to status.

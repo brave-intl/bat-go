@@ -19,6 +19,7 @@ type MockOrder struct {
 	FnSetStatus                         func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	FnSetExpiresAt                      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	FnSetLastPaidAt                     func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnSetTrialDays                      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, ndays int64) error
 	FnAppendMetadata                    func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
 	FnAppendMetadataInt                 func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	FnAppendMetadataInt64               func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
@@ -91,6 +92,14 @@ func (r *MockOrder) SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, i
 	}
 
 	return r.FnSetLastPaidAt(ctx, dbi, id, when)
+}
+
+func (r *MockOrder) SetTrialDays(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, ndays int64) error {
+	if r.FnSetTrialDays == nil {
+		return nil
+	}
+
+	return r.FnSetTrialDays(ctx, dbi, id, ndays)
 }
 
 func (r *MockOrder) AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -1157,53 +1158,68 @@ func TestOrder_Vendor(t *testing.T) {
 	}
 }
 
-func TestOrder_ShouldSetTrialDays(t *testing.T) {
+func TestOrder_ShouldCreateTrialSessionStripe(t *testing.T) {
+	type tcGiven struct {
+		ord *model.Order
+		now time.Time
+	}
+
 	type testCase struct {
 		name  string
-		given model.Order
+		given tcGiven
 		exp   bool
 	}
 
 	tests := []testCase{
 		{
-			name:  "not_paid",
-			given: model.Order{Status: model.OrderStatusPending},
-		},
-
-		{
-			name: "not_paid_not_stripe",
-			given: model.Order{
-				Status:                model.OrderStatusPending,
-				AllowedPaymentMethods: pq.StringArray{"something"},
+			name: "false_paid_not_stripe",
+			given: tcGiven{
+				ord: &model.Order{
+					Status:                model.OrderStatusPaid,
+					AllowedPaymentMethods: pq.StringArray{"radom"},
+				},
 			},
 		},
 
 		{
-			name:  "paid",
-			given: model.Order{Status: model.OrderStatusPaid},
-		},
-
-		{
-			name: "paid_not_stripe",
-			given: model.Order{
-				Status:                model.OrderStatusPaid,
-				AllowedPaymentMethods: pq.StringArray{"something"},
+			name: "false_not_paid_not_stripe",
+			given: tcGiven{
+				ord: &model.Order{
+					Status:                model.OrderStatusPending,
+					AllowedPaymentMethods: pq.StringArray{"radom"},
+				},
 			},
 		},
 
 		{
-			name: "paid_stripe",
-			given: model.Order{
-				Status:                model.OrderStatusPaid,
-				AllowedPaymentMethods: pq.StringArray{"stripe"},
+			name: "false_paid_stripe",
+			given: tcGiven{
+				ord: &model.Order{
+					Status:                model.OrderStatusPaid,
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+				},
 			},
 		},
 
 		{
-			name: "not_paid_stripe",
-			given: model.Order{
-				Status:                model.OrderStatusPending,
-				AllowedPaymentMethods: pq.StringArray{"stripe"},
+			name: "false_canceled_not_expired_stripe",
+			given: tcGiven{
+				ord: &model.Order{
+					Status:                model.OrderStatusPaid,
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+					ExpiresAt:             ptrTo(time.Date(2024, time.November, 1, 0, 0, 0, 0, time.UTC)),
+				},
+				now: time.Date(2024, time.October, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+
+		{
+			name: "true_pending_stripe",
+			given: tcGiven{
+				ord: &model.Order{
+					Status:                model.OrderStatusPending,
+					AllowedPaymentMethods: pq.StringArray{"stripe"},
+				},
 			},
 			exp: true,
 		},
@@ -1213,7 +1229,82 @@ func TestOrder_ShouldSetTrialDays(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.ShouldSetTrialDays()
+			actual := tc.given.ord.ShouldCreateTrialSessionStripe(tc.given.now)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestOrder_IsPaidAt(t *testing.T) {
+	type tcGiven struct {
+		ord *model.Order
+		now time.Time
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "true_paid",
+			given: tcGiven{
+				ord: &model.Order{
+					Status: model.OrderStatusPaid,
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "false_canceled_no_expiry",
+			given: tcGiven{
+				ord: &model.Order{
+					Status: model.OrderStatusCanceled,
+				},
+			},
+		},
+
+		{
+			name: "true_canceled_expires_later",
+			given: tcGiven{
+				ord: &model.Order{
+					Status:    model.OrderStatusCanceled,
+					ExpiresAt: ptrTo(time.Date(2024, time.November, 1, 0, 0, 0, 0, time.UTC)),
+				},
+				now: time.Date(2024, time.October, 1, 0, 0, 0, 0, time.UTC),
+			},
+			exp: true,
+		},
+
+		{
+			name: "false_canceled_expired",
+			given: tcGiven{
+				ord: &model.Order{
+					Status:    model.OrderStatusCanceled,
+					ExpiresAt: ptrTo(time.Date(2024, time.November, 1, 0, 0, 0, 0, time.UTC)),
+				},
+				now: time.Date(2024, time.December, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+
+		{
+			name: "false_pending",
+			given: tcGiven{
+				ord: &model.Order{
+					Status: model.OrderStatusPending,
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.ord.IsPaidAt(tc.given.now)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
