@@ -2021,6 +2021,7 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 	sreq := createStripeSessionRequest{
 		orderID:    oid,
 		email:      req.Email,
+		customerID: req.CustomerID,
 		successURL: surl,
 		cancelURL:  curl,
 		trialDays:  order.GetTrialDays(),
@@ -2572,6 +2573,7 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 	req := createStripeSessionRequest{
 		orderID:    ord.ID.String(),
 		email:      email,
+		customerID: oldSess.Customer.ID,
 		successURL: oldSess.SuccessURL,
 		cancelURL:  oldSess.CancelURL,
 		trialDays:  ord.GetTrialDays(),
@@ -2798,6 +2800,7 @@ func chooseStripeSessID(ord *model.Order, canBeNewSessID string) (string, bool) 
 type createStripeSessionRequest struct {
 	orderID    string
 	email      string
+	customerID string
 	successURL string
 	cancelURL  string
 	trialDays  int64
@@ -2815,9 +2818,17 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		LineItems:          req.items,
 	}
 
-	// Email might not be given.
-	// This could happen while recreating a session, and the email was not extracted from the old one.
-	if req.email != "" {
+	// Different processes can supply different info about customer:
+	// - when customerID is present, it takes precedence;
+	// - when email is present:
+	//    - first, search for customer;
+	//    - fallback to using the email directly.
+	// Based on the rules above, if both are present, customerID wins.
+	switch {
+	case req.customerID != "":
+		params.Customer = &req.customerID
+
+	case req.customerID == "" && req.email != "":
 		if cust, ok := cl.FindCustomer(ctx, req.email); ok && cust.Email != "" {
 			params.Customer = &cust.ID
 		} else {

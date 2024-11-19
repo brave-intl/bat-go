@@ -4564,7 +4564,84 @@ func TestCreateStripeSession(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "success_found_customer",
+			name: "success_cust_id",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if params.Customer == nil || *params.Customer != "cus_id" {
+							return nil, model.Error("unexpected")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						panic("unexpected_find_customer")
+					},
+				},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					customerID: "cus_id",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					trialDays:  7,
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_cust_id_email",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if params.Customer == nil || *params.Customer != "cus_id" {
+							return nil, model.Error("unexpected")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						panic("unexpected_find_customer")
+					},
+				},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					customerID: "cus_id",
+					email:      "you@example.com",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					trialDays:  7,
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_email_found_customer",
 			given: tcGiven{
 				cl: &xstripe.MockClient{
 					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
@@ -4598,7 +4675,7 @@ func TestCreateStripeSession(t *testing.T) {
 		},
 
 		{
-			name: "success_customer_not_found",
+			name: "success_email_customer_not_found",
 			given: tcGiven{
 				cl: &xstripe.MockClient{
 					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
@@ -4636,7 +4713,7 @@ func TestCreateStripeSession(t *testing.T) {
 		},
 
 		{
-			name: "success_no_customer_email",
+			name: "success_email_no_customer_email",
 			given: tcGiven{
 				cl: &xstripe.MockClient{
 					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
@@ -4663,7 +4740,7 @@ func TestCreateStripeSession(t *testing.T) {
 		},
 
 		{
-			name: "success_no_trial_days",
+			name: "success_email_no_trial_days",
 			given: tcGiven{
 				cl: &xstripe.MockClient{},
 

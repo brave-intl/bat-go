@@ -413,6 +413,7 @@ type OrderItemRequest struct {
 // CreateOrderRequestNew includes information needed to create an order.
 type CreateOrderRequestNew struct {
 	Email          string                `json:"email" validate:"required,email"`
+	CustomerID     string                `json:"customer_id"` // Optional.
 	Currency       string                `json:"currency" validate:"required,iso4217"`
 	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
 	RadomMetadata  *OrderRadomMetadata   `json:"radom_metadata"`
