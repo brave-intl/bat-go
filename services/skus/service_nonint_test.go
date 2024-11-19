@@ -4456,6 +4456,79 @@ func TestService_recreateStripeSession(t *testing.T) {
 		},
 
 		{
+			name: "success_email_from_request_cust_without_email",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeCheckoutSessionId" && val == "cs_test_id" {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							ID:         "cs_test_id_old",
+							SuccessURL: "https://example.com/success",
+							CancelURL:  "https://example.com/cancel",
+							Customer:   &stripe.Customer{ID: "cus_id"},
+						}
+
+						return result, nil
+					},
+
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						return nil, false
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if params.Customer != nil {
+							return nil, model.Error("unexpected_customer")
+						}
+
+						if *params.CustomerEmail != "request@example.com" {
+							return nil, model.Error("unexpected_customer_email")
+						}
+
+						result := &stripe.CheckoutSession{
+							ID:                 "cs_test_id",
+							PaymentMethodTypes: []string{"card"},
+							Mode:               stripe.CheckoutSessionModeSubscription,
+							SuccessURL:         *params.SuccessURL,
+							CancelURL:          *params.CancelURL,
+							ClientReferenceID:  *params.ClientReferenceID,
+							Subscription: &stripe.Subscription{
+								ID: "sub_id",
+								Metadata: map[string]string{
+									"orderID": *params.ClientReferenceID,
+								},
+							},
+							AllowPromotionCodes: true,
+						}
+
+						return result, nil
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Items: []model.OrderItem{
+						{
+							Quantity: 1,
+							Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+						},
+					},
+				},
+				oldSessID: "cs_test_id_old",
+				email:     "request@example.com",
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
 			name: "success_email_from_request",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{

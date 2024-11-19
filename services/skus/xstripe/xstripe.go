@@ -56,3 +56,13 @@ func CustomerEmailFromSession(sess *stripe.CheckoutSession) string {
 	// Default to empty, Stripe will ask the customer.
 	return ""
 }
+
+func CustomerIDFromSession(sess *stripe.CheckoutSession) string {
+	// Return the customer id only if the customer is present AND it has email set.
+	// Without the email, the customer record is not fully formed, and does not suit the use case.
+	if sess.Customer != nil && sess.Customer.Email != "" {
+		return sess.Customer.ID
+	}
+
+	return ""
+}
