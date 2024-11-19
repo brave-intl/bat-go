@@ -2573,11 +2573,14 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 	req := createStripeSessionRequest{
 		orderID:    ord.ID.String(),
 		email:      email,
-		customerID: oldSess.Customer.ID,
 		successURL: oldSess.SuccessURL,
 		cancelURL:  oldSess.CancelURL,
 		trialDays:  ord.GetTrialDays(),
 		items:      buildStripeLineItems(ord.Items),
+	}
+
+	if oldSess.Customer != nil {
+		req.customerID = oldSess.Customer.ID
 	}
 
 	if req.email == "" {

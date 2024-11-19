@@ -4388,7 +4388,7 @@ func TestService_recreateStripeSession(t *testing.T) {
 		},
 
 		{
-			name: "success_email_from_session",
+			name: "success_email_cust_from_session",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{
 					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
@@ -4405,7 +4405,7 @@ func TestService_recreateStripeSession(t *testing.T) {
 							ID:         "cs_test_id_old",
 							SuccessURL: "https://example.com/success",
 							CancelURL:  "https://example.com/cancel",
-							Customer:   &stripe.Customer{Email: "you@example.com"},
+							Customer:   &stripe.Customer{ID: "cus_id", Email: "you@example.com"},
 						}
 
 						return result, nil
@@ -4473,7 +4473,6 @@ func TestService_recreateStripeSession(t *testing.T) {
 							ID:         "cs_test_id_old",
 							SuccessURL: "https://example.com/success",
 							CancelURL:  "https://example.com/cancel",
-							Customer:   &stripe.Customer{Email: "session@example.com"},
 						}
 
 						return result, nil
