@@ -26,37 +26,88 @@ func TestOrder_SetTrialDays(t *testing.T) {
 	dbi, err := setupDBI()
 	must.Equal(t, nil, err)
 
-	t.Cleanup(func() {
+	defer func() {
 		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
-	})
+	}()
+
+	type tcGiven struct {
+		id       uuid.UUID
+		ndays    int64
+		fnBefore func(ctx context.Context, dbi sqlx.ExecerContext) error
+	}
 
 	type tcExpected struct {
-		ndays int64
-		err   error
+		num       int64
+		updateErr error
+		getErr    error
 	}
 
 	type testCase struct {
 		name  string
-		given int64
+		given tcGiven
 		exp   tcExpected
 	}
 
 	tests := []testCase{
 		{
-			name: "not_found",
+			name: "not_set_before",
+			given: tcGiven{
+				id:    uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				ndays: 1,
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, created_at, updated_at
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+
 			exp: tcExpected{
-				err: model.ErrOrderNotFound,
+				num: 1,
 			},
 		},
 
 		{
-			name: "no_changes",
-		},
+			name: "overwrites_existing",
+			given: tcGiven{
+				id:    uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				ndays: 7,
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, trial_days, created_at, updated_at
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						3,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01'
+					);`
 
-		{
-			name:  "updated_value",
-			given: 4,
-			exp:   tcExpected{ndays: 4},
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+
+			exp: tcExpected{
+				num: 7,
+			},
 		},
 	}
 
@@ -73,23 +124,31 @@ func TestOrder_SetTrialDays(t *testing.T) {
 
 			t.Cleanup(func() { _ = tx.Rollback() })
 
-			order, err := createOrderForTest(ctx, tx, repo)
-			must.Equal(t, nil, err)
-
-			id := order.ID
-			if tc.exp.err == model.ErrOrderNotFound {
-				// Use any id for testing the not found case.
-				id = uuid.NamespaceDNS
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, tx)
+				must.NoError(t, err)
 			}
 
-			actual, err := repo.SetTrialDays(ctx, tx, id, tc.given)
-			must.Equal(t, true, errors.Is(err, tc.exp.err))
+			{
+				err := repo.SetTrialDays(ctx, tx, tc.given.id, tc.given.ndays)
+				if err != nil {
+					t.Log(err)
+				}
+				must.Equal(t, tc.exp.updateErr, err)
+			}
 
-			if tc.exp.err != nil {
+			if tc.exp.updateErr != nil {
 				return
 			}
 
-			should.Equal(t, tc.exp.ndays, actual.GetTrialDays())
+			actual, err := repo.Get(ctx, tx, tc.given.id)
+			must.Equal(t, tc.exp.getErr, err)
+
+			if tc.exp.getErr != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.num, actual.GetTrialDays())
 		})
 	}
 }

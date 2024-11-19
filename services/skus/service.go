@@ -97,6 +97,7 @@ type orderStoreSvc interface {
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	SetTrialDays(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, ndays int64) error
 	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
 	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
@@ -634,7 +635,7 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 	var newSessID string
 
 	if expSessID != "" {
-		nsessID, err := s.recreateStripeSession(ctx, dbi, ord, expSessID)
+		nsessID, err := s.recreateStripeSession(ctx, dbi, ord, expSessID, "")
 		if err != nil {
 			return fmt.Errorf("failed to create checkout session: %w", err)
 		}
@@ -755,13 +756,31 @@ func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
 	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
-func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
-	ord, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
+func (s *Service) setOrderTrialDays(ctx context.Context, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to set the order's trial days: %w", err)
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.setOrderTrialDaysTx(ctx, tx, orderID, req, now); err != nil {
+		return err
 	}
 
-	if !ord.ShouldSetTrialDays() {
+	return tx.Commit()
+}
+
+func (s *Service) setOrderTrialDaysTx(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {
+	if err := s.orderRepo.SetTrialDays(ctx, dbi, orderID, req.TrialDays); err != nil {
+		return err
+	}
+
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord.ShouldCreateTrialSessionStripe(now) {
 		return nil
 	}
 
@@ -770,7 +789,7 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		return model.ErrNoStripeCheckoutSessID
 	}
 
-	_, err = s.recreateStripeSession(ctx, s.Datastore.RawDB(), ord, oldSessID)
+	_, err = s.recreateStripeSession(ctx, dbi, ord, oldSessID, req.Email)
 
 	return err
 }
@@ -2544,7 +2563,7 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
 }
 
-func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID string) (string, error) {
+func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID, email string) (string, error) {
 	oldSess, err := s.stripeCl.Session(ctx, oldSessID, nil)
 	if err != nil {
 		return "", err
@@ -2552,11 +2571,15 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 
 	req := createStripeSessionRequest{
 		orderID:    ord.ID.String(),
-		email:      xstripe.CustomerEmailFromSession(oldSess),
+		email:      email,
 		successURL: oldSess.SuccessURL,
 		cancelURL:  oldSess.CancelURL,
 		trialDays:  ord.GetTrialDays(),
 		items:      buildStripeLineItems(ord.Items),
+	}
+
+	if req.email == "" {
+		req.email = xstripe.CustomerEmailFromSession(oldSess)
 	}
 
 	sessID, err := createStripeSession(ctx, s.stripeCl, req)

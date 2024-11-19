@@ -37,8 +37,7 @@ type Datastore interface {
 	datastore.Datastore
 
 	CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error)
-	// SetOrderTrialDays - set the number of days of free trial for this order
-	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
+
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetOrderByExternalID by the external id from the purchase vendor
@@ -99,7 +98,6 @@ type orderStore interface {
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
-	SetTrialDays(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID, ndays int64) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	GetExpiresAtAfterISOPeriod(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (time.Time, error)
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -263,31 +261,6 @@ func (pg *Postgres) GetKey(id uuid.UUID, showExpired bool) (*Key, error) {
 	}
 
 	return &key, nil
-}
-
-// SetOrderTrialDays sets the number of days of free trial for this order and returns the updated result.
-func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error) {
-	tx, err := pg.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create db tx: %w", err)
-	}
-	defer pg.RollbackTx(tx)
-
-	result, err := pg.orderRepo.SetTrialDays(ctx, tx, *orderID, days)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute tx: %w", err)
-	}
-
-	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, tx, *orderID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 // CreateOrder creates orders for Auto Contribute and Search Captcha.
