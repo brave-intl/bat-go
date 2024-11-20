@@ -97,10 +97,12 @@ type orderStoreSvc interface {
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	SetTrialDays(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, ndays int64) error
 	AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
 	AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	AppendMetadataInt64(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 	GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
+	IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error
 }
 
 type tlv2Store interface {
@@ -633,7 +635,7 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 	var newSessID string
 
 	if expSessID != "" {
-		nsessID, err := s.recreateStripeSession(ctx, dbi, ord, expSessID)
+		nsessID, err := s.recreateStripeSession(ctx, dbi, ord, expSessID, "")
 		if err != nil {
 			return fmt.Errorf("failed to create checkout session: %w", err)
 		}
@@ -694,6 +696,10 @@ func (s *Service) cancelOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id 
 	return s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusCanceled)
 }
 
+func (s *Service) resetNumPaymentFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
+	return s.orderRepo.AppendMetadataInt(ctx, dbi, id, "numPaymentFailed", 0)
+}
+
 // CancelOrderLegacy cancels an order, propagates to stripe if needed.
 func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
 	// TODO: Refactor this later. Now here's a quick fix.
@@ -750,13 +756,31 @@ func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
 	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
-func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
-	ord, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
+func (s *Service) setOrderTrialDays(ctx context.Context, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to set the order's trial days: %w", err)
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.setOrderTrialDaysTx(ctx, tx, orderID, req, now); err != nil {
+		return err
 	}
 
-	if !ord.ShouldSetTrialDays() {
+	return tx.Commit()
+}
+
+func (s *Service) setOrderTrialDaysTx(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {
+	if err := s.orderRepo.SetTrialDays(ctx, dbi, orderID, req.TrialDays); err != nil {
+		return err
+	}
+
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord.ShouldCreateTrialSessionStripe(now) {
 		return nil
 	}
 
@@ -765,7 +789,7 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		return model.ErrNoStripeCheckoutSessID
 	}
 
-	_, err = s.recreateStripeSession(ctx, s.Datastore.RawDB(), ord, oldSessID)
+	_, err = s.recreateStripeSession(ctx, dbi, ord, oldSessID, req.Email)
 
 	return err
 }
@@ -1708,7 +1732,30 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
+		// Reset numPaymentFailed.
+		if err := s.resetNumPaymentFailed(ctx, dbi, oid); err != nil {
+			return err
+		}
+
 		return s.cancelOrderTx(ctx, dbi, oid)
+
+	case ntf.shouldRecordPayFailure():
+		subID, err := ntf.subID()
+		if err != nil {
+			return err
+		}
+
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.Get(ctx, dbi, oid)
+		if err != nil {
+			return err
+		}
+
+		return s.recordPayFailureStripe(ctx, dbi, ord, subID)
 
 	default:
 		return nil
@@ -2058,17 +2105,7 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
 	// to allow for more flexible idempotent behavior.
 	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
-		if !shouldRetryRedeemFn(kind, cred.Issuer, err) {
-			return handleRedeemFnError(ctx, w, kind, cred, err)
-		}
-
-		// TODO: remove this as there should be no credentials in Production signed by brave-leo-premium-year.
-		//
-		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
-		const leoa = "brave.com?sku=brave-leo-premium-year"
-		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
-			return handleRedeemFnError(ctx, w, kind, cred, err)
-		}
+		return handleRedeemFnError(ctx, w, kind, cred, err)
 	}
 
 	// TODO(clD11): cleanup after quick fix
@@ -2210,13 +2247,22 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		return nil, err
 	}
 
+	paidt := time.Now()
+
 	// 3. Return it if found. The caller must handle it accordingly.
 	if err == nil {
+		// 3.1. Handle cases when an existing order is found, and it's often outdated.
+		// Examples:
+		// - annual VPN users on mobile pre-July 2024;
+		// - mobile Developers and QAs using the same store id repeatedly.
+		if err := s.renewOrderWithExpPaidTime(ctx, ord.ID, rcpt.ExpiresAt, paidt); err != nil {
+			return nil, err
+		}
+
 		return ord, model.ErrOrderExistsForReceipt
 	}
 
 	// 4. Create if missing.
-	paidt := time.Now()
 
 	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
 }
@@ -2471,6 +2517,25 @@ func createOrderWithReceipt(
 	return order, nil
 }
 
+func (s *Service) recordPayFailureStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string) error {
+	if shouldUpdateOrderStripeSubID(ord, subID) {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
+			return err
+		}
+	}
+
+	if err := s.orderRepo.IncrementNumPayFailed(ctx, dbi, ord.ID); err != nil {
+		return err
+	}
+
+	// Skip updating payment processor if it's already Stripe.
+	if ord.IsStripe() {
+		return nil
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+}
+
 func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string, expt, paidt time.Time) error {
 	if shouldUpdateOrderStripeSubID(ord, subID) {
 		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", subID); err != nil {
@@ -2485,6 +2550,11 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 		return err
 	}
 
+	// Reset numPaymentFailed.
+	if err := s.resetNumPaymentFailed(ctx, dbi, ord.ID); err != nil {
+		return err
+	}
+
 	// Skip updating payment processor if it's already Stripe.
 	if ord.IsStripe() {
 		return nil
@@ -2493,7 +2563,7 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
 }
 
-func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID string) (string, error) {
+func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID, email string) (string, error) {
 	oldSess, err := s.stripeCl.Session(ctx, oldSessID, nil)
 	if err != nil {
 		return "", err
@@ -2501,11 +2571,15 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 
 	req := createStripeSessionRequest{
 		orderID:    ord.ID.String(),
-		email:      xstripe.CustomerEmailFromSession(oldSess),
+		email:      email,
 		successURL: oldSess.SuccessURL,
 		cancelURL:  oldSess.CancelURL,
 		trialDays:  ord.GetTrialDays(),
 		items:      buildStripeLineItems(ord.Items),
+	}
+
+	if req.email == "" {
+		req.email = xstripe.CustomerEmailFromSession(oldSess)
 	}
 
 	sessID, err := createStripeSession(ctx, s.stripeCl, req)
@@ -2800,12 +2874,6 @@ func handleRedeemFnError(ctx context.Context, w http.ResponseWriter, kind string
 	}
 
 	return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
-}
-
-func shouldRetryRedeemFn(kind, issuer string, err error) bool {
-	const leo = "brave.com?sku=brave-leo-premium"
-
-	return kind == timeLimitedV2 && issuer == leo && err.Error() == cbr.ErrBadRequest.Error()
 }
 
 func newRadomGateway(env string) (*radom.Gateway, error) {

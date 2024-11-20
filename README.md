@@ -5,11 +5,11 @@
 
 ## Developer Setup
 
-1. [Install Go 1.12](https://golang.org/doc/install) (NOTE: Go 1.10 and earlier will not work!)
+1. [Install Go](https://golang.org/doc/install) (Go 1.22 or later)
 
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 
-3. `go get -u github.com/hexdigest/gowrap/cmd/gowrap`
+3. `go install github.com/hexdigest/gowrap/cmd/gowrap@latest`
 
 4. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
 
@@ -54,24 +54,9 @@ You can run all the unit and integration tests by setting the env `TEST_TAGS=int
 `make docker-dev` 
 
 Services are split up for testing:
-`cd /src/grant-server/payment ; > go test --tags=integration -v`
+`cd /src/services/payments ; go test --tags=integration -v`
 
 For example in `promotion` you can run specific tests by running a command similar to `go test --tags=integration -run TestControllersTestSuite/TestCreateOrder`.
-
-### Rapid Iteration dev Environment
-
-On occasion it is desirable to re-run the development environment at will quickly.  To this
-end you can run `make docker-refresh-dev` which will spin up the bat-go services including a
-container named `grant-refresh-dev`.  If you want to recompile this service you merely need to
-perform a `docker restart grant-refresh-dev` and it will recompile and run the service.
-
-A particularly interesting use case is marrying this with utilities such as `fswatch` to watch
-for file changes.  There is an example below which will restart this `grant-refresh-dev` container
-on any file change in the source directory:
-
-```bash
-fswatch . | xargs -I {} sh -c '$(docker ps -f "name=grant-refresh-dev" --format "docker restart {{.ID}}")'
-```
 
 ## Building a prod image using docker
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi"
@@ -310,11 +311,6 @@ func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandler
 	return r
 }
 
-type setTrialDaysRequest struct {
-	TrialDays int64 `json:"trialDays"`
-}
-
-// TODO: refactor this to avoid multiple fetches of an order.
 func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
@@ -324,21 +320,19 @@ func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
-		if err := svc.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
-			return handlers.ValidationError("merchant and caveats", map[string]interface{}{"orderMerchantAndCaveats": err.Error()})
-		}
-
 		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			return handlers.WrapError(err, "failed to read request body", http.StatusBadRequest)
 		}
 
-		req := &setTrialDaysRequest{}
+		req := &model.SetTrialDaysRequest{}
 		if err := json.Unmarshal(data, req); err != nil {
 			return handlers.WrapError(err, "failed to parse request", http.StatusBadRequest)
 		}
 
-		if err := svc.SetOrderTrialDays(ctx, &orderID, req.TrialDays); err != nil {
+		now := time.Now().UTC()
+
+		if err := svc.setOrderTrialDays(ctx, orderID, req, now); err != nil {
 			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
 		}
 
@@ -1089,7 +1083,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 
 			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+		case errors.Is(err, model.ErrNoRowsChangedOrder):
 			l.Warn().Err(err).Msg("failed to process play store notification")
 
 			// No rows have changed whilst processing.
@@ -1180,7 +1174,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 
 			return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-		case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+		case errors.Is(err, model.ErrNoRowsChangedOrder):
 			l.Warn().Err(err).Msg("failed to process app store notification")
 
 			// No rows have changed whilst processing.
@@ -1313,7 +1307,7 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 
 				return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 
-			case errors.Is(err, model.ErrNoRowsChangedOrder), errors.Is(err, model.ErrNoRowsChangedOrderPayHistory):
+			case errors.Is(err, model.ErrNoRowsChangedOrder):
 				l.Warn().Err(err).Msg("failed to process stripe notification")
 
 				// No rows have changed whilst processing.

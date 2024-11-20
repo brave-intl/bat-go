@@ -19,10 +19,12 @@ type MockOrder struct {
 	FnSetStatus                         func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	FnSetExpiresAt                      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	FnSetLastPaidAt                     func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
+	FnSetTrialDays                      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, ndays int64) error
 	FnAppendMetadata                    func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error
 	FnAppendMetadataInt                 func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error
 	FnAppendMetadataInt64               func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int64) error
 	FnGetExpiredStripeCheckoutSessionID func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error)
+	FnIncrementNumPayFailed             func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error
 }
 
 func (r *MockOrder) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -92,6 +94,14 @@ func (r *MockOrder) SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, i
 	return r.FnSetLastPaidAt(ctx, dbi, id, when)
 }
 
+func (r *MockOrder) SetTrialDays(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, ndays int64) error {
+	if r.FnSetTrialDays == nil {
+		return nil
+	}
+
+	return r.FnSetTrialDays(ctx, dbi, id, ndays)
+}
+
 func (r *MockOrder) AppendMetadata(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
 	if r.FnAppendMetadata == nil {
 		return nil
@@ -122,6 +132,14 @@ func (r *MockOrder) GetExpiredStripeCheckoutSessionID(ctx context.Context, dbi s
 	}
 
 	return r.FnGetExpiredStripeCheckoutSessionID(ctx, dbi, orderID)
+}
+
+func (r *MockOrder) IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
+	if r.FnIncrementNumPayFailed == nil {
+		return nil
+	}
+
+	return r.FnIncrementNumPayFailed(ctx, dbi, id)
 }
 
 type MockOrderItem struct {

@@ -22,7 +22,6 @@ const (
 	ErrOrderNotPaid                           Error = "order not paid"
 	ErrIssuerNotFound                         Error = "model: issuer not found"
 	ErrNoRowsChangedOrder                     Error = "model: no rows changed in orders"
-	ErrNoRowsChangedOrderPayHistory           Error = "model: no rows changed in order_payment_history"
 	ErrExpiredStripeCheckoutSessionIDNotFound Error = "model: expired stripeCheckoutSessionId not found"
 	ErrInvalidOrderNoItems                    Error = "model: invalid order: no items"
 	ErrNoStripeCheckoutSessID                 Error = "model: order: no stripe checkout session id"
@@ -119,12 +118,21 @@ func (o *Order) IsRadomPayable() bool {
 	return Slice[string](o.AllowedPaymentMethods).Contains(RadomPaymentMethod)
 }
 
-func (o *Order) ShouldSetTrialDays() bool {
-	return !o.IsPaid() && o.IsStripePayable()
+func (o *Order) ShouldCreateTrialSessionStripe(now time.Time) bool {
+	return !o.IsPaidAt(now) && o.IsStripePayable()
 }
 
 // IsPaid returns true if the order is paid.
+//
+// TODO: Update all callers of the method to pass time explicitly.
 func (o *Order) IsPaid() bool {
+	return o.IsPaidAt(time.Now())
+}
+
+// IsPaidAt returns true if the order is paid.
+//
+// If canceled, it checks if expires_at is in the future.
+func (o *Order) IsPaidAt(now time.Time) bool {
 	switch o.Status {
 	case OrderStatusPaid:
 		// The order is paid if the status is paid.
@@ -135,7 +143,7 @@ func (o *Order) IsPaid() bool {
 			return false
 		}
 
-		return o.ExpiresAt.After(time.Now())
+		return o.ExpiresAt.After(now)
 	default:
 		return false
 	}
@@ -175,6 +183,17 @@ func (o *Order) NumIntervals() (int, error) {
 	}
 
 	return result, nil
+}
+
+func (o *Order) NumPaymentFailed() int {
+	numRaw, ok := o.Metadata["numPaymentFailed"]
+	if !ok {
+		return 0
+	}
+
+	result, _ := numFromAny(numRaw)
+
+	return result
 }
 
 // HasItem returns the item if found.
@@ -719,6 +738,11 @@ type VerifyCredentialOpaque struct {
 	Type         string  `json:"type" validate:"oneof=single-use time-limited time-limited-v2"`
 	Presentation string  `json:"presentation" validate:"base64"`
 	Version      float64 `json:"version" validate:"-"`
+}
+
+type SetTrialDaysRequest struct {
+	Email     string `json:"email"` // TODO: Make it required.
+	TrialDays int64  `json:"trialDays"`
 }
 
 func addURLParam(src, name, val string) (string, error) {
