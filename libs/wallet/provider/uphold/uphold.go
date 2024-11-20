@@ -17,6 +17,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -236,6 +237,12 @@ func submit(
 	if err != nil {
 		return nil, resp, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyRead, err.Error())
 	}
+	sbody := string(body)
+	for _, p := range []string{`"description":\s*"[^"]+"\s*,?`, `"\w+Country":\s*"[^"]+"\s*,?`} {
+		re := regexp.MustCompile(p)
+		sbody = re.ReplaceAllString(sbody, "")
+	}
+	sbody = regexp.MustCompile(`,}`).ReplaceAllString(sbody, "}")
 
 	if logger != nil {
 		logger.Debug().
@@ -243,18 +250,18 @@ func submit(
 			Str("type", "http.Response").
 			Int("status", resp.StatusCode).
 			Str("headers", string(jsonHeaders)).
-			Msg(string(body))
+			Msg(sbody)
 	}
 
 	if resp.StatusCode/100 != 2 {
 		var uhErr upholdError
-		if json.Unmarshal(body, &uhErr) != nil {
-			return nil, resp, fmt.Errorf("Error %d, %s", resp.StatusCode, body)
+		if json.Unmarshal([]byte(sbody), &uhErr) != nil {
+			return nil, resp, fmt.Errorf("Error %d, %s", resp.StatusCode, sbody)
 		}
 		uhErr.RequestID = resp.Header.Get("Request-Id")
 		return nil, resp, uhErr
 	}
-	return body, resp, nil
+	return []byte(sbody), resp, nil
 }
 
 type createCardRequest struct {
