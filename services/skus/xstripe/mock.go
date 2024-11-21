@@ -15,7 +15,10 @@ type MockClient struct {
 
 func (c *MockClient) Session(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
 	if c.FnSession == nil {
-		result := &stripe.CheckoutSession{ID: id}
+		result := &stripe.CheckoutSession{
+			ID:       id,
+			Customer: &stripe.Customer{ID: "cus_id", Email: "customer@example.com"},
+		}
 
 		return result, nil
 	}
