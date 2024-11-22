@@ -237,12 +237,7 @@ func submit(
 	if err != nil {
 		return nil, resp, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyRead, err.Error())
 	}
-	sbody := string(body)
-	for _, p := range []string{`"description":\s*"[^"]+"\s*,?`, `"\w+Country":\s*"[^"]+"\s*,?`} {
-		re := regexp.MustCompile(p)
-		sbody = re.ReplaceAllString(sbody, "")
-	}
-	sbody = regexp.MustCompile(`,}`).ReplaceAllString(sbody, "}")
+	sbody := redactUnneededContent(string(body))
 
 	if logger != nil {
 		logger.Debug().
@@ -1186,4 +1181,13 @@ func FundWallet(ctx context.Context, destWallet *Wallet, amount decimal.Decimal)
 	}
 
 	return balance.TotalProbi, nil
+}
+
+func redactUnneededContent(sbody string) string {
+	for _, p := range []string{`"description":\s*"[^"]+"\s*,?`, `"\w+Country":\s*"[^"]+"\s*,?`} {
+		re := regexp.MustCompile(p)
+		sbody = re.ReplaceAllString(sbody, "")
+	}
+	sbody = strings.ReplaceAll(sbody, ",}", "}")
+	return sbody
 }

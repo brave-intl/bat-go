@@ -3,6 +3,7 @@ package uphold
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -350,4 +351,15 @@ func requireDonorWallet(t *testing.T) *Wallet {
 	}
 
 	return &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+}
+
+func TestRedactUnneeded(t *testing.T) {
+	response := `{"description":"some unneeded content","UKCountry":"foo","TestCountry":"bar","NoMatch": true}`
+	result := `{"NoMatch": true}`
+	testValue := redactUnneededContent(response)
+	assert.Equal(t, result, testValue)
+	var dat map[string]interface{}
+	if err := json.Unmarshal([]byte(testValue), &dat); err != nil {
+		t.Fatal(err)
+	}
 }
