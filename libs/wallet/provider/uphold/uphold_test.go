@@ -354,7 +354,7 @@ func requireDonorWallet(t *testing.T) *Wallet {
 }
 
 func TestRedactUnneeded(t *testing.T) {
-	response := `{"description":"some unneeded content","UKCountry":"foo","TestCountry":"bar","NoMatch": true}`
+	response := `{"description":"some unneeded content","OKCountry":"foo","TestCountry":"bar","NoMatch": true}`
 	result := `{"NoMatch": true}`
 	testValue := redactUnneededContent(response)
 	assert.Equal(t, result, testValue)
