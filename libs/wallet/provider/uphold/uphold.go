@@ -1183,11 +1183,13 @@ func FundWallet(ctx context.Context, destWallet *Wallet, amount decimal.Decimal)
 	return balance.TotalProbi, nil
 }
 
+var redactRegexp = []regexp.Regexp{
+	*regexp.MustCompile(`"description":\s*"[^"]+"\s*,?`),
+	*regexp.MustCompile(`"\w+Country":\s*"[^"]+"\s*,?`),
+}
 func redactUnneededContent(sbody string) string {
-	for _, p := range []string{`"description":\s*"[^"]+"\s*,?`, `"\w+Country":\s*"[^"]+"\s*,?`} {
-		re := regexp.MustCompile(p)
+	for _, re := range redactRegexp {
 		sbody = re.ReplaceAllString(sbody, "")
 	}
-	sbody = strings.ReplaceAll(sbody, ",}", "}")
-	return sbody
+	return strings.ReplaceAll(sbody, ",}", "}")
 }
