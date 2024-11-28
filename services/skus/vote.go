@@ -236,9 +236,7 @@ func (s *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 }
 
 // Vote based on the browser's attention
-func (s *Service) Vote(
-	ctx context.Context, credentials []CredentialBinding, voteText string) error {
-
+func (s *Service) Vote(ctx context.Context, credentials []CredentialBinding, voteText string) error {
 	logger := logging.Logger(ctx, "skus.Vote")
 
 	var vote Vote
@@ -248,8 +246,7 @@ func (s *Service) Vote(
 	}
 
 	// generate all the cb credential redemptions
-	requestCredentials, err := generateCredentialRedemptions(
-		context.WithValue(ctx, appctx.DatastoreCTXKey, s.Datastore), credentials)
+	requestCredentials, err := generateCredentialRedemptions(context.WithValue(ctx, appctx.DatastoreCTXKey, s.Datastore), credentials)
 	if err != nil {
 		return fmt.Errorf("error generating credential redemptions: %w", err)
 	}
