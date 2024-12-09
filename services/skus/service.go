@@ -2106,7 +2106,17 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
 	// to allow for more flexible idempotent behavior.
 	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
-		return handleRedeemFnError(ctx, w, kind, cred, err)
+		if !shouldRetryRedeemFn(kind, cred.Issuer, err) {
+			return handleRedeemFnError(ctx, w, kind, cred, err)
+		}
+
+		// TODO: remove this as there should be no credentials in Production signed by brave-leo-premium-year.
+		//
+		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
+		const leoa = "brave.com?sku=brave-leo-premium-year"
+		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
+			return handleRedeemFnError(ctx, w, kind, cred, err)
+		}
 	}
 
 	// TODO(clD11): cleanup after quick fix
@@ -2115,6 +2125,12 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	}
 
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+}
+
+func shouldRetryRedeemFn(kind, issuer string, err error) bool {
+	const leo = "brave.com?sku=brave-leo-premium"
+
+	return kind == timeLimitedV2 && issuer == leo && err.Error() == cbr.ErrBadRequest.Error()
 }
 
 func (s *Service) createOrderTx(ctx context.Context, dbi sqlx.ExtContext, oreq *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
