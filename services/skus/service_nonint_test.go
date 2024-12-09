@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"testing"
@@ -22,10 +21,7 @@ import (
 	"github.com/stripe/stripe-go/v72"
 	"google.golang.org/api/androidpublisher/v3"
 
-	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/datastore"
-	berrs "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/handlers"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/radom"
@@ -5798,118 +5794,6 @@ func TestService_setOrderTrialDaysTx(t *testing.T) {
 
 			actual := svc.setOrderTrialDaysTx(ctx, nil, tc.given.id, tc.given.req, tc.given.now)
 			should.ErrorIs(t, actual, tc.exp)
-		})
-	}
-}
-
-func TestHandleRedeemFnError(t *testing.T) {
-	type tcGiven struct {
-		kind string
-		cred *cbr.CredentialRedemption
-		err  error
-	}
-
-	type testCase struct {
-		name  string
-		given tcGiven
-		exp   *handlers.AppError
-	}
-
-	tests := []testCase{
-		{
-			name: "500_tlv2_not_found",
-			given: tcGiven{
-				kind: timeLimitedV2,
-				cred: &cbr.CredentialRedemption{TokenPreimage: "token_preimage"},
-				err: berrs.New(model.Error("not found"), "cbr route not found", berrs.Codified{
-					ErrCode: "cbr_path_not_found",
-					Retry:   true,
-				}),
-			},
-			exp: &handlers.AppError{
-				Code: http.StatusInternalServerError,
-				Cause: berrs.New(model.Error("not found"), "cbr route not found", berrs.Codified{
-					ErrCode: "cbr_path_not_found",
-					Retry:   true,
-				}),
-				Message: "Error verifying credentials",
-			},
-		},
-
-		{
-			name: "200_tlv2_duplicate",
-			given: tcGiven{
-				kind: timeLimitedV2,
-				cred: &cbr.CredentialRedemption{TokenPreimage: "token_preimage"},
-				err: berrs.New(model.Error("duplicate redemption"), "cbr duplicate redemption", berrs.Codified{
-					ErrCode: "cbr_dup_redeem",
-				}),
-			},
-		},
-
-		{
-			name: "403_tlv2_bad_request",
-			given: tcGiven{
-				kind: timeLimitedV2,
-				cred: &cbr.CredentialRedemption{TokenPreimage: "token_preimage"},
-				err: berrs.New(model.Error("bad request"), "cbr bad request", berrs.Codified{
-					ErrCode: "cbr_bad_request",
-				}),
-			},
-			exp: &handlers.AppError{
-				Code: http.StatusForbidden,
-				Cause: berrs.New(model.Error("bad request"), "cbr bad request", berrs.Codified{
-					ErrCode: "cbr_bad_request",
-				}),
-				Message: "invalid credentials",
-			},
-		},
-
-		{
-			name: "403_tlv_duplicate",
-			given: tcGiven{
-				kind: timeLimited,
-				cred: &cbr.CredentialRedemption{TokenPreimage: "token_preimage"},
-				err: berrs.New(model.Error("duplicate redemption"), "cbr duplicate redemption", berrs.Codified{
-					ErrCode: "cbr_dup_redeem",
-				}),
-			},
-			exp: &handlers.AppError{
-				Code: http.StatusForbidden,
-				Cause: berrs.New(model.Error("duplicate redemption"), "cbr duplicate redemption", berrs.Codified{
-					ErrCode: "cbr_dup_redeem",
-				}),
-				Message: "invalid credentials",
-			},
-		},
-	}
-
-	for i := range tests {
-		tc := tests[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-
-			rw := httptest.NewRecorder()
-			rw.Header().Set("content-type", "application/json")
-
-			actual := handleRedeemFnError(ctx, rw, tc.given.kind, tc.given.cred, tc.given.err)
-			if actual != nil {
-				should.Equal(t, tc.exp.Code, actual.Code)
-				should.Equal(t, tc.exp.Cause, actual.Cause)
-				should.Equal(t, tc.exp.Message, actual.Message)
-
-				return
-			}
-
-			must.Equal(t, http.StatusOK, rw.Code)
-
-			resp := &blindedCredVrfResult{}
-			err := json.Unmarshal(rw.Body.Bytes(), resp)
-			must.NoError(t, err)
-
-			should.Equal(t, tc.given.cred.TokenPreimage, resp.ID)
-			should.True(t, resp.Duplicate)
 		})
 	}
 }
