@@ -520,6 +520,10 @@ var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBin
 			}
 		}
 
+		if issuer == nil {
+			return nil, model.ErrIssuerNotFound
+		}
+
 		requestCredentials[i].Issuer = issuer.Name()
 		requestCredentials[i].TokenPreimage = cb[i].TokenPreimage
 		requestCredentials[i].Signature = cb[i].Signature

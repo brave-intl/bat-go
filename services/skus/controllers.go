@@ -847,47 +847,51 @@ type VoteRequest struct {
 // MakeVote is the handler for making a vote using credentials
 func MakeVote(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			req VoteRequest
-			ctx = r.Context()
-		)
-		err := requestutils.ReadJSON(ctx, r.Body, &req)
-		if err != nil {
+		ctx := r.Context()
+
+		req := VoteRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, &req); err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		logger := logging.Logger(ctx, "skus.MakeVote")
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
+		if _, err := govalidator.ValidateStruct(req); err != nil {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.Vote(ctx, req.Credentials, req.Vote)
-		if err != nil {
+		lg := logging.Logger(ctx, "skus").With().Str("func", "MakeVote").Logger()
+
+		if err := service.Vote(ctx, req.Credentials, req.Vote); err != nil {
 			switch err.(type) {
 			case govalidator.Error:
-				logger.Warn().Err(err).Msg("failed vote validation")
+				lg.Warn().Err(err).Msg("failed vote validation")
 				return handlers.WrapValidationError(err)
+
 			case govalidator.Errors:
-				logger.Warn().Err(err).Msg("failed multiple vote validation")
+				lg.Warn().Err(err).Msg("failed multiple vote validation")
 				return handlers.WrapValidationError(err)
+
 			default:
 				// check for custom vote invalidations
 				if errors.Is(err, ErrInvalidSKUToken) {
 					verr := handlers.ValidationError("failed to validate sku token", nil)
+
 					data := []string{}
 					if errors.Is(err, ErrInvalidSKUTokenSKU) {
 						data = append(data, "invalid sku value")
 					}
+
 					if errors.Is(err, ErrInvalidSKUTokenBadMerchant) {
 						data = append(data, "invalid merchant value")
 					}
+
 					verr.Data = data
-					logger.Warn().Err(err).Msg("failed sku validations")
+					lg.Warn().Err(err).Msg("failed sku validations")
+
 					return verr
 				}
-				logger.Warn().Err(err).Msg("failed to perform vote")
+
+				lg.Warn().Err(err).Msg("failed to perform vote")
+
 				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
 			}
 		}

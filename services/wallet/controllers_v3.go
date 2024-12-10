@@ -396,18 +396,21 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			)
 		}
 
-		// read post body
 		if err := inputs.DecodeAndValidateReader(ctx, cuw, r.Body); err != nil {
 			return cuw.HandleErrors(err)
 		}
 
-		// get the wallet
 		wallet, err := s.GetWallet(ctx, *id.UUID())
 		if err != nil {
-			if strings.Contains(err.Error(), "looking up wallet") {
-				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
-			}
+			l.Err(err).Msg("failed to get wallet")
+
 			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
+		}
+
+		if wallet == nil {
+			l.Err(model.ErrWalletNotFound).Msg("wallet not found")
+
+			return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
 		}
 
 		var aa uuid.UUID

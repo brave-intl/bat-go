@@ -2021,6 +2021,7 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 	sreq := createStripeSessionRequest{
 		orderID:    oid,
 		email:      req.Email,
+		customerID: req.CustomerID,
 		successURL: surl,
 		cancelURL:  curl,
 		trialDays:  order.GetTrialDays(),
@@ -2105,7 +2106,17 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
 	// to allow for more flexible idempotent behavior.
 	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
-		return handleRedeemFnError(ctx, w, kind, cred, err)
+		if !shouldRetryRedeemFn(kind, cred.Issuer, err) {
+			return handleRedeemFnError(ctx, w, kind, cred, err)
+		}
+
+		// TODO: remove this as there should be no credentials in Production signed by brave-leo-premium-year.
+		//
+		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
+		const leoa = "brave.com?sku=brave-leo-premium-year"
+		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
+			return handleRedeemFnError(ctx, w, kind, cred, err)
+		}
 	}
 
 	// TODO(clD11): cleanup after quick fix
@@ -2572,6 +2583,7 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 	req := createStripeSessionRequest{
 		orderID:    ord.ID.String(),
 		email:      email,
+		customerID: xstripe.CustomerIDFromSession(oldSess),
 		successURL: oldSess.SuccessURL,
 		cancelURL:  oldSess.CancelURL,
 		trialDays:  ord.GetTrialDays(),
@@ -2798,6 +2810,7 @@ func chooseStripeSessID(ord *model.Order, canBeNewSessID string) (string, bool) 
 type createStripeSessionRequest struct {
 	orderID    string
 	email      string
+	customerID string
 	successURL string
 	cancelURL  string
 	trialDays  int64
@@ -2815,9 +2828,17 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		LineItems:          req.items,
 	}
 
-	// Email might not be given.
-	// This could happen while recreating a session, and the email was not extracted from the old one.
-	if req.email != "" {
+	// Different processes can supply different info about customer:
+	// - when customerID is present, it takes precedence;
+	// - when email is present:
+	//    - first, search for customer;
+	//    - fallback to using the email directly.
+	// Based on the rules above, if both are present, customerID wins.
+	switch {
+	case req.customerID != "":
+		params.Customer = &req.customerID
+
+	case req.customerID == "" && req.email != "":
 		if cust, ok := cl.FindCustomer(ctx, req.email); ok && cust.Email != "" {
 			params.Customer = &cust.ID
 		} else {
@@ -2874,6 +2895,12 @@ func handleRedeemFnError(ctx context.Context, w http.ResponseWriter, kind string
 	}
 
 	return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+}
+
+func shouldRetryRedeemFn(kind, issuer string, err error) bool {
+	const leo = "brave.com?sku=brave-leo-premium"
+
+	return kind == timeLimitedV2 && issuer == leo && err.Error() == cbr.ErrBadRequest.Error()
 }
 
 func newRadomGateway(env string) (*radom.Gateway, error) {
