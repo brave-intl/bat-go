@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -4636,6 +4637,61 @@ func TestCreateStripeSession(t *testing.T) {
 
 	tests := []testCase{
 		{
+			name: "success_discounts_metadata",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if len(params.Discounts) != 1 {
+							return nil, model.Error("unexpected_discounts")
+						}
+
+						if coup := params.Discounts[0].Coupon; coup == nil || *coup != "coup_id_01" {
+							return nil, model.Error("unexpected_discount_val")
+						}
+
+						if val, ok := params.SubscriptionData.Params.Metadata["key_01"]; !ok || val != "val_01" {
+							fmt.Println(params.SubscriptionData.Metadata)
+							return nil, model.Error("unexpected_metadata_val")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						panic("unexpected_find_customer")
+					},
+				},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					customerID: "cus_id",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					trialDays:  7,
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+					discounts: []*stripe.CheckoutSessionDiscountParams{
+						{
+							Coupon: ptrTo("coup_id_01"),
+						},
+					},
+					metadata: map[string]string{
+						"key_01": "val_01",
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
 			name: "success_cust_id",
 			given: tcGiven{
 				cl: &xstripe.MockClient{
@@ -4949,6 +5005,49 @@ func TestBuildStripeLineItems(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := buildStripeLineItems(tc.given)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestBuildStripeDiscounts(t *testing.T) {
+	tests := []struct {
+		name  string
+		given []string
+		exp   []*stripe.CheckoutSessionDiscountParams
+	}{
+		{
+			name: "nil",
+		},
+
+		{
+			name:  "empty_nil",
+			given: []string{},
+		},
+
+		{
+			name:  "one",
+			given: []string{"coup_id_01"},
+			exp: []*stripe.CheckoutSessionDiscountParams{
+				{Coupon: ptrTo("coup_id_01")},
+			},
+		},
+
+		{
+			name:  "two",
+			given: []string{"coup_id_01", "coup_id_02"},
+			exp: []*stripe.CheckoutSessionDiscountParams{
+				{Coupon: ptrTo("coup_id_01")},
+				{Coupon: ptrTo("coup_id_02")},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := buildStripeDiscounts(tc.given)
 			should.Equal(t, tc.exp, actual)
 		})
 	}

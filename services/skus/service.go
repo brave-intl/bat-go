@@ -2026,6 +2026,8 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		cancelURL:  curl,
 		trialDays:  order.GetTrialDays(),
 		items:      buildStripeLineItems(order.Items),
+		discounts:  buildStripeDiscounts(req.Discounts),
+		metadata:   req.Metadata,
 	}
 
 	return createStripeSession(ctx, s.stripeCl, sreq)
@@ -2815,6 +2817,8 @@ type createStripeSessionRequest struct {
 	cancelURL  string
 	trialDays  int64
 	items      []*stripe.CheckoutSessionLineItemParams
+	discounts  []*stripe.CheckoutSessionDiscountParams
+	metadata   map[string]string
 }
 
 func createStripeSession(ctx context.Context, cl stripeClient, req createStripeSessionRequest) (string, error) {
@@ -2826,6 +2830,7 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		ClientReferenceID:  &req.orderID,
 		SubscriptionData:   &stripe.CheckoutSessionSubscriptionDataParams{},
 		LineItems:          req.items,
+		Discounts:          req.discounts,
 	}
 
 	// Different processes can supply different info about customer:
@@ -2850,8 +2855,13 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		params.SubscriptionData.TrialPeriodDays = &req.trialDays
 	}
 
-	params.SubscriptionData.AddMetadata("orderID", req.orderID)
 	params.AddExtra("allow_promotion_codes", "true")
+
+	params.SubscriptionData.AddMetadata("orderID", req.orderID)
+
+	for k, v := range req.metadata {
+		params.SubscriptionData.AddMetadata(k, v)
+	}
 
 	sess, err := cl.CreateSession(ctx, params)
 	if err != nil {
@@ -2873,6 +2883,18 @@ func buildStripeLineItems(items []model.OrderItem) []*stripe.CheckoutSessionLine
 		result = append(result, &stripe.CheckoutSessionLineItemParams{
 			Price:    ptrTo(priceID),
 			Quantity: ptrTo(int64(items[i].Quantity)),
+		})
+	}
+
+	return result
+}
+
+func buildStripeDiscounts(discounts []string) []*stripe.CheckoutSessionDiscountParams {
+	var result []*stripe.CheckoutSessionDiscountParams
+
+	for i := range discounts {
+		result = append(result, &stripe.CheckoutSessionDiscountParams{
+			Coupon: ptrTo(discounts[i]),
 		})
 	}
 
