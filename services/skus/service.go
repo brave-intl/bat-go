@@ -2855,7 +2855,7 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		params.SubscriptionData.TrialPeriodDays = &req.trialDays
 	}
 
-	// Only allow user facing promotion codes if params.Discounts are empty:
+	// Only allow user-facing promotion codes if params.Discounts is empty:
 	// - allow_promotion_codes and params.Discounts are mutually exclusive in Stripe.
 	if len(params.Discounts) == 0 {
 		params.AddExtra("allow_promotion_codes", "true")
