@@ -4654,6 +4654,10 @@ func TestCreateStripeSession(t *testing.T) {
 							return nil, model.Error("unexpected_metadata_val")
 						}
 
+						if params.Extra != nil && params.Extra.Get("allow_promotion_codes") == "true" {
+							return nil, model.Error("unexpected_extra_allow_promotion_codes")
+						}
+
 						result := &stripe.CheckoutSession{ID: "cs_test_id"}
 
 						return result, nil
@@ -4871,6 +4875,39 @@ func TestCreateStripeSession(t *testing.T) {
 			name: "success_email_no_trial_days",
 			given: tcGiven{
 				cl: &xstripe.MockClient{},
+
+				req: createStripeSessionRequest{
+					orderID:    "facade00-0000-4000-a000-000000000000",
+					email:      "you@example.com",
+					successURL: "https://example.com/success",
+					cancelURL:  "https://example.com/cancel",
+					items: []*stripe.CheckoutSessionLineItemParams{
+						{
+							Quantity: ptrTo[int64](1),
+							Price:    ptrTo("stripe_item_id"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_allow_promotion_codes",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if params.Extra.Get("allow_promotion_codes") != "true" {
+							return nil, model.Error("unexpected_extra_allow_promotion_codes")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+				},
 
 				req: createStripeSessionRequest{
 					orderID:    "facade00-0000-4000-a000-000000000000",
