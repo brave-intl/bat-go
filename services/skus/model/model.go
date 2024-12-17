@@ -418,7 +418,9 @@ type CreateOrderRequestNew struct {
 	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
 	RadomMetadata  *OrderRadomMetadata   `json:"radom_metadata"`
 	PaymentMethods []string              `json:"payment_methods"`
+	Discounts      []string              `json:"discounts"`
 	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
+	Metadata       map[string]string     `json:"metadata"`
 }
 
 // OrderItemRequestNew represents an item in an order request.
