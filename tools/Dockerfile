@@ -25,11 +25,7 @@ FROM alpine:3.19 as base
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /src/bat-go /bin/
 
-FROM base as payments
-CMD ["bat-go", "serve", "nitro", "inside-enclave", "--log-address", "vm(3):2345", "--egress-address", "vm(3):1234", "--upstream-url", "http://0.0.0.0:8080", "--address", ":8080"]
-
 FROM base as artifact
 COPY --from=builder /src/migrations/ /migrations/
 EXPOSE 3333
 CMD ["bat-go", "serve", "grant", "--enable-job-workers", "true"]
-
