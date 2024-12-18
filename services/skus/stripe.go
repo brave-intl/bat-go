@@ -11,12 +11,16 @@ import (
 )
 
 const (
-	errStripeSkipEvent        = model.Error("stripe: skip webhook event")
-	errStripeUnsupportedEvent = model.Error("stripe: unsupported webhook event")
-	errStripeNoInvoiceSub     = model.Error("stripe: no invoice subscription")
-	errStripeNoInvoiceLines   = model.Error("stripe: no invoice lines")
-	errStripeOrderIDMissing   = model.Error("stripe: order_id missing")
-	errStripeInvalidSubPeriod = model.Error("stripe: invalid subscription period")
+	errStripeSkipEvent          = model.Error("stripe: skip webhook event")
+	errStripeUnsupportedEvent   = model.Error("stripe: unsupported webhook event")
+	errStripeNoInvoiceSub       = model.Error("stripe: no invoice subscription")
+	errStripeNoInvoiceLines     = model.Error("stripe: no invoice lines")
+	errStripeOrderIDMissing     = model.Error("stripe: order_id missing")
+	errStripeInvalidSubPeriod   = model.Error("stripe: invalid subscription period")
+	errStripeUMAStSubIDMissing  = model.Error("stripe: monthly to annual st_sub_id missing")
+	errStripeUMASubIDMissing    = model.Error("stripe: monthly to annual sub_id missing")
+	errStripeUMAOrderIDMissing  = model.Error("stripe: monthly to annual order_id missing")
+	errStripeUMACouponIDMissing = model.Error("stripe: monthly to annual coupon_id missing")
 )
 
 type stripeNotification struct {
@@ -70,6 +74,12 @@ func (x *stripeNotification) shouldCancel() bool {
 
 func (x *stripeNotification) shouldRecordPayFailure() bool {
 	return x.invoice != nil && x.raw.Type == "invoice.payment_failed"
+}
+
+func (x *stripeNotification) hasDiscounts() bool {
+	isPaid := x.invoice != nil && x.raw.Type == "invoice.paid"
+
+	return isPaid && len(x.invoice.Discounts) == 1 && x.invoice.Discount != nil
 }
 
 func (x *stripeNotification) ntfType() string {
@@ -166,6 +176,45 @@ func (x *stripeNotification) expiresTime() (time.Time, error) {
 	return time.Unix(sub.Period.End, 0).UTC(), nil
 }
 
+func (x *stripeNotification) hasCoupon() bool {
+	return x.invoice != nil && x.invoice.Discount != nil && x.invoice.Discount.Coupon != nil
+}
+
+func (x *stripeNotification) umaData() (promoMonthlyAnnualData, error) {
+	if x.invoice.Lines == nil || len(x.invoice.Lines.Data) == 0 {
+		return promoMonthlyAnnualData{}, errStripeNoInvoiceLines
+	}
+
+	stSubID, ok := x.invoice.Lines.Data[0].Metadata["uma__st_sub_id"]
+	if !ok {
+		return promoMonthlyAnnualData{}, errStripeUMAStSubIDMissing
+	}
+
+	subID, ok := x.invoice.Lines.Data[0].Metadata["uma__sub_id"]
+	if !ok {
+		return promoMonthlyAnnualData{}, errStripeUMAStSubIDMissing
+	}
+
+	ordID, ok := x.invoice.Lines.Data[0].Metadata["uma__order_id"]
+	if !ok {
+		return promoMonthlyAnnualData{}, errStripeUMAOrderIDMissing
+	}
+
+	coupID, ok := x.invoice.Lines.Data[0].Metadata["uma__coupon_id"]
+	if !ok {
+		return promoMonthlyAnnualData{}, errStripeUMACouponIDMissing
+	}
+
+	result := promoMonthlyAnnualData{
+		stSubID: stSubID,
+		subID:   subID,
+		orderID: ordID,
+		coupID:  coupID,
+	}
+
+	return result, nil
+}
+
 func parseStripeEventData[T any](data []byte) (*T, error) {
 	var result T
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -173,4 +222,11 @@ func parseStripeEventData[T any](data []byte) (*T, error) {
 	}
 
 	return &result, nil
+}
+
+type promoMonthlyAnnualData struct {
+	stSubID string
+	subID   string
+	orderID string
+	coupID  string
 }

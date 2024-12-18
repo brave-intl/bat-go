@@ -1723,8 +1723,11 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 		}
 
 		paidt := time.Now()
+		if err := s.renewOrderStripe(ctx, dbi, ord, subID, expt, paidt); err != nil {
+			return err
+		}
 
-		return s.renewOrderStripe(ctx, dbi, ord, subID, expt, paidt)
+		return s.processStripeInvDicount(ctx, dbi, ntf)
 
 	case ntf.shouldCancel():
 		oid, err := ntf.orderID()
@@ -2606,6 +2609,29 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 	}
 
 	return sessID, nil
+}
+
+func (s *Service) processStripeInvDicount(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
+	if !ntf.hasDiscounts() {
+		return nil
+	}
+
+	// Handle only coupons for now.
+	if ntf.hasCoupon() {
+		return nil
+	}
+
+	// Here should be a check that the id is expected.
+	// Continue assuming the check passes.
+
+	umaPromo, err := ntf.umaData()
+	if err != nil {
+		return err
+	}
+
+	_ = umaPromo
+
+	return nil
 }
 
 func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem, merchID, status string) (*model.OrderNew, error) {

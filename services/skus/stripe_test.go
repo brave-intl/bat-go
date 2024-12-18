@@ -69,6 +69,56 @@ func TestParseStripeNotification(t *testing.T) {
 		should.Equal(t, time.Date(2024, time.July, 12, 07, 16, 18, 0, time.UTC), time.Unix(sub.Period.End, 0).UTC())
 	})
 
+	t.Run("invoice_paid_coupon", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_invoice_paid_coupon.json"))
+		must.NoError(t, err)
+
+		event := &stripe.Event{}
+
+		{
+			err := json.Unmarshal(raw, event)
+			must.NoError(t, err)
+		}
+
+		should.Equal(t, "invoice.paid", event.Type)
+
+		ntf, err := parseStripeNotification(event)
+		must.NoError(t, err)
+
+		should.Equal(t, "sub_1QWvtYHof20bphG6mW3XXU9c", ntf.invoice.Subscription.ID)
+
+		must.Equal(t, 1, len(ntf.invoice.Lines.Data))
+
+		sub := ntf.invoice.Lines.Data[0]
+
+		should.Equal(t, "subscription", string(sub.Type))
+		should.Equal(t, "sub_1QWvtYHof20bphG6mW3XXU9c", sub.Subscription)
+		should.Equal(t, "a469d322-ea87-4cdb-9a09-5f67a95696ef", sub.Metadata["orderID"])
+
+		{
+			sub, err := ntf.subID()
+			must.NoError(t, err)
+
+			should.Equal(t, "sub_1QWvtYHof20bphG6mW3XXU9c", sub)
+		}
+
+		oid, err := ntf.orderID()
+		must.NoError(t, err)
+
+		should.True(t, uuid.Equal(uuid.FromStringOrNil("a469d322-ea87-4cdb-9a09-5f67a95696ef"), oid))
+
+		must.True(t, sub.Period != nil)
+		should.Equal(t, int64(1734423164), sub.Period.Start)
+		should.Equal(t, time.Date(2024, time.December, 17, 8, 12, 44, 0, time.UTC), time.Unix(sub.Period.Start, 0).UTC())
+
+		should.Equal(t, int64(1737101564), sub.Period.End)
+		should.Equal(t, time.Date(2025, time.January, 17, 8, 12, 44, 0, time.UTC), time.Unix(sub.Period.End, 0).UTC())
+
+		must.Equal(t, 1, len(ntf.invoice.Discounts))
+		must.True(t, ntf.invoice.Discount != nil)
+		should.Equal(t, "g4V47kwV", ntf.invoice.Discount.Coupon.ID)
+	})
+
 	t.Run("invoice_payment_failed", func(t *testing.T) {
 		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_invoice_payment_failed.json"))
 		must.NoError(t, err)
