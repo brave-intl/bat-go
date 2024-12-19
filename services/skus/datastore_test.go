@@ -133,28 +133,6 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 	}
 }
 
-func (suite *PostgresTestSuite) TestGetOrderByExternalID() {
-	ctx := context.Background()
-	defer ctx.Done()
-
-	// create an issuer and a paid order with one order item and a time limited v2 credential type.
-	ctx = context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
-	o1, _ := createOrderAndIssuer(suite.T(), ctx, suite.storage, devFreeTimeLimitedV2)
-
-	// add the external id to metadata
-	err := suite.storage.AppendOrderMetadata(ctx, &o1.ID, "externalID", "my external id")
-	suite.Require().NoError(err)
-
-	// test out get by external id
-	o2, err := suite.storage.GetOrderByExternalID("my external id")
-	suite.Require().NoError(err)
-	suite.Assert().NotNil(o2)
-
-	if o2 != nil {
-		suite.Assert().Equal(o2.ID.String(), o1.ID.String())
-	}
-}
-
 func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrder_Success() {
 	env := os.Getenv("ENV")
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)

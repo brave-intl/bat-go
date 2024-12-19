@@ -23,7 +23,6 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/client"
-	"github.com/stripe/stripe-go/v72/sub"
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 
@@ -125,6 +124,7 @@ type stripeClient interface {
 	Session(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	CreateSession(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	Subscription(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
+	CancelSub(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error
 	FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool)
 }
 
@@ -698,62 +698,6 @@ func (s *Service) cancelOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id 
 
 func (s *Service) resetNumPaymentFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
 	return s.orderRepo.AppendMetadataInt(ctx, dbi, id, "numPaymentFailed", 0)
-}
-
-// CancelOrderLegacy cancels an order, propagates to stripe if needed.
-func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
-	// TODO: Refactor this later. Now here's a quick fix.
-	ord, err := s.Datastore.GetOrder(orderID)
-	if err != nil {
-		return err
-	}
-
-	if ord == nil {
-		return model.ErrOrderNotFound
-	}
-
-	subID, ok := ord.StripeSubID()
-	if ok && subID != "" {
-		// Cancel the stripe subscription.
-		if _, err := sub.Cancel(subID, nil); err != nil {
-			// Error out if it's not 404.
-			if !isErrStripeNotFound(err) {
-				return fmt.Errorf("failed to cancel stripe subscription: %w", err)
-			}
-		}
-
-		// Cancel even for 404.
-		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
-	}
-
-	if ord.IsIOS() || ord.IsAndroid() {
-		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
-	}
-
-	// Try to find by order_id in Stripe.
-	params := &stripe.SubscriptionSearchParams{}
-	params.Query = fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String())
-
-	ctx := context.TODO()
-
-	iter := sub.Search(params)
-	for iter.Next() {
-		sb := iter.Subscription()
-		if _, err := sub.Cancel(sb.ID, nil); err != nil {
-			// It seems that already canceled subscriptions might return 404.
-			if isErrStripeNotFound(err) {
-				continue
-			}
-
-			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
-		}
-
-		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sb.ID); err != nil {
-			return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
-		}
-	}
-
-	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
 func (s *Service) setOrderTrialDays(ctx context.Context, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {
@@ -1723,8 +1667,11 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 		}
 
 		paidt := time.Now()
+		if err := s.renewOrderStripe(ctx, dbi, ord, subID, expt, paidt); err != nil {
+			return err
+		}
 
-		return s.renewOrderStripe(ctx, dbi, ord, subID, expt, paidt)
+		return s.processStripeMtoA(ctx, dbi, ntf)
 
 	case ntf.shouldCancel():
 		oid, err := ntf.orderID()
@@ -2606,6 +2553,43 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 	}
 
 	return sessID, nil
+}
+
+func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
+	umaData, err := ntf.umaData()
+	if err != nil {
+		// Recover from the error is possible.
+		// Not all orders are migration orders, therefore must not fail.
+		if errors.Is(err, errStripeIncompleteUMAData) {
+			return nil
+		}
+
+		return err
+	}
+
+	// Cancel the order and subscription.
+	oid, err := uuid.FromString(umaData.orderID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.cancelOrderTx(ctx, dbi, oid); err != nil {
+		return err
+	}
+
+	if err := s.stripeCl.CancelSub(ctx, umaData.stSubID, nil); err != nil {
+		if !isErrStripeNotFound(err) {
+			return err
+		}
+	}
+
+	if !hasCxUsedUMACoupon(ntf, umaData) {
+		return nil
+	}
+
+	// Update the customer metadata.
+
+	return nil
 }
 
 func newOrderNewForReq(req *model.CreateOrderRequestNew, items []model.OrderItem, merchID, status string) (*model.OrderNew, error) {

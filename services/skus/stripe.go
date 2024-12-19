@@ -11,12 +11,13 @@ import (
 )
 
 const (
-	errStripeSkipEvent        = model.Error("stripe: skip webhook event")
-	errStripeUnsupportedEvent = model.Error("stripe: unsupported webhook event")
-	errStripeNoInvoiceSub     = model.Error("stripe: no invoice subscription")
-	errStripeNoInvoiceLines   = model.Error("stripe: no invoice lines")
-	errStripeOrderIDMissing   = model.Error("stripe: order_id missing")
-	errStripeInvalidSubPeriod = model.Error("stripe: invalid subscription period")
+	errStripeSkipEvent         = model.Error("stripe: skip webhook event")
+	errStripeUnsupportedEvent  = model.Error("stripe: unsupported webhook event")
+	errStripeNoInvoiceSub      = model.Error("stripe: no invoice subscription")
+	errStripeNoInvoiceLines    = model.Error("stripe: no invoice lines")
+	errStripeOrderIDMissing    = model.Error("stripe: order_id missing")
+	errStripeInvalidSubPeriod  = model.Error("stripe: invalid subscription period")
+	errStripeIncompleteUMAData = model.Error("stripe: incomplete upgrade monthly to annual data")
 )
 
 type stripeNotification struct {
@@ -166,6 +167,39 @@ func (x *stripeNotification) expiresTime() (time.Time, error) {
 	return time.Unix(sub.Period.End, 0).UTC(), nil
 }
 
+func (x *stripeNotification) hasCoupon() bool {
+	return x.invoice != nil && x.invoice.Discount != nil && x.invoice.Discount.Coupon != nil
+}
+
+func (x *stripeNotification) umaData() (promoMonthlyAnnualData, error) {
+	if x.invoice.Lines == nil || len(x.invoice.Lines.Data) == 0 {
+		return promoMonthlyAnnualData{}, errStripeNoInvoiceLines
+	}
+
+	stSubID, ok1 := x.invoice.Lines.Data[0].Metadata["uma__st_sub_id"]
+	subID, ok2 := x.invoice.Lines.Data[0].Metadata["uma__sub_id"]
+	ordID, ok3 := x.invoice.Lines.Data[0].Metadata["uma__order_id"]
+
+	// For MtoA, there should be all three pieces.
+	// Other combinations are invalid.
+	if ok1 && ok2 && ok3 {
+		result := promoMonthlyAnnualData{
+			stSubID: stSubID,
+			subID:   subID,
+			orderID: ordID,
+		}
+
+		// Coupon is optional.
+		if coupID, ok := x.invoice.Lines.Data[0].Metadata["uma__coupon_id"]; ok {
+			result.coupID = coupID
+		}
+
+		return result, nil
+	}
+
+	return promoMonthlyAnnualData{}, errStripeIncompleteUMAData
+}
+
 func parseStripeEventData[T any](data []byte) (*T, error) {
 	var result T
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -173,4 +207,27 @@ func parseStripeEventData[T any](data []byte) (*T, error) {
 	}
 
 	return &result, nil
+}
+
+type promoMonthlyAnnualData struct {
+	stSubID string
+	subID   string
+	orderID string
+	coupID  string
+}
+
+func hasCxUsedUMACoupon(ntf *stripeNotification, promo promoMonthlyAnnualData) bool {
+	if !ntf.hasCoupon() {
+		return false
+	}
+
+	if promo.coupID == "" {
+		return false
+	}
+
+	if ntf.invoice.Discount.Coupon.ID != promo.coupID {
+		return false
+	}
+
+	return true
 }

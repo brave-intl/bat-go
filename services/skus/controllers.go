@@ -78,7 +78,7 @@ func Router(
 	r.Method(
 		http.MethodDelete,
 		"/{orderID}",
-		metricsMwr("CancelOrder", NewCORSMwr(copts, http.MethodDelete)(authMwr(CancelOrder(svc)))),
+		metricsMwr("CancelOrder", NewCORSMwr(copts, http.MethodDelete)(authMwr(handleCancelOrderLegacy(svc)))),
 	)
 
 	r.Method(
@@ -340,30 +340,9 @@ func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 	})
 }
 
-// CancelOrder handles requests for cancelling orders.
-func CancelOrder(service *Service) handlers.AppHandler {
+func handleCancelOrderLegacy(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-		orderID := &inputs.ID{}
-
-		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{"orderID": err.Error()},
-			)
-		}
-
-		oid := *orderID.UUID()
-
-		if err := service.validateOrderMerchantAndCaveats(ctx, oid); err != nil {
-			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
-		}
-
-		if err := service.CancelOrderLegacy(oid); err != nil {
-			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+		return handlers.WrapError(model.Error("not implemented"), "not implemented", http.StatusNotImplemented)
 	})
 }
 
@@ -728,10 +707,6 @@ func deleteOrderCreds(service *Service) handlers.AppHandler {
 		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
 			return handlers.ValidationError("orderID", map[string]interface{}{"orderID": err.Error()})
-		}
-
-		if err := service.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
-			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
 		}
 
 		isSigned := r.URL.Query().Get("isSigned") == "true"

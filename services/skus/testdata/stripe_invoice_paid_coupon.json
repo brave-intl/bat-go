@@ -1,0 +1,279 @@
+{
+    "id": "evt_1QWvtcHof20bphG6UPhbXh0t",
+    "object": "event",
+    "api_version": "2020-08-27",
+    "created": 1734423167,
+    "data": {
+        "object": {
+            "id": "in_1QWvtYHof20bphG6WUDSRwo9",
+            "object": "invoice",
+            "account_country": "US",
+            "account_name": "Brave Software",
+            "account_tax_ids": null,
+            "amount_due": 1349,
+            "amount_paid": 1349,
+            "amount_remaining": 0,
+            "amount_shipping": 0,
+            "application": null,
+            "application_fee_amount": null,
+            "attempt_count": 1,
+            "attempted": true,
+            "auto_advance": false,
+            "automatic_tax": {
+                "disabled_reason": null,
+                "enabled": false,
+                "liability": null,
+                "status": null
+            },
+            "automatically_finalizes_at": null,
+            "billing_reason": "subscription_create",
+            "charge": "ch_3QWvtZHof20bphG61P9JYpGt",
+            "collection_method": "charge_automatically",
+            "created": 1734423165,
+            "currency": "usd",
+            "custom_fields": null,
+            "customer": "cus_RPlQ4qhcgg3uin",
+            "customer_address": {
+                "city": null,
+                "country": "AU",
+                "line1": null,
+                "line2": null,
+                "postal_code": null,
+                "state": null
+            },
+            "customer_email": "c0c0a000-0000-4000-a000-000000000000@mailinator.com",
+            "customer_name": "Cocoa",
+            "customer_phone": null,
+            "customer_shipping": null,
+            "customer_tax_exempt": "none",
+            "customer_tax_ids": [],
+            "default_payment_method": null,
+            "default_source": null,
+            "default_tax_rates": [],
+            "description": null,
+            "discount": {
+                "id": "di_1QWvtYHof20bphG6uFdxEUZ2",
+                "object": "discount",
+                "checkout_session": null,
+                "coupon": {
+                    "id": "g4V47kwV",
+                    "object": "coupon",
+                    "amount_off": null,
+                    "created": 1734006059,
+                    "currency": null,
+                    "duration": "once",
+                    "duration_in_months": null,
+                    "livemode": false,
+                    "max_redemptions": null,
+                    "metadata": {},
+                    "name": "Upgrading to Brave Leo Annual",
+                    "percent_off": 10,
+                    "redeem_by": null,
+                    "times_redeemed": 1,
+                    "valid": true
+                },
+                "customer": "cus_RPlQ4qhcgg3uin",
+                "end": null,
+                "invoice": null,
+                "invoice_item": null,
+                "promotion_code": null,
+                "start": 1734423164,
+                "subscription": "sub_1QWvtYHof20bphG6mW3XXU9c",
+                "subscription_item": null
+            },
+            "discounts": [
+                "di_1QWvtYHof20bphG6uFdxEUZ2"
+            ],
+            "due_date": null,
+            "effective_at": 1734423165,
+            "ending_balance": 0,
+            "footer": null,
+            "from_invoice": null,
+            "hosted_invoice_url": "https://invoice.stripe.com/i/acct_1HlmudHof20bphG6/test_YWNjdF8xSGxtdWRIb2YyMGJwaEc2LF9SUGxRVEVRRllaNldSRkpNSk1vSG5IYmJQMHg3dXhWLDEyNDk2Mzk2OA0200gBRyEpJ6?s=ap",
+            "invoice_pdf": "https://pay.stripe.com/invoice/acct_1HlmudHof20bphG6/test_YWNjdF8xSGxtdWRIb2YyMGJwaEc2LF9SUGxRVEVRRllaNldSRkpNSk1vSG5IYmJQMHg3dXhWLDEyNDk2Mzk2OA0200gBRyEpJ6/pdf?s=ap",
+            "issuer": {
+                "type": "self"
+            },
+            "last_finalization_error": null,
+            "latest_revision": null,
+            "lines": {
+                "object": "list",
+                "data": [
+                    {
+                        "id": "il_1QWvtYHof20bphG60jmJRiTn",
+                        "object": "line_item",
+                        "amount": 1499,
+                        "amount_excluding_tax": 1499,
+                        "currency": "usd",
+                        "description": "1 × Brave Leo (at $14.99 / month)",
+                        "discount_amounts": [
+                            {
+                                "amount": 150,
+                                "discount": "di_1QWvtYHof20bphG6uFdxEUZ2"
+                            }
+                        ],
+                        "discountable": true,
+                        "discounts": [],
+                        "invoice": "in_1QWvtYHof20bphG6WUDSRwo9",
+                        "livemode": false,
+                        "metadata": {
+                            "orderID": "a469d322-ea87-4cdb-9a09-5f67a95696ef"
+                        },
+                        "period": {
+                            "end": 1737101564,
+                            "start": 1734423164
+                        },
+                        "plan": {
+                            "id": "price_1OuRqmHof20bphG6RXl7EHP2",
+                            "object": "plan",
+                            "active": true,
+                            "aggregate_usage": null,
+                            "amount": 1499,
+                            "amount_decimal": "1499",
+                            "billing_scheme": "per_unit",
+                            "created": 1710474872,
+                            "currency": "usd",
+                            "interval": "month",
+                            "interval_count": 1,
+                            "livemode": false,
+                            "metadata": {},
+                            "meter": null,
+                            "nickname": null,
+                            "product": "prod_OtZCXOCIO3AJE6",
+                            "tiers_mode": null,
+                            "transform_usage": null,
+                            "trial_period_days": null,
+                            "usage_type": "licensed"
+                        },
+                        "pretax_credit_amounts": [
+                            {
+                                "amount": 150,
+                                "discount": "di_1QWvtYHof20bphG6uFdxEUZ2",
+                                "type": "discount"
+                            }
+                        ],
+                        "price": {
+                            "id": "price_1OuRqmHof20bphG6RXl7EHP2",
+                            "object": "price",
+                            "active": true,
+                            "billing_scheme": "per_unit",
+                            "created": 1710474872,
+                            "currency": "usd",
+                            "custom_unit_amount": null,
+                            "livemode": false,
+                            "lookup_key": null,
+                            "metadata": {},
+                            "nickname": null,
+                            "product": "prod_OtZCXOCIO3AJE6",
+                            "recurring": {
+                                "aggregate_usage": null,
+                                "interval": "month",
+                                "interval_count": 1,
+                                "meter": null,
+                                "trial_period_days": null,
+                                "usage_type": "licensed"
+                            },
+                            "tax_behavior": "unspecified",
+                            "tiers_mode": null,
+                            "transform_quantity": null,
+                            "type": "recurring",
+                            "unit_amount": 1499,
+                            "unit_amount_decimal": "1499"
+                        },
+                        "proration": false,
+                        "proration_details": {
+                            "credited_items": null
+                        },
+                        "quantity": 1,
+                        "subscription": "sub_1QWvtYHof20bphG6mW3XXU9c",
+                        "subscription_item": "si_RPlQE1xS1nhEpF",
+                        "tax_amounts": [],
+                        "tax_rates": [],
+                        "type": "subscription",
+                        "unit_amount_excluding_tax": "1499"
+                    }
+                ],
+                "has_more": false,
+                "total_count": 1,
+                "url": "/v1/invoices/in_1QWvtYHof20bphG6WUDSRwo9/lines"
+            },
+            "livemode": false,
+            "metadata": {},
+            "next_payment_attempt": null,
+            "number": "6F05F825-0001",
+            "on_behalf_of": null,
+            "paid": true,
+            "paid_out_of_band": false,
+            "payment_intent": "pi_3QWvtZHof20bphG61lcaqavM",
+            "payment_settings": {
+                "default_mandate": null,
+                "payment_method_options": {
+                    "acss_debit": null,
+                    "bancontact": null,
+                    "card": {
+                        "request_three_d_secure": "automatic"
+                    },
+                    "customer_balance": null,
+                    "konbini": null,
+                    "sepa_debit": null,
+                    "us_bank_account": null
+                },
+                "payment_method_types": null
+            },
+            "period_end": 1734423164,
+            "period_start": 1734423164,
+            "post_payment_credit_notes_amount": 0,
+            "pre_payment_credit_notes_amount": 0,
+            "quote": null,
+            "receipt_number": null,
+            "rendering": null,
+            "rendering_options": null,
+            "shipping_cost": null,
+            "shipping_details": null,
+            "starting_balance": 0,
+            "statement_descriptor": null,
+            "status": "paid",
+            "status_transitions": {
+                "finalized_at": 1734423165,
+                "marked_uncollectible_at": null,
+                "paid_at": 1734423167,
+                "voided_at": null
+            },
+            "subscription": "sub_1QWvtYHof20bphG6mW3XXU9c",
+            "subscription_details": {
+                "metadata": {
+                    "orderID": "a469d322-ea87-4cdb-9a09-5f67a95696ef"
+                }
+            },
+            "subtotal": 1499,
+            "subtotal_excluding_tax": 1499,
+            "tax": null,
+            "test_clock": null,
+            "total": 1349,
+            "total_discount_amounts": [
+                {
+                    "amount": 150,
+                    "discount": "di_1QWvtYHof20bphG6uFdxEUZ2"
+                }
+            ],
+            "total_excluding_tax": 1349,
+            "total_pretax_credit_amounts": [
+                {
+                    "amount": 150,
+                    "discount": "di_1QWvtYHof20bphG6uFdxEUZ2",
+                    "type": "discount"
+                }
+            ],
+            "total_tax_amounts": [],
+            "transfer_data": null,
+            "webhooks_delivered_at": 1734423165
+        }
+    },
+    "livemode": false,
+    "pending_webhooks": 1,
+    "request": {
+        "id": "req_8u5iYdHnFHcaE6",
+        "idempotency_key": "98bf3643-115c-457a-b324-041820d8b08c"
+    },
+    "type": "invoice.paid"
+}
