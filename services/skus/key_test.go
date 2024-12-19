@@ -1,9 +1,7 @@
 package skus
 
 import (
-	"context"
 	"crypto"
-	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -15,16 +13,13 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
-	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/middleware"
 
-	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
 
@@ -256,225 +251,4 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code, "request with merchant auth should succeed")
-}
-
-func TestValidateOrderMerchantAndCaveats(t *testing.T) {
-	type tcGiven struct {
-		orderID uuid.UUID
-		merch   string
-		cvt     map[string]string
-		repo    *repository.MockOrder
-	}
-
-	type testCase struct {
-		name  string
-		given tcGiven
-		exp   error
-	}
-
-	tests := []testCase{
-		{
-			name: "invalid_order",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("0fb1d6ba-5d39-4f69-830b-c92c4640c86e")),
-				merch:   "brave.com",
-
-				repo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						return nil, model.ErrOrderNotFound
-					},
-				},
-			},
-			exp: model.ErrOrderNotFound,
-		},
-
-		{
-			name: "merchant_no_caveats",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-				merch:   "brave.com",
-
-				repo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						result := &model.Order{
-							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-							Currency:   "BAT",
-							MerchantID: "brave.com",
-							Location: datastore.NullString{
-								NullString: sql.NullString{
-									Valid:  true,
-									String: "test.brave.com",
-								},
-							},
-							Status: "paid",
-						}
-
-						return result, nil
-					},
-				},
-			},
-		},
-
-		{
-			name: "incorrect_merchant",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-				merch:   "brave.software",
-
-				repo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						result := &model.Order{
-							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-							Currency:   "BAT",
-							MerchantID: "brave.com",
-							Location: datastore.NullString{
-								NullString: sql.NullString{
-									Valid:  true,
-									String: "test.brave.com",
-								},
-							},
-							Status: "paid",
-						}
-
-						return result, nil
-					},
-				},
-			},
-			exp: errMerchantMismatch,
-		},
-
-		{
-			name: "merchant_location",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-				merch:   "brave.com",
-				cvt:     map[string]string{"location": "test.brave.com"},
-
-				repo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						result := &model.Order{
-							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-							Currency:   "BAT",
-							MerchantID: "brave.com",
-							Location: datastore.NullString{
-								NullString: sql.NullString{
-									Valid:  true,
-									String: "test.brave.com",
-								},
-							},
-							Status: "paid",
-						}
-
-						return result, nil
-					},
-				},
-			},
-		},
-
-		{
-			name: "incorrect_location",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-				merch:   "brave.com",
-				cvt:     map[string]string{"location": "test.brave.software"},
-
-				repo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						result := &model.Order{
-							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-							Currency:   "BAT",
-							MerchantID: "brave.com",
-							Location: datastore.NullString{
-								NullString: sql.NullString{
-									Valid:  true,
-									String: "test.brave.com",
-								},
-							},
-							Status: "paid",
-						}
-
-						return result, nil
-					},
-				},
-			},
-			exp: errLocationMismatch,
-		},
-
-		{
-			name: "unexpected_sku",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-				merch:   "brave.com",
-				cvt:     map[string]string{"location": "test.brave.com", "sku": "some_sku"},
-
-				repo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						result := &model.Order{
-							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-							Currency:   "BAT",
-							MerchantID: "brave.com",
-							Location: datastore.NullString{
-								NullString: sql.NullString{
-									Valid:  true,
-									String: "test.brave.com",
-								},
-							},
-							Status: "paid",
-						}
-
-						return result, nil
-					},
-				},
-			},
-			exp: errUnexpectedSKUCvt,
-		},
-
-		{
-			name: "empty_order_location",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-				merch:   "brave.com",
-				cvt:     map[string]string{"location": "test.brave.com"},
-
-				repo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						result := &model.Order{
-							ID:         uuid.Must(uuid.FromString("056bf179-1c07-4787-bd36-db51a83ad139")),
-							Currency:   "BAT",
-							MerchantID: "brave.com",
-							Status:     "paid",
-						}
-
-						return result, nil
-					},
-				},
-			},
-		},
-	}
-
-	// Need a database instance in Datastore.
-	// Not using mocks (as the suppressed return value suggests).
-	dbi, _, err := sqlmock.New()
-	must.Equal(t, nil, err)
-
-	ds := &Postgres{
-		Postgres: datastore.Postgres{DB: sqlx.NewDb(dbi, "postgres")},
-	}
-
-	for i := range tests {
-		tc := tests[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.WithValue(context.Background(), merchantCtxKey{}, tc.given.merch)
-			ctx = context.WithValue(ctx, caveatsCtxKey{}, tc.given.cvt)
-
-			svc := &Service{
-				Datastore: ds,
-				orderRepo: tc.given.repo,
-			}
-
-			err := svc.validateOrderMerchantAndCaveats(ctx, tc.given.orderID)
-			assert.Equal(t, tc.exp, err)
-		})
-	}
 }

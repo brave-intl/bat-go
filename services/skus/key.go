@@ -162,26 +162,6 @@ func merchantFromCtx(ctx context.Context) (string, error) {
 	return merchant, nil
 }
 
-// validateOrderMerchantAndCaveats checks that the current authentication of the request has
-// permissions to this order by cross-checking the merchant and caveats in context.
-func (s *Service) validateOrderMerchantAndCaveats(ctx context.Context, oid uuid.UUID) error {
-	merchant, err := merchantFromCtx(ctx)
-	if err != nil {
-		return err
-	}
-
-	order, err := s.orderRepo.Get(ctx, s.Datastore.RawDB(), oid)
-	if err != nil {
-		return err
-	}
-
-	if order.MerchantID != merchant {
-		return errMerchantMismatch
-	}
-
-	return validateOrderCvt(order, caveatsFromCtx(ctx))
-}
-
 // NewAuthMwr returns a handler that authorises requests via http signature or simple tokens.
 func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
@@ -213,18 +193,4 @@ func NewAuthMwr(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
 		})
 	}
-}
-
-func validateOrderCvt(ord *model.Order, cvt map[string]string) error {
-	if loc, ok := cvt["location"]; ok && ord.Location.Valid {
-		if ord.Location.String != loc {
-			return errLocationMismatch
-		}
-	}
-
-	if _, ok := cvt["sku"]; ok {
-		return errUnexpectedSKUCvt
-	}
-
-	return nil
 }

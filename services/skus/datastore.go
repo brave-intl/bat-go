@@ -40,12 +40,8 @@ type Datastore interface {
 
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
-	// GetOrderByExternalID by the external id from the purchase vendor
-	GetOrderByExternalID(externalID string) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
-	// UpdateOrderMetadata adds a key value pair to an order's metadata
-	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// UpdateTransaction creates a transaction
@@ -71,9 +67,6 @@ type Datastore interface {
 	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	InsertVote(ctx context.Context, vr VoteRecord) error
-	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
-	IsStripeSub(uuid.UUID) (bool, string, error)
-	GetOrderItem(ctx context.Context, itemID uuid.UUID) (*OrderItem, error)
 	InsertOrderCredsTx(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) error
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
@@ -89,7 +82,6 @@ type Datastore interface {
 	GetSigningOrderRequestOutboxByOrderItem(ctx context.Context, orderID, itemID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error
 	UpdateSigningOrderRequestOutboxTx(ctx context.Context, tx *sqlx.Tx, requestID uuid.UUID, completedAt time.Time) error
-	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 	GetOutboxMovAvgDurationSeconds() (int64, error)
 }
 
@@ -288,30 +280,6 @@ func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *
 	return result, nil
 }
 
-// GetOrderByExternalID returns an order by the external id from the purchase vendor.
-func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
-	ctx := context.TODO()
-	dbi := pg.RawDB()
-
-	result, err := pg.orderRepo.GetByExternalID(ctx, dbi, externalID)
-	if err != nil {
-		// Preserve the legacy behaviour.
-		// TODO: Propagate the sentinel error, and handle in the business logic properly.
-		if errors.Is(err, model.ErrOrderNotFound) {
-			return nil, nil
-		}
-
-		return nil, err
-	}
-
-	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, dbi, result.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
 // GetOutboxMovAvgDurationSeconds - get the number of seconds it takes to clear the last 20 outbox messages
 func (pg *Postgres) GetOutboxMovAvgDurationSeconds() (int64, error) {
 	statement := `
@@ -351,24 +319,6 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	result.Items, err = pg.orderItemRepo.FindByOrderID(ctx, dbi, orderID)
 	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// GetOrderItem retrieves the order item for the given identifier.
-//
-// It returns sql.ErrNoRows if the item is not found.
-func (pg *Postgres) GetOrderItem(ctx context.Context, itemID uuid.UUID) (*OrderItem, error) {
-	result, err := pg.orderItemRepo.Get(ctx, pg.RawDB(), itemID)
-	if err != nil {
-		// Preserve the legacy behaviour.
-		// TODO: Propagate the sentinel error, and handle in the business logic properly.
-		if errors.Is(err, model.ErrOrderItemNotFound) {
-			return nil, sql.ErrNoRows
-		}
-
 		return nil, err
 	}
 
@@ -474,50 +424,6 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 	}
 
 	return &transaction, nil
-}
-
-// CheckExpiredCheckoutSession indicates whether a Stripe checkout session is expired with its id for the given orderID.
-//
-// TODO(pavelb): The boolean return value is unnecessary, and can be removed.
-// If there is experied session, the session id is present.
-// If there is no session, or it has not expired, the result is the same – no session id.
-// It's the caller's responsibility (the business logic layer) to interpret the result.
-func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string, error) {
-	ctx := context.TODO()
-
-	sessID, err := pg.orderRepo.GetExpiredStripeCheckoutSessionID(ctx, pg.RawDB(), orderID)
-	if err != nil {
-		if errors.Is(err, model.ErrExpiredStripeCheckoutSessionIDNotFound) {
-			return false, "", nil
-		}
-
-		return false, "", fmt.Errorf("failed to check expired state of checkout session: %w", err)
-	}
-
-	if sessID == "" {
-		return false, "", nil
-	}
-
-	return true, sessID, nil
-}
-
-// IsStripeSub reports whether the order is associated with a stripe subscription, if true, subscription id is returned.
-//
-// TODO(pavelb): This is a piece of business logic that leaked to the storage layer.
-// Also, it unsuccessfully mimics the Go comma, ok idiom – bool and string should be swapped.
-// But that's not necessary.
-// If metadata was found, but there was no stripeSubscriptionId, it's known not to be a Stripe order.
-func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
-	ctx := context.TODO()
-
-	data, err := pg.orderRepo.GetMetadata(ctx, pg.RawDB(), orderID)
-	if err != nil {
-		return false, "", err
-	}
-
-	sid, ok := data["stripeSubscriptionId"].(string)
-
-	return ok, sid, nil
 }
 
 // UpdateOrder updates the orders status.
@@ -888,15 +794,6 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 		return fmt.Errorf("failed to insert vote to drain: %w", err)
 	}
 	return nil
-}
-
-// UpdateOrderMetadata sets the order's metadata to the key and value.
-//
-// Deprecated: This method is no longer used and should be deleted.
-//
-// TODO(pavelb): Remove this method as it's dangerous and must not be used.
-func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
-	return model.Error("UpdateOrderMetadata must not be used")
 }
 
 // TimeLimitedV2Creds represent all the
@@ -1290,21 +1187,6 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 	}
 
 	return nil
-}
-
-// AppendOrderMetadata appends the key and string value to an order's metadata.
-func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key, value string) error {
-	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
-	if err != nil {
-		return err
-	}
-	defer rollback()
-
-	if err := pg.orderRepo.AppendMetadata(ctx, tx, *orderID, key, value); err != nil {
-		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
-	}
-
-	return commit()
 }
 
 // recordOrderPayment records payments for Auto Contribute and Search Captcha.
