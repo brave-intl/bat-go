@@ -10,6 +10,7 @@ type MockClient struct {
 	FnSession       func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	FnCreateSession func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	FnSubscription  func(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
+	FnCancelSub     func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error
 	FnFindCustomer  func(ctx context.Context, email string) (*stripe.Customer, bool)
 }
 
@@ -60,6 +61,14 @@ func (c *MockClient) Subscription(ctx context.Context, id string, params *stripe
 	}
 
 	return c.FnSubscription(ctx, id, params)
+}
+
+func (c *MockClient) CancelSub(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error {
+	if c.FnCancelSub == nil {
+		return nil
+	}
+
+	return c.FnCancelSub(ctx, id, params)
 }
 
 func (c *MockClient) FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool) {

@@ -124,6 +124,7 @@ type stripeClient interface {
 	Session(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	CreateSession(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	Subscription(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
+	CancelSub(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error
 	FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool)
 }
 
@@ -2567,7 +2568,20 @@ func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, nt
 	}
 
 	// Cancel the order and subscription.
-	_ = umaData
+	oid, err := uuid.FromString(umaData.orderID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.cancelOrderTx(ctx, dbi, oid); err != nil {
+		return err
+	}
+
+	if err := s.stripeCl.CancelSub(ctx, umaData.stSubID, nil); err != nil {
+		if !isErrStripeNotFound(err) {
+			return err
+		}
+	}
 
 	if !hasCxUsedUMACoupon(ntf, umaData) {
 		return nil

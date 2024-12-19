@@ -28,6 +28,12 @@ func (c *Client) Subscription(_ context.Context, id string, params *stripe.Subsc
 	return c.cl.Subscriptions.Get(id, params)
 }
 
+func (c *Client) CancelSub(_ context.Context, id string, params *stripe.SubscriptionCancelParams) error {
+	_, err := c.cl.Subscriptions.Cancel(id, params)
+
+	return err
+}
+
 func (c *Client) FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool) {
 	iter := c.Customers(ctx, &stripe.CustomerListParams{Email: &email})
 
