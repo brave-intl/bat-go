@@ -44,20 +44,6 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
-// AppendOrderMetadata implements Datastore
-func (_d DatastoreWithPrometheus) AppendOrderMetadata(ctx context.Context, up1 *uuid.UUID, s1 string, s2 string) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AppendOrderMetadata", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.AppendOrderMetadata(ctx, up1, s1, s2)
-}
-
 // BeginTx implements Datastore
 func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
 	_since := time.Now()
@@ -70,20 +56,6 @@ func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "BeginTx", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.BeginTx()
-}
-
-// CheckExpiredCheckoutSession implements Datastore
-func (_d DatastoreWithPrometheus) CheckExpiredCheckoutSession(u1 uuid.UUID) (b1 bool, s1 string, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckExpiredCheckoutSession", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.CheckExpiredCheckoutSession(u1)
 }
 
 // CommitVote implements Datastore
@@ -254,20 +226,6 @@ func (_d DatastoreWithPrometheus) GetOrder(orderID uuid.UUID) (op1 *Order, err e
 	return _d.base.GetOrder(orderID)
 }
 
-// GetOrderByExternalID implements Datastore
-func (_d DatastoreWithPrometheus) GetOrderByExternalID(externalID string) (op1 *Order, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderByExternalID", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetOrderByExternalID(externalID)
-}
-
 // GetOrderCreds implements Datastore
 func (_d DatastoreWithPrometheus) GetOrderCreds(orderID uuid.UUID, isSigned bool) (oa1 []OrderCreds, err error) {
 	_since := time.Now()
@@ -294,20 +252,6 @@ func (_d DatastoreWithPrometheus) GetOrderCredsByItemID(orderID uuid.UUID, itemI
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderCredsByItemID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetOrderCredsByItemID(orderID, itemID, isSigned)
-}
-
-// GetOrderItem implements Datastore
-func (_d DatastoreWithPrometheus) GetOrderItem(ctx context.Context, itemID uuid.UUID) (op1 *OrderItem, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderItem", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetOrderItem(ctx, itemID)
 }
 
 // GetOutboxMovAvgDurationSeconds implements Datastore
@@ -548,20 +492,6 @@ func (_d DatastoreWithPrometheus) InsertVote(ctx context.Context, vr VoteRecord)
 	return _d.base.InsertVote(ctx, vr)
 }
 
-// IsStripeSub implements Datastore
-func (_d DatastoreWithPrometheus) IsStripeSub(u1 uuid.UUID) (b1 bool, s1 string, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "IsStripeSub", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.IsStripeSub(u1)
-}
-
 // MarkVoteErrored implements Datastore
 func (_d DatastoreWithPrometheus) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) (err error) {
 	_since := time.Now()
@@ -665,20 +595,6 @@ func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UpdateOrder(orderID, status)
-}
-
-// UpdateOrderMetadata implements Datastore
-func (_d DatastoreWithPrometheus) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrderMetadata", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.UpdateOrderMetadata(orderID, key, value)
 }
 
 // UpdateSigningOrderRequestOutboxTx implements Datastore
