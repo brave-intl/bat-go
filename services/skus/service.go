@@ -1727,7 +1727,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		return s.processStripeInvDicount(ctx, dbi, ntf)
+		return s.processStripeMtoA(ctx, dbi, ntf)
 
 	case ntf.shouldCancel():
 		oid, err := ntf.orderID()
@@ -2611,25 +2611,26 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 	return sessID, nil
 }
 
-func (s *Service) processStripeInvDicount(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
-	if !ntf.hasDiscounts() {
-		return nil
-	}
-
-	// Handle only coupons for now.
-	if ntf.hasCoupon() {
-		return nil
-	}
-
-	// Here should be a check that the id is expected.
-	// Continue assuming the check passes.
-
-	umaPromo, err := ntf.umaData()
+func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
+	umaData, err := ntf.umaData()
 	if err != nil {
+		// Recover from the error is possible.
+		// Not all orders are migration orders, therefore must not fail.
+		if errors.Is(err, errStripeIncompleteUMAData) {
+			return nil
+		}
+
 		return err
 	}
 
-	_ = umaPromo
+	// Cancel the order and subscription.
+	_ = umaData
+
+	if !hasCxUsedUMACoupon(ntf, umaData) {
+		return nil
+	}
+
+	// Update the customer metadata.
 
 	return nil
 }
