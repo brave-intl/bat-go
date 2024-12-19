@@ -73,12 +73,6 @@ func (x *stripeNotification) shouldRecordPayFailure() bool {
 	return x.invoice != nil && x.raw.Type == "invoice.payment_failed"
 }
 
-func (x *stripeNotification) hasDiscounts() bool {
-	isPaid := x.invoice != nil && x.raw.Type == "invoice.paid"
-
-	return isPaid && len(x.invoice.Discounts) == 1 && x.invoice.Discount != nil
-}
-
 func (x *stripeNotification) ntfType() string {
 	return x.raw.Type
 }
