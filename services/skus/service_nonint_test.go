@@ -6050,6 +6050,271 @@ func TestHandleRedeemFnError(t *testing.T) {
 	}
 }
 
+func TestService_processStripeMtoA(t *testing.T) {
+	type tcGiven struct {
+		repo *repository.MockOrder
+		stcl *xstripe.MockClient
+		ntf  *stripeNotification
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "skip_incomplete_uma_data",
+			given: tcGiven{
+				repo: &repository.MockOrder{},
+				stcl: &xstripe.MockClient{},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{Metadata: map[string]string{}},
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_invalid_data",
+			given: tcGiven{
+				repo: &repository.MockOrder{},
+				stcl: &xstripe.MockClient{},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{},
+					},
+				},
+			},
+			exp: errStripeNoInvoiceLines,
+		},
+
+		{
+			name: "error_invalid_order_id",
+			given: tcGiven{
+				repo: &repository.MockOrder{},
+				stcl: &xstripe.MockClient{},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"uma__st_sub_id": "st_sub_id_01",
+										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
+										"uma__order_id":  "decade00-0000-4000-a000-00000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			exp: errors.New("uuid: incorrect UUID length: decade00-0000-4000-a000-00000000000"),
+		},
+
+		{
+			name: "error_cancel_order",
+			given: tcGiven{
+				repo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				stcl: &xstripe.MockClient{},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"uma__st_sub_id": "st_sub_id_01",
+										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
+										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "error_cancel_sub",
+			given: tcGiven{
+				repo: &repository.MockOrder{},
+				stcl: &xstripe.MockClient{
+					FnCancelSub: func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"uma__st_sub_id": "st_sub_id_01",
+										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
+										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "success_cancel_sub_not_found_no_coupon",
+			given: tcGiven{
+				repo: &repository.MockOrder{},
+				stcl: &xstripe.MockClient{
+					FnCancelSub: func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error {
+						rerr := &stripe.Error{
+							HTTPStatusCode: http.StatusNotFound,
+							Code:           stripe.ErrorCodeResourceMissing,
+						}
+
+						return rerr
+					},
+				},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"uma__st_sub_id": "st_sub_id_01",
+										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
+										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "success_no_coupon",
+			given: tcGiven{
+				repo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("decade00-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected_cancel_order_id")
+						}
+
+						if status != model.OrderStatusCanceled {
+							return model.Error("unexpected_cancel_order_status")
+						}
+
+						return nil
+					},
+				},
+				stcl: &xstripe.MockClient{
+					FnCancelSub: func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error {
+						if id != "st_sub_id_01" {
+							return model.Error("unexpected_cancel_sub_id")
+						}
+
+						return nil
+					},
+				},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"uma__st_sub_id": "st_sub_id_01",
+										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
+										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				repo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("decade00-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected_cancel_order_id")
+						}
+
+						if status != model.OrderStatusCanceled {
+							return model.Error("unexpected_cancel_order_status")
+						}
+
+						return nil
+					},
+				},
+				stcl: &xstripe.MockClient{
+					FnCancelSub: func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error {
+						if id != "st_sub_id_01" {
+							return model.Error("unexpected_cancel_sub_id")
+						}
+
+						return nil
+					},
+				},
+				ntf: &stripeNotification{
+					invoice: &stripe.Invoice{
+						Lines: &stripe.InvoiceLineList{
+							Data: []*stripe.InvoiceLine{
+								{
+									Metadata: map[string]string{
+										"uma__st_sub_id": "st_sub_id_01",
+										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
+										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
+										"uma__coupon_id": "coup_id_01",
+									},
+								},
+							},
+						},
+						Discount: &stripe.Discount{
+							Coupon: &stripe.Coupon{ID: "coup_id_01"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo: tc.given.repo,
+				stripeCl:  tc.given.stcl,
+			}
+
+			ctx := context.Background()
+
+			actual := svc.processStripeMtoA(ctx, nil, tc.given.ntf)
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 type mockRadomClient struct {
 	fnCreateCheckoutSession func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
 	fnGetSubscription       func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
