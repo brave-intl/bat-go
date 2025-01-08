@@ -2,11 +2,6 @@ name: CI
 
 on:
   pull_request:
-    branches-ignore:
-      - 'nitro-payments-dev'
-    # branches:
-    #   - master
-    #   - prod
 
 env:
   GO111MODULE: on

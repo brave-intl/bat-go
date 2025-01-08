@@ -482,6 +482,132 @@ func TestOrder_CreateNew(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "success_dicounts_metadata",
+			given: tcGiven{
+				svc: &mockOrderService{
+					fnCreateOrder: func(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error) {
+						if len(req.Discounts) != 1 {
+							return nil, model.Error("unexpected_discounts")
+						}
+
+						if req.Discounts[0] != "coup_id_01" {
+							return nil, model.Error("unexpected_discount_value")
+						}
+
+						if val, ok := req.Metadata["key_01"]; !ok || val != "val_01" {
+							return nil, model.Error("unexpected_metadata_val")
+						}
+
+						result := &model.Order{
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "location",
+								},
+							},
+							Items: []model.OrderItem{
+								{
+									SKU:      "sku",
+									SKUVnt:   "sku_vnt",
+									Quantity: 1,
+									Price:    mustDecimalFromString("1"),
+									Subtotal: mustDecimalFromString("1"),
+									Location: datastore.NullString{
+										NullString: sql.NullString{
+											Valid:  true,
+											String: "location",
+										},
+									},
+									Description: datastore.NullString{
+										NullString: sql.NullString{
+											Valid:  true,
+											String: "description",
+										},
+									},
+									CredentialType: "credential_type",
+									ValidForISO:    ptrTo("P1M"),
+									Metadata: datastore.Metadata{
+										"stripe_product_id": "product_id",
+										"stripe_item_id":    "item_id",
+									},
+								},
+							},
+							TotalPrice: mustDecimalFromString("1"),
+						}
+
+						return result, nil
+					},
+				},
+				body: `{
+					"email": "you@example.com",
+					"currency": "USD",
+					"stripe_metadata": {
+						"success_uri": "https://example.com/success",
+						"cancel_uri": "https://example.com/cancel"
+					},
+					"payment_methods": ["stripe"],
+					"discounts": ["coup_id_01"],
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "sku_vnt",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M",
+							"stripe_metadata": {
+								"product_id": "product_id",
+								"item_id": "item_id"
+							}
+						}
+					],
+					"metadata": {
+						"key_01": "val_01"
+					}
+				}`,
+			},
+			exp: tcExpected{
+				result: &model.Order{
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "location",
+						},
+					},
+					Items: []model.OrderItem{
+						{
+							SKU:      "sku",
+							SKUVnt:   "sku_vnt",
+							Quantity: 1,
+							Price:    mustDecimalFromString("1"),
+							Subtotal: mustDecimalFromString("1"),
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "location",
+								},
+							},
+							Description: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "description",
+								},
+							},
+							CredentialType: "credential_type",
+							ValidForISO:    ptrTo("P1M"),
+							Metadata: datastore.Metadata{
+								"stripe_product_id": "product_id",
+								"stripe_item_id":    "item_id",
+							},
+						},
+					},
+					TotalPrice: mustDecimalFromString("1"),
+				},
+			},
+		},
 	}
 
 	for i := range tests {
