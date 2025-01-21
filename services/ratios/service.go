@@ -11,9 +11,8 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/stripe"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
-	logutils "github.com/brave-intl/bat-go/libs/logging"
 	srv "github.com/brave-intl/bat-go/libs/service"
-	"github.com/gomodule/redigo/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
 
@@ -22,7 +21,7 @@ func NewService(
 	ctx context.Context,
 	coingecko coingecko.Client,
 	stripe stripe.Client,
-	redis *redis.Pool,
+	redis *redis.Client,
 ) *Service {
 	return &Service{
 		jobs:      []srv.Job{},
@@ -38,7 +37,7 @@ type Service struct {
 	// coingecko client
 	coingecko coingecko.Client
 	stripe    stripe.Client
-	redis     *redis.Pool
+	redis     *redis.Client
 }
 
 // Jobs - Implement srv.JobService interface
@@ -57,22 +56,15 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		return ctx, nil, fmt.Errorf("failed to initialize redis client: %w", err)
 	}
 
-	redis := &redis.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-		// Dial or DialContext must be set. When both are set, DialContext takes precedence over Dial.
-		Dial: func() (redis.Conn, error) {
-			return redis.DialURL(redisAddr)
-		},
+	opts, err := redis.ParseURL(redisAddr)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to parse redis URL")
+		return ctx, nil, fmt.Errorf("failed to parse redis URL: %w", err)
 	}
 
-	conn := redis.Get()
-	defer func() {
-		err := conn.Close()
-		logutils.Logger(ctx, "ratios.InitService").Error().Err(err).Msg("failed to close redis conn")
-	}()
-	err = conn.Err()
-	if err != nil {
+	redis := redis.NewClient(opts)
+
+	if err := redis.Ping(ctx).Err(); err != nil {
 		logger.Error().Err(err).Msg("failed to initialize the redis client")
 		return ctx, nil, fmt.Errorf("failed to initialize redis client: %w", err)
 	}

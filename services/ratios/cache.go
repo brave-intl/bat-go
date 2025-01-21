@@ -8,8 +8,7 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
-	"github.com/brave-intl/bat-go/libs/closers"
-	"github.com/gomodule/redigo/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
 
@@ -21,13 +20,15 @@ const (
 
 // GetTopCoins - get the top coins
 func (s *Service) GetTopCoins(ctx context.Context, limit int) (CoingeckoCoinList, error) {
-	conn := s.redis.Get()
-	defer closers.Log(ctx, conn)
-
 	var resp CoingeckoCoinList
 	coinCacheKey := fmt.Sprintf("coins-%s", time.Now().Format("2006-01-02"))
 
-	tmp, err := redis.Strings(conn.Do("ZREVRANGEBYSCORE", coinCacheKey, "+inf", "0", "LIMIT", "0", limit))
+	tmp, err := s.redis.ZRevRangeByScore(ctx, coinCacheKey, &redis.ZRangeBy{
+		Min:    "0",
+		Max:    "+inf",
+		Offset: 0,
+		Count:  int64(limit),
+	}).Result()
 	if err != nil {
 		return resp, err
 	}
@@ -43,13 +44,15 @@ func (s *Service) GetTopCoins(ctx context.Context, limit int) (CoingeckoCoinList
 
 // GetTopCurrencies - get the top currencies
 func (s *Service) GetTopCurrencies(ctx context.Context, limit int) (CoingeckoVsCurrencyList, error) {
-	conn := s.redis.Get()
-	defer closers.Log(ctx, conn)
-
 	var resp CoingeckoVsCurrencyList
 	currencyCacheKey := fmt.Sprintf("currencies-%s", time.Now().Format("2006-01-02"))
 
-	tmp, err := redis.Strings(conn.Do("ZREVRANGEBYSCORE", currencyCacheKey, "+inf", "0", "LIMIT", "0", limit))
+	tmp, err := s.redis.ZRevRangeByScore(ctx, currencyCacheKey, &redis.ZRangeBy{
+		Min:    "0",
+		Max:    "+inf",
+		Offset: 0,
+		Count:  int64(limit),
+	}).Result()
 	if err != nil {
 		return resp, err
 	}
@@ -65,43 +68,28 @@ func (s *Service) GetTopCurrencies(ctx context.Context, limit int) (CoingeckoVsC
 
 // RecordCoinsAndCurrencies - record the coins and currencies in the cache
 func (s *Service) RecordCoinsAndCurrencies(ctx context.Context, coinIds []CoingeckoCoin, vsCurrencies []CoingeckoVsCurrency) error {
-	conn := s.redis.Get()
-	defer closers.Log(ctx, conn)
-
 	coinCacheKey := fmt.Sprintf("coins-%s", time.Now().Format("2006-01-02"))
 	currencyCacheKey := fmt.Sprintf("currencies-%s", time.Now().Format("2006-01-02"))
 
+	pipe := s.redis.Pipeline()
+
 	for _, coin := range coinIds {
-		err := conn.Send("ZINCRBY", coinCacheKey, "1", coin.String())
-		if err != nil {
-			return err
-		}
+		pipe.ZIncrBy(ctx, coinCacheKey, 1, coin.String())
 	}
 
 	for _, currency := range vsCurrencies {
-		err := conn.Send("ZINCRBY", currencyCacheKey, "1", currency.String())
-		if err != nil {
-			return err
-		}
+		pipe.ZIncrBy(ctx, currencyCacheKey, 1, currency.String())
 	}
 
-	err := conn.Flush()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // CacheRelative - cache the relative values
 func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceResponse) error {
-	conn := s.redis.Get()
-	defer closers.Log(ctx, conn)
-
 	now := time.Now()
 
-	tmp := make([]interface{}, 1, (2*len(resp))+1)
-	tmp[0] = "relative"
+	data := make(map[string]interface{})
 
 	for coin, rates := range resp {
 		var subResp ratiosclient.RelativeResponse
@@ -115,30 +103,22 @@ func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceR
 			return err
 		}
 
-		tmp = append(tmp, coin)
-		tmp = append(tmp, bytes)
+		data[coin] = string(bytes)
 	}
 
-	_, err := conn.Do("HMSET", tmp...)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.redis.HSet(ctx, "relative", data).Err()
 }
 
 // GetRelativeFromCache - get the relative response from the cache
 func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies CoingeckoVsCurrencyList, coinIds ...CoingeckoCoin) (*coingecko.SimplePriceResponse, time.Time, error) {
-	conn := s.redis.Get()
-	defer closers.Log(ctx, conn)
-
 	updated := time.Now()
 
-	tmp := make([]interface{}, 1, len(coinIds)+1)
-	tmp[0] = "relative"
-	for _, coin := range coinIds {
-		tmp = append(tmp, coin.String())
+	keys := make([]string, len(coinIds))
+	for i, coin := range coinIds {
+		keys[i] = coin.String()
 	}
-	rates, err := redis.Strings(conn.Do("HMGET", tmp...))
+
+	rates, err := s.redis.HMGet(ctx, "relative", keys...).Result()
 	if err != nil {
 		return nil, updated, err
 	}
@@ -147,9 +127,9 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 	for i, rate := range rates {
 		coin := coinIds[i].String()
 
-		if len(rate) > 0 {
+		if rate != nil {
 			var r ratiosclient.RelativeResponse
-			err = json.Unmarshal([]byte(rate), &r)
+			err = json.Unmarshal([]byte(rate.(string)), &r)
 			if err != nil {
 				return nil, updated, err
 			}

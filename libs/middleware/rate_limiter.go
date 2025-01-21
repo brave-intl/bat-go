@@ -6,10 +6,10 @@ import (
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/gomodule/redigo/redis"
-	"github.com/throttled/throttled"
-	"github.com/throttled/throttled/store/memstore"
-	"github.com/throttled/throttled/store/redigostore"
+	"github.com/redis/go-redis/v9"
+	"github.com/throttled/throttled/v2"
+	"github.com/throttled/throttled/v2/store/goredisstore.v9"
+	"github.com/throttled/throttled/v2/store/memstore"
 )
 
 // IPRateLimiterWithStore rate limits based on IP using
@@ -21,7 +21,7 @@ func IPRateLimiterWithStore(
 	ctx context.Context,
 	perMin int,
 	burst int,
-	store throttled.GCRAStore,
+	store throttled.GCRAStoreCtx,
 ) func(next http.Handler) http.Handler {
 	logger := logging.Logger(ctx, "middleware.IPRateLimiterWithStore")
 
@@ -30,12 +30,12 @@ func IPRateLimiterWithStore(
 			MaxRate:  throttled.PerMin(perMin),
 			MaxBurst: burst,
 		}
-		rateLimiter, err := throttled.NewGCRARateLimiter(store, quota)
+		rateLimiter, err := throttled.NewGCRARateLimiterCtx(store, quota)
 		if err != nil {
 			logger.Fatal().Err(err)
 		}
 
-		httpRateLimiter := throttled.HTTPRateLimiter{
+		httpRateLimiter := throttled.HTTPRateLimiterCtx{
 			RateLimiter: rateLimiter,
 			VaryBy: &throttled.VaryBy{
 				RemoteAddr: true,
@@ -65,7 +65,7 @@ func IPRateLimiterWithStore(
 // in-memory store that will not synchronize across instances.
 func RateLimiter(ctx context.Context, perMin int) func(next http.Handler) http.Handler {
 	logger := logging.Logger(ctx, "middleware.RateLimiter")
-	store, err := memstore.New(65536)
+	store, err := memstore.NewCtx(65536)
 	if err != nil {
 		logger.Fatal().Err(err)
 	}
@@ -87,18 +87,16 @@ func RateLimiterRedisStore(
 	ctx context.Context,
 	perMin int,
 	burst int,
-	redis *redis.Pool,
+	redis *redis.Client,
 	keyPrefix string,
-	db int,
 ) func(next http.Handler) http.Handler {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
-	store, err := redigostore.New(redis, keyPrefix, db)
+	store, err := goredisstore.NewCtx(redis, keyPrefix)
 	if err != nil {
 		logger.Fatal().Err(err)
 	}
-
 	return IPRateLimiterWithStore(ctx, perMin, burst, store)
 }

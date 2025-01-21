@@ -7,6 +7,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"regexp"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/libs/clients/coingecko/mock"
@@ -18,16 +26,9 @@ import (
 	"github.com/brave-intl/bat-go/services/ratios"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
-	"github.com/gomodule/redigo/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"regexp"
-	"strconv"
-	"testing"
-	"time"
 )
 
 type ControllersTestSuite struct {
@@ -84,19 +85,17 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	suite.mockCtrl = gomock.NewController(suite.T())
 	// setup a mock coingecko client
 	redisAddr, err := appctx.GetStringFromContext(suite.ctx, appctx.RatiosRedisAddrCTXKey)
+	suite.Require().NoError(err)
 
-	redis := &redis.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-		// Dial or DialContext must be set. When both are set, DialContext takes precedence over Dial.
-		Dial: func() (redis.Conn, error) {
-			return redis.DialURL(redisAddr)
-		},
+	opts, err := redis.ParseURL(redisAddr)
+	suite.Require().NoError(err, "Must be able to parse redis URL")
+
+	redis := redis.NewClient(opts)
+
+	if err := redis.Ping(suite.ctx).Err(); err != nil {
+		suite.Require().NoError(err, "Must be able to ping redis")
 	}
 
-	conn := redis.Get()
-	err = conn.Err()
-	suite.Require().NoError(err, "failed to setup redis conn")
 	coingecko := mockcoingecko.NewMockClient(suite.mockCtrl)
 	suite.mockCoingeckoClient = coingecko
 

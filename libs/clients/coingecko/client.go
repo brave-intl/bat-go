@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/closers"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/gomodule/redigo/redis"
 	"github.com/google/go-querystring/query"
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 )
 
@@ -37,11 +36,11 @@ type Client interface {
 type HTTPClient struct {
 	baseParams
 	client *clients.SimpleHTTPClient
-	redis  *redis.Pool
+	redis  *redis.Client
 }
 
 // NewWithContext returns a new HTTPClient, retrieving the base URL from the context
-func NewWithContext(ctx context.Context, redis *redis.Pool) (Client, error) {
+func NewWithContext(ctx context.Context, redis *redis.Client) (Client, error) {
 	// get the server url from context
 	serverURL, err := appctx.GetStringFromContext(ctx, appctx.CoingeckoServerCTXKey)
 	if err != nil {
@@ -174,12 +173,9 @@ func (c *HTTPClient) FetchMarketChart(
 		return nil, updated, err
 	}
 
-	conn := c.redis.Get()
-	defer closers.Log(ctx, conn)
-
 	var body MarketChartResponse
 	var entry cacheEntry
-	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
+	entryBytes, err := c.redis.Get(ctx, cacheKey).Bytes()
 	if err == nil {
 		err = json.Unmarshal(entryBytes, &entry)
 		if err != nil {
@@ -222,8 +218,7 @@ func (c *HTTPClient) FetchMarketChart(
 	if err != nil {
 		return nil, updated, err
 	}
-	_, err = conn.Do("SET", cacheKey, entryBytes)
-	if err != nil {
+	if err := c.redis.Set(ctx, cacheKey, entryBytes, 0).Err(); err != nil {
 		return nil, updated, err
 	}
 
@@ -361,22 +356,18 @@ func (c *HTTPClient) FetchCoinMarkets(
 		return nil, updated, err
 	}
 
-	conn := c.redis.Get()
-	defer closers.Log(ctx, conn)
-
 	var body CoinMarketResponse
 	var entry cacheEntry
 
 	// Check cache first before making request to Coingecko
-	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
+	entryBytes, err := c.redis.Get(ctx, cacheKey).Bytes()
 	if err == nil {
 		err = json.Unmarshal(entryBytes, &entry)
 		if err != nil {
 			return nil, updated, err
 		}
 
-		err = json.Unmarshal([]byte(entry.Payload), &body)
-		if err != nil {
+		if err := json.Unmarshal([]byte(entry.Payload), &body); err != nil {
 			return nil, updated, err
 		}
 
@@ -424,7 +415,7 @@ func (c *HTTPClient) FetchCoinMarkets(
 		return nil, updated, err
 	}
 
-	_, err = conn.Do("SET", cacheKey, entryBytes)
+	err = c.redis.Set(ctx, cacheKey, entryBytes, 0).Err()
 	if err != nil {
 		return nil, updated, err
 	}
