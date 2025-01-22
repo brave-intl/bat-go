@@ -317,7 +317,7 @@ func TestFilterActiveCreds(t *testing.T) {
 			given: tcGiven{
 				creds: []TimeAwareSubIssuedCreds{
 					{
-						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+						ValidTo: time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC),
 					},
 				},
 				now: time.Now(),
@@ -325,7 +325,7 @@ func TestFilterActiveCreds(t *testing.T) {
 			exp: tcExpected{
 				activeCreds: []TimeAwareSubIssuedCreds{
 					{
-						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+						ValidTo: time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC),
 					},
 				},
 			},
@@ -355,7 +355,7 @@ func TestFilterActiveCreds(t *testing.T) {
 					},
 
 					{
-						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+						ValidTo: time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC),
 					},
 				},
 				now: time.Now(),
@@ -363,7 +363,7 @@ func TestFilterActiveCreds(t *testing.T) {
 			exp: tcExpected{
 				activeCreds: []TimeAwareSubIssuedCreds{
 					{
-						ValidTo: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
+						ValidTo: time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC),
 					},
 				},
 			},
