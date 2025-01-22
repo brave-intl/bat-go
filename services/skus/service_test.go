@@ -320,7 +320,7 @@ func TestFilterActiveCreds(t *testing.T) {
 						ValidTo: time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC),
 					},
 				},
-				now: time.Now(),
+				now: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
 				activeCreds: []TimeAwareSubIssuedCreds{
@@ -339,7 +339,7 @@ func TestFilterActiveCreds(t *testing.T) {
 						ValidTo: time.Date(2020, time.January, 20, 0, 0, 0, 0, time.UTC),
 					},
 				},
-				now: time.Now(),
+				now: time.Date(2021, time.January, 20, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
 				activeCreds: []TimeAwareSubIssuedCreds{},
@@ -358,7 +358,7 @@ func TestFilterActiveCreds(t *testing.T) {
 						ValidTo: time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC),
 					},
 				},
-				now: time.Now(),
+				now: time.Date(2025, time.January, 20, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
 				activeCreds: []TimeAwareSubIssuedCreds{
