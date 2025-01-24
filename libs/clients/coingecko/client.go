@@ -415,8 +415,7 @@ func (c *HTTPClient) FetchCoinMarkets(
 		return nil, updated, err
 	}
 
-	err = c.redis.Set(ctx, cacheKey, entryBytes, 0).Err()
-	if err != nil {
+	if err := c.redis.Set(ctx, cacheKey, entryBytes, 0).Err(); err != nil {
 		return nil, updated, err
 	}
 

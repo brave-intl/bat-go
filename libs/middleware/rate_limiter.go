@@ -35,14 +35,6 @@ func IPRateLimiterWithStore(
 			logger.Fatal().Err(err)
 		}
 
-		httpRateLimiter := throttled.HTTPRateLimiterCtx{
-			RateLimiter: rateLimiter,
-			VaryBy: &throttled.VaryBy{
-				RemoteAddr: true,
-				Path:       true,
-				Method:     true,
-			},
-		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// override for OPTIONS request methods, as sometimes many cors requests happen quickly??
 			if r.Method == http.MethodOptions {
@@ -51,6 +43,14 @@ func IPRateLimiterWithStore(
 			}
 
 			if !isSimpleTokenInContext(r.Context()) {
+				httpRateLimiter := throttled.HTTPRateLimiterCtx{
+					RateLimiter: rateLimiter,
+					VaryBy: &throttled.VaryBy{
+						RemoteAddr: true,
+						Path:       true,
+						Method:     true,
+					},
+				}
 				httpRateLimiter.RateLimit(next).ServeHTTP(w, r)
 			} else {
 				// override rate limiting for authorized endpoints

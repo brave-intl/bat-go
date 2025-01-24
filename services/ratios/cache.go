@@ -129,8 +129,7 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 
 		if rate != nil {
 			var r ratiosclient.RelativeResponse
-			err = json.Unmarshal([]byte(rate.(string)), &r)
-			if err != nil {
+			if err := json.Unmarshal([]byte(rate.(string)), &r); err != nil {
 				return nil, updated, err
 			}
 			// the least recently updated
