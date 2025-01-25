@@ -1,5 +1,5 @@
-//go:build integration && vpn
-// +build integration,vpn
+//go:build integration
+// +build integration
 
 package coingecko_test
 
