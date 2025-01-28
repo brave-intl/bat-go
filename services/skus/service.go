@@ -843,7 +843,7 @@ func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, 
 	return &amount, status, currency, custodian, nil
 }
 
-// getUpholdCustodialTxWithRetries - the the custodial tx information from uphold with retries
+// getUpholdCustodialTxWithRetries - the custodial tx information from uphold with retries
 func getUpholdCustodialTxWithRetries(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 
 	var (
