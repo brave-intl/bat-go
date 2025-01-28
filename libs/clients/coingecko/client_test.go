@@ -1,5 +1,5 @@
-//go:build integration && vpn
-// +build integration,vpn
+//go:build integration
+// +build integration
 
 package coingecko_test
 
@@ -13,15 +13,15 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
-	"github.com/gomodule/redigo/redis"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/suite"
 )
 
 type CoingeckoTestSuite struct {
 	suite.Suite
-	redisPool *redis.Pool
-	client    coingecko.Client
-	ctx       context.Context
+	redis  *redis.Client
+	client coingecko.Client
+	ctx    context.Context
 }
 
 func TestCoingeckoTestSuite(t *testing.T) {
@@ -54,31 +54,21 @@ func (suite *CoingeckoTestSuite) SetupTest() {
 	// vs-currency limit
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, coingeckoCurrencyLimit)
 
-	var redisAddr string = "redis://grant-redis"
+	redisAddr := "redis://grant-redis:6379"
 	if len(os.Getenv("REDIS_ADDR")) > 0 {
 		redisAddr = os.Getenv("REDIS_ADDR")
 	}
 
-	suite.redisPool = &redis.Pool{
-		MaxIdle:   50,
-		MaxActive: 1000,
-		Dial: func() (redis.Conn, error) {
-			conn, err := redis.DialURL(redisAddr)
-			suite.Require().NoError(err, "failed to connect to redis")
-			return conn, err
-		},
-	}
+	opts, err := redis.ParseURL(redisAddr)
+	suite.Require().NoError(err, "Must be able to parse redis URL")
+	suite.redis = redis.NewClient(opts)
 
-	rConn := suite.redisPool.Get()
-	defer rConn.Close()
-	s, err := redis.String(rConn.Do("PING"))
-	suite.Require().NoError(err, "failed to connect to redis")
-	suite.Require().True(s == "PONG", "bad response from redis")
+	err = suite.redis.Ping(suite.ctx).Err()
+	suite.Require().NoError(err, "Must be able to connect to redis")
 
 	// setup the client under test, no redis, will test redis interactions in ratios service
-	suite.client, err = coingecko.NewWithContext(suite.ctx, suite.redisPool)
+	suite.client, err = coingecko.NewWithContext(suite.ctx, suite.redis)
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
-
 }
 
 func (suite *CoingeckoTestSuite) TestFetchSimplePrice() {
