@@ -33,8 +33,8 @@ type CardsConfig struct {
 }
 
 type Config struct {
+	Env        string
 	TOSVersion int
-	TOSEnabled bool
 	Cards      *CardsConfig
 }
 
@@ -47,6 +47,22 @@ type Service struct {
 	jobs                 []srv.Job
 	ratios               ratios.Client
 	s3Svc                s3Service
+}
+
+func (c *Config) isDevelopment() bool {
+	if c == nil {
+		return false
+	}
+
+	return c.Env == "development"
+}
+
+func (c *Config) isStaging() bool {
+	if c == nil {
+		return false
+	}
+
+	return c.Env == "staging"
 }
 
 func (s *Service) Jobs() []srv.Job {
@@ -159,7 +175,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		},
 	}
 
-	if s.cfg.TOSEnabled {
+	if s.cfg.isDevelopment() || s.cfg.isStaging() {
 		params.TOSVersion = s.cfg.TOSVersion
 	}
 
