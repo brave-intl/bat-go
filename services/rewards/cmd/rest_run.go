@@ -72,12 +72,15 @@ func RestRun(command *cobra.Command, args []string) {
 		ctx = context.WithValue(ctx, appctx.DefaultACChoicesCTXKey, acChoices)
 	}
 
+	env := os.Getenv("ENV")
+	if env == "" {
+		lg.Fatal().Err(err).Msg("error retrieving environment")
+	}
+
 	tosVersion, err := strconv.Atoi(os.Getenv("REWARDS_TOS_VERSION"))
 	if err != nil {
 		lg.Fatal().Err(err).Msg("error retrieving rewards terms of service version")
 	}
-
-	tosEnabled, _ := strconv.ParseBool(os.Getenv("REWARDS_TOS_VERSION_ENABLED"))
 
 	// Get the bucket from the context and not os.Getenv so we don't diverge. GetParameters uses the context on
 	// each request and this will need to be refactored before we can remove it.
@@ -92,8 +95,8 @@ func RestRun(command *cobra.Command, args []string) {
 	}
 
 	cfg := &rewards.Config{
+		Env:        env,
 		TOSVersion: tosVersion,
-		TOSEnabled: tosEnabled,
 		Cards: &rewards.CardsConfig{
 			Bucket: cardsBucket,
 			Key:    cardsKey,
