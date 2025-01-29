@@ -2,13 +2,14 @@ package middleware
 
 import (
 	"context"
-	"github.com/alicebob/miniredis/v2"
-	"github.com/gomodule/redigo/redis"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRateLimiterMemoryMiddleware(t *testing.T) {
@@ -44,16 +45,12 @@ func TestRateLimiterRedisMiddleware(t *testing.T) {
 	limit := 60
 	burst := 2
 	mr, _ := miniredis.Run()
-	pool := &redis.Pool{
-		MaxIdle:     1,
-		IdleTimeout: 5000,
-		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", mr.Addr())
-		},
-	}
+	redis := redis.NewClient(&redis.Options{
+		Addr: mr.Addr(),
+	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	wrappedHandler := RateLimiterRedisStore(ctx, limit, burst, pool, "", 1)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	wrappedHandler := RateLimiterRedisStore(ctx, limit, burst, redis, "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server := httptest.NewServer(wrappedHandler)
 	defer server.Close()
 

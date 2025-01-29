@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine as builder
+FROM golang:1.22-alpine AS builder
 
 # Put certs in builder image.
 RUN apk update
@@ -12,17 +12,18 @@ ARG COMMIT
 WORKDIR /src
 COPY . ./
 
-RUN cd main && go mod download && CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=local go build \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd main && go mod download && CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=local go build \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o bat-go main.go
 
-FROM alpine:3.19 as base
+FROM alpine:3.19 AS base
 
 # Put certs in artifact from builder.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /src/main/bat-go /bin/
 
-FROM base as artifact
+FROM base AS artifact
 COPY --from=builder /src/migrations/ /migrations/
 USER nobody
 EXPOSE 3333
