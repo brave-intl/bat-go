@@ -36,6 +36,7 @@ type ControllersTestSuite struct {
 
 	ctx                 context.Context
 	service             *ratios.Service
+	redis               *redis.Client
 	mockCtrl            *gomock.Controller
 	mockCoingeckoClient *mockcoingecko.MockClient
 	mockStripeClient    *mockstripe.MockClient
@@ -71,7 +72,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoIDToSymbolCTXKey, map[string]string{"basic-attention-token": "bat"})
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoSupportedVsCurrenciesCTXKey, map[string]bool{"usd": true})
 
-	var redisAddr string = "redis://grant-redis:6379"
+	var redisAddr string = "redis://grant-redis:6379/2"
 	if len(os.Getenv("REDIS_ADDR")) > 0 {
 		redisAddr = os.Getenv("REDIS_ADDR")
 	}
@@ -90,9 +91,9 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	opts, err := redis.ParseURL(redisAddr)
 	suite.Require().NoError(err, "Must be able to parse redis URL")
 
-	redis := redis.NewClient(opts)
+	suite.redis = redis.NewClient(opts)
 
-	if err := redis.Ping(suite.ctx).Err(); err != nil {
+	if err := suite.redis.Ping(suite.ctx).Err(); err != nil {
 		suite.Require().NoError(err, "Must be able to ping redis")
 	}
 
@@ -102,12 +103,17 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	stripe := mockstripe.NewMockClient(suite.mockCtrl)
 	suite.mockStripeClient = stripe
 
-	suite.service = ratios.NewService(suite.ctx, coingecko, stripe, redis)
+	suite.service = ratios.NewService(suite.ctx, coingecko, stripe, suite.redis)
 	suite.Require().NoError(err, "failed to setup ratios service")
 }
 
 func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	suite.mockCtrl.Finish()
+}
+
+func (suite *ControllersTestSuite) TearDownTest() {
+	// flush all keys from the test Redis database
+	suite.Assert().NoError(suite.redis.FlushDB(suite.ctx).Err(), "Must be able to flush Redis database")
 }
 
 func (suite *ControllersTestSuite) TestGetHistoryHandler() {

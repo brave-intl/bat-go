@@ -116,7 +116,14 @@ docker-test:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test && cd main && go run main.go generate json-schema
+	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker compose -f docker-compose.yml -f docker-compose.dev.yml run -T --rm dev make test
+
+docker-test-redis:
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker compose \
+		--profile redis-log -f docker-compose.yml -f docker-compose.dev.yml up -d redis --wait
+	docker exec grant-redis redis-cli MONITOR &
+	-make docker-test
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml stop
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
@@ -170,10 +177,10 @@ create-json-schema:
 	cd main && go run main.go generate json-schema
 
 test:
-	cd libs && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
-	cd services && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
-	cd tools && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
-	cd cmd && go test -count 1 -v -p 1 $(TEST_FLAGS) ./...
+	cd libs && go test -count 1 -v -p 1 $(TEST_FLAGS)
+	cd services && go test -count 1 -v -p 1 $(TEST_FLAGS)
+	cd tools && go test -count 1 -v -p 1 $(TEST_FLAGS)
+	cd cmd && go test -count 1 -v -p 1 $(TEST_FLAGS)
 
 format:
 	gofmt -s -w ./

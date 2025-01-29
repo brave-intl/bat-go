@@ -1,6 +1,7 @@
 version: "3.4"
 
 volumes:
+  gomod:
   out:
     driver_opts:
       type: tmpfs
@@ -11,6 +12,7 @@ services:
     volumes:
       - ".:/src"
       - "out:/out"
+      - "gomod:/go/pkg/mod"
     security_opt:
       - no-new-privileges:true
     environment:
@@ -26,3 +28,14 @@ services:
     image: vault:0.10.2
     networks:
       - grant
+  redislog:
+    container_name: grant-redis-log
+    image: redis
+    networks:
+      - grant
+    command: ["redis-cli", "-h", "grant-redis", "MONITOR"]
+    profiles:
+      - redis-log
+    depends_on:
+      redis:
+        condition: service_healthy
