@@ -34,6 +34,7 @@ type CardsConfig struct {
 
 type Config struct {
 	TOSVersion int
+	TOSEnabled bool
 	Cards      *CardsConfig
 }
 
@@ -156,6 +157,10 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
+	}
+
+	if s.cfg.TOSEnabled {
+		params.TOSVersion = s.cfg.TOSVersion
 	}
 
 	vbatDeadline, ok := ctx.Value(appctx.ParametersVBATDeadlineCTXKey).(time.Time)
