@@ -162,11 +162,10 @@ services:
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - OUTPUT_DIR="/out"
-      - PKG
       - PPROF_ENABLED=true
-      - RUN
       - TEST_PKG
       - TEST_RUN
+      - TEST_DIRS
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "DAPP_ALLOWED_CORS_ORIGINS=https://my-dapp.com"

@@ -23,6 +23,7 @@ services:
       - VAULT_TOKEN
       - TEST_RUN
       - TEST_PKG
+      - TEST_DIRS
   vault:
     container_name: grant-vault
     image: vault:0.10.2
