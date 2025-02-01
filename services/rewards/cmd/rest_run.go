@@ -72,6 +72,11 @@ func RestRun(command *cobra.Command, args []string) {
 		ctx = context.WithValue(ctx, appctx.DefaultACChoicesCTXKey, acChoices)
 	}
 
+	env := os.Getenv("ENV")
+	if env == "" {
+		lg.Fatal().Err(err).Msg("error retrieving environment")
+	}
+
 	tosVersion, err := strconv.Atoi(os.Getenv("REWARDS_TOS_VERSION"))
 	if err != nil {
 		lg.Fatal().Err(err).Msg("error retrieving rewards terms of service version")
@@ -90,6 +95,7 @@ func RestRun(command *cobra.Command, args []string) {
 	}
 
 	cfg := &rewards.Config{
+		Env:        env,
 		TOSVersion: tosVersion,
 		Cards: &rewards.CardsConfig{
 			Bucket: cardsBucket,
