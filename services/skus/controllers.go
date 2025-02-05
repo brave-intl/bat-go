@@ -755,6 +755,8 @@ func deleteOrderCreds(service *Service) handlers.AppHandler {
 	}
 }
 
+const errTypeAssertion = model.Error("skus: type assertion")
+
 // getOrderCredsByID handles requests for fetching order credentials by an item id.
 //
 // Requests may come in via two endpoints:
@@ -825,7 +827,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 		if legacyMode {
 			suCreds, ok := creds.([]OrderCreds)
 			if !ok {
-				l.Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("error getting credentials type assertion")
+				l.Err(errTypeAssertion).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("error getting credentials type assertion")
 				return handlers.WrapError(err, "Error getting credentials", http.StatusInternalServerError)
 			}
 
@@ -835,7 +837,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 				}
 			}
 
-			l.Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("error finding creds legacy")
+			l.Err(errNotFound).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("error finding creds legacy")
 
 			return handlers.WrapError(err, "Error getting credentials", http.StatusNotFound)
 		}
