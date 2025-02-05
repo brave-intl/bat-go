@@ -768,8 +768,12 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
+		l := logging.Logger(ctx, "skus").With().Str("func", "getOrderCredsByID").Logger()
+
 		orderID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
+			l.Err(err).Msg("failed to decode and validate string for orderID")
+
 			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 				"orderID": err.Error(),
 			})
@@ -777,6 +781,8 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 
 		itemID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
+			l.Err(err).Msg("failed to decode and validate string for itemID")
+
 			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 				"itemID": err.Error(),
 			})
@@ -788,6 +794,8 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 		} else {
 			reqIDRaw := &inputs.ID{}
 			if err := inputs.DecodeAndValidateString(ctx, reqIDRaw, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
+				l.Err(err).Msg("failed to decode and validate string reqIDRaw")
+
 				return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
 					"requestID": err.Error(),
 				})
@@ -796,19 +804,18 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			reqID = *reqIDRaw.UUID()
 		}
 
-		l := logging.Logger(ctx, "skus").With().Str("func", "getOrderCredsByID").Logger()
-
 		itemIDv := *itemID.UUID()
 		creds, status, err := svc.GetItemCredentials(ctx, *orderID.UUID(), itemIDv, reqID)
 		if err != nil {
 			if !errors.Is(err, errSetRetryAfter) {
-				l.Error().Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("failed to get item creds")
+				l.Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("failed to get item creds")
 				return handlers.WrapError(err, "Error getting credentials", status)
 			}
 
 			// Add to response header as error specifies a retry after period.
 			avg, err := svc.Datastore.GetOutboxMovAvgDurationSeconds()
 			if err != nil {
+				l.Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("failed to get obx mov avg")
 				return handlers.WrapError(err, "Error getting credential retry-after", status)
 			}
 
@@ -818,6 +825,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 		if legacyMode {
 			suCreds, ok := creds.([]OrderCreds)
 			if !ok {
+				l.Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("error getting credentials type assertion")
 				return handlers.WrapError(err, "Error getting credentials", http.StatusInternalServerError)
 			}
 
@@ -826,6 +834,8 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 					return handlers.RenderContent(ctx, suCreds[i], w, status)
 				}
 			}
+
+			l.Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("error finding creds legacy")
 
 			return handlers.WrapError(err, "Error getting credentials", http.StatusNotFound)
 		}
