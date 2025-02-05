@@ -768,7 +768,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
-		l := logging.Logger(ctx, "skus").With().Str("func", "getOrderCredsByID").Logger()
+		l := logging.Logger(ctx, "skus").With().Str("func", "getOrderCredsByID").Bool("legacy_mode", legacyMode).Logger()
 
 		orderID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
