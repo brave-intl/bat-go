@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -54,7 +55,7 @@ func (suite *CoingeckoTestSuite) SetupTest() {
 	// vs-currency limit
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, coingeckoCurrencyLimit)
 
-	redisAddr := "redis://grant-redis:6379"
+	redisAddr := "redis://grant-redis:6379/1"
 	if len(os.Getenv("REDIS_ADDR")) > 0 {
 		redisAddr = os.Getenv("REDIS_ADDR")
 	}
@@ -69,6 +70,13 @@ func (suite *CoingeckoTestSuite) SetupTest() {
 	// setup the client under test, no redis, will test redis interactions in ratios service
 	suite.client, err = coingecko.NewWithContext(suite.ctx, suite.redis)
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
+}
+
+func (suite *CoingeckoTestSuite) TearDownTest() {
+	// flush all keys from the test Redis database
+	suite.Assert().NoError(suite.redis.FlushDB(suite.ctx).Err(), "Must be able to flush Redis database")
+	// work around Coingecko rate limit
+	time.Sleep(200 * time.Millisecond)
 }
 
 func (suite *CoingeckoTestSuite) TestFetchSimplePrice() {

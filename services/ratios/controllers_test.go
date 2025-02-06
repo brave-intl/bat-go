@@ -22,6 +22,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/stripe"
 	mockstripe "github.com/brave-intl/bat-go/libs/clients/stripe/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/inputs"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/ratios"
 	"github.com/go-chi/chi"
@@ -36,6 +37,7 @@ type ControllersTestSuite struct {
 
 	ctx                 context.Context
 	service             *ratios.Service
+	redis               *redis.Client
 	mockCtrl            *gomock.Controller
 	mockCoingeckoClient *mockcoingecko.MockClient
 	mockStripeClient    *mockstripe.MockClient
@@ -66,12 +68,21 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	// vs-currency limit
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, 2)
 	// all this is setup in init service
-	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoSymbolToIDCTXKey, map[string]string{"bat": "basic-attention-token"})
+	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoSymbolToIDCTXKey, map[string]string{
+		"bat": "basic-attention-token",
+		"eth": "ethereum",
+	})
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoContractToIDCTXKey, map[string]string{})
-	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoIDToSymbolCTXKey, map[string]string{"basic-attention-token": "bat"})
-	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoSupportedVsCurrenciesCTXKey, map[string]bool{"usd": true})
+	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoIDToSymbolCTXKey, map[string]string{
+		"basic-attention-token": "bat",
+		"ethereum":              "eth",
+	})
+	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoSupportedVsCurrenciesCTXKey, map[string]bool{
+		"usd": true,
+		"eur": true,
+	})
 
-	var redisAddr string = "redis://grant-redis:6379"
+	var redisAddr string = "redis://grant-redis:6379/2"
 	if len(os.Getenv("REDIS_ADDR")) > 0 {
 		redisAddr = os.Getenv("REDIS_ADDR")
 	}
@@ -90,9 +101,9 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	opts, err := redis.ParseURL(redisAddr)
 	suite.Require().NoError(err, "Must be able to parse redis URL")
 
-	redis := redis.NewClient(opts)
+	suite.redis = redis.NewClient(opts)
 
-	if err := redis.Ping(suite.ctx).Err(); err != nil {
+	if err := suite.redis.Ping(suite.ctx).Err(); err != nil {
 		suite.Require().NoError(err, "Must be able to ping redis")
 	}
 
@@ -102,12 +113,17 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	stripe := mockstripe.NewMockClient(suite.mockCtrl)
 	suite.mockStripeClient = stripe
 
-	suite.service = ratios.NewService(suite.ctx, coingecko, stripe, redis)
+	suite.service = ratios.NewService(suite.ctx, coingecko, stripe, suite.redis)
 	suite.Require().NoError(err, "failed to setup ratios service")
 }
 
 func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	suite.mockCtrl.Finish()
+}
+
+func (suite *ControllersTestSuite) TearDownTest() {
+	// flush all keys from the test Redis database
+	suite.Assert().NoError(suite.redis.FlushDB(suite.ctx).Err(), "Must be able to flush Redis database")
 }
 
 func (suite *ControllersTestSuite) TestGetHistoryHandler() {
@@ -617,4 +633,79 @@ func (suite *ControllersTestSuite) TestCreateStripeOnrampSessionsHandler() {
 		suite.Require().NoError(err)
 		suite.Require().Equal(ratiosResp.URL, "https://example.com")
 	}
+}
+
+func (suite *ControllersTestSuite) TestCacheOperations() {
+	// Initialize coins
+	var coinList ratios.CoingeckoCoinList
+	err := inputs.DecodeAndValidate(suite.ctx, &coinList, []byte("bat,eth"))
+	suite.Require().NoError(err)
+
+	// Test RecordCoinsAndCurrencies
+	err = suite.service.RecordCoinsAndCurrencies(
+		suite.ctx,
+		[]ratios.CoingeckoCoin(coinList),
+		[]ratios.CoingeckoVsCurrency{"usd", "eur"},
+	)
+	suite.Require().NoError(err, "Should record coins and currencies without error")
+
+	// Test GetTopCoins
+	topCoins, err := suite.service.GetTopCoins(suite.ctx, 10)
+	suite.Require().NoError(err, "Should get top coins without error")
+	suite.Require().Len(topCoins, 2, "Should have exactly 2 top coins (BAT, ETH)")
+	suite.Require().Contains(topCoins.String(), "basic-attention-token", "Should contain BAT in top coins")
+	suite.Require().Contains(topCoins.String(), "ethereum", "Should contain ETH in top coins")
+
+	// Test GetTopCurrencies
+	topCurrencies, err := suite.service.GetTopCurrencies(suite.ctx, 10)
+	suite.Require().NoError(err, "Should get top currencies without error")
+	suite.Require().Len(topCurrencies, 2, "Should have exactly 2 top currencies (USD, EUR)")
+	suite.Require().Contains(topCurrencies.String(), "usd", "Should contain USD in top currencies")
+	suite.Require().Contains(topCurrencies.String(), "eur", "Should contain EUR in top currencies")
+
+	// Test RunNextRelativeCachePrepopulationJob
+	// Setup mock response for FetchSimplePrice
+	mockResp := coingecko.SimplePriceResponse(map[string]map[string]decimal.Decimal{
+		"basic-attention-token": {
+			"usd":            decimal.NewFromFloat(0.25),
+			"usd_24h_change": decimal.NewFromFloat(5.25),
+		},
+		"ethereum": {
+			"usd":            decimal.NewFromFloat(2000.50),
+			"usd_24h_change": decimal.NewFromFloat(2.75),
+		},
+	})
+	suite.mockCoingeckoClient.EXPECT().
+		FetchSimplePrice(gomock.Any(), gomock.Any(), gomock.Any(), true).
+		Return(&mockResp, nil).
+		Times(1) // Expect exactly one call
+
+	// Run the job
+	ran, err := suite.service.RunNextRelativeCachePrepopulationJob(suite.ctx)
+	suite.Require().NoError(err, "Should run cache prepopulation job without error")
+	suite.Require().True(ran, "Should indicate job was run")
+
+	// Verify the data was cached by trying to retrieve it - this should NOT call Coingecko
+	rates, updated, err := suite.service.GetRelativeFromCache(
+		suite.ctx,
+		ratios.CoingeckoVsCurrencyList{"usd"},
+		[]ratios.CoingeckoCoin(coinList)...,
+	)
+	suite.Require().NoError(err, "Should get cached rates without error")
+	suite.Require().NotNil(rates, "Should have cached rates")
+	suite.Require().NotZero(updated, "Should have last updated timestamp")
+
+	// Verify the cached data matches what we expect
+	suite.Require().Contains((*rates)["basic-attention-token"], "usd")
+	suite.Require().Contains((*rates)["ethereum"], "usd")
+	suite.Require().Equal(
+		decimal.NewFromFloat(0.25),
+		(*rates)["basic-attention-token"]["usd"],
+		"BAT/USD rate should match",
+	)
+	suite.Require().Equal(
+		decimal.NewFromFloat(2000.50),
+		(*rates)["ethereum"]["usd"],
+		"ETH/USD rate should match",
+	)
 }
