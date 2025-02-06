@@ -23,7 +23,6 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/client"
-	"github.com/stripe/stripe-go/v72/sub"
 	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 
@@ -698,62 +697,6 @@ func (s *Service) cancelOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id 
 
 func (s *Service) resetNumPaymentFailed(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
 	return s.orderRepo.AppendMetadataInt(ctx, dbi, id, "numPaymentFailed", 0)
-}
-
-// CancelOrderLegacy cancels an order, propagates to stripe if needed.
-func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
-	// TODO: Refactor this later. Now here's a quick fix.
-	ord, err := s.Datastore.GetOrder(orderID)
-	if err != nil {
-		return err
-	}
-
-	if ord == nil {
-		return model.ErrOrderNotFound
-	}
-
-	subID, ok := ord.StripeSubID()
-	if ok && subID != "" {
-		// Cancel the stripe subscription.
-		if _, err := sub.Cancel(subID, nil); err != nil {
-			// Error out if it's not 404.
-			if !isErrStripeNotFound(err) {
-				return fmt.Errorf("failed to cancel stripe subscription: %w", err)
-			}
-		}
-
-		// Cancel even for 404.
-		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
-	}
-
-	if ord.IsIOS() || ord.IsAndroid() {
-		return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
-	}
-
-	// Try to find by order_id in Stripe.
-	params := &stripe.SubscriptionSearchParams{}
-	params.Query = fmt.Sprintf("status:'active' AND metadata['orderID']:'%s'", orderID.String())
-
-	ctx := context.TODO()
-
-	iter := sub.Search(params)
-	for iter.Next() {
-		sb := iter.Subscription()
-		if _, err := sub.Cancel(sb.ID, nil); err != nil {
-			// It seems that already canceled subscriptions might return 404.
-			if isErrStripeNotFound(err) {
-				continue
-			}
-
-			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
-		}
-
-		if err := s.Datastore.AppendOrderMetadata(ctx, &orderID, "stripeSubscriptionId", sb.ID); err != nil {
-			return fmt.Errorf("failed to update order metadata with subscription id: %w", err)
-		}
-	}
-
-	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
 func (s *Service) setOrderTrialDays(ctx context.Context, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {
