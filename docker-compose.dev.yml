@@ -32,6 +32,9 @@ services:
   redislog:
     container_name: grant-redis-log
     image: redis
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     networks:
       - grant
     command: ["redis-cli", "-h", "grant-redis", "MONITOR"]
