@@ -128,8 +128,13 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 		coin := coinIds[i].String()
 
 		if rate != nil {
+			rateStr, ok := rate.(string)
+			if !ok {
+				return nil, updated, fmt.Errorf("invalid type for rate, expected string for coin: %s", coin)
+			}
+
 			var r ratiosclient.RelativeResponse
-			if err := json.Unmarshal([]byte(rate.(string)), &r); err != nil {
+			if err := json.Unmarshal([]byte(rateStr), &r); err != nil {
 				return nil, updated, err
 			}
 			// the least recently updated

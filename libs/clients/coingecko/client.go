@@ -190,10 +190,7 @@ func (c *HTTPClient) FetchMarketChart(
 		// 1d chart is cached for 1 hour
 		// 1w chart is cached for 7 hours
 		// etc
-		secondsSinceUpdate := int(time.Since(entry.LastUpdated).Seconds())
-		if secondsSinceUpdate < cacheDurationSeconds {
-			return &body, entry.LastUpdated, err
-		}
+		return &body, entry.LastUpdated, err
 	}
 
 	req, err := c.client.NewRequest(ctx, "GET", url, nil, params)
@@ -218,7 +215,7 @@ func (c *HTTPClient) FetchMarketChart(
 	if err != nil {
 		return nil, updated, err
 	}
-	if err := c.redis.Set(ctx, cacheKey, entryBytes, 0).Err(); err != nil {
+	if err := c.redis.Set(ctx, cacheKey, entryBytes, time.Duration(cacheDurationSeconds)*time.Second).Err(); err != nil {
 		return nil, updated, err
 	}
 
