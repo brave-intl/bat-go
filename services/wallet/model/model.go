@@ -17,6 +17,8 @@ const (
 	ErrNoWalletCustodian    Error = "model: no linked wallet custodian"
 	ErrInternalServer       Error = "model: internal server error"
 	ErrWalletNotFound       Error = "model: wallet not found"
+	ErrSolAlreadyWaitlisted Error = "model: solana already waitlisted"
+	ErrSolAlreadyLinked     Error = "model: solana already linked"
 )
 
 type AllowListEntry struct {

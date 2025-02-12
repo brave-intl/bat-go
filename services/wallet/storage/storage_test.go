@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/datastore"
-	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+
+	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/services/wallet/model"
 )
 
 func TestChallenge_Get(t *testing.T) {
