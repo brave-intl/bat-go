@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
@@ -398,6 +399,61 @@ func TestAllowList_GetAllowListEntry(t *testing.T) {
 			actual, err2 := a.GetAllowListEntry(ctx, dbi, tc.given.paymentID)
 			should.Equal(t, tc.exp.err, err2)
 			should.Equal(t, tc.exp.allow, actual)
+		})
+	}
+}
+
+func TestIsUniqueConstraintViolation(t *testing.T) {
+	type tcGiven struct {
+		err error
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "not_pq_error",
+			given: tcGiven{
+				err: model.Error("not_pq_error"),
+			},
+		},
+
+		{
+			name: "not_constraint_error",
+			given: tcGiven{
+				err: &pq.Error{
+					Code: "0",
+				},
+			},
+		},
+
+		{
+			name: "constraint_error",
+			given: tcGiven{
+				err: &pq.Error{
+					Code: "23505",
+				},
+			},
+			exp: tcExpected{
+				result: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := isUniqueConstraintViolation(tc.given.err)
+			should.Equal(t, tc.exp.result, actual)
 		})
 	}
 }
