@@ -218,7 +218,7 @@ func New() (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), err
+	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), nil
 }
 
 // isB64 - check if the input string is base64
