@@ -693,6 +693,40 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		suite.Assert().Error(err, sql.ErrNoRows)
 	})
+
+	suite.Run("PostSolanaWaitlist_BadRequest_PaymentIDSignatureMismatch", func() {
+		pid := uuid.NewV4()
+
+		body := struct {
+			PaymentID uuid.UUID `json:"paymentId"`
+		}{
+			PaymentID: pid,
+		}
+
+		b, err := json.Marshal(body)
+		suite.Require().NoError(err)
+
+		r := httptest.NewRequest(http.MethodPost, "/v3/wallet/solana/waitlist", bytes.NewBuffer(b))
+
+		err = signUpdateRequest(r, paymentID.String(), priv)
+		suite.Require().NoError(err)
+
+		rw := httptest.NewRecorder()
+
+		waitlistRepo := storage.NewSolanaWaitlist()
+
+		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+		suite.Require().NoError(err)
+
+		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+		svr.Handler.ServeHTTP(rw, r)
+
+		suite.Require().Equal(http.StatusBadRequest, rw.Code)
+
+		var actual entry
+		err = sqlx.GetContext(context.TODO(), pg.RawDB(), &actual, q, pid)
+		suite.Assert().Equal(sql.ErrNoRows, err)
+	})
 }
 
 func whitelistWallet(t *testing.T, pg wallet.Datastore, Id string) {

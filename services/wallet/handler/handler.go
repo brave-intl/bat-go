@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 )
 
@@ -61,6 +62,19 @@ func (h *Solana) PostWaitlist(w http.ResponseWriter, r *http.Request) *handlers.
 		lg.Err(err).Msg("failed to validate req")
 
 		return handlers.WrapValidationError(err)
+	}
+
+	sk, err := middleware.GetKeyID(ctx)
+	if err != nil {
+		lg.Err(err).Msg("failed to get key id")
+
+		return handlers.ValidationError("request body", map[string]interface{}{"paymentId": err.Error()})
+	}
+
+	if sk != req.PaymentID.String() {
+		lg.Err(model.ErrPaymentIDSignatureMismatch).Msg("paymentId signature mismatch")
+
+		return handlers.ValidationError("request body", map[string]interface{}{"paymentId": model.ErrPaymentIDSignatureMismatch})
 	}
 
 	if err := h.svc.SolanaAddToWaitlist(ctx, req.PaymentID); err != nil {
