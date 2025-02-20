@@ -102,6 +102,19 @@ func (h *Solana) DeleteWaitlist(w http.ResponseWriter, r *http.Request) *handler
 		return handlers.WrapError(err, "invalid paymentID", http.StatusBadRequest)
 	}
 
+	sk, err := middleware.GetKeyID(ctx)
+	if err != nil {
+		lg.Err(err).Msg("failed to get key id")
+
+		return handlers.ValidationError("request", map[string]interface{}{"paymentId": err.Error()})
+	}
+
+	if sk != paymentID.String() {
+		lg.Err(model.ErrPaymentIDSignatureMismatch).Msg("paymentId signature mismatch")
+
+		return handlers.ValidationError("request", map[string]interface{}{"paymentId": model.ErrPaymentIDSignatureMismatch})
+	}
+
 	if err := h.svc.SolanaDeleteFromWaitlist(ctx, *paymentID.UUID()); err != nil {
 		lg.Err(err).Msg("failed to add payment id to solana waitlist")
 
