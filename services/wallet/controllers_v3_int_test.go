@@ -662,38 +662,6 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 		suite.Assert().NotEmpty(actual.JoinedAt)
 	})
 
-	suite.Run("DeleteSolanaWaitlist", func() {
-		ctx := context.Background()
-
-		var weExists entry
-		err = sqlx.GetContext(ctx, pg.RawDB(), &weExists, q, paymentID)
-
-		suite.Require().NoError(err)
-		suite.Require().Equal(paymentID, weExists.PaymentID)
-
-		r := httptest.NewRequest(http.MethodDelete, "/v3/wallet/solana/waitlist/"+paymentID.String(), nil)
-
-		err = signUpdateRequest(r, paymentID.String(), priv)
-		suite.Require().NoError(err)
-
-		rw := httptest.NewRecorder()
-
-		waitlistRepo := storage.NewSolanaWaitlist()
-
-		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
-		suite.Require().NoError(err)
-
-		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
-		svr.Handler.ServeHTTP(rw, r)
-
-		suite.Require().Equal(http.StatusOK, rw.Code)
-
-		var actual entry
-		err = sqlx.GetContext(ctx, pg.RawDB(), &actual, q, paymentID)
-
-		suite.Assert().Error(err, sql.ErrNoRows)
-	})
-
 	suite.Run("PostSolanaWaitlist_BadRequest_PaymentIDSignatureMismatch", func() {
 		pid := uuid.NewV4()
 
@@ -726,6 +694,72 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 		var actual entry
 		err = sqlx.GetContext(context.TODO(), pg.RawDB(), &actual, q, pid)
 		suite.Assert().Equal(sql.ErrNoRows, err)
+	})
+
+	suite.Run("DeleteSolanaWaitlist_BadRequest_PaymentIDSignatureMismatch", func() {
+		ctx := context.Background()
+
+		var weExists entry
+		err = sqlx.GetContext(ctx, pg.RawDB(), &weExists, q, paymentID)
+
+		suite.Require().NoError(err)
+		suite.Require().Equal(paymentID, weExists.PaymentID)
+
+		r := httptest.NewRequest(http.MethodDelete, "/v3/wallet/solana/waitlist/"+uuid.NewV4().String(), nil)
+
+		err = signUpdateRequest(r, paymentID.String(), priv)
+		suite.Require().NoError(err)
+
+		rw := httptest.NewRecorder()
+
+		waitlistRepo := storage.NewSolanaWaitlist()
+
+		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+		suite.Require().NoError(err)
+
+		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+		svr.Handler.ServeHTTP(rw, r)
+
+		suite.Require().Equal(http.StatusBadRequest, rw.Code)
+
+		var actual entry
+		err = sqlx.GetContext(context.TODO(), pg.RawDB(), &actual, q, paymentID)
+		suite.Require().NoError(err)
+
+		suite.Assert().Equal(paymentID, actual.PaymentID)
+		suite.Assert().NotEmpty(actual.JoinedAt)
+	})
+
+	suite.Run("DeleteSolanaWaitlist", func() {
+		ctx := context.Background()
+
+		var weExists entry
+		err = sqlx.GetContext(ctx, pg.RawDB(), &weExists, q, paymentID)
+
+		suite.Require().NoError(err)
+		suite.Require().Equal(paymentID, weExists.PaymentID)
+
+		r := httptest.NewRequest(http.MethodDelete, "/v3/wallet/solana/waitlist/"+paymentID.String(), nil)
+
+		err = signUpdateRequest(r, paymentID.String(), priv)
+		suite.Require().NoError(err)
+
+		rw := httptest.NewRecorder()
+
+		waitlistRepo := storage.NewSolanaWaitlist()
+
+		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+		suite.Require().NoError(err)
+
+		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
+		svr.Handler.ServeHTTP(rw, r)
+
+		suite.Require().Equal(http.StatusOK, rw.Code)
+
+		var actual entry
+		err = sqlx.GetContext(ctx, pg.RawDB(), &actual, q, paymentID)
+
+		suite.Assert().Error(err, sql.ErrNoRows)
 	})
 }
 
