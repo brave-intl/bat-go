@@ -359,7 +359,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	if len(dappAO) == 0 {
 		logger.Panic().Msg("dapp origin env missing")
 	}
-	r = wallet.RegisterRoutes(ctx, walletService, r, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO))
+
+	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
+
+	corsOpts := wallet.NewCORSOpts(origins, dbg)
+	solMw := wallet.NewCORSMwr(corsOpts, http.MethodPost, http.MethodDelete)
+
+	r = wallet.RegisterRoutes(ctx, walletService, r, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO), solMw)
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {

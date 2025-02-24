@@ -8,15 +8,18 @@ import (
 )
 
 const (
-	ErrWalletNotWhitelisted Error = "model: wallet not whitelisted"
-	ErrNotFound             Error = "model: not found"
-	ErrChallengeNotFound    Error = "model: challenge not found"
-	ErrChallengeExpired     Error = "model: challenge expired"
-	ErrNoRowsDeleted        Error = "model: no rows deleted"
-	ErrNotInserted          Error = "model: not inserted"
-	ErrNoWalletCustodian    Error = "model: no linked wallet custodian"
-	ErrInternalServer       Error = "model: internal server error"
-	ErrWalletNotFound       Error = "model: wallet not found"
+	ErrWalletNotWhitelisted       Error = "model: wallet not whitelisted"
+	ErrNotFound                   Error = "model: not found"
+	ErrChallengeNotFound          Error = "model: challenge not found"
+	ErrChallengeExpired           Error = "model: challenge expired"
+	ErrNoRowsDeleted              Error = "model: no rows deleted"
+	ErrNotInserted                Error = "model: not inserted"
+	ErrNoWalletCustodian          Error = "model: no linked wallet custodian"
+	ErrInternalServer             Error = "model: internal server error"
+	ErrWalletNotFound             Error = "model: wallet not found"
+	ErrSolAlreadyWaitlisted       Error = "model: solana already waitlisted"
+	ErrSolAlreadyLinked           Error = "model: solana already linked"
+	ErrPaymentIDSignatureMismatch Error = "model: payment id in request does not match signature"
 )
 
 type AllowListEntry struct {

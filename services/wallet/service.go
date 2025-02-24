@@ -14,9 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brave-intl/bat-go/services/wallet/metric"
-	"github.com/brave-intl/bat-go/services/wallet/model"
-	"github.com/brave-intl/bat-go/services/wallet/storage"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -44,6 +41,10 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/cmd"
+	"github.com/brave-intl/bat-go/services/wallet/handler"
+	"github.com/brave-intl/bat-go/services/wallet/metric"
+	"github.com/brave-intl/bat-go/services/wallet/model"
+	"github.com/brave-intl/bat-go/services/wallet/storage"
 )
 
 // VerifiedWalletEnable enable verified wallet call
@@ -117,6 +118,11 @@ type allowListRepo interface {
 	GetAllowListEntry(ctx context.Context, dbi sqlx.QueryerContext, paymentID uuid.UUID) (model.AllowListEntry, error)
 }
 
+type solanaWaitlistRepo interface {
+	Insert(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID, joinedAt time.Time) error
+	Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error
+}
+
 type metricSvc interface {
 	LinkSuccessZP(cc string)
 	LinkFailureZP(cc string)
@@ -141,6 +147,7 @@ type Service struct {
 	RoDatastore      ReadOnlyDatastore
 	chlRepo          challengeRepo
 	allowListRepo    allowListRepo
+	solWaitlistRepo  solanaWaitlistRepo
 	repClient        reputation.Client
 	geminiClient     gemini.Client
 	geoValidator     GeoValidator
@@ -163,6 +170,7 @@ func InitService(
 	roDatastore ReadOnlyDatastore,
 	chlRepo challengeRepo,
 	allowList allowListRepo,
+	solWaitlistRepo solanaWaitlistRepo,
 	repClient reputation.Client,
 	geminiClient gemini.Client,
 	geoCountryValidator GeoValidator,
@@ -171,18 +179,19 @@ func InitService(
 	gemini geminiSvc,
 	dappConf DAppConfig) (*Service, error) {
 	service := &Service{
-		Datastore:     datastore,
-		RoDatastore:   roDatastore,
-		chlRepo:       chlRepo,
-		allowListRepo: allowList,
-		repClient:     repClient,
-		geminiClient:  geminiClient,
-		geoValidator:  geoCountryValidator,
-		retry:         retry,
-		metric:        metric,
-		gemini:        gemini,
-		dappConf:      dappConf,
-		crMu:          new(sync.RWMutex),
+		Datastore:       datastore,
+		RoDatastore:     roDatastore,
+		chlRepo:         chlRepo,
+		allowListRepo:   allowList,
+		solWaitlistRepo: solWaitlistRepo,
+		repClient:       repClient,
+		geminiClient:    geminiClient,
+		geoValidator:    geoCountryValidator,
+		retry:           retry,
+		metric:          metric,
+		gemini:          gemini,
+		dappConf:        dappConf,
+		crMu:            new(sync.RWMutex),
 	}
 	return service, nil
 }
@@ -206,6 +215,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	chlRepo := storage.NewChallenge()
 	alRepo := storage.NewAllowList()
+	solWaitlistRepo := storage.NewSolanaWaitlist()
 
 	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")
 	if err != nil {
@@ -290,7 +300,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		AllowedOrigins: dappAO,
 	}
 
-	s, err := InitService(db, roDB, chlRepo, alRepo, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
+	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -344,7 +354,7 @@ func (service *Service) getCustodianRegions() custodian.Regions {
 }
 
 // RegisterRoutes - register the wallet api routes given a chi.Mux
-func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middleware.InstrumentHandlerDef, dAppCorsMw func(next http.Handler) http.Handler) *chi.Mux {
+func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middleware.InstrumentHandlerDef, dAppCorsMw func(next http.Handler) http.Handler, solMw func(next http.Handler) http.Handler) *chi.Mux {
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
@@ -391,6 +401,16 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 
 		r.Post("/challenges", middleware.RateLimiter(ctx, 2)(metricsMw("CreateChallenge", dAppCorsMw(CreateChallenge(s)))).ServeHTTP)
 		r.Options("/challenges", middleware.RateLimiter(ctx, 2)(metricsMw("CreateChallengeOptions", dAppCorsMw(noOpHandler()))).ServeHTTP)
+
+		{
+			solH := handler.NewSolana(s)
+
+			r.Post("/solana/waitlist", middleware.HTTPSignedOnly(s)(metricsMw("SolanaPostWaitlist", handlers.AppHandler(solH.PostWaitlist))).ServeHTTP)
+
+			r.Delete("/solana/waitlist/{paymentID}", middleware.HTTPSignedOnly(s)(metricsMw("SolanaDeleteWaitlist", handlers.AppHandler(solH.DeleteWaitlist))).ServeHTTP)
+
+			r.Options("/solana/waitlist", middleware.RateLimiter(ctx, 5)(metricsMw("SolanaWaitlistOptions", solMw(noOpHandler()))).ServeHTTP)
+		}
 	})
 
 	r.Route("/v4/wallets", func(r chi.Router) {
@@ -429,6 +449,25 @@ func noOpHandler() http.Handler {
 	return http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		return
 	})
+}
+
+func NewCORSMwr(opts cors.Options, methods ...string) func(next http.Handler) http.Handler {
+	opts.AllowedMethods = methods
+
+	return cors.Handler(opts)
+}
+
+func NewCORSOpts(origins []string, dbg bool) cors.Options {
+	result := cors.Options{
+		Debug:            dbg,
+		AllowedOrigins:   origins,
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		ExposedHeaders:   []string{""},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}
+
+	return result
 }
 
 // SubmitAnonCardTransaction validates and submits a transaction on behalf of an anonymous card
@@ -903,6 +942,43 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 	}
 
 	return info, nil
+}
+
+func (service *Service) SolanaAddToWaitlist(ctx context.Context, paymentID uuid.UUID) error {
+	if err := solanaCanJoinWaitlist(ctx, service.Datastore, paymentID); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+
+	if err := service.solWaitlistRepo.Insert(ctx, service.Datastore.RawDB(), paymentID, now); err != nil {
+		if !errors.Is(err, model.ErrSolAlreadyWaitlisted) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type cxLinkRepo interface {
+	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+}
+
+func solanaCanJoinWaitlist(ctx context.Context, repo cxLinkRepo, paymentID uuid.UUID) error {
+	cxLink, err := repo.GetCustodianLinkByWalletID(ctx, paymentID)
+	if err != nil && !errors.Is(err, model.ErrNoWalletCustodian) {
+		return err
+	}
+
+	if cxLink.isLinked() && cxLink.isSolana() {
+		return model.ErrSolAlreadyLinked
+	}
+
+	return nil
+}
+
+func (service *Service) SolanaDeleteFromWaitlist(ctx context.Context, paymentID uuid.UUID) error {
+	return service.solWaitlistRepo.Delete(ctx, service.Datastore.RawDB(), paymentID)
 }
 
 // RefreshCustodianRegionsWorker - get the custodian regions from the merge param bucket

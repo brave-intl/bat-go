@@ -5,18 +5,20 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/go-chi/chi"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/wallet"
-	"github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // WalletRestRun - Main entrypoint of the REST subcommand
@@ -35,7 +37,13 @@ func WalletRestRun(command *cobra.Command, args []string) {
 		logger.Panic().Msg("dapp origin env missing")
 	}
 
-	wallet.RegisterRoutes(ctx, service, router, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO))
+	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
+
+	corsOpts := wallet.NewCORSOpts(origins, dbg)
+	solMw := wallet.NewCORSMwr(corsOpts, http.MethodPost, http.MethodDelete)
+
+	wallet.RegisterRoutes(ctx, service, router, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO), solMw)
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {

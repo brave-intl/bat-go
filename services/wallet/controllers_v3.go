@@ -12,6 +12,9 @@ import (
 	"strings"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -23,8 +26,6 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet/model"
-	"github.com/go-chi/chi"
-	uuid "github.com/satori/go.uuid"
 )
 
 const (

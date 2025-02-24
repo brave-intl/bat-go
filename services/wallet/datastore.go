@@ -632,10 +632,10 @@ type CustodianLink struct {
 	UnlinkedAt     *time.Time `json:"unlinked_at" db:"unlinked_at" valid:"-"`
 }
 
-// TODO(clD11): Wallet Refactor. These should not be nullable, fix pointers and raname fields for consistency.
+// TODO(clD11): Wallet Refactor. These should not be nullable, fix pointers and rename fields for consistency.
+const depositProviderSolana = "solana"
 
 func NewSolanaCustodialLink(walletID uuid.UUID, depositDestination string) *CustodianLink {
-	const depositProviderSolana = "solana"
 	return &CustodianLink{
 		WalletID:  &walletID,
 		LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, depositDestination)),
@@ -661,6 +661,14 @@ func (cl *CustodianLink) GetLinkingIDString() string {
 
 func (cl *CustodianLink) isLinked() bool {
 	return cl != nil && cl.UnlinkedAt == nil && cl.DisconnectedAt == nil && !cl.LinkedAt.IsZero()
+}
+
+func (cl *CustodianLink) isSolana() bool {
+	if cl == nil {
+		return false
+	}
+
+	return cl.Custodian == depositProviderSolana
 }
 
 // GetCustodianLinkCount - get the wallet custodian link count across all wallets
