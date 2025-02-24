@@ -109,7 +109,7 @@ func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (boo
 	if err != nil {
 		return true, fmt.Errorf("failed to retrieve top coins: %w", err)
 	}
-	topCurrencies, err := s.GetTopCurrencies(ctx, 5)
+	topCurrencies, err := s.GetTopCurrencies(ctx, 10)
 	if err != nil {
 		return true, fmt.Errorf("failed to retrieve top currencies: %w", err)
 	}
