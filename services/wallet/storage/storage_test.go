@@ -4,15 +4,18 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/datastore"
-	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+
+	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/services/wallet/model"
 )
 
 func TestChallenge_Get(t *testing.T) {
@@ -401,8 +404,227 @@ func TestAllowList_GetAllowListEntry(t *testing.T) {
 	}
 }
 
+const (
+	solInsert = `INSERT INTO solana_waitlist (payment_id, joined_at) VALUES($1, $2)`
+	solSelect = `SELECT * FROM solana_waitlist WHERE payment_id = $1`
+)
+
+type expWaitlistEntry struct {
+	PaymentID uuid.UUID `db:"payment_id"`
+	JoinedAt  time.Time `db:"joined_at"`
+}
+
+func TestSolanaWaitlist_Insert(t *testing.T) {
+	dbi, err := setupDBI()
+	must.NoError(t, err)
+
+	defer func() {
+		_, _ = dbi.Exec("TRUNCATE TABLE solana_waitlist;")
+	}()
+
+	type tcGiven struct {
+		paymentID uuid.UUID
+		joinedAt  time.Time
+		fnBefore  func(ctx context.Context, dbi sqlx.ExecerContext) error
+	}
+
+	type tcExpected struct {
+		result expWaitlistEntry
+		err    error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "pq_constraint_violation",
+			given: tcGiven{
+				paymentID: uuid.FromStringOrNil("a6c1f1f9-7b24-4244-84e2-7ec696c55965"),
+				joinedAt:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					pid := uuid.FromStringOrNil("a6c1f1f9-7b24-4244-84e2-7ec696c55965")
+					jnd := time.Date(2025, time.February, 13, 0, 0, 0, 0, time.UTC)
+
+					_, err := dbi.ExecContext(ctx, solInsert, pid, jnd)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrSolAlreadyWaitlisted,
+			},
+		},
+
+		{
+			name: "insert_success",
+			given: tcGiven{
+				paymentID: uuid.FromStringOrNil("57697d78-5498-4b56-baca-7621487ee876"),
+				joinedAt:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			},
+			exp: tcExpected{
+				result: expWaitlistEntry{
+					PaymentID: uuid.FromStringOrNil("57697d78-5498-4b56-baca-7621487ee876"),
+					JoinedAt:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, dbi)
+				must.NoError(t, err)
+			}
+
+			repo := NewSolanaWaitlist()
+
+			actual := repo.Insert(ctx, dbi, tc.given.paymentID, tc.given.joinedAt)
+			should.Equal(t, tc.exp.err, actual)
+
+			if tc.exp.err == nil {
+				result := &expWaitlistEntry{}
+
+				err := sqlx.GetContext(ctx, dbi, result, solSelect, tc.given.paymentID)
+				must.NoError(t, err)
+
+				should.Equal(t, tc.exp.result.PaymentID, result.PaymentID)
+				should.Equal(t, tc.exp.result.JoinedAt, result.JoinedAt.UTC())
+			}
+		})
+	}
+}
+
+func TestSolanaWaitlist_Delete(t *testing.T) {
+	dbi, err := setupDBI()
+	must.NoError(t, err)
+
+	defer func() {
+		_, _ = dbi.Exec("TRUNCATE TABLE solana_waitlist;")
+	}()
+
+	type tcGiven struct {
+		paymentID uuid.UUID
+		joinedAt  time.Time
+		fnBefore  func(ctx context.Context, dbi sqlx.ExecerContext) error
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "delete_success",
+			given: tcGiven{
+				paymentID: uuid.FromStringOrNil("13e9416d-b1ff-44c2-87d2-e6d2c24a9d1e"),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					pid := uuid.FromStringOrNil("13e9416d-b1ff-44c2-87d2-e6d2c24a9d1e")
+					jnd := time.Date(2025, time.February, 13, 0, 0, 0, 0, time.UTC)
+
+					_, err := dbi.ExecContext(ctx, solInsert, pid, jnd)
+
+					return err
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, dbi)
+				must.NoError(t, err)
+			}
+
+			repo := NewSolanaWaitlist()
+
+			actual := repo.Delete(ctx, dbi, tc.given.paymentID)
+			must.NoError(t, actual)
+
+			result := &expWaitlistEntry{}
+
+			err := sqlx.GetContext(ctx, dbi, result, solSelect, tc.given.paymentID)
+			should.Equal(t, sql.ErrNoRows, err)
+		})
+	}
+}
+
+func TestIsUniqueConstraintViolation(t *testing.T) {
+	type tcGiven struct {
+		err error
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "not_pq_error",
+			given: tcGiven{
+				err: model.Error("not_pq_error"),
+			},
+		},
+
+		{
+			name: "not_constraint_error",
+			given: tcGiven{
+				err: &pq.Error{
+					Code: "0",
+				},
+			},
+		},
+
+		{
+			name: "constraint_error",
+			given: tcGiven{
+				err: &pq.Error{
+					Code: "23505",
+				},
+			},
+			exp: tcExpected{
+				result: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := isUniqueConstraintViolation(tc.given.err)
+			should.Equal(t, tc.exp.result, actual)
+		})
+	}
+}
+
 func setupDBI() (*sqlx.DB, error) {
-	pg, err := datastore.NewPostgres("", false, "")
+	pg, err := datastore.NewPostgres("", true, "")
 	if err != nil {
 		return nil, err
 	}

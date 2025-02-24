@@ -6,9 +6,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
+
+	"github.com/brave-intl/bat-go/services/wallet/model"
 )
 
 type Challenge struct{}
@@ -111,4 +113,41 @@ func (a *AllowList) GetAllowListEntry(ctx context.Context, dbi sqlx.QueryerConte
 	}
 
 	return result, nil
+}
+
+type SolanaWaitlist struct{}
+
+func NewSolanaWaitlist() *SolanaWaitlist { return &SolanaWaitlist{} }
+
+func (w *SolanaWaitlist) Insert(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID, joinedAt time.Time) error {
+	const q = `INSERT INTO solana_waitlist (payment_id, joined_at) VALUES($1, $2)`
+
+	if _, err := dbi.ExecContext(ctx, q, paymentID, joinedAt); err != nil {
+		if isUniqueConstraintViolation(err) {
+			return model.ErrSolAlreadyWaitlisted
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func (w *SolanaWaitlist) Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error {
+	const q = `DELETE FROM solana_waitlist WHERE payment_id = $1`
+
+	if _, err := dbi.ExecContext(ctx, q, paymentID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isUniqueConstraintViolation(err error) bool {
+	var pe *pq.Error
+	if errors.As(err, &pe) {
+		return pe.Code == "23505"
+	}
+
+	return false
 }
