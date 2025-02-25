@@ -16,6 +16,8 @@ const (
 	// The amount of seconds price data can be in the Redis cache
 	// before it is considered stale
 	GetRelativeTTL = 900
+	// The maximum number of entries that can be in the relative cache (excluding the top coins)
+	MaxRelativeEntries = 20000
 )
 
 // GetTopCoins - get the top coins
@@ -86,7 +88,19 @@ func (s *Service) RecordCoinsAndCurrencies(ctx context.Context, coinIds []Coinge
 }
 
 // CacheRelative - cache the relative values
-func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceResponse) error {
+func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceResponse, ignoreLimit bool) error {
+	// Check if we're at the entry limit, unless ignoreLimit is true
+	if !ignoreLimit {
+		entriesCount, err := s.redis.HLen(ctx, "relative").Result()
+		if err != nil {
+			return fmt.Errorf("failed to get relative cache size: %w", err)
+		}
+
+		if entriesCount >= MaxRelativeEntries {
+			return fmt.Errorf("relative cache has reached maximum entries limit (%d)", MaxRelativeEntries)
+		}
+	}
+
 	now := time.Now()
 
 	data := make(map[string]interface{})

@@ -2,6 +2,7 @@ package ratios
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -95,6 +96,11 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 			Cadence: 5 * time.Minute,
 			Workers: 1,
 		},
+		{
+			Func:    service.RemoveExpiredRelativeEntries,
+			Cadence: 1 * time.Minute,
+			Workers: 1,
+		},
 	}
 
 	// Sigh, for compatibility with existing ratios mistakes
@@ -123,9 +129,70 @@ func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (boo
 		return true, fmt.Errorf("failed to fetch price from coingecko: %w", err)
 	}
 
-	err = s.CacheRelative(ctx, *rates)
+	err = s.CacheRelative(ctx, *rates, true)
 	if err != nil {
 		return true, fmt.Errorf("failed to cache relative rates: %w", err)
+	}
+
+	return true, nil
+}
+
+// RemoveExpiredRelativeEntries removes all expired entries from the cache
+// Workaround until Valkey implements HEXPIRE https://github.com/valkey-io/valkey/issues/640
+func (s *Service) RemoveExpiredRelativeEntries(ctx context.Context) (bool, error) {
+	logger := logging.Logger(ctx, "ratios.RemoveExpiredRelativeEntries")
+
+	var cursor uint64 = 0
+	batchSize := 500
+	totalRemoved := 0
+
+	for {
+		// Get a batch of entries using HSCAN
+		keys, nextCursor, err := s.redis.HScan(ctx, "relative", cursor, "", int64(batchSize)).Result()
+		if err != nil {
+			return false, fmt.Errorf("failed to scan relative cache: %w", err)
+		}
+
+		// Process entries in pairs (key, value)
+		keysToDelete := []string{}
+		for i := 0; i < len(keys); i += 2 {
+			coin := keys[i]
+			dataStr := keys[i+1]
+
+			// Parse the data
+			var data ratiosclient.RelativeResponse
+			if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
+				logger.Warn().Err(err).Str("coin", coin).Msg("failed to unmarshal relative cache entry, will remove")
+				keysToDelete = append(keysToDelete, coin)
+				continue
+			}
+
+			// Check if entry is stale based on GetRelativeTTL
+			if time.Since(data.LastUpdated) > GetRelativeTTL*time.Second {
+				keysToDelete = append(keysToDelete, coin)
+			}
+		}
+
+		// Delete stale entries in a single operation if any found
+		if len(keysToDelete) > 0 {
+			if _, err := s.redis.HDel(ctx, "relative", keysToDelete...).Result(); err != nil {
+				logger.Error().Err(err).Strs("coins", keysToDelete).Msg("failed to delete stale entries")
+			} else {
+				totalRemoved += len(keysToDelete)
+			}
+		}
+
+		// Update cursor for next iteration
+		cursor = nextCursor
+
+		// Exit when we've scanned the entire hash
+		if cursor == 0 {
+			break
+		}
+	}
+
+	if totalRemoved > 0 {
+		logger.Info().Int("removed", totalRemoved).Msg("removed expired entries from relative cache")
 	}
 
 	return true, nil

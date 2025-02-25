@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -708,4 +709,76 @@ func (suite *ControllersTestSuite) TestCacheOperations() {
 		(*rates)["ethereum"]["usd"],
 		"ETH/USD rate should match",
 	)
+}
+
+func (suite *ControllersTestSuite) TestRemoveExpiredRelativeEntries() {
+	// Setup test with many entries to test batching
+	now := time.Now()
+
+	// Add 1000 entries (800 fresh, 200 expired)
+	batchData := make(map[string]interface{})
+
+	// Create fresh entries
+	freshEntry := ratiosclient.RelativeResponse{
+		Payload: map[string]map[string]decimal.Decimal{
+			"coin": {
+				"usd": decimal.NewFromFloat(100),
+			},
+		},
+		LastUpdated: now,
+	}
+	freshEntryBytes, err := json.Marshal(freshEntry)
+	suite.Require().NoError(err)
+
+	// Create expired entries
+	expiredEntry := ratiosclient.RelativeResponse{
+		Payload: map[string]map[string]decimal.Decimal{
+			"coin": {
+				"usd": decimal.NewFromFloat(100),
+			},
+		},
+		LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
+	}
+	expiredEntryBytes, err := json.Marshal(expiredEntry)
+	suite.Require().NoError(err)
+
+	// Add entries to batch
+	for i := 0; i < 800; i++ {
+		batchData[fmt.Sprintf("fresh_coin_%d", i)] = string(freshEntryBytes)
+	}
+
+	for i := 0; i < 200; i++ {
+		batchData[fmt.Sprintf("expired_coin_%d", i)] = string(expiredEntryBytes)
+	}
+
+	// Add entries to Redis
+	err = suite.redis.HSet(suite.ctx, "relative", batchData).Err()
+	suite.Require().NoError(err)
+
+	// Verify initial state
+	count, err := suite.redis.HLen(suite.ctx, "relative").Result()
+	suite.Require().NoError(err)
+	suite.Equal(int64(1000), count)
+
+	// Run the function being tested
+	result, err := suite.service.RemoveExpiredRelativeEntries(suite.ctx)
+
+	// Verify results
+	suite.Require().NoError(err)
+	suite.True(result)
+
+	// Check that only the fresh entries remain
+	count, err = suite.redis.HLen(suite.ctx, "relative").Result()
+	suite.Require().NoError(err)
+	suite.Equal(int64(800), count)
+
+	// Verify a sample of fresh entries still exist
+	exists, err := suite.redis.HExists(suite.ctx, "relative", "fresh_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.True(exists)
+
+	// Verify a sample of expired entries were removed
+	exists, err = suite.redis.HExists(suite.ctx, "relative", "expired_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.False(exists)
 }
