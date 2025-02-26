@@ -258,7 +258,7 @@ func New() (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewClientWithPrometheus(&HTTPClient{client}, "bitflyer_client"), err
+	return NewClientWithPrometheus(&HTTPClient{client}, "bitflyer_client"), nil
 }
 
 // SetAuthToken sets the auth token
