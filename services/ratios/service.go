@@ -225,6 +225,11 @@ func (s *Service) GetRelative(
 			logger.Error().Err(err).Msg("failed to fetch price from coingecko")
 			return nil, fmt.Errorf("failed to fetch price from coingecko: %w", err)
 		}
+
+		// insert into cache
+		if err := s.CacheRelative(ctx, *rates, false); err != nil {
+			logger.Error().Err(err).Msg("failed to cache relative rates")
+		}
 		updated = time.Now()
 	}
 

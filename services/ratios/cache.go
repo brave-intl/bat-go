@@ -96,8 +96,10 @@ func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceR
 			return fmt.Errorf("failed to get relative cache size: %w", err)
 		}
 
-		if entriesCount >= MaxRelativeEntries {
-			return fmt.Errorf("relative cache has reached maximum entries limit (%d)", MaxRelativeEntries)
+		// Check if adding these new entries would exceed the maximum limit
+		if entriesCount+int64(len(resp)) > int64(MaxRelativeEntries) {
+			return fmt.Errorf("relative cache would exceed maximum entries limit (%d) by adding %d entries",
+				MaxRelativeEntries, len(resp))
 		}
 	}
 
