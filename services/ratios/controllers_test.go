@@ -712,34 +712,35 @@ func (suite *ControllersTestSuite) TestCacheOperations() {
 }
 
 func (suite *ControllersTestSuite) TestRemoveExpiredRelativeEntries() {
+	// Temporarily skip this test while refactoring the cache structure
+	//suite.T().Skip("Temporarily skipping this test during cache refactoring")
+
 	// Setup test with many entries to test batching
 	now := time.Now()
 
 	// Add 1000 entries (800 fresh, 200 expired)
 	batchData := make(map[string]interface{})
 
-	// Create fresh entries
-	freshEntry := ratiosclient.RelativeResponse{
-		Payload: map[string]map[string]decimal.Decimal{
-			"coin": {
-				"usd": decimal.NewFromFloat(100),
-			},
+	// Create fresh entries using the new CoinCacheData format
+	freshData := ratios.CoinCacheData{
+		"usd": ratios.CurrencyData{
+			Price:       decimal.NewFromFloat(100),
+			Change24h:   decimal.NewFromFloat(5),
+			LastUpdated: now,
 		},
-		LastUpdated: now,
 	}
-	freshEntryBytes, err := json.Marshal(freshEntry)
+	freshEntryBytes, err := json.Marshal(freshData)
 	suite.Require().NoError(err)
 
-	// Create expired entries
-	expiredEntry := ratiosclient.RelativeResponse{
-		Payload: map[string]map[string]decimal.Decimal{
-			"coin": {
-				"usd": decimal.NewFromFloat(100),
-			},
+	// Create expired entries using the new CoinCacheData format
+	expiredData := ratios.CoinCacheData{
+		"usd": ratios.CurrencyData{
+			Price:       decimal.NewFromFloat(100),
+			Change24h:   decimal.NewFromFloat(5),
+			LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
 		},
-		LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
 	}
-	expiredEntryBytes, err := json.Marshal(expiredEntry)
+	expiredEntryBytes, err := json.Marshal(expiredData)
 	suite.Require().NoError(err)
 
 	// Add entries to batch
