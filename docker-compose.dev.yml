@@ -31,7 +31,7 @@ services:
       - grant
   redislog:
     container_name: grant-redis-log
-    image: redis
+    image: redis:7.2
     networks:
       - grant
     command: ["redis-cli", "-h", "grant-redis", "MONITOR"]

@@ -2,6 +2,7 @@ package ratios
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -95,6 +96,11 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 			Cadence: 5 * time.Minute,
 			Workers: 1,
 		},
+		{
+			Func:    service.RemoveExpiredRelativeEntries,
+			Cadence: 1 * time.Minute,
+			Workers: 1,
+		},
 	}
 
 	// Sigh, for compatibility with existing ratios mistakes
@@ -109,7 +115,7 @@ func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (boo
 	if err != nil {
 		return true, fmt.Errorf("failed to retrieve top coins: %w", err)
 	}
-	topCurrencies, err := s.GetTopCurrencies(ctx, 5)
+	topCurrencies, err := s.GetTopCurrencies(ctx, 10)
 	if err != nil {
 		return true, fmt.Errorf("failed to retrieve top currencies: %w", err)
 	}
@@ -123,9 +129,102 @@ func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (boo
 		return true, fmt.Errorf("failed to fetch price from coingecko: %w", err)
 	}
 
-	err = s.CacheRelative(ctx, *rates)
+	err = s.CacheRelative(ctx, *rates, true)
 	if err != nil {
 		return true, fmt.Errorf("failed to cache relative rates: %w", err)
+	}
+
+	return true, nil
+}
+
+// RemoveExpiredRelativeEntries removes all expired entries from the cache
+// Workaround until Valkey implements HEXPIRE https://github.com/valkey-io/valkey/issues/640
+func (s *Service) RemoveExpiredRelativeEntries(ctx context.Context) (bool, error) {
+	logger := logging.Logger(ctx, "ratios.RemoveExpiredRelativeEntries")
+	logger.Debug().Msg("Starting relative cache cleanup job")
+
+	var cursor uint64 = 0
+	batchSize := 500
+	totalRemoved := 0
+	scannedCount := 0
+
+	for {
+		// Get a batch of entries using HSCAN
+		logger.Debug().Uint64("cursor", cursor).Int("batchSize", batchSize).Msg("Scanning next batch of Redis entries")
+		keys, nextCursor, err := s.redis.HScan(ctx, "relative", cursor, "", int64(batchSize)).Result()
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to scan relative cache")
+			return false, fmt.Errorf("failed to scan relative cache: %w", err)
+		}
+
+		scannedCount += len(keys) / 2
+		logger.Debug().Int("batchEntries", len(keys)/2).Int("totalScanned", scannedCount).Msg("Retrieved batch of entries")
+
+		// Process entries in pairs (key, value)
+		keysToDelete := []string{}
+		for i := 0; i < len(keys); i += 2 {
+			coin := keys[i]
+			dataStr := keys[i+1]
+
+			// Parse the data - try the new format first
+			var coinData CoinCacheData
+			if err := json.Unmarshal([]byte(dataStr), &coinData); err != nil {
+				logger.Warn().Err(err).Str("coin", coin).Msg("failed to unmarshal relative cache entry, will remove")
+				keysToDelete = append(keysToDelete, coin)
+				continue
+			}
+
+			// Check if all currency entries are stale
+			allStale := true
+			validCount := 0
+			staleCount := 0
+
+			for _, currData := range coinData {
+				if time.Since(currData.LastUpdated) <= GetRelativeTTL*time.Second {
+					validCount++
+					allStale = false
+				} else {
+					staleCount++
+				}
+			}
+
+			logger.Debug().Str("coin", coin).Int("validCurrencies", validCount).Int("staleCurrencies", staleCount).Bool("allStale", allStale).Msg("Checked entry currencies")
+
+			// If all currency entries are stale, mark for deletion
+			if allStale && len(coinData) > 0 {
+				logger.Debug().Str("coin", coin).Msg("All currencies are stale, will delete entire coin entry")
+				keysToDelete = append(keysToDelete, coin)
+			}
+		}
+
+		// Delete stale entries in a single operation if any found
+		if len(keysToDelete) > 0 {
+			logger.Debug().Strs("coinsToDelete", keysToDelete).Msg("Deleting stale entries")
+			if _, err := s.redis.HDel(ctx, "relative", keysToDelete...).Result(); err != nil {
+				logger.Error().Err(err).Strs("coins", keysToDelete).Msg("Failed to delete stale entries")
+			} else {
+				totalRemoved += len(keysToDelete)
+				logger.Debug().Int("batchRemoved", len(keysToDelete)).Int("totalRemoved", totalRemoved).Msg("Successfully removed batch of stale entries")
+			}
+		} else {
+			logger.Debug().Msg("No stale entries found in this batch")
+		}
+
+		// Update cursor for next iteration
+		cursor = nextCursor
+		logger.Debug().Uint64("nextCursor", cursor).Msg("Updated cursor for next iteration")
+
+		// Exit when we've scanned the entire hash
+		if cursor == 0 {
+			logger.Debug().Msg("Finished scanning all entries (cursor returned to 0)")
+			break
+		}
+	}
+
+	if totalRemoved > 0 {
+		logger.Info().Int("removed", totalRemoved).Int("scanned", scannedCount).Msg("Removed expired entries from relative cache")
+	} else {
+		logger.Info().Int("scanned", scannedCount).Msg("No expired entries found in relative cache")
 	}
 
 	return true, nil
@@ -157,6 +256,11 @@ func (s *Service) GetRelative(
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to fetch price from coingecko")
 			return nil, fmt.Errorf("failed to fetch price from coingecko: %w", err)
+		}
+
+		// insert into cache
+		if err := s.CacheRelative(ctx, *rates, false); err != nil {
+			logger.Error().Err(err).Msg("failed to cache relative rates")
 		}
 		updated = time.Now()
 	}
