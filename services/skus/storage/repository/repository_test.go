@@ -12,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 
@@ -1214,6 +1215,145 @@ func TestOrder_IncrementNumPayFailed(t *testing.T) {
 
 			should.Equal(t, tc.exp.num, actual.NumPaymentFailed())
 			should.Equal(t, tc.exp.mdata, actual.Metadata)
+		})
+	}
+}
+
+func TestOrder_GetByExternalID(t *testing.T) {
+	dbi, err := setupDBI()
+	must.Equal(t, nil, err)
+
+	defer func() {
+		_, _ = dbi.Exec("TRUNCATE TABLE orders;")
+	}()
+
+	type tcGiven struct {
+		extID    string
+		fnBefore func(ctx context.Context, dbi sqlx.ExecerContext) error
+	}
+
+	type tcExpected struct {
+		ord *model.Order
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "not_found",
+			given: tcGiven{
+				extID: "ext_id_01",
+			},
+			exp: tcExpected{
+				err: model.ErrOrderNotFound,
+			},
+		},
+
+		{
+			name: "not_found_no_metadata",
+			given: tcGiven{
+				extID: "ext_id_01",
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, created_at, updated_at
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderNotFound,
+			},
+		},
+
+		{
+			name: "found",
+			given: tcGiven{
+				extID: "ext_id_01",
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, created_at, updated_at, metadata
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01',
+						'{"externalID": "ext_id_01"}'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				ord: &model.Order{
+					ID:         uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					MerchantID: "brave.com",
+					Status:     model.OrderStatusPaid,
+					Currency:   "USD",
+					TotalPrice: decimal.RequireFromString("9.99"),
+					CreatedAt:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+					UpdatedAt:  time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+					Metadata:   datastore.Metadata{"externalID": "ext_id_01"},
+				},
+			},
+		},
+	}
+
+	repo := repository.NewOrder()
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			tx, err := dbi.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadUncommitted})
+			must.NoError(t, err)
+
+			t.Cleanup(func() { _ = tx.Rollback() })
+
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, tx)
+				must.NoError(t, err)
+			}
+
+			actual, err := repo.GetByExternalID(ctx, tx, tc.given.extID)
+			must.Equal(t, tc.exp.err, err)
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.True(t, uuid.Equal(tc.exp.ord.ID, actual.ID))
+			should.True(t, tc.exp.ord.TotalPrice.Equal(actual.TotalPrice))
+			should.True(t, tc.exp.ord.CreatedAt.Equal(actual.CreatedAt))
+			should.True(t, tc.exp.ord.UpdatedAt.Equal(actual.UpdatedAt))
+			should.Equal(t, tc.exp.ord.MerchantID, actual.MerchantID)
+			should.Equal(t, tc.exp.ord.Status, actual.Status)
+			should.Equal(t, tc.exp.ord.Currency, actual.Currency)
+			should.Equal(t, tc.exp.ord.Metadata, actual.Metadata)
 		})
 	}
 }
