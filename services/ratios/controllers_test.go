@@ -307,7 +307,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	handler := ratios.GetRelativeHandler(suite.service)
 	// Test validation errors
-	// ErrCoingeckoCoinInvalid
+	// ErrCoingeckoCoinInvalid is not raised for invalid coinIDs
 	req, err := http.NewRequest("GET", "/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}", nil)
 	suite.Require().NoError(err)
 	rctx := chi.NewRouteContext()
@@ -316,11 +316,15 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	rctx.URLParams.Add("duration", "1d")
 	req = req.WithContext(suite.ctx)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-	suite.Require().Empty(rr.Header().Get("Cache-Control"))
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	cacheControl := rr.Header().Get("Cache-Control")
+	suite.Require().NotEmpty(cacheControl, "Cache-Control header is not present")
+	var resp = new(ratiosclient.RelativeResponse)
+	err = json.Unmarshal(rr.Body.Bytes(), resp)
+	suite.Require().NoError(err)
+	suite.Require().Empty(resp.Payload, "Payload should be empty since no coins are valid")
 
 	// ErrCoingeckoCoinEmpty
 	rctx = chi.NewRouteContext()
@@ -395,7 +399,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	suite.Require().NoError(err)
 
 	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("coinIDs", "bat")
+	rctx.URLParams.Add("coinIDs", "bat,invalidcoingeckocoin")
 	rctx.URLParams.Add("vsCurrencies", "usd")
 	rctx.URLParams.Add("duration", "1d")
 
@@ -408,7 +412,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 	// validate response code matches
 	suite.Require().Equal(http.StatusOK, rr.Code)
 	// validate cache control header is set and is correct
-	cacheControl := rr.Header().Get("Cache-Control")
+	cacheControl = rr.Header().Get("Cache-Control")
 	suite.Require().NotEmpty(cacheControl, "Cache-Control header is not present")
 	maxAgeRegex := regexp.MustCompile(`max-age=(\d+)`)
 	maxAgeMatch := maxAgeRegex.FindStringSubmatch(cacheControl)
@@ -420,7 +424,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 
 	// example
 	// {"payload":{"bat":{"usd":1.3,"usd_timeframe_change":0.8356218194962891}}
-	var resp = new(ratiosclient.RelativeResponse)
+	resp = new(ratiosclient.RelativeResponse)
 	err = json.Unmarshal(rr.Body.Bytes(), resp)
 	suite.Require().NoError(err)
 

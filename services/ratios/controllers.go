@@ -34,28 +34,6 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 		logger := logging.Logger(ctx, "ratios.GetRelativeHandler")
 		var coinIDs = new(CoingeckoCoinList)
 		if err = inputs.DecodeAndValidate(ctx, coinIDs, []byte(coinIDsInput)); err != nil {
-			if errors.Is(err, ErrCoingeckoCoinInvalid) {
-				logger.Error().Err(err).Msg("invalid coin input from caller")
-				return handlers.ValidationError(
-					"Error validating coin url parameter",
-					map[string]interface{}{
-						"err":     err.Error(),
-						"coinIDs": "invalid coin",
-					},
-				)
-			}
-
-			if errors.Is(err, ErrCoingeckoCoinEmpty) {
-				logger.Error().Err(err).Msg("empty coin input from caller")
-				return handlers.ValidationError(
-					"Error validating coin url parameter",
-					map[string]interface{}{
-						"err":     err.Error(),
-						"coinIDs": "empty coin",
-					},
-				)
-			}
-
 			if errors.Is(err, ErrCoingeckoCoinListLimit) {
 				logger.Error().Err(err).Msg("coin list limit exceeded")
 				return handlers.ValidationError(
