@@ -56,7 +56,7 @@ jobs:
 
     - name: Set up Go
       id: setup-go
-      uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+      uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5
       with:
         # Run both CI jobs explicitly with 1.22.
         # The 1.19 job is currently marked as required, but it needs to pass before it can be removed.
