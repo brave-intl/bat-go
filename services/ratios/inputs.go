@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 // CoingeckoCoin - type for coingecko coin input
@@ -37,6 +38,7 @@ func (cc *CoingeckoCoin) Decode(ctx context.Context, v []byte) error {
 
 	coin := strings.ToLower(string(v))
 	if coin == "" {
+		*cc = CoingeckoCoin{input: coin, coin: coin}
 		return ErrCoingeckoCoinEmpty
 	}
 
@@ -55,6 +57,7 @@ func (cc *CoingeckoCoin) Decode(ctx context.Context, v []byte) error {
 		return nil
 	}
 
+	*cc = CoingeckoCoin{input: coin, coin: coin}
 	return nil
 }
 
@@ -107,12 +110,17 @@ func (ccl *CoingeckoCoinList) Validate(ctx context.Context) error {
 		return fmt.Errorf("%w: %s is not valid", ErrCoingeckoCoinListLimit, ccl.String())
 	}
 
+	logger := logging.Logger(ctx, "ratios.inputs.Validate")
+	validCoins := make([]CoingeckoCoin, 0)
 	for _, coin := range *ccl {
 		err := coin.Validate(ctx)
 		if err != nil {
-			return err
+			logger.Warn().Err(err).Msg("invalid coin input from caller")
+			continue
 		}
+		validCoins = append(validCoins, coin)
 	}
+	*ccl = CoingeckoCoinList(validCoins)
 	return nil
 }
 
