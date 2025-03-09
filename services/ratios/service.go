@@ -240,6 +240,14 @@ func (s *Service) GetRelative(
 	// get logger from context
 	logger := logging.Logger(ctx, "ratios.GetRelative")
 
+	if len(coinIDs) == 0 {
+		logger.Warn().Msg("coinIDs is empty, returning empty payload")
+		return &ratiosclient.RelativeResponse{
+			Payload:     map[string]map[string]decimal.Decimal{},
+			LastUpdated: time.Now(),
+		}, nil
+	}
+
 	// record coin / currency usage
 	err := s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin(coinIDs), []CoingeckoVsCurrency(vsCurrencies))
 	if err != nil {

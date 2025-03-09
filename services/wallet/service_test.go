@@ -7,13 +7,16 @@ import (
 	"testing"
 	"time"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/handlers"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
+
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/services/wallet/model"
+	uuid "github.com/satori/go.uuid"
 )
 
 func TestClaimsZP(t *testing.T) {
@@ -308,4 +311,138 @@ func Test_parseZebPayClaims(t *testing.T) {
 			should.Equal(t, tc.expected.appErr, err)
 		})
 	}
+}
+
+func TestSolanaCanJoinWaitlist(t *testing.T) {
+	type tcGiven struct {
+		id   uuid.UUID
+		repo cxLinkRepo
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368"),
+				repo: &mockCxLinkRepo{fnGetCustodianLinkByWalletID: func(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+					return nil, model.Error("error cx link")
+				}},
+			},
+			exp: tcExpected{
+				err: model.Error("error cx link"),
+			},
+		},
+
+		{
+			name: "no_wallet_custodian",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368"),
+				repo: &mockCxLinkRepo{
+					fnGetCustodianLinkByWalletID: func(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+						return nil, model.ErrNoWalletCustodian
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_solana_already_linked",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368"),
+				repo: &mockCxLinkRepo{
+					fnGetCustodianLinkByWalletID: func(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+						linkID := uuid.FromStringOrNil("2bcf2ed1-a447-457f-99f1-be2bc4c2bcfe")
+
+						return &CustodianLink{
+							WalletID:  &ID,
+							LinkingID: &linkID,
+							Custodian: depositProviderSolana,
+							LinkedAt:  time.Date(2025, time.February, 12, 0, 0, 0, 0, time.UTC),
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrSolAlreadyLinked,
+			},
+		},
+
+		{
+			name: "error_not_linked_not_solana",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368"),
+				repo: &mockCxLinkRepo{fnGetCustodianLinkByWalletID: func(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+					paymentID := uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368")
+
+					cxLink := &CustodianLink{
+						WalletID:  &paymentID,
+						LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, "deposit_destination")),
+						Custodian: "custodian",
+					}
+
+					return cxLink, nil
+				}},
+			},
+		},
+
+		{
+			name: "error_linked_not_solana",
+			given: tcGiven{
+				id: uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368"),
+				repo: &mockCxLinkRepo{fnGetCustodianLinkByWalletID: func(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+					paymentID := uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368")
+
+					cxLink := &CustodianLink{
+						WalletID:  &paymentID,
+						LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, "deposit_destination")),
+						Custodian: "custodian",
+						LinkedAt:  time.Date(2025, time.February, 12, 0, 0, 0, 0, time.UTC),
+					}
+
+					return cxLink, nil
+				}},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				id:   uuid.FromStringOrNil("3d24c761-105c-439d-b69a-0e59a0ade368"),
+				repo: &mockCxLinkRepo{},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			actual := solanaCanJoinWaitlist(ctx, tc.given.repo, tc.given.id)
+			should.Equal(t, tc.exp.err, actual)
+		})
+	}
+}
+
+type mockCxLinkRepo struct {
+	fnGetCustodianLinkByWalletID func(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+}
+
+func (m *mockCxLinkRepo) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+	if m.fnGetCustodianLinkByWalletID == nil {
+		return nil, nil
+	}
+
+	return m.fnGetCustodianLinkByWalletID(ctx, ID)
 }

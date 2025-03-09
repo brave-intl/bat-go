@@ -125,6 +125,7 @@ type stripeClient interface {
 	Session(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	CreateSession(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	Subscription(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
+	CancelSub(_ context.Context, id string, params *stripe.SubscriptionCancelParams) error
 	FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool)
 }
 
@@ -1724,7 +1725,11 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 
 		paidt := time.Now()
 
-		return s.renewOrderStripe(ctx, dbi, ord, subID, expt, paidt)
+		if err := s.renewOrderStripe(ctx, dbi, ord, subID, expt, paidt); err != nil {
+			return err
+		}
+
+		return s.processStripeMtoA(ctx, dbi, ntf)
 
 	case ntf.shouldCancel():
 		oid, err := ntf.orderID()
@@ -2574,6 +2579,36 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	}
 
 	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+}
+
+func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
+	umaData, err := ntf.umaData()
+	if err != nil {
+		// Recover from the error is possible.
+		// Not all orders are migration orders, therefore must not fail.
+		if errors.Is(err, errStripeIncompleteUMAData) {
+			return nil
+		}
+
+		return err
+	}
+
+	oid, err := uuid.FromString(umaData.orderID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.cancelOrderTx(ctx, dbi, oid); err != nil {
+		return err
+	}
+
+	if err := s.stripeCl.CancelSub(ctx, umaData.stripeSubID, nil); err != nil {
+		if !isErrStripeNotFound(err) {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID, email string) (string, error) {
