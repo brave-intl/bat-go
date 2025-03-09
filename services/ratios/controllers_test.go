@@ -716,74 +716,115 @@ func (suite *ControllersTestSuite) TestCacheOperations() {
 }
 
 func (suite *ControllersTestSuite) TestRemoveExpiredRelativeEntries() {
-	// Temporarily skip this test while refactoring the cache structure
-	//suite.T().Skip("Temporarily skipping this test during cache refactoring")
-
-	// Setup test with many entries to test batching
+	// Prepare test data
 	now := time.Now()
 
-	// Add 1000 entries (800 fresh, 200 expired)
-	batchData := make(map[string]interface{})
-
-	// Create fresh entries using the new CoinCacheData format
-	freshData := ratios.CoinCacheData{
-		"usd": ratios.CurrencyData{
-			Price:       decimal.NewFromFloat(100),
-			Change24h:   decimal.NewFromFloat(5),
-			LastUpdated: now,
-		},
+	// Create fresh currency entries
+	freshUSD := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(1.0),
+		Change24h:   decimal.NewFromFloat(0.1),
+		LastUpdated: now,
 	}
-	freshEntryBytes, err := json.Marshal(freshData)
-	suite.Require().NoError(err)
-
-	// Create expired entries using the new CoinCacheData format
-	expiredData := ratios.CoinCacheData{
-		"usd": ratios.CurrencyData{
-			Price:       decimal.NewFromFloat(100),
-			Change24h:   decimal.NewFromFloat(5),
-			LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
-		},
-	}
-	expiredEntryBytes, err := json.Marshal(expiredData)
-	suite.Require().NoError(err)
-
-	// Add entries to batch
-	for i := 0; i < 800; i++ {
-		batchData[fmt.Sprintf("fresh_coin_%d", i)] = string(freshEntryBytes)
+	freshEUR := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(0.8),
+		Change24h:   decimal.NewFromFloat(0.05),
+		LastUpdated: now,
 	}
 
-	for i := 0; i < 200; i++ {
-		batchData[fmt.Sprintf("expired_coin_%d", i)] = string(expiredEntryBytes)
+	// Create expired currency entries
+	expiredUSD := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(2.0),
+		Change24h:   decimal.NewFromFloat(0.2),
+		LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
 	}
+	expiredEUR := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(1.6),
+		Change24h:   decimal.NewFromFloat(0.15),
+		LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
+	}
+
+	// Create a batch of data
+	pipe := suite.redis.Pipeline()
+
+	// Coins to add to the tracking set
+	coinsToAdd := make([]interface{}, 0, 100)
+
+	// Add entries to batch - use the new format (relative:$coinname)
+	for i := 0; i < 60; i++ {
+		coinName := fmt.Sprintf("fresh_coin_%d", i)
+		coinKey := fmt.Sprintf("relative:%s", coinName)
+		currencyData := map[string]interface{}{
+			"usd": string(mustMarshal(suite.T(), freshUSD)),
+			"eur": string(mustMarshal(suite.T(), freshEUR)),
+		}
+		pipe.HSet(suite.ctx, coinKey, currencyData)
+		coinsToAdd = append(coinsToAdd, coinName)
+	}
+
+	for i := 0; i < 40; i++ {
+		coinName := fmt.Sprintf("expired_coin_%d", i)
+		coinKey := fmt.Sprintf("relative:%s", coinName)
+		currencyData := map[string]interface{}{
+			"usd": string(mustMarshal(suite.T(), expiredUSD)),
+			"eur": string(mustMarshal(suite.T(), expiredEUR)),
+		}
+		pipe.HSet(suite.ctx, coinKey, currencyData)
+		coinsToAdd = append(coinsToAdd, coinName)
+	}
+
+	// Add coins to tracking set
+	pipe.SAdd(suite.ctx, "relative_coins", coinsToAdd...)
 
 	// Add entries to Redis
-	err = suite.redis.HSet(suite.ctx, "relative", batchData).Err()
+	_, err := pipe.Exec(suite.ctx)
 	suite.Require().NoError(err)
 
-	// Verify initial state
-	count, err := suite.redis.HLen(suite.ctx, "relative").Result()
+	// Verify initial state - count all coins in the tracking set
+	count, err := suite.redis.SCard(suite.ctx, "relative_coins").Result()
 	suite.Require().NoError(err)
-	suite.Equal(int64(1000), count)
+	suite.Require().Equal(int64(100), count)
 
-	// Run the function being tested
+	// Run the function to remove expired entries
 	result, err := suite.service.RemoveExpiredRelativeEntries(suite.ctx)
-
-	// Verify results
 	suite.Require().NoError(err)
-	suite.True(result)
+	suite.Require().True(result)
 
-	// Check that only the fresh entries remain
-	count, err = suite.redis.HLen(suite.ctx, "relative").Result()
+	// Verify that only expired coins are removed from the tracking set
+	count, err = suite.redis.SCard(suite.ctx, "relative_coins").Result()
 	suite.Require().NoError(err)
-	suite.Equal(int64(800), count)
+	suite.Require().Equal(int64(60), count)
 
-	// Verify a sample of fresh entries still exist
-	exists, err := suite.redis.HExists(suite.ctx, "relative", "fresh_coin_1").Result()
+	// Verify a specific coin that should still exist in the set
+	exists, err := suite.redis.SIsMember(suite.ctx, "relative_coins", "fresh_coin_1").Result()
 	suite.Require().NoError(err)
-	suite.True(exists)
+	suite.Require().True(exists, "fresh_coin_1 should still exist in the set")
 
-	// Verify a sample of expired entries were removed
-	exists, err = suite.redis.HExists(suite.ctx, "relative", "expired_coin_1").Result()
+	// Verify that the hash for the fresh coin exists
+	hashExists, err := suite.redis.Exists(suite.ctx, "relative:fresh_coin_1").Result()
 	suite.Require().NoError(err)
-	suite.False(exists)
+	suite.Require().Equal(int64(1), hashExists, "Hash relative:fresh_coin_1 should exist")
+
+	// Verify a specific coin that should be removed from the set
+	exists, err = suite.redis.SIsMember(suite.ctx, "relative_coins", "expired_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.Require().False(exists, "expired_coin_1 should not exist in the set")
+
+	// Verify that the hash for the expired coin is removed
+	hashExists, err = suite.redis.Exists(suite.ctx, "relative:expired_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.Require().Equal(int64(0), hashExists, "Hash relative:expired_coin_1 should not exist")
+
+	// Additional verification - check a currency value in a fresh coin
+	usdValue, err := suite.redis.HGet(suite.ctx, "relative:fresh_coin_2", "usd").Result()
+	suite.Require().NoError(err)
+	suite.Require().NotEmpty(usdValue, "USD currency data should exist for fresh_coin_2")
+}
+
+// Helper function to marshal data and handle errors
+func mustMarshal(t *testing.T, data interface{}) []byte {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes
 }
