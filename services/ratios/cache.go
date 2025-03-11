@@ -175,7 +175,6 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 
 	// Track entries with all requested currencies
 	resp := make(map[string]map[string]decimal.Decimal, len(coinIds))
-	var missingData []string
 
 	// Create a pipeline for efficient retrieval
 	pipe := s.redis.Pipeline()
@@ -198,7 +197,7 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 	// Execute the pipeline
 	_, err := pipe.Exec(ctx)
 	if err != nil {
-		return nil, updated, err
+		return nil, updated, fmt.Errorf("redis pipeline error: %w", err)
 	}
 
 	// Process the results
@@ -208,46 +207,35 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 		currencyValues, err := cmd.Result()
 
 		if err != nil {
-			missingData = append(missingData, fmt.Sprintf("error fetching data for coin: %s: %v", coinStr, err))
-			continue
+			return nil, updated, fmt.Errorf("error fetching data for coin %s: %w", coinStr, err)
 		}
 
 		// Process the currency values for this coin
 		coinRates := make(map[string]decimal.Decimal)
 		oldestUpdate := updated
-		hasAllCurrencies := true
 
 		for i, currValue := range currencyValues {
 			currencyStr := currencyKeys[i]
 
 			// Missing data for this currency
 			if currValue == nil {
-				missingData = append(missingData, fmt.Sprintf("missing vs currency: %s for coin: %s", currencyStr, coinStr))
-				hasAllCurrencies = false
-				break
+				return nil, updated, fmt.Errorf("missing data for currency %s, coin %s", currencyStr, coinStr)
 			}
 
 			// Parse the currency data
 			currValueStr, ok := currValue.(string)
 			if !ok {
-				missingData = append(missingData, fmt.Sprintf("invalid type for currency %s, expected string for coin: %s", currencyStr, coinStr))
-				hasAllCurrencies = false
-				break
+				return nil, updated, fmt.Errorf("invalid data type for currency %s, coin %s", currencyStr, coinStr)
 			}
 
 			var currData CurrencyData
 			if err := json.Unmarshal([]byte(currValueStr), &currData); err != nil {
-				missingData = append(missingData, fmt.Sprintf("error unmarshaling data for currency %s, coin %s: %v", currencyStr, coinStr, err))
-				hasAllCurrencies = false
-				break
+				return nil, updated, fmt.Errorf("error unmarshaling data for currency %s, coin %s: %w", currencyStr, coinStr, err)
 			}
 
 			// Check if this entry is stale
 			if time.Since(currData.LastUpdated) > GetRelativeTTL*time.Second {
-				// Data is stale, mark for refresh
-				missingData = append(missingData, fmt.Sprintf("stale data for vs currency: %s for coin: %s", currencyStr, coinStr))
-				hasAllCurrencies = false
-				break
+				return nil, updated, fmt.Errorf("stale data for currency %s, coin %s", currencyStr, coinStr)
 			}
 
 			// Track the oldest update time
@@ -260,20 +248,12 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 			coinRates[currencyStr+"_24h_change"] = currData.Change24h
 		}
 
-		// Only add complete coins to the response
-		if hasAllCurrencies {
-			// Update the oldest timestamp
-			if oldestUpdate.Before(updated) {
-				updated = oldestUpdate
-			}
-
-			resp[coinStr] = coinRates
+		// Update the oldest timestamp
+		if oldestUpdate.Before(updated) {
+			updated = oldestUpdate
 		}
-	}
 
-	// If we have any missing or stale data, return error
-	if len(missingData) > 0 {
-		return nil, updated, fmt.Errorf("incomplete cache data: %s", strings.Join(missingData, "; "))
+		resp[coinStr] = coinRates
 	}
 
 	sResp := coingecko.SimplePriceResponse(resp)
