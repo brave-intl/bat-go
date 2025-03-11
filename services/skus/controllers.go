@@ -88,9 +88,6 @@ func Router(
 	)
 
 	r.Method(http.MethodGet, "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(svc)))
-	r.Method(http.MethodPost, "/{orderID}/transactions/uphold", metricsMwr("CreateUpholdTransaction", CreateUpholdTransaction(svc)))
-	r.Method(http.MethodPost, "/{orderID}/transactions/gemini", metricsMwr("CreateGeminiTransaction", CreateGeminiTransaction(svc)))
-
 	r.Method(
 		http.MethodPost,
 		"/{orderID}/transactions/anonymousCard",
@@ -304,13 +301,6 @@ func GetKeys(service *Service) handlers.AppHandler {
 	})
 }
 
-// VoteRouter for voting endpoint
-func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
-	r := chi.NewRouter()
-	r.Method("POST", "/", instrumentHandler("MakeVote", MakeVote(service)))
-	return r
-}
-
 func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
@@ -419,104 +409,6 @@ func GetTransactions(service *Service) handlers.AppHandler {
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
 	ExternalTransactionID string `json:"externalTransactionId" valid:"required,uuid"`
-}
-
-// CreateGeminiTransaction creates a transaction against an order
-func CreateGeminiTransaction(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req CreateTransactionRequest
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
-			)
-		}
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID)
-		if err != nil {
-			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
-		}
-
-		if transaction != nil {
-			// if the transaction is already added, then do an update
-			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), service.getGeminiCustodialTx)
-			if err != nil {
-				return handlers.WrapError(err, "Error updating the transaction", http.StatusBadRequest)
-			}
-			// return 200 in event of already created transaction
-			return handlers.RenderContent(r.Context(), transaction, w, http.StatusOK)
-		}
-
-		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), service.getGeminiCustodialTx)
-		if err != nil {
-			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
-		}
-
-		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
-	})
-}
-
-// CreateUpholdTransaction creates a transaction against an order
-func CreateUpholdTransaction(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req CreateTransactionRequest
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
-			)
-		}
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID)
-		if err != nil {
-			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
-		}
-
-		if transaction != nil {
-			// if the transaction is already added, then do an update
-			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTxWithRetries)
-			if err != nil {
-				return handlers.WrapError(err, "Error updating the transaction", http.StatusBadRequest)
-			}
-			// return 200 in event of already created transaction
-			return handlers.RenderContent(r.Context(), transaction, w, http.StatusOK)
-		}
-
-		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTxWithRetries)
-		if err != nil {
-			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
-		}
-
-		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
-	})
 }
 
 // CreateAnonCardTransactionRequest includes information needed to create a anon card transaction
