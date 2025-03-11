@@ -529,7 +529,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	}
 
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
-	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
