@@ -2,6 +2,7 @@ package ratios
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -95,6 +96,11 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 			Cadence: 5 * time.Minute,
 			Workers: 1,
 		},
+		{
+			Func:    service.RemoveExpiredRelativeEntries,
+			Cadence: 1 * time.Minute,
+			Workers: 1,
+		},
 	}
 
 	// Sigh, for compatibility with existing ratios mistakes
@@ -109,7 +115,7 @@ func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (boo
 	if err != nil {
 		return true, fmt.Errorf("failed to retrieve top coins: %w", err)
 	}
-	topCurrencies, err := s.GetTopCurrencies(ctx, 5)
+	topCurrencies, err := s.GetTopCurrencies(ctx, 10)
 	if err != nil {
 		return true, fmt.Errorf("failed to retrieve top currencies: %w", err)
 	}
@@ -123,9 +129,125 @@ func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (boo
 		return true, fmt.Errorf("failed to fetch price from coingecko: %w", err)
 	}
 
-	err = s.CacheRelative(ctx, *rates)
+	err = s.CacheRelative(ctx, *rates, true)
 	if err != nil {
 		return true, fmt.Errorf("failed to cache relative rates: %w", err)
+	}
+
+	return true, nil
+}
+
+// RemoveExpiredRelativeEntries removes all expired entries from the cache
+// Workaround until Valkey implements HEXPIRE https://github.com/valkey-io/valkey/issues/640
+func (s *Service) RemoveExpiredRelativeEntries(ctx context.Context) (bool, error) {
+	logger := logging.Logger(ctx, "ratios.RemoveExpiredRelativeEntries")
+	logger.Debug().Msg("Starting relative cache cleanup job")
+
+	// Get all coins from the tracking set instead of using KEYS
+	coinMembers, err := s.redis.SMembers(ctx, "relative_coins").Result()
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to get coin members from set")
+		return false, fmt.Errorf("failed to get coin members from set: %w", err)
+	}
+
+	logger.Debug().Int("coinCount", len(coinMembers)).Msg("Found coins to check")
+	totalRemoved := 0
+	coinsRemoved := 0
+	scannedCount := 0
+	coinsToRemoveFromSet := []string{}
+
+	// Use a pipeline for batch operations
+	pipe := s.redis.Pipeline()
+
+	// For each coin in the set, check its currency entries
+	for _, coin := range coinMembers {
+		coinKey := fmt.Sprintf("relative:%s", coin)
+
+		// Get all currency entries for this coin
+		currencyData, err := s.redis.HGetAll(ctx, coinKey).Result()
+		if err != nil {
+			logger.Error().Err(err).Str("coin", coin).Msg("Failed to get currency data")
+			continue
+		}
+
+		// If coin hash doesn't exist or is empty, mark for removal from set
+		if len(currencyData) == 0 {
+			logger.Debug().Str("coin", coin).Msg("Coin hash is empty, will remove from tracking set")
+			coinsToRemoveFromSet = append(coinsToRemoveFromSet, coin)
+			continue
+		}
+
+		scannedCount += len(currencyData)
+		logger.Debug().Str("coin", coin).Int("currencies", len(currencyData)).Msg("Retrieved currency entries")
+
+		// Check if all currency entries are stale
+		staleKeys := []string{}
+		allStale := true
+		validCount := 0
+		staleCount := 0
+
+		for currKey, dataStr := range currencyData {
+			var currData CurrencyData
+			if err := json.Unmarshal([]byte(dataStr), &currData); err != nil {
+				logger.Warn().Err(err).Str("coin", coin).Str("currency", currKey).Msg("Failed to unmarshal currency data, will remove")
+				staleKeys = append(staleKeys, currKey)
+				staleCount++
+				continue
+			}
+
+			// Check if the currency entry is stale
+			if time.Since(currData.LastUpdated) > GetRelativeTTL*time.Second {
+				logger.Debug().Str("coin", coin).Str("currency", currKey).Time("lastUpdated", currData.LastUpdated).Msg("Stale currency entry found")
+				staleKeys = append(staleKeys, currKey)
+				staleCount++
+			} else {
+				validCount++
+				allStale = false
+			}
+		}
+
+		logger.Debug().Str("coin", coin).Int("validCurrencies", validCount).Int("staleCurrencies", staleCount).Bool("allStale", allStale).Msg("Checked entry currencies")
+
+		// If we have stale currency entries
+		if len(staleKeys) > 0 {
+			// If all entries are stale, delete the entire hash and remove from tracking set
+			if allStale && len(currencyData) > 0 {
+				logger.Debug().Str("coin", coin).Msg("All currencies are stale, deleting entire coin hash")
+				pipe.Del(ctx, coinKey)
+				coinsToRemoveFromSet = append(coinsToRemoveFromSet, coin)
+				totalRemoved += len(currencyData)
+				coinsRemoved++
+			} else {
+				// Otherwise, just delete the stale currency entries
+				logger.Debug().Str("coin", coin).Strs("staleCurrencies", staleKeys).Msg("Deleting stale currency entries")
+				pipe.HDel(ctx, coinKey, staleKeys...)
+				totalRemoved += len(staleKeys)
+			}
+		} else {
+			logger.Debug().Str("coin", coin).Msg("No stale entries found for this coin")
+		}
+	}
+
+	// Remove coins from the tracking set if needed
+	if len(coinsToRemoveFromSet) > 0 {
+		strs := make([]interface{}, len(coinsToRemoveFromSet))
+		for i, v := range coinsToRemoveFromSet {
+			strs[i] = v
+		}
+		pipe.SRem(ctx, "relative_coins", strs...)
+	}
+
+	// Execute all operations in a transaction
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to execute pipeline")
+		return false, fmt.Errorf("failed to execute pipeline: %w", err)
+	}
+
+	if totalRemoved > 0 {
+		logger.Info().Int("entriesRemoved", totalRemoved).Int("coinsRemoved", coinsRemoved).Int("scanned", scannedCount).Msg("Removed expired entries from relative cache")
+	} else {
+		logger.Info().Int("scanned", scannedCount).Msg("No expired entries found in relative cache")
 	}
 
 	return true, nil
@@ -165,6 +287,11 @@ func (s *Service) GetRelative(
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to fetch price from coingecko")
 			return nil, fmt.Errorf("failed to fetch price from coingecko: %w", err)
+		}
+
+		// insert into cache
+		if err := s.CacheRelative(ctx, *rates, false); err != nil {
+			logger.Error().Err(err).Msg("failed to cache relative rates")
 		}
 		updated = time.Now()
 	}
