@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -712,4 +713,118 @@ func (suite *ControllersTestSuite) TestCacheOperations() {
 		(*rates)["ethereum"]["usd"],
 		"ETH/USD rate should match",
 	)
+}
+
+func (suite *ControllersTestSuite) TestRemoveExpiredRelativeEntries() {
+	// Prepare test data
+	now := time.Now()
+
+	// Create fresh currency entries
+	freshUSD := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(1.0),
+		Change24h:   decimal.NewFromFloat(0.1),
+		LastUpdated: now,
+	}
+	freshEUR := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(0.8),
+		Change24h:   decimal.NewFromFloat(0.05),
+		LastUpdated: now,
+	}
+
+	// Create expired currency entries
+	expiredUSD := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(2.0),
+		Change24h:   decimal.NewFromFloat(0.2),
+		LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
+	}
+	expiredEUR := ratios.CurrencyData{
+		Price:       decimal.NewFromFloat(1.6),
+		Change24h:   decimal.NewFromFloat(0.15),
+		LastUpdated: now.Add(-time.Duration(ratios.GetRelativeTTL+100) * time.Second),
+	}
+
+	// Create a batch of data
+	pipe := suite.redis.Pipeline()
+
+	// Coins to add to the tracking set
+	coinsToAdd := make([]interface{}, 0, 100)
+
+	// Add entries to batch - use the new format (relative:$coinname)
+	for i := 0; i < 60; i++ {
+		coinName := fmt.Sprintf("fresh_coin_%d", i)
+		coinKey := fmt.Sprintf("relative:%s", coinName)
+		currencyData := map[string]interface{}{
+			"usd": string(mustMarshal(suite.T(), freshUSD)),
+			"eur": string(mustMarshal(suite.T(), freshEUR)),
+		}
+		pipe.HSet(suite.ctx, coinKey, currencyData)
+		coinsToAdd = append(coinsToAdd, coinName)
+	}
+
+	for i := 0; i < 40; i++ {
+		coinName := fmt.Sprintf("expired_coin_%d", i)
+		coinKey := fmt.Sprintf("relative:%s", coinName)
+		currencyData := map[string]interface{}{
+			"usd": string(mustMarshal(suite.T(), expiredUSD)),
+			"eur": string(mustMarshal(suite.T(), expiredEUR)),
+		}
+		pipe.HSet(suite.ctx, coinKey, currencyData)
+		coinsToAdd = append(coinsToAdd, coinName)
+	}
+
+	// Add coins to tracking set
+	pipe.SAdd(suite.ctx, "relative_coins", coinsToAdd...)
+
+	// Add entries to Redis
+	_, err := pipe.Exec(suite.ctx)
+	suite.Require().NoError(err)
+
+	// Verify initial state - count all coins in the tracking set
+	count, err := suite.redis.SCard(suite.ctx, "relative_coins").Result()
+	suite.Require().NoError(err)
+	suite.Require().Equal(int64(100), count)
+
+	// Run the function to remove expired entries
+	result, err := suite.service.RemoveExpiredRelativeEntries(suite.ctx)
+	suite.Require().NoError(err)
+	suite.Require().True(result)
+
+	// Verify that only expired coins are removed from the tracking set
+	count, err = suite.redis.SCard(suite.ctx, "relative_coins").Result()
+	suite.Require().NoError(err)
+	suite.Require().Equal(int64(60), count)
+
+	// Verify a specific coin that should still exist in the set
+	exists, err := suite.redis.SIsMember(suite.ctx, "relative_coins", "fresh_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.Require().True(exists, "fresh_coin_1 should still exist in the set")
+
+	// Verify that the hash for the fresh coin exists
+	hashExists, err := suite.redis.Exists(suite.ctx, "relative:fresh_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.Require().Equal(int64(1), hashExists, "Hash relative:fresh_coin_1 should exist")
+
+	// Verify a specific coin that should be removed from the set
+	exists, err = suite.redis.SIsMember(suite.ctx, "relative_coins", "expired_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.Require().False(exists, "expired_coin_1 should not exist in the set")
+
+	// Verify that the hash for the expired coin is removed
+	hashExists, err = suite.redis.Exists(suite.ctx, "relative:expired_coin_1").Result()
+	suite.Require().NoError(err)
+	suite.Require().Equal(int64(0), hashExists, "Hash relative:expired_coin_1 should not exist")
+
+	// Additional verification - check a currency value in a fresh coin
+	usdValue, err := suite.redis.HGet(suite.ctx, "relative:fresh_coin_2", "usd").Result()
+	suite.Require().NoError(err)
+	suite.Require().NotEmpty(usdValue, "USD currency data should exist for fresh_coin_2")
+}
+
+// Helper function to marshal data and handle errors
+func mustMarshal(t *testing.T, data interface{}) []byte {
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes
 }
