@@ -13,7 +13,8 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/awa/go-iap v1.3.22
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.31.0
-	github.com/brave-intl/bat-go v1.0.2
+	github.com/brave-intl/bat-go v1.0.3
+	github.com/brave-intl/bat-go/cmd v0.0.0-20250314144354-95b627ea508a
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
 	github.com/btcsuite/btcutil v1.0.2
