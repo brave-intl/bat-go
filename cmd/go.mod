@@ -9,7 +9,7 @@ replace github.com/brave-intl/bat-go/libs => ../libs
 replace github.com/brave-intl/bat-go/tools => ../tools
 
 require (
-	github.com/brave-intl/bat-go/libs v0.0.0-20220913154833-730f36b772de
+	github.com/brave-intl/bat-go/libs v0.0.0-20250318093146-2a3a3cd99f4c
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.13.0
