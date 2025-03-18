@@ -44,7 +44,7 @@ func New() (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewClientWithPrometheus(&HTTPClient{client}, "cbr_client"), err
+	return NewClientWithPrometheus(&HTTPClient{client}, "cbr_client"), nil
 }
 
 // IssuerCreateRequest is a request to create a new issuer
