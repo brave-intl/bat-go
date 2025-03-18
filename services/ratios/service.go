@@ -296,48 +296,22 @@ func (s *Service) GetRelative(
 		updated = time.Now()
 	}
 
-	if duration != "1d" {
-		// fill change with 0s ( it's unused for multiple coinIDs and we will overwrite for single )
-		out := map[string]map[string]decimal.Decimal{}
-		for k, v := range *rates {
-			innerOut := map[string]decimal.Decimal{}
-			for kk, vv := range v {
-				if !strings.HasSuffix(kk, "_24h_change") {
-					innerOut[kk+"_timeframe_change"] = decimal.Zero
-					innerOut[kk] = vv
-				}
+	// Transform rates to copy 24h change values to timeframe change
+	out := map[string]map[string]decimal.Decimal{}
+	for k, v := range *rates {
+		innerOut := map[string]decimal.Decimal{}
+		for kk, vv := range v {
+			if strings.HasSuffix(kk, "_24h_change") {
+				// Copy 24h change to timeframe change
+				innerOut[strings.TrimSuffix(kk, "_24h_change")+"_timeframe_change"] = vv
 			}
-			out[k] = innerOut
+			innerOut[kk] = vv
 		}
-
-		if len(coinIDs) == 1 {
-			// request history for duration to calculate change
-			chart, _, err := s.coingecko.FetchMarketChart(
-				ctx,
-				coinIDs[0].String(),
-				vsCurrencies[0].String(),
-				duration.ToDays(),
-				duration.ToGetHistoryCacheDurationSeconds(),
-			)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to fetch chart from coingecko")
-				return nil, fmt.Errorf("failed to fetch chart from coingecko: %w", err)
-			}
-
-			current := out[coinIDs[0].String()][vsCurrencies[0].String()]
-			previous := chart.Prices[0][1]
-			change := decimal.Zero
-			// division by error when previous is zero
-			if !previous.IsZero() {
-				change = current.Sub(previous).Div(previous).Mul(decimal.NewFromFloat(100))
-			}
-
-			out[coinIDs[0].String()][vsCurrencies[0].String()+"_timeframe_change"] = change
-		}
-
-		tmp := coingecko.SimplePriceResponse(out)
-		rates = &tmp
+		out[k] = innerOut
 	}
+
+	tmp := coingecko.SimplePriceResponse(out)
+	rates = &tmp
 
 	return &ratiosclient.RelativeResponse{
 		Payload:     mapSimplePriceResponse(ctx, *rates, duration, coinIDs, vsCurrencies),
