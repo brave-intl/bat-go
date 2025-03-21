@@ -64,7 +64,7 @@ jobs:
         cache-dependency-path: "**/go.sum"
 
     - name: Install Docker Compose
-      uses: KengoTODA/actions-setup-docker-compose@15e32ca58926da3f2779fcf090799d809ce5cb4e
+      uses: KengoTODA/actions-setup-docker-compose@c87e531c5cb07c74d23a929bd8cdf54c2f4b583f
       with:
         version: '1.25.4'
 
