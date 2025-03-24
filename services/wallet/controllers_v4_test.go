@@ -77,7 +77,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 		Validate(gomock.Any(), geoCountry).
 		Return(true, nil)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, reputationClient, nil, locationValidator, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, reputationClient, nil, locationValidator, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
@@ -124,7 +124,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 		Validate(gomock.Any(), gomock.Any()).
 		Return(false, nil)
 
-	service, err := wallet.InitService(nil, nil, nil, nil, nil, nil, nil, locationValidator, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(nil, nil, nil, nil, nil, nil, nil, nil, locationValidator, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
@@ -176,7 +176,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlready
 		Validate(gomock.Any(), geoCountry).
 		Return(true, nil)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, nil, locationValidator, nil, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, nil, nil, locationValidator, nil, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
@@ -247,7 +247,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 		Validate(gomock.Any(), gomock.Any()).
 		Return(true, nil)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, reputationClient, nil, locationValidator, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, reputationClient, nil, locationValidator, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
@@ -297,7 +297,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, reputationClient, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, reputationClient, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
@@ -347,7 +347,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationM
 	storage, err := wallet.NewWritablePostgres("", false, "")
 	suite.NoError(err)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, nil, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
@@ -385,7 +385,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_PaymentIDMism
 	storage, err := wallet.NewWritablePostgres("", false, "")
 	suite.NoError(err)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, nil, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
@@ -452,7 +452,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlr
 		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errorBundle)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, reputationClient, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, reputationClient, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
@@ -517,7 +517,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_ReputationCal
 		UpsertReputationSummary(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errReputation)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, nil, reputationClient, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
+	service, err := wallet.InitService(storage, nil, nil, nil, nil, nil, reputationClient, nil, nil, backoff.Retry, nil, nil, wallet.DAppConfig{})
 	suite.Require().NoError(err)
 
 	// create rewards wallet with public key
@@ -582,7 +582,7 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4() {
 
 	allowList := storage.NewAllowList()
 
-	service, _ := wallet.InitService(pg, nil, nil, allowList, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+	service, _ := wallet.InitService(pg, nil, nil, allowList, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	handler := handlers.AppHandler(wallet.GetWalletV4(service))
 
@@ -625,7 +625,7 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4_Not_Whitelisted() {
 
 	allowList := storage.NewAllowList()
 
-	service, _ := wallet.InitService(pg, nil, nil, allowList, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+	service, _ := wallet.InitService(pg, nil, nil, allowList, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	handler := handlers.AppHandler(wallet.GetWalletV4(service))
 

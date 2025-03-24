@@ -113,7 +113,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	w1 := suite.NewWallet(service, "uphold")
 
@@ -173,7 +173,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	w1 := suite.NewWallet(service, "uphold")
 	w2 := suite.NewWallet(service, "uphold")
@@ -327,7 +327,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -370,7 +370,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	pg, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
-	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+	service, _ := wallet.InitService(pg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
@@ -448,7 +448,7 @@ func (suite *WalletControllersTestSuite) TestChallenges_Success() {
 		AllowedOrigins: []string{"https://my-dapp.com", "https://my-dapp-2.com"},
 	}
 
-	s, err := wallet.InitService(pg, nil, chlRep, nil, nil, nil, nil, nil, nil, nil, nil, dac)
+	s, err := wallet.InitService(pg, nil, chlRep, nil, nil, nil, nil, nil, nil, nil, nil, nil, dac)
 	suite.Require().NoError(err)
 
 	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
@@ -534,7 +534,9 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 
 	mtc := metric.New()
 
-	s, err := wallet.InitService(pg, nil, chlRep, allowList, nil, repClient, nil, nil, nil, mtc, nil, dac)
+	addrsChecker := &mockSolAddrsChecker{}
+
+	s, err := wallet.InitService(pg, nil, chlRep, allowList, nil, addrsChecker, repClient, nil, nil, nil, mtc, nil, dac)
 	suite.Require().NoError(err)
 
 	cr := custodian.Regions{Solana: custodian.GeoAllowBlockMap{
@@ -646,7 +648,7 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 		suite.Require().NoError(err)
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
@@ -683,7 +685,7 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 		suite.Require().NoError(err)
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
@@ -714,7 +716,7 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 		suite.Require().NoError(err)
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
@@ -748,7 +750,7 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
+		s, err := wallet.InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, wallet.DAppConfig{})
 		suite.Require().NoError(err)
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
@@ -915,4 +917,16 @@ func setupRouter(service *wallet.Service) *chi.Mux {
 
 func ptrTo[T any](v T) *T {
 	return &v
+}
+
+type mockSolAddrsChecker struct {
+	fnIsAllowed func(ctx context.Context, addrs string) error
+}
+
+func (c *mockSolAddrsChecker) IsAllowed(ctx context.Context, addrs string) error {
+	if c.fnIsAllowed == nil {
+		return nil
+	}
+
+	return c.fnIsAllowed(ctx, addrs)
 }

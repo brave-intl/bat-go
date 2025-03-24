@@ -20,6 +20,7 @@ const (
 	ErrSolAlreadyWaitlisted       Error = "model: solana already waitlisted"
 	ErrSolAlreadyLinked           Error = "model: solana already linked"
 	ErrPaymentIDSignatureMismatch Error = "model: payment id in request does not match signature"
+	ErrSolAddrsNotAllowed         Error = "model: solana address not allowed"
 )
 
 type AllowListEntry struct {
