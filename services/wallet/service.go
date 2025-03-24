@@ -296,7 +296,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	mtc := metric.New()
 	gemx := newGeminix("passport", "drivers_license", "national_identity_card", "passport_card")
 
-	addrsBucket := os.Getenv("")
+	addrsBucket := os.Getenv("S3_OFAC_ADDRESS_BUCKET")
 	if addrsBucket == "" {
 		l.Panic().Err(errors.New("wallet: address bucket not found")).Msg("failed to find address bucket")
 	}
