@@ -63,11 +63,6 @@ jobs:
         go-version: 1.22
         cache-dependency-path: "**/go.sum"
 
-    - name: Install Docker Compose
-      uses: KengoTODA/actions-setup-docker-compose@15e32ca58926da3f2779fcf090799d809ce5cb4e
-      with:
-        version: '1.25.4'
-
     - run: docker compose pull
 
     - name: Start Vault
