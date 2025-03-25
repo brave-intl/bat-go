@@ -1,0 +1,53 @@
+package wallet
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	"github.com/brave-intl/bat-go/libs/ptr"
+	"github.com/brave-intl/bat-go/services/wallet/model"
+)
+
+type s3Service interface {
+	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+}
+
+type checkerConfig struct {
+	bucket string
+}
+
+type solAddrsChecker struct {
+	cfg   checkerConfig
+	s3Svc s3Service
+}
+
+func newSolAddrsChecker(s3Svc s3Service, cfg checkerConfig) *solAddrsChecker {
+	return &solAddrsChecker{
+		cfg:   cfg,
+		s3Svc: s3Svc,
+	}
+}
+
+func (c *solAddrsChecker) IsAllowed(ctx context.Context, addrs string) error {
+	key := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString([]byte(addrs))
+
+	param := &s3.HeadObjectInput{
+		Bucket: ptr.To(c.cfg.bucket),
+		Key:    ptr.To(key),
+	}
+
+	if _, err := c.s3Svc.HeadObject(ctx, param); err != nil {
+		var nf *types.NotFound
+		if errors.As(err, &nf) {
+			return nil
+		}
+
+		return err
+	}
+
+	return model.ErrSolAddrsNotAllowed
+}

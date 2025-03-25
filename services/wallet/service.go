@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -123,6 +124,10 @@ type solanaWaitlistRepo interface {
 	Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error
 }
 
+type solanaAddrsChecker interface {
+	IsAllowed(ctc context.Context, addrs string) error
+}
+
 type metricSvc interface {
 	LinkSuccessZP(cc string)
 	LinkFailureZP(cc string)
@@ -148,6 +153,7 @@ type Service struct {
 	chlRepo          challengeRepo
 	allowListRepo    allowListRepo
 	solWaitlistRepo  solanaWaitlistRepo
+	solAddrsChecker  solanaAddrsChecker
 	repClient        reputation.Client
 	geminiClient     gemini.Client
 	geoValidator     GeoValidator
@@ -171,6 +177,7 @@ func InitService(
 	chlRepo challengeRepo,
 	allowList allowListRepo,
 	solWaitlistRepo solanaWaitlistRepo,
+	solAddrsChecker solanaAddrsChecker,
 	repClient reputation.Client,
 	geminiClient gemini.Client,
 	geoCountryValidator GeoValidator,
@@ -184,6 +191,7 @@ func InitService(
 		chlRepo:         chlRepo,
 		allowListRepo:   allowList,
 		solWaitlistRepo: solWaitlistRepo,
+		solAddrsChecker: solAddrsChecker,
 		repClient:       repClient,
 		geminiClient:    geminiClient,
 		geoValidator:    geoCountryValidator,
@@ -263,10 +271,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	awsClient, err := appaws.NewClient(cfg)
-	if err != nil {
-		l.Panic().Err(err).Msg("failed to initialize wallet service")
-	}
+	awsClient := s3.NewFromConfig(cfg)
 
 	// put the configured aws client on ctx
 	ctx = context.WithValue(ctx, appctx.AWSClientCTXKey, awsClient)
@@ -291,6 +296,17 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	mtc := metric.New()
 	gemx := newGeminix("passport", "drivers_license", "national_identity_card", "passport_card")
 
+	addrsBucket := os.Getenv("S3_OFAC_ADDRESS_BUCKET")
+	if addrsBucket == "" {
+		l.Panic().Err(errors.New("wallet: address bucket not found")).Msg("failed to find address bucket")
+	}
+
+	ccfg := checkerConfig{
+		bucket: addrsBucket,
+	}
+
+	sac := newSolAddrsChecker(awsClient, ccfg)
+
 	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
 	if len(dappAO) == 0 {
 		l.Panic().Err(errors.New("dapp allowed origins missing")).Msg("failed to initialize wallet service")
@@ -300,7 +316,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		AllowedOrigins: dappAO,
 	}
 
-	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
+	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, sac, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -781,6 +797,10 @@ func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wall
 const errDisabledRegion model.Error = "disabled region"
 
 func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UUID, req linkSolanaAddrRequest) error {
+	if err := service.solAddrsChecker.IsAllowed(ctx, req.SolanaPublicKey); err != nil {
+		return err
+	}
+
 	repSum, err := service.repClient.GetReputationSummary(ctx, paymentID)
 	if err != nil {
 		return err
