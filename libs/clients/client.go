@@ -212,7 +212,7 @@ func (c *SimpleHTTPClient) NewRequest(
 	if err != nil {
 		return nil, NewHTTPError(err, (*req.URL).String(), "request", status, body)
 	}
-	return req, err
+	return req, nil
 }
 
 // Do the specified http request, decoding the JSON result into v
