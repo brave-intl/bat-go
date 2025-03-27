@@ -278,7 +278,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	awsClient := s3.NewFromConfig(cfg)
+	s3Client := s3.NewFromConfig(cfg)
 
 	// get the s3 bucket and object
 	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
@@ -292,7 +292,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 			Msg("failed to initialize wallet service")
 	}
 
-	geoCountryValidator := NewGeoCountryValidator(awsClient, Config{
+	geoCountryValidator := NewGeoCountryValidator(s3Client, Config{
 		bucket: bucket,
 		object: object,
 	})
@@ -309,7 +309,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		bucket: addrsBucket,
 	}
 
-	sac := newSolAddrsChecker(awsClient, ccfg)
+	sac := newSolAddrsChecker(s3Client, ccfg)
 
 	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
 	if len(dappAO) == 0 {
@@ -325,7 +325,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	s.s3g = awsClient
+	s.s3g = s3Client
 
 	_, err = s.RefreshCustodianRegionsWorker(ctx)
 	if err != nil {
