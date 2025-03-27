@@ -27,6 +27,10 @@ type s3Getter interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
+type ParamsConfig struct {
+	Bucket string
+}
+
 type CardsConfig struct {
 	Bucket string
 	Key    string
@@ -35,6 +39,7 @@ type CardsConfig struct {
 type Config struct {
 	Env        string
 	TOSVersion int
+	Params     *ParamsConfig
 	Cards      *CardsConfig
 }
 
@@ -128,22 +133,14 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 	s.cacheMu.RUnlock()
 
 	if time.Now().After(lastPollTime.Add(15 * time.Minute)) {
-		var (
-			payoutStatus     *custodian.PayoutStatus
-			custodianRegions *custodian.Regions
-			bucket, ok       = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
-		)
+		payoutStatus, err := custodian.ExtractPayoutStatus(ctx, s.s3g, s.cfg.Params.Bucket)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
+		}
 
-		if ok {
-			payoutStatus, err = custodian.ExtractPayoutStatus(ctx, s.s3g, bucket)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
-			}
-
-			custodianRegions, err = custodian.ExtractCustodianRegions(ctx, s.s3g, bucket)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
-			}
+		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, s.s3g, s.cfg.Params.Bucket)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
 		}
 
 		s.cacheMu.Lock()
