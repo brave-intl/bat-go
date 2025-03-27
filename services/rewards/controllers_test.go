@@ -56,7 +56,7 @@ func TestGetParametersController(t *testing.T) {
 		cfg:     &Config{TOSVersion: 1},
 		ratios:  mockRatios,
 		cacheMu: new(sync.RWMutex),
-		s3Svc:   mockS3Svc,
+		s3g:     mockS3Svc,
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "/v1/parameters", nil)

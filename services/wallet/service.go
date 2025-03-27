@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
@@ -25,7 +27,6 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
-	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -146,6 +147,10 @@ type geminiSvc interface {
 	IsRegionAvailable(ctx context.Context, issuingCountry string, custodianRegions custodian.Regions) error
 }
 
+type s3Getter interface {
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+}
+
 // Service contains datastore connections
 type Service struct {
 	Datastore        Datastore
@@ -164,6 +169,8 @@ type Service struct {
 	metric           metricSvc
 	gemini           geminiSvc
 	dappConf         DAppConfig
+
+	s3g s3Getter
 }
 
 type DAppConfig struct {
@@ -266,15 +273,12 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, geminiClient)
 	}
 
-	cfg, err := appaws.BaseAWSConfig(ctx, l)
+	cfg, err := newAWSConfig(ctx)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
 
 	awsClient := s3.NewFromConfig(cfg)
-
-	// put the configured aws client on ctx
-	ctx = context.WithValue(ctx, appctx.AWSClientCTXKey, awsClient)
 
 	// get the s3 bucket and object
 	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
@@ -320,6 +324,8 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
+
+	s.s3g = awsClient
 
 	_, err = s.RefreshCustodianRegionsWorker(ctx)
 	if err != nil {
@@ -1005,15 +1011,9 @@ func (service *Service) SolanaDeleteFromWaitlist(ctx context.Context, paymentID 
 func (service *Service) RefreshCustodianRegionsWorker(ctx context.Context) (bool, error) {
 	useCustodianRegions, featureOK := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool)
 	if featureOK && !useCustodianRegions {
-		// do not attempt no error
 		return false, nil
 	}
-	// get aws client
-	client, clientOK := ctx.Value(appctx.AWSClientCTXKey).(*appaws.Client)
-	if !clientOK {
-		return true, errors.New("cannot run refresh custodian regions, no client")
-	}
-	// get the bucket and if we are feature flagged on
+
 	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
 	if !bucketOK {
 		return true, errors.New("cannot run refresh custodian regions, no bucket")
@@ -1022,14 +1022,15 @@ func (service *Service) RefreshCustodianRegionsWorker(ctx context.Context) (bool
 	select {
 	case <-ctx.Done():
 		return true, ctx.Err()
+
 	default:
-		// use client to put the custodian regions on ctx
-		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, client, bucket)
+		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, service.s3g, bucket)
 		if err != nil {
 			return true, fmt.Errorf("error running refresh custodian regions: %w", err)
 		}
-		// write custodian regions to service
+
 		service.SetCustodianRegions(*custodianRegions)
+
 		return true, nil
 	}
 }
@@ -1191,4 +1192,13 @@ func (d *deleteExpiredChallengeTask) deleteExpiredChallenges(ctx context.Context
 		return false, fmt.Errorf("error deleting expired challenges: %w", err)
 	}
 	return true, nil
+}
+
+func newAWSConfig(ctx context.Context) (aws.Config, error) {
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok || len(region) == 0 {
+		region = "us-west-2"
+	}
+
+	return config.LoadDefaultConfig(ctx, config.WithRegion(region))
 }

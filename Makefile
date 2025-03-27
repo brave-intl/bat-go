@@ -50,7 +50,6 @@ mock:
 	cd libs && mockgen -source=./clients/coingecko/client.go -destination=clients/coingecko/mock/mock.go -package=mock_coingecko
 	cd libs && mockgen -source=./clients/stripe/client.go -destination=clients/stripe/mock/mock.go -package=mock_stripe
 	cd libs && mockgen -source=./backoff/retrypolicy/retrypolicy.go -destination=backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
-	cd libs && mockgen -source=./aws/s3.go -destination=aws/mock/mock.go -package=mockaws
 	cd libs && mockgen -source=./kafka/dialer.go -destination=kafka/mock/dialer.go -package=mockdialer
 
 instrumented:

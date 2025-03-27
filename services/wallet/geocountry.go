@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
 )
 
@@ -19,21 +18,21 @@ type Config struct {
 
 // GeoCountryValidator defines a GeoCountryValidator.
 type GeoCountryValidator struct {
-	s3     appaws.S3GetObjectAPI
+	s3g    s3Getter
 	config Config
 }
 
 // NewGeoCountryValidator creates a new instance of NewGeoCountryValidator.
-func NewGeoCountryValidator(s3 appaws.S3GetObjectAPI, config Config) *GeoCountryValidator {
+func NewGeoCountryValidator(s3g s3Getter, config Config) *GeoCountryValidator {
 	return &GeoCountryValidator{
-		s3:     s3,
+		s3g:    s3g,
 		config: config,
 	}
 }
 
-// Validate is an implementation of the Validate interface and returns true is a given geo country is valid.
+// Validate is an implementation of the Validate interface and returns true if a given geo country is valid.
 func (g GeoCountryValidator) Validate(ctx context.Context, geoCountry string) (bool, error) {
-	out, err := g.s3.GetObject(
+	out, err := g.s3g.GetObject(
 		ctx, &s3.GetObjectInput{
 			Bucket: &g.config.bucket,
 			Key:    &g.config.object,

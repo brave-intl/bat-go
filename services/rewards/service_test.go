@@ -15,7 +15,7 @@ import (
 func TestService_GetCards(t *testing.T) {
 	type tcGiven struct {
 		cfg   *Config
-		s3Svc s3Service
+		s3Svc s3Getter
 	}
 
 	type tcExpected struct {
@@ -76,8 +76,8 @@ func TestService_GetCards(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			s := &Service{
-				cfg:   tc.given.cfg,
-				s3Svc: tc.given.s3Svc,
+				cfg: tc.given.cfg,
+				s3g: tc.given.s3Svc,
 			}
 
 			ctx := context.Background()
