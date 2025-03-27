@@ -12,15 +12,14 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/clients/ratios"
 	ratiosmock "github.com/brave-intl/bat-go/libs/clients/ratios/mock"
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
 )
 
 func TestGetParametersController(t *testing.T) {
@@ -53,7 +52,12 @@ func TestGetParametersController(t *testing.T) {
 	}
 
 	s := &Service{
-		cfg:     &Config{TOSVersion: 1},
+		cfg: &Config{
+			TOSVersion: 1,
+			Params: &ParamsConfig{
+				Bucket: "bucket",
+			},
+		},
 		ratios:  mockRatios,
 		cacheMu: new(sync.RWMutex),
 		s3g:     s3g,
@@ -61,8 +65,6 @@ func TestGetParametersController(t *testing.T) {
 
 	req, err := http.NewRequest(http.MethodGet, "/v1/parameters", nil)
 	require.NoError(t, err)
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.ParametersMergeBucketCTXKey, "something"))
 
 	rw := httptest.NewRecorder()
 
