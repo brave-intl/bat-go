@@ -33,7 +33,7 @@ func TestSolAddrsChecker_IsAllowed(t *testing.T) {
 			given: tcGiven{
 				addrs: "solana_address",
 				sac: &solAddrsChecker{
-					s3Svc: &mockS3Service{fnHeadObject: func(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+					s3h: &mockS3Header{fnHeadObject: func(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 						return nil, model.Error("s3_svc_error")
 					}},
 				},
@@ -48,7 +48,7 @@ func TestSolAddrsChecker_IsAllowed(t *testing.T) {
 			given: tcGiven{
 				addrs: "solana_address",
 				sac: &solAddrsChecker{
-					s3Svc: &mockS3Service{fnHeadObject: func(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+					s3h: &mockS3Header{fnHeadObject: func(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 						return nil, nil
 					}},
 				},
@@ -63,7 +63,7 @@ func TestSolAddrsChecker_IsAllowed(t *testing.T) {
 			given: tcGiven{
 				addrs: "solana_address",
 				sac: &solAddrsChecker{
-					s3Svc: &mockS3Service{fnHeadObject: func(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+					s3h: &mockS3Header{fnHeadObject: func(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 						return nil, &types.NotFound{
 							Message:           nil,
 							ErrorCodeOverride: nil,
@@ -86,11 +86,11 @@ func TestSolAddrsChecker_IsAllowed(t *testing.T) {
 	}
 }
 
-type mockS3Service struct {
+type mockS3Header struct {
 	fnHeadObject func(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
-func (s *mockS3Service) HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+func (s *mockS3Header) HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	if s.fnHeadObject == nil {
 		return nil, nil
 	}

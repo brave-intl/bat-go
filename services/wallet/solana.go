@@ -12,7 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/model"
 )
 
-type s3Service interface {
+type s3Header interface {
 	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 }
 
@@ -21,14 +21,14 @@ type checkerConfig struct {
 }
 
 type solAddrsChecker struct {
-	cfg   checkerConfig
-	s3Svc s3Service
+	cfg checkerConfig
+	s3h s3Header
 }
 
-func newSolAddrsChecker(s3Svc s3Service, cfg checkerConfig) *solAddrsChecker {
+func newSolAddrsChecker(s3h s3Header, cfg checkerConfig) *solAddrsChecker {
 	return &solAddrsChecker{
-		cfg:   cfg,
-		s3Svc: s3Svc,
+		cfg: cfg,
+		s3h: s3h,
 	}
 }
 
@@ -40,7 +40,7 @@ func (c *solAddrsChecker) IsAllowed(ctx context.Context, addrs string) error {
 		Key:    ptr.To(key),
 	}
 
-	if _, err := c.s3Svc.HeadObject(ctx, param); err != nil {
+	if _, err := c.s3h.HeadObject(ctx, param); err != nil {
 		var nf *types.NotFound
 		if errors.As(err, &nf) {
 			return nil
