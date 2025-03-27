@@ -8,8 +8,6 @@ type CTXKey string
 const (
 	// MergeCustodialCTXKey - the context key for merge custodial
 	MergeCustodialCTXKey CTXKey = "merge_custodial"
-	// AWSClientCTXKey - the context key for an aws client
-	AWSClientCTXKey CTXKey = "aws_client"
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
 	// DatabaseTransactionCTXKey - context key for database transactions

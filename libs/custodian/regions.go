@@ -9,37 +9,36 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	appaws "github.com/brave-intl/bat-go/libs/aws"
+
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/ptr"
 )
 
-var (
-	custodianRegionsObj = "custodian-regions.json"
-	payoutStatusObj     = "payout-status.json"
-)
+type s3Getter interface {
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+}
 
-// ExtractCustodianRegions - extract the custodian regions from the client
-func ExtractCustodianRegions(ctx context.Context, client appaws.S3GetObjectAPI, bucket string) (*Regions, error) {
-	logger := logging.Logger(ctx, "custodian.ExtractCustodianRegions")
-	// get the object with the client
-	out, err := client.GetObject(
+func ExtractCustodianRegions(ctx context.Context, s3g s3Getter, bucket string) (*Regions, error) {
+	out, err := s3g.GetObject(
 		ctx, &s3.GetObjectInput{
 			Bucket: &bucket,
-			Key:    &custodianRegionsObj,
+			Key:    ptr.To("custodian-regions.json"),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get custodian regions: %w", err)
 	}
 	defer func() {
 		if err := out.Body.Close(); err != nil {
-			logger.Error().Err(err).Msg("failed to close s3 result body")
+			l := logging.Logger(ctx, "custodian.ExtractCustodianRegions")
+
+			l.Error().Err(err).Msg("failed to close s3 result body")
 		}
 	}()
+
 	var custodianRegions = new(Regions)
 
-	// parse body json
 	if err := inputs.DecodeAndValidateReader(ctx, custodianRegions, out.Body); err != nil {
 		return nil, custodianRegions.HandleErrors(err)
 	}
@@ -48,13 +47,13 @@ func ExtractCustodianRegions(ctx context.Context, client appaws.S3GetObjectAPI, 
 }
 
 // ExtractPayoutStatus - extract the custodian payout status from the client
-func ExtractPayoutStatus(ctx context.Context, client appaws.S3GetObjectAPI, bucket string) (*PayoutStatus, error) {
+func ExtractPayoutStatus(ctx context.Context, s3g s3Getter, bucket string) (*PayoutStatus, error) {
 	logger := logging.Logger(ctx, "custodian.extractPayoutStatus")
 	// get the object with the client
-	out, err := client.GetObject(
+	out, err := s3g.GetObject(
 		ctx, &s3.GetObjectInput{
 			Bucket: &bucket,
-			Key:    &payoutStatusObj,
+			Key:    ptr.To("payout-status.json"),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get payout status: %w", err)

@@ -34,7 +34,7 @@ func TestGetParametersController(t *testing.T) {
 				"usd": decimal.New(10, 0),
 			}}, nil)
 
-	mockS3Svc := &mockS3Service{
+	s3g := &mockS3Getter{
 		fnGetObject: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 			if *params.Key == "payout-status.json" {
 				body := io.NopCloser(bytes.NewBufferString(`{"uphold":"processing","gemini":"off","bitflyer":"off","unverified":"off"}`))
@@ -56,7 +56,7 @@ func TestGetParametersController(t *testing.T) {
 		cfg:     &Config{TOSVersion: 1},
 		ratios:  mockRatios,
 		cacheMu: new(sync.RWMutex),
-		s3Svc:   mockS3Svc,
+		s3g:     s3g,
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "/v1/parameters", nil)
