@@ -14,8 +14,8 @@ import (
 
 func TestService_GetCards(t *testing.T) {
 	type tcGiven struct {
-		cfg   *Config
-		s3Svc s3Getter
+		cfg *Config
+		s3g s3Getter
 	}
 
 	type tcExpected struct {
@@ -36,7 +36,7 @@ func TestService_GetCards(t *testing.T) {
 				cfg: &Config{
 					Cards: &CardsConfig{},
 				},
-				s3Svc: &mockS3Service{
+				s3g: &mockS3Getter{
 					fnGetObject: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 						return nil, model.Error("error")
 					},
@@ -53,7 +53,7 @@ func TestService_GetCards(t *testing.T) {
 				cfg: &Config{
 					Cards: &CardsConfig{},
 				},
-				s3Svc: &mockS3Service{
+				s3g: &mockS3Getter{
 					fnGetObject: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 						cards := CardBytes(`{ "card": [{"title": "<string>", "description": "<string>", "url": "<string>", "thumbnail": "<string>"}] }`)
 
@@ -77,7 +77,7 @@ func TestService_GetCards(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &Service{
 				cfg: tc.given.cfg,
-				s3g: tc.given.s3Svc,
+				s3g: tc.given.s3g,
 			}
 
 			ctx := context.Background()
@@ -90,11 +90,11 @@ func TestService_GetCards(t *testing.T) {
 	}
 }
 
-type mockS3Service struct {
+type mockS3Getter struct {
 	fnGetObject func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
-func (m *mockS3Service) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+func (m *mockS3Getter) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 	if m.fnGetObject == nil {
 		return &s3.GetObjectOutput{}, nil
 	}
