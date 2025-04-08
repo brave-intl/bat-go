@@ -25,16 +25,9 @@ func init() {
 	cmdutils.Must(viper.BindEnv("vbat-deadline", "VBAT_DEADLINE"))
 
 	// transition- defaults to false
-	rewardsCmd.PersistentFlags().Bool("transition", false,
-		"transition parameter")
+	rewardsCmd.PersistentFlags().Bool("transition", false, "transition parameter")
 	cmdutils.Must(viper.BindPFlag("transition", rewardsCmd.PersistentFlags().Lookup("transition")))
 	cmdutils.Must(viper.BindEnv("transition", "TRANSITION"))
-
-	// merge_param_bucket - defaults to ""
-	rewardsCmd.PersistentFlags().String("merge-param-bucket", "",
-		"the bucket for which parameters are merged into this service")
-	cmdutils.Must(viper.BindPFlag("merge-param-bucket", rewardsCmd.PersistentFlags().Lookup("merge-param-bucket")))
-	cmdutils.Must(viper.BindEnv("merge-param-bucket", "MERGE_PARAM_BUCKET"))
 
 	// defaultCurrency - defaults to USD
 	rewardsCmd.PersistentFlags().String("default-currency", "USD",

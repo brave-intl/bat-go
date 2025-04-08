@@ -82,6 +82,7 @@ services:
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "DAPP_ALLOWED_CORS_ORIGINS=https://my-dapp.com"
+      - "S3_OFAC_ADDRESS_BUCKET=ofac-addresses"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -169,6 +170,7 @@ services:
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "DAPP_ALLOWED_CORS_ORIGINS=https://my-dapp.com"
+      - "S3_OFAC_ADDRESS_BUCKET=ofac-addresses"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations

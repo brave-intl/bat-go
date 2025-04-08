@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/clients/ratios"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/custodian"
-	"github.com/brave-intl/bat-go/libs/logging"
 	srv "github.com/brave-intl/bat-go/libs/service"
 )
 
@@ -23,8 +23,12 @@ const (
 	reqBodyLimit10MB = 10 << 20
 )
 
-type s3Service interface {
+type s3Getter interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+}
+
+type ParamsConfig struct {
+	Bucket string
 }
 
 type CardsConfig struct {
@@ -35,6 +39,7 @@ type CardsConfig struct {
 type Config struct {
 	Env        string
 	TOSVersion int
+	Params     *ParamsConfig
 	Cards      *CardsConfig
 }
 
@@ -46,7 +51,7 @@ type Service struct {
 	cacheMu              *sync.RWMutex
 	jobs                 []srv.Job
 	ratios               ratios.Client
-	s3Svc                s3Service
+	s3g                  s3Getter
 }
 
 func (c *Config) isDevelopment() bool {
@@ -76,9 +81,7 @@ func InitService(ctx context.Context, cfg *Config) (*Service, error) {
 		return nil, fmt.Errorf("failed to initialize ratios client: %w", err)
 	}
 
-	lg := logging.Logger(ctx, "rewards")
-
-	awsCfg, err := appaws.BaseAWSConfig(ctx, lg)
+	awsCfg, err := newAWSConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create base aws config: %w", err)
 	}
@@ -90,7 +93,7 @@ func InitService(ctx context.Context, cfg *Config) (*Service, error) {
 		cacheMu: new(sync.RWMutex),
 		jobs:    []srv.Job{},
 		ratios:  ratiosCl,
-		s3Svc:   s3client,
+		s3g:     s3client,
 	}, nil
 }
 
@@ -130,22 +133,14 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 	s.cacheMu.RUnlock()
 
 	if time.Now().After(lastPollTime.Add(15 * time.Minute)) {
-		var (
-			payoutStatus     *custodian.PayoutStatus
-			custodianRegions *custodian.Regions
-			bucket, ok       = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
-		)
+		payoutStatus, err := custodian.ExtractPayoutStatus(ctx, s.s3g, s.cfg.Params.Bucket)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
+		}
 
-		if ok {
-			payoutStatus, err = custodian.ExtractPayoutStatus(ctx, s.s3Svc, bucket)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
-			}
-
-			custodianRegions, err = custodian.ExtractCustodianRegions(ctx, s.s3Svc, bucket)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
-			}
+		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, s.s3g, s.cfg.Params.Bucket)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
 		}
 
 		s.cacheMu.Lock()
@@ -195,11 +190,20 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 type CardBytes []byte
 
 func (s *Service) GetCardsAsBytes(ctx context.Context) (CardBytes, error) {
-	out, err := s.s3Svc.GetObject(ctx, &s3.GetObjectInput{Bucket: &s.cfg.Cards.Bucket, Key: &s.cfg.Cards.Key})
+	out, err := s.s3g.GetObject(ctx, &s3.GetObjectInput{Bucket: &s.cfg.Cards.Bucket, Key: &s.cfg.Cards.Key})
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = out.Body.Close() }()
 
 	return io.ReadAll(io.LimitReader(out.Body, reqBodyLimit10MB))
+}
+
+func newAWSConfig(ctx context.Context) (aws.Config, error) {
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok || len(region) == 0 {
+		region = "us-west-2"
+	}
+
+	return config.LoadDefaultConfig(ctx, config.WithRegion(region))
 }

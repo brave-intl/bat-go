@@ -12,15 +12,14 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/clients/ratios"
 	ratiosmock "github.com/brave-intl/bat-go/libs/clients/ratios/mock"
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
 )
 
 func TestGetParametersController(t *testing.T) {
@@ -34,7 +33,7 @@ func TestGetParametersController(t *testing.T) {
 				"usd": decimal.New(10, 0),
 			}}, nil)
 
-	mockS3Svc := &mockS3Service{
+	s3g := &mockS3Getter{
 		fnGetObject: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 			if *params.Key == "payout-status.json" {
 				body := io.NopCloser(bytes.NewBufferString(`{"uphold":"processing","gemini":"off","bitflyer":"off","unverified":"off"}`))
@@ -53,16 +52,19 @@ func TestGetParametersController(t *testing.T) {
 	}
 
 	s := &Service{
-		cfg:     &Config{TOSVersion: 1},
+		cfg: &Config{
+			TOSVersion: 1,
+			Params: &ParamsConfig{
+				Bucket: "bucket",
+			},
+		},
 		ratios:  mockRatios,
 		cacheMu: new(sync.RWMutex),
-		s3Svc:   mockS3Svc,
+		s3g:     s3g,
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "/v1/parameters", nil)
 	require.NoError(t, err)
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.ParametersMergeBucketCTXKey, "something"))
 
 	rw := httptest.NewRecorder()
 

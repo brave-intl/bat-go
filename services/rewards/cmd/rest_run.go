@@ -47,7 +47,6 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.RatiosCacheExpiryDurationCTXKey, viper.GetDuration("ratios-client-cache-expiry"))
 	ctx = context.WithValue(ctx, appctx.RatiosCachePurgeDurationCTXKey, viper.GetDuration("ratios-client-cache-purge"))
 	ctx = context.WithValue(ctx, appctx.DefaultACChoiceCTXKey, viper.GetFloat64("default-ac-choice"))
-	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
 
 	ctx = context.WithValue(ctx, appctx.ParametersVBATDeadlineCTXKey, viper.GetTime("vbat-deadline"))
 	ctx = context.WithValue(ctx, appctx.ParametersTransitionCTXKey, viper.GetBool("transition"))
@@ -82,11 +81,9 @@ func RestRun(command *cobra.Command, args []string) {
 		lg.Fatal().Err(err).Msg("error retrieving rewards terms of service version")
 	}
 
-	// Get the bucket from the context and not os.Getenv so we don't diverge. GetParameters uses the context on
-	// each request and this will need to be refactored before we can remove it.
-	cardsBucket, ok := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
-	if !ok {
-		lg.Fatal().Err(err).Msg("failed to get envar for cards bucket")
+	clientRewardsBucket := os.Getenv("MERGE_PARAM_BUCKET")
+	if clientRewardsBucket == "" {
+		lg.Fatal().Err(err).Msg("failed to get envar for client rewards bucket")
 	}
 
 	cardsKey := "cards.json"
@@ -97,8 +94,11 @@ func RestRun(command *cobra.Command, args []string) {
 	cfg := &rewards.Config{
 		Env:        env,
 		TOSVersion: tosVersion,
+		Params: &rewards.ParamsConfig{
+			Bucket: clientRewardsBucket,
+		},
 		Cards: &rewards.CardsConfig{
-			Bucket: cardsBucket,
+			Bucket: clientRewardsBucket,
 			Key:    cardsKey,
 		},
 	}
