@@ -226,6 +226,8 @@ github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869/go.mod h1:Ekp36dR
 github.com/boombuler/barcode v1.0.0/go.mod h1:paBWMcWSl3LHKBqUq+rly7CNSldXjb2rDl3JlRe0mD8=
 github.com/brave-intl/bat-go v1.0.2 h1:0JHIPQrs3PuPL0BdUBOdlEImN7IsSZ3J5pLHr2wPCxA=
 github.com/brave-intl/bat-go v1.0.2/go.mod h1:v0+eoO+LrHWe9+gcunYvB+t5mXxPRY1RVR3ZoVKZuC4=
+github.com/brave-intl/bat-go v1.0.3 h1:VgZtVApKzizRNoUNQ8dl6ZcV6bn6lq0eZlMceUVwEWk=
+github.com/brave-intl/bat-go v1.0.3/go.mod h1:ob0XhWyX3Tqu2j0fJEoXouwc63axNdPpyyg1PVC4y4k=
 github.com/bshuster-repo/logrus-logstash-hook v0.4.1/go.mod h1:zsTqEiSzDgAa/8GZR7E1qaXrhYNDKBYy5/dWPTIflbk=
 github.com/bsm/ginkgo/v2 v2.7.0/go.mod h1:AiKlXPm7ItEHNc/2+OkrNG4E0ITzojb9/xWzvQ9XZ9w=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=

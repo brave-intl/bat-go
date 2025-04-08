@@ -4,7 +4,8 @@ go 1.23
 
 require (
 	github.com/alecthomas/jsonschema v0.0.0-20220216202328-9eeeec9d044b
-	github.com/brave-intl/bat-go v1.0.2
+	github.com/brave-intl/bat-go v1.0.3
+	github.com/brave-intl/bat-go/cmd v0.0.0-20250408113207-f29633bee54e
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/services v1.0.2
 	github.com/getsentry/sentry-go v0.14.0
