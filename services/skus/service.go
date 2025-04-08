@@ -2395,7 +2395,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "externalID", subID.String()); err != nil {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "radomSubscriptionId", subID.String()); err != nil {
 			return err
 		}
 
