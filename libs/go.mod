@@ -1,6 +1,6 @@
 module github.com/brave-intl/bat-go/libs
 
-go 1.23
+go 1.23.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.23.0
@@ -34,8 +34,8 @@ require (
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled/v2 v2.12.0
 	github.com/tyler-smith/go-bip39 v1.1.0
-	golang.org/x/crypto v0.31.0
-	golang.org/x/net v0.23.0
+	golang.org/x/crypto v0.37.0
+	golang.org/x/net v0.39.0
 	gotest.tools v2.2.0+incompatible
 )
 
@@ -84,8 +84,8 @@ require (
 	github.com/rs/xid v1.4.0 // indirect
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto v0.0.0-20230221151758-ace64dc21148 // indirect
 	google.golang.org/grpc v1.53.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
