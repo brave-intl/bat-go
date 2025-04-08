@@ -12,6 +12,8 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/awa/go-iap v1.3.22
+	github.com/aws/aws-sdk-go-v2 v1.17.7
+	github.com/aws/aws-sdk-go-v2/config v1.18.19
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.31.0
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
@@ -32,7 +34,7 @@ require (
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/rs/zerolog v1.28.0
 	github.com/satori/go.uuid v1.2.0
-	github.com/segmentio/kafka-go v0.4.35
+	github.com/segmentio/kafka-go v0.4.47
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.13.0
@@ -47,9 +49,7 @@ require (
 require (
 	cloud.google.com/go/compute v1.21.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
-	github.com/aws/aws-sdk-go-v2 v1.17.7 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.18.19 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.18 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.1 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.31 // indirect
