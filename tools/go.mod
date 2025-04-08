@@ -1,6 +1,6 @@
 module github.com/brave-intl/bat-go/tools
 
-go 1.21
+go 1.23
 
 require (
 	github.com/alecthomas/jsonschema v0.0.0-20220216202328-9eeeec9d044b
