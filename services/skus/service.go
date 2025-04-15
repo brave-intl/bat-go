@@ -14,14 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/sub"
 	"google.golang.org/api/idtoken"
@@ -1473,6 +1470,10 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
 	}
+
+	lg := logging.Logger(ctx, "GetTimeLimitedCreds")
+
+	lg.Info().Interface("order", order).Interface("item", item).Interface("credentials", credentials).Interface("issuerID", issuerID).Interface("interval", interval).Interface("duration", duration).Msg("errors")
 
 	if len(credentials) == 0 {
 		return nil, http.StatusBadRequest, model.Error("failed to issue credentials")
