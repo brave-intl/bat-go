@@ -2971,33 +2971,39 @@ func newRadomGateway(env string) (*radom.Gateway, error) {
 			Managed: radom.Managed{
 				Methods: []radom.Method{
 					{
-						Network: "SepoliaTestnet",
-						Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+						Network:            "SepoliaTestnet",
+						Token:              "0x5D684d37922dAf7Aa2013E65A22880a11C475e25", // BAT
+						DiscountPercentOff: 20.0,
 					},
 
 					{
-						Network: "PolygonTestnet",
-						Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+						Network:            "PolygonTestnet",
+						Token:              "0xd445cAAbb9eA6685D3A512439256866563a16E93", // BAT
+						DiscountPercentOff: 20.0,
 					},
 				},
 			},
 		}, nil
+
 	case "production":
 		return &radom.Gateway{
 			Managed: radom.Managed{
 				Methods: []radom.Method{
 					{
-						Network: "Polygon",
-						Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+						Network:            "Polygon",
+						Token:              "0x3cef98bb43d732e2f285ee605a8158cde967d219", // BAT
+						DiscountPercentOff: 20.0,
 					},
 
 					{
-						Network: "Ethereum",
-						Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+						Network:            "Ethereum",
+						Token:              "0x0d8775f648430679a709e98d2b0cb6250d2887ef", // BAT
+						DiscountPercentOff: 20.0,
 					},
 				},
 			},
 		}, nil
+
 	default:
 		return nil, model.Error("skus: unknown environment")
 	}

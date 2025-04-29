@@ -31,8 +31,9 @@ type Managed struct {
 }
 
 type Method struct {
-	Network string `json:"network"`
-	Token   string `json:"token"`
+	Network            string `json:"network"`
+	Token              string `json:"token"`
+	DiscountPercentOff int64  `json:"discountPercentOff"`
 }
 
 type LineItem struct {
