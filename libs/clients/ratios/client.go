@@ -81,7 +81,7 @@ func New() (Client, error) {
 		&HTTPClient{
 			client: client,
 			cache:  cache.New(5*time.Second, 1*time.Minute),
-		}, "ratios_client"), err
+		}, "ratios_client"), nil
 }
 
 // RateResponse is the response received from ratios
