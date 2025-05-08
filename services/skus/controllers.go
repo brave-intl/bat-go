@@ -369,13 +369,19 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrder").Logger()
+
 		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
+			lg.Err(err).Msg("failed to parse order id")
+
 			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
 		order, err := svc.getTransformOrder(ctx, orderID)
 		if err != nil {
+			lg.Err(err).Msg("failed to get transform order")
+
 			switch {
 			case errors.Is(err, context.Canceled):
 				return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
@@ -391,6 +397,8 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 		if isRadomCheckoutSession(order) {
 			sid, ok := order.RadomSubID()
 			if !ok {
+				lg.Err(model.ErrNoRadomSubscriptionID).Msg("failed to get radom session id")
+
 				return handlers.WrapError(model.ErrNoRadomSubscriptionID, "radom session id not found", http.StatusInternalServerError)
 			}
 
