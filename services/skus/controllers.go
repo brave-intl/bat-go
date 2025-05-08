@@ -366,7 +366,7 @@ func CancelOrder(service *Service) handlers.AppHandler {
 }
 
 func handleGetOrder(svc *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 
 		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
@@ -388,8 +388,17 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 			}
 		}
 
+		if isRadomCheckoutSession(order) {
+			sid, ok := order.RadomSubID()
+			if !ok {
+				return handlers.WrapError(model.ErrNoRadomSubscriptionID, "radom session id not found", http.StatusInternalServerError)
+			}
+
+			order.UpdateCheckoutSessionID(sid)
+		}
+
 		return handlers.RenderContent(ctx, order, w, http.StatusOK)
-	})
+	}
 }
 
 // GetTransactions is the handler for listing the transactions for an order

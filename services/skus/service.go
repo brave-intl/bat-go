@@ -131,7 +131,8 @@ type stripeClient interface {
 
 // Service contains datastore
 type radomClient interface {
-	CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	CreateCheckoutSession(ctx context.Context, creq *radom.CreateCheckoutSessionRequest) (radom.CreateCheckoutSessionResponse, error)
+	GetCheckoutSession(ctx context.Context, csid string) (radom.GetCheckoutSessionResponse, error)
 	GetSubscription(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
 }
 
@@ -610,17 +611,31 @@ func (s *Service) getTransformOrderTx(ctx context.Context, dbi sqlx.ExtContext, 
 		return nil, fmt.Errorf("failed to get order (%s): %w", orderID.String(), err)
 	}
 
+	// Nothing more to do for mobile orders.
+	if ord.IsIOS() || ord.IsAndroid() {
+		return ord, nil
+	}
+
 	// Nothing more to do for orders with a Stripe subscription.
 	if _, ok := ord.StripeSubID(); ok {
 		return ord, nil
 	}
 
-	if !shouldTransformStripeOrder(ord) {
+	// Nothing more to do for orders with a Radom subscription.
+	if _, ok := ord.RadomSubID(); ok {
 		return ord, nil
 	}
 
-	if err := s.updateOrderStripeSession(ctx, dbi, ord); err != nil {
-		return nil, fmt.Errorf("failed to transform stripe order (%s): %w", orderID.String(), err)
+	switch {
+	case isStripeCheckoutSession(ord):
+		if err := s.updateOrderStripeSession(ctx, dbi, ord); err != nil {
+			return nil, fmt.Errorf("failed to transform stripe order (%s): %w", orderID.String(), err)
+		}
+
+	case isRadomCheckoutSession(ord):
+		if err := s.updateOrderRadomSession(ctx, dbi, ord); err != nil {
+			return nil, fmt.Errorf("failed to transform radom order (%s): %w", orderID.String(), err)
+		}
 	}
 
 	return s.getOrderFullTx(ctx, dbi, orderID)
@@ -644,7 +659,7 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 		newSessID = nsessID
 	}
 
-	// Below goes some leagcy stuff.
+	// Below goes some legacy stuff.
 	// There was also a bug where the old subscription would be tested for payment.
 	// The code below did not take into account that the session could have been updated just above.
 	//
@@ -677,6 +692,49 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 	paidt := time.Unix(sub.CurrentPeriodStart, 0).UTC()
 
 	return s.renewOrderStripe(ctx, dbi, ord, sub.ID, expt, paidt)
+}
+
+func (s *Service) updateOrderRadomSession(ctx context.Context, dbi sqlx.ExtContext, ord *model.Order) error {
+	ord, err := s.getOrderFullTx(ctx, dbi, ord.ID)
+	if err != nil {
+		return err
+	}
+
+	sid, ok := ord.RadomSessID()
+	if !ok {
+		return model.ErrNoRadomCheckoutSessionID
+	}
+
+	cs, err := s.radomClient.GetCheckoutSession(ctx, sid)
+	if err != nil {
+		return err
+	}
+
+	if !cs.IsSessionExpired() {
+		return nil
+	}
+
+	oreq := &model.CreateOrderRequestNew{
+		RadomMetadata: &model.OrderRadomMetadata{
+			SuccessURI: cs.SuccessURL,
+			CancelURI:  cs.CancelURL,
+		},
+	}
+
+	nsid, err := s.createRadomSession(ctx, oreq, ord)
+	if err != nil {
+		return err
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "radomCheckoutSessionId", nsid)
+}
+
+func isStripeCheckoutSession(ord *model.Order) bool {
+	return !ord.IsPaid() && ord.IsStripePayable()
+}
+
+func isRadomCheckoutSession(ord *model.Order) bool {
+	return !ord.IsPaid() && ord.IsRadomPayable()
 }
 
 func (s *Service) CancelOrder(ctx context.Context, id uuid.UUID) error {
@@ -2056,7 +2114,7 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 		return "", err
 	}
 
-	reqx := &radom.CheckoutSessionRequest{
+	reqx := &radom.CreateCheckoutSessionRequest{
 		LineItems:  items,
 		Gateway:    s.radomGateway,
 		SuccessURL: surl,
