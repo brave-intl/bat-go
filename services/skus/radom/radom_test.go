@@ -8,6 +8,102 @@ import (
 	must "github.com/stretchr/testify/require"
 )
 
+func TestGetCheckoutSessionResponse_IsSessionExpired(t *testing.T) {
+	type tcGiven struct {
+		r GetCheckoutSessionResponse
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "expired",
+			given: tcGiven{
+				r: GetCheckoutSessionResponse{
+					SessionStatus: "expired",
+				},
+			},
+			exp: tcExpected{
+				result: true,
+			},
+		},
+
+		{
+			name: "not_expired",
+			given: tcGiven{
+				r: GetCheckoutSessionResponse{
+					SessionStatus: "session_status",
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.r.IsSessionExpired()
+			should.Equal(t, tc.exp.result, actual)
+		})
+	}
+}
+
+func TestGetCheckoutSessionResponse_IsSessionSuccess(t *testing.T) {
+	type tcGiven struct {
+		r GetCheckoutSessionResponse
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "success",
+			given: tcGiven{
+				r: GetCheckoutSessionResponse{
+					SessionStatus: "success",
+				},
+			},
+			exp: tcExpected{
+				result: true,
+			},
+		},
+
+		{
+			name: "not_success",
+			given: tcGiven{
+				r: GetCheckoutSessionResponse{
+					SessionStatus: "session_status",
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.r.IsSessionSuccess()
+			should.Equal(t, tc.exp.result, actual)
+		})
+	}
+}
+
 func TestSubscriptionResponse_NextBillingDate(t *testing.T) {
 	type tcGiven struct {
 		subResp SubscriptionResponse
