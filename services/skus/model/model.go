@@ -52,7 +52,6 @@ const (
 	ErrUnsupportedCredType Error = "unsupported credential type"
 
 	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
-	ErrNoRadomSubscriptionID    Error = "model: no radom subscription id"
 
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )

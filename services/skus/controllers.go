@@ -395,11 +395,11 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 		}
 
 		if isRadomCheckoutSession(order) {
-			sid, ok := order.RadomSubID()
+			sid, ok := order.RadomSessID()
 			if !ok {
-				lg.Err(model.ErrNoRadomSubscriptionID).Msg("failed to get radom session id")
+				lg.Err(model.ErrNoRadomCheckoutSessionID).Msg("failed to get radom session id")
 
-				return handlers.WrapError(model.ErrNoRadomSubscriptionID, "radom session id not found", http.StatusInternalServerError)
+				return handlers.WrapError(model.ErrNoRadomCheckoutSessionID, "radom session id not found", http.StatusInternalServerError)
 			}
 
 			order.UpdateCheckoutSessionID(sid)
