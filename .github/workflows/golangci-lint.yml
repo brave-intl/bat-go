@@ -21,7 +21,7 @@ jobs:
         with:
           go-version: '1.23'
       - name: golangci-lint-libs
-        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3.7.0
+        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v3.7.1
         with:
           working-directory: libs
           version: v1.64.8
@@ -36,7 +36,7 @@ jobs:
         with:
           go-version: '1.23'
       - name: golangci-lint-services
-        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3.7.0
+        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v3.7.1
         with:
           working-directory: services
           version: v1.64.8
@@ -51,7 +51,7 @@ jobs:
         with:
           go-version: '1.23'
       - name: golangci-lint-tools
-        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3.7.0
+        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v3.7.1
         with:
           working-directory: tools
           version: v1.64.8
@@ -66,7 +66,7 @@ jobs:
         with:
           go-version: '1.23'
       - name: golangci-lint-cmd
-        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3.7.0
+        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v3.7.1
         with:
           working-directory: cmd
           version: v1.64.8
@@ -81,7 +81,7 @@ jobs:
         with:
           go-version: '1.23'
       - name: golangci-lint-main
-        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3.7.0
+        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v3.7.1
         with:
           working-directory: main
           version: v1.64.8
