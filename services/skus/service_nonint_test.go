@@ -5342,12 +5342,12 @@ func TestNewRadomGateway(t *testing.T) {
 							{
 								Network:            "SepoliaTestnet",
 								Token:              "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
-								DiscountPercentOff: 20.0,
+								DiscountPercentOff: 0.20,
 							},
 							{
 								Network:            "PolygonTestnet",
 								Token:              "0xd445cAAbb9eA6685D3A512439256866563a16E93",
-								DiscountPercentOff: 20.0,
+								DiscountPercentOff: 0.20,
 							},
 						},
 					},
@@ -5367,12 +5367,12 @@ func TestNewRadomGateway(t *testing.T) {
 							{
 								Network:            "SepoliaTestnet",
 								Token:              "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
-								DiscountPercentOff: 20.0,
+								DiscountPercentOff: 0.20,
 							},
 							{
 								Network:            "PolygonTestnet",
 								Token:              "0xd445cAAbb9eA6685D3A512439256866563a16E93",
-								DiscountPercentOff: 20.0,
+								DiscountPercentOff: 0.20,
 							},
 						},
 					},
@@ -5392,13 +5392,13 @@ func TestNewRadomGateway(t *testing.T) {
 							{
 								Network:            "Polygon",
 								Token:              "0x3cef98bb43d732e2f285ee605a8158cde967d219",
-								DiscountPercentOff: 20.0,
+								DiscountPercentOff: 0.20,
 							},
 
 							{
 								Network:            "Ethereum",
 								Token:              "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
-								DiscountPercentOff: 20.0,
+								DiscountPercentOff: 0.20,
 							},
 						},
 					},
