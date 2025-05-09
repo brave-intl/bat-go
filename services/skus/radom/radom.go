@@ -45,7 +45,7 @@ type Metadata struct {
 	Value string `json:"value"`
 }
 
-type CheckoutSessionRequest struct {
+type CreateCheckoutSessionRequest struct {
 	LineItems  []LineItem `json:"lineItems"`
 	Gateway    *Gateway   `json:"gateway"`
 	SuccessURL string     `json:"successUrl"`
@@ -54,22 +54,52 @@ type CheckoutSessionRequest struct {
 	ExpiresAt  int64      `json:"expiresAt"` // in unix seconds
 }
 
-type CheckoutSessionResponse struct {
+type CreateCheckoutSessionResponse struct {
 	SessionID  string `json:"checkoutSessionId"`
 	SessionURL string `json:"checkoutSessionUrl"`
 }
 
-func (c *Client) CreateCheckoutSession(ctx context.Context, creq *CheckoutSessionRequest) (CheckoutSessionResponse, error) {
+type GetCheckoutSessionResponse struct {
+	SuccessURL    string `json:"successUrl"`
+	CancelURL     string `json:"cancelUrl"`
+	SessionStatus string `json:"sessionStatus"`
+}
+
+func (r GetCheckoutSessionResponse) IsSessionExpired() bool {
+	return r.SessionStatus == "expired"
+}
+
+func (r GetCheckoutSessionResponse) IsSessionSuccess() bool {
+	return r.SessionStatus == "success"
+}
+
+func (c *Client) CreateCheckoutSession(ctx context.Context, creq *CreateCheckoutSessionRequest) (CreateCheckoutSessionResponse, error) {
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/checkout_session", creq, nil)
 	if err != nil {
-		return CheckoutSessionResponse{}, err
+		return CreateCheckoutSessionResponse{}, err
 	}
 
 	req.Header.Add("Authorization", c.authToken)
 
-	var resp CheckoutSessionResponse
+	var resp CreateCheckoutSessionResponse
 	if _, err := c.client.Do(ctx, req, &resp); err != nil {
-		return CheckoutSessionResponse{}, err
+		return CreateCheckoutSessionResponse{}, err
+	}
+
+	return resp, nil
+}
+
+func (c *Client) GetCheckoutSession(ctx context.Context, seshID string) (GetCheckoutSessionResponse, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "/checkout_session/"+seshID, nil, nil)
+	if err != nil {
+		return GetCheckoutSessionResponse{}, err
+	}
+
+	req.Header.Add("Authorization", c.authToken)
+
+	var resp GetCheckoutSessionResponse
+	if _, err := c.client.Do(ctx, req, &resp); err != nil {
+		return GetCheckoutSessionResponse{}, err
 	}
 
 	return resp, nil

@@ -366,16 +366,22 @@ func CancelOrder(service *Service) handlers.AppHandler {
 }
 
 func handleGetOrder(svc *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
+
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrder").Logger()
 
 		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
+			lg.Err(err).Msg("failed to parse order id")
+
 			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
 		order, err := svc.getTransformOrder(ctx, orderID)
 		if err != nil {
+			lg.Err(err).Msg("failed to get transform order")
+
 			switch {
 			case errors.Is(err, context.Canceled):
 				return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
@@ -388,8 +394,19 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 			}
 		}
 
+		if isRadomCheckoutSession(order) {
+			sid, ok := order.RadomSessID()
+			if !ok {
+				lg.Err(model.ErrNoRadomCheckoutSessionID).Msg("failed to get radom session id")
+
+				return handlers.WrapError(model.ErrNoRadomCheckoutSessionID, "radom session id not found", http.StatusInternalServerError)
+			}
+
+			order.UpdateCheckoutSessionID(sid)
+		}
+
 		return handlers.RenderContent(ctx, order, w, http.StatusOK)
-	})
+	}
 }
 
 // GetTransactions is the handler for listing the transactions for an order
