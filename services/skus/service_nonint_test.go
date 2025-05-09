@@ -6443,6 +6443,87 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "create_radom_session_error",
+			given: tcGiven{
+				ord: &model.Order{
+					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				},
+				oss: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						oid := uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000")
+
+						if id != oid {
+							return nil, model.Error("wrong order id")
+						}
+
+						ord := &model.Order{
+							Metadata: datastore.Metadata{"radomCheckoutSessionId": "sesh_id"},
+						}
+
+						return ord, nil
+					},
+				},
+				ois: &repository.MockOrderItem{},
+				rcl: &mockRadomClient{
+					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
+						return radom.GetCheckoutSessionResponse{
+							SessionStatus: "expired",
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				err: errRadomProductIDNotFound,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ord: &model.Order{
+					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				},
+				oss: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						oid := uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000")
+
+						if id != oid {
+							return nil, model.Error("wrong order id")
+						}
+
+						ord := &model.Order{
+							Metadata: datastore.Metadata{"radomCheckoutSessionId": "sesh_id"},
+						}
+
+						return ord, nil
+					},
+				},
+				ois: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						if orderID != uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000") {
+							return nil, model.Error("wrong order id")
+						}
+
+						items := []model.OrderItem{
+							{
+								Metadata: datastore.Metadata{"radom_product_id": "product_id"},
+							},
+						}
+
+						return items, nil
+					},
+				},
+				rcl: &mockRadomClient{
+					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
+						return radom.GetCheckoutSessionResponse{
+							SessionStatus: "expired",
+						}, nil
+					},
+				},
+			},
+		},
 	}
 
 	for i := range tests {
