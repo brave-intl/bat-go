@@ -711,9 +711,6 @@ func (s *Service) updateOrderRadomSession(ctx context.Context, dbi sqlx.ExtConte
 		return err
 	}
 
-	lg := logging.Logger(ctx, "updateOrderRadomSession")
-	lg.Info().Interface("ord", ord).Interface("cs", cs).Msg("processing one")
-
 	switch {
 	case cs.IsSessionSuccess():
 		// Currently there should only ever be a single sub associated with a checkout session.
