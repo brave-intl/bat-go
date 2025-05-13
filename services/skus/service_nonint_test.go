@@ -5429,7 +5429,7 @@ func TestNewRadomGateway(t *testing.T) {
 	}
 }
 
-func TestService_processRadomEvent(t *testing.T) {
+func TestService_processRadomNotification(t *testing.T) {
 	type tcGiven struct {
 		event *radom.Notification
 	}
@@ -5466,7 +5466,7 @@ func TestService_processRadomEvent(t *testing.T) {
 	}
 }
 
-func TestService_processRadomEventTx(t *testing.T) {
+func TestService_processRadomNotificationTx(t *testing.T) {
 	type tcGiven struct {
 		event           *radom.Notification
 		orderRepo       orderStoreSvc

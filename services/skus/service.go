@@ -94,6 +94,7 @@ type orderStoreSvc interface {
 	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -1361,7 +1362,7 @@ func haveCreds(creds *TimeLimitedV2Creds) bool {
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
-func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID string) ([]byte, error) {
+func (s *Service) GetActiveCredentialSigningKey(_ context.Context, merchantID string) ([]byte, error) {
 	// sorted by name, created_at, first result is most recent
 	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
 	if err != nil {
@@ -1383,7 +1384,7 @@ func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID 
 }
 
 // GetCredentialSigningKeys get the current list of credential signing keys for this merchant
-func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID string) ([][]byte, error) {
+func (s *Service) GetCredentialSigningKeys(_ context.Context, merchantID string) ([][]byte, error) {
 	var resp = [][]byte{}
 	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
 	if err != nil {
@@ -1441,7 +1442,7 @@ func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, tim
 
 // timeChunking - given a duration and interval size of credential, return number of credentials
 // to generate, and a function that takes a start time and increments it by an appropriate amount
-func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, orderID, itemID uuid.UUID, issued time.Time, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
+func timeChunking(_ context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, orderID, itemID uuid.UUID, issued time.Time, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
 	expiresAt, err := duration.From(issued)
 	if err != nil {
 		return nil, fmt.Errorf("unable to compute expiry")
@@ -1478,7 +1479,7 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 }
 
 // GetTimeLimitedCreds returns get an order's time limited creds.
-func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID, reqID uuid.UUID) ([]TimeLimitedCreds, int, error) {
+func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID, _ uuid.UUID) ([]TimeLimitedCreds, int, error) {
 	if !order.IsPaid() || order.LastPaidAt == nil {
 		return nil, http.StatusBadRequest, model.Error("order is not paid, or invalid last paid at")
 	}
@@ -2465,7 +2466,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		ord, err := s.orderRepo.GetByRadomSubscriptionID(ctx, dbi, subID.String())
 		if err != nil {
 			return err
 		}
@@ -2495,7 +2496,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		ord, err := s.orderRepo.GetByRadomSubscriptionID(ctx, dbi, subID.String())
 		if err != nil {
 			return err
 		}
