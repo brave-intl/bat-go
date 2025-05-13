@@ -94,6 +94,7 @@ type orderStoreSvc interface {
 	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -2465,7 +2466,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		ord, err := s.orderRepo.GetByRadomSubscriptionID(ctx, dbi, subID.String())
 		if err != nil {
 			return err
 		}
@@ -2495,7 +2496,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		ord, err := s.orderRepo.GetByRadomSubscriptionID(ctx, dbi, subID.String())
 		if err != nil {
 			return err
 		}

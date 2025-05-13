@@ -16,11 +16,126 @@ import (
 	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 )
+
+func TestOrder_GetByRadomSubscriptionID(t *testing.T) {
+	dbi, err := setupDBI()
+	must.NoError(t, err)
+
+	defer func() {
+		_, _ = dbi.Exec("DELETE FROM orders;")
+	}()
+
+	type tcGiven struct {
+		rsid     string
+		fnBefore func(ctx context.Context, dbi sqlx.ExecerContext) error
+	}
+
+	type tcExpected struct {
+		order *model.Order
+		err   error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_order_not_found",
+			given: tcGiven{
+				rsid: "some_radom_sub_id",
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, trial_days, created_at, updated_at, metadata
+					)
+					VALUES (
+						'00000000-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						3,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01',
+						'{"radomSubscriptionId" : "radom_sub_id"}'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrOrderNotFound,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				rsid: "rsid_success",
+				fnBefore: func(ctx context.Context, dbi sqlx.ExecerContext) error {
+					const q = `INSERT INTO orders (
+						id, merchant_id, status, currency, total_price, trial_days, created_at, updated_at, metadata
+					)
+					VALUES (
+						'facade00-0000-4000-a000-000000000000',
+						'brave.com',
+						'paid',
+						'USD',
+						9.99,
+						3,
+						'2024-01-01 00:00:01',
+						'2024-01-01 00:00:01',
+						'{"radomSubscriptionId" : "rsid_success"}'
+					);`
+
+					_, err := dbi.ExecContext(ctx, q)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				order: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+				},
+			},
+		},
+	}
+
+	repo := repository.NewOrder()
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			_, err = dbi.Exec("DELETE FROM orders;")
+			must.NoError(t, err)
+
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, dbi)
+				must.NoError(t, err)
+			}
+
+			actual, err := repo.GetByRadomSubscriptionID(ctx, dbi, tc.given.rsid)
+			must.Equal(t, tc.exp.err, err)
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.order.ID, actual.ID)
+		})
+	}
+}
 
 func TestOrder_SetTrialDays(t *testing.T) {
 	dbi, err := setupDBI()
@@ -1220,20 +1335,6 @@ func TestOrder_IncrementNumPayFailed(t *testing.T) {
 
 func ptrString(s string) *string {
 	return &s
-}
-
-func nowPlusInterval(v string) (time.Time, error) {
-	dur, err := timeutils.ParseDuration(v)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	result, err := dur.FromNow()
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return *result, nil
 }
 
 func nowPlusIntervalPg(ctx context.Context, dbi sqlx.QueryerContext, v string) (time.Time, error) {
