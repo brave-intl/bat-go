@@ -2,7 +2,7 @@ module github.com/brave-intl/bat-go/main
 
 go 1.23.0
 
-toolchain go1.23.9
+toolchain go1.24.3
 
 replace github.com/brave-intl/bat-go/cmd => ../cmd
 
