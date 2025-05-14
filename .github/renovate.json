@@ -3,7 +3,7 @@
   "extends": [
     "local>brave-intl/renovate-config"
   ],
-  "ignorePatterns": [
+  "ignorePaths": [
     "**/go.mod",
     "**/go.sum"
   ]
