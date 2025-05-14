@@ -164,6 +164,118 @@ func TestSubscriptionResponse_NextBillingDate(t *testing.T) {
 	}
 }
 
+func TestSubscriptionResponse_SubID(t *testing.T) {
+	type tcGiven struct {
+		subResp *SubscriptionResponse
+	}
+
+	type tcExpected struct {
+		sid string
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "nil",
+		},
+
+		{
+			name: "empty_id",
+			given: tcGiven{
+				subResp: &SubscriptionResponse{},
+			},
+		},
+
+		{
+			name: "id",
+			given: tcGiven{
+				subResp: &SubscriptionResponse{
+					ID: "id",
+				},
+			},
+			exp: tcExpected{
+				sid: "id",
+				ok:  true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := tc.given.subResp.SubID()
+			should.Equal(t, tc.exp.ok, ok)
+			should.Equal(t, tc.exp.sid, actual)
+		})
+	}
+}
+
+func TestSubscriptionResponse_IsActive(t *testing.T) {
+	type tcGiven struct {
+		subResp *SubscriptionResponse
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "nil",
+		},
+
+		{
+			name: "empty_id",
+			given: tcGiven{
+				subResp: &SubscriptionResponse{},
+			},
+		},
+
+		{
+			name: "not_active",
+			given: tcGiven{
+				subResp: &SubscriptionResponse{
+					Status: "expired",
+				},
+			},
+		},
+
+		{
+			name: "active",
+			given: tcGiven{
+				subResp: &SubscriptionResponse{
+					Status: "active",
+				},
+			},
+			exp: tcExpected{
+				result: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.subResp.IsActive()
+			should.Equal(t, tc.exp.result, actual)
+		})
+	}
+}
+
 func TestSubscriptionResponse_LastPaid(t *testing.T) {
 	type tcGiven struct {
 		subResp SubscriptionResponse

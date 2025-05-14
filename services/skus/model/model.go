@@ -53,6 +53,9 @@ const (
 
 	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
 
+	ErrRadomInvalidNumAssocSubs Error = "model: invalid number of associated subs"
+	ErrRadomSubNotActive        Error = "model: sub not active"
+
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 

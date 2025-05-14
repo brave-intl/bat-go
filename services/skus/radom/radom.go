@@ -60,9 +60,10 @@ type CreateCheckoutSessionResponse struct {
 }
 
 type GetCheckoutSessionResponse struct {
-	SuccessURL    string `json:"successUrl"`
-	CancelURL     string `json:"cancelUrl"`
-	SessionStatus string `json:"sessionStatus"`
+	SuccessURL         string                 `json:"successUrl"`
+	CancelURL          string                 `json:"cancelUrl"`
+	SessionStatus      string                 `json:"sessionStatus"`
+	AssocSubscriptions []SubscriptionResponse `json:"associatedSubscriptions"`
 }
 
 func (r GetCheckoutSessionResponse) IsSessionExpired() bool {
@@ -123,12 +124,29 @@ func (c *Client) GetSubscription(ctx context.Context, subID string) (*Subscripti
 
 type SubscriptionResponse struct {
 	ID                string    `json:"id"`
+	Status            string    `json:"status"`
 	NextBillingDateAt string    `json:"nextBillingDateAt"`
 	Payments          []Payment `json:"payments"`
 }
 
 type Payment struct {
 	Date string `json:"date"`
+}
+
+func (s *SubscriptionResponse) SubID() (string, bool) {
+	if s == nil || s.ID == "" {
+		return "", false
+	}
+
+	return s.ID, true
+}
+
+func (s *SubscriptionResponse) IsActive() bool {
+	if s == nil || s.Status == "" {
+		return false
+	}
+
+	return s.Status == "active"
 }
 
 func (s *SubscriptionResponse) NextBillingDate() (time.Time, error) {

@@ -711,23 +711,67 @@ func (s *Service) updateOrderRadomSession(ctx context.Context, dbi sqlx.ExtConte
 		return err
 	}
 
-	if !cs.IsSessionExpired() {
+	switch {
+	case cs.IsSessionSuccess():
+		// Currently there should only ever be a single sub associated with a checkout session.
+		if len(cs.AssocSubscriptions) != 1 {
+			return model.ErrRadomInvalidNumAssocSubs
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, cs.AssocSubscriptions[0].ID)
+		if err != nil {
+			return err
+		}
+
+		if !rsub.IsActive() {
+			return model.ErrRadomSubNotActive
+		}
+
+		return s.newRadomSub(ctx, dbi, ord.ID, rsub)
+
+	case cs.IsSessionExpired():
+		oreq := &model.CreateOrderRequestNew{
+			RadomMetadata: &model.OrderRadomMetadata{
+				SuccessURI: cs.SuccessURL,
+				CancelURI:  cs.CancelURL,
+			},
+		}
+
+		nsid, err := s.createRadomSession(ctx, oreq, ord)
+		if err != nil {
+			return err
+		}
+
+		return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "radomCheckoutSessionId", nsid)
+
+	default:
 		return nil
-	}
 
-	oreq := &model.CreateOrderRequestNew{
-		RadomMetadata: &model.OrderRadomMetadata{
-			SuccessURI: cs.SuccessURL,
-			CancelURI:  cs.CancelURL,
-		},
 	}
+}
 
-	nsid, err := s.createRadomSession(ctx, oreq, ord)
+func (s *Service) newRadomSub(ctx context.Context, dbi sqlx.ExtContext, oid uuid.UUID, rsub *radom.SubscriptionResponse) error {
+	nxtB, err := rsub.NextBillingDate()
 	if err != nil {
 		return err
 	}
 
-	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "radomCheckoutSessionId", nsid)
+	expAt := nxtB.Add(24 * time.Hour)
+
+	paidAt, err := rsub.LastPaid()
+	if err != nil {
+		return err
+	}
+
+	if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "radomSubscriptionId", rsub.ID); err != nil {
+		return err
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
 }
 
 func isStripeCheckoutSession(ord *model.Order) bool {
@@ -2438,27 +2482,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		nxtB, err := rsub.NextBillingDate()
-		if err != nil {
-			return err
-		}
-
-		expAt := nxtB.Add(24 * time.Hour)
-
-		paidAt, err := rsub.LastPaid()
-		if err != nil {
-			return err
-		}
-
-		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
-			return err
-		}
-
-		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "radomSubscriptionId", subID.String()); err != nil {
-			return err
-		}
-
-		return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
+		return s.newRadomSub(ctx, dbi, oid, rsub)
 
 	case ntf.ShouldRenew():
 		subID, err := ntf.SubID()
