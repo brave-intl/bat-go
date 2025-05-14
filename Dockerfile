@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o bat-go main.go
 
-FROM alpine:3.19 AS base
+FROM alpine:3.21 AS base
 
 # Put certs in artifact from builder.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
