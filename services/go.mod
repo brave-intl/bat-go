@@ -22,7 +22,7 @@ require (
 	github.com/brave-intl/bat-go/tools v1.0.2
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/getsentry/sentry-go v0.14.0
-	github.com/go-chi/chi v4.1.2+incompatible
+	github.com/go-chi/chi v4.1.3+incompatible
 	github.com/go-chi/cors v1.2.1
 	github.com/go-jose/go-jose/v3 v3.0.4
 	github.com/go-playground/validator/v10 v10.14.1
