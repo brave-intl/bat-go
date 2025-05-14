@@ -17,7 +17,8 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.17.7
 	github.com/aws/aws-sdk-go-v2/config v1.18.19
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.31.0
-	github.com/brave-intl/bat-go v1.0.2
+	github.com/brave-intl/bat-go v1.0.3
+	github.com/brave-intl/bat-go/cmd v0.0.0-20250514143053-3f2918e4640d
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/tools v1.0.2
 	github.com/btcsuite/btcutil v1.0.2

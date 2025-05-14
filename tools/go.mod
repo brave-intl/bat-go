@@ -6,7 +6,8 @@ toolchain go1.23.9
 
 require (
 	github.com/alecthomas/jsonschema v0.0.0-20220216202328-9eeeec9d044b
-	github.com/brave-intl/bat-go v1.0.2
+	github.com/brave-intl/bat-go v1.0.3
+	github.com/brave-intl/bat-go/cmd v0.0.0-20250514143053-3f2918e4640d
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/services v1.0.2
 	github.com/getsentry/sentry-go v0.14.0
