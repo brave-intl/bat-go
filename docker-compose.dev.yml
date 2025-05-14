@@ -26,7 +26,7 @@ services:
       - TEST_DIRS
   vault:
     container_name: grant-vault
-    image: vault:0.10.2
+    image: vault:0.11.6
     networks:
       - grant
   redislog:
