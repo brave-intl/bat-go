@@ -310,7 +310,7 @@ services:
 
   dynamodb:
     container_name: dynamodb
-    image: amazon/dynamodb-local:1.21.0
+    image: amazon/dynamodb-local:1.25.1
     networks:
       - grant
     ports:
