@@ -6326,6 +6326,7 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 		ord *model.Order
 		oss orderStoreSvc
 		ois orderItemStore
+		oph orderPayHistoryStore
 		rcl radomClient
 	}
 
@@ -6341,22 +6342,22 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "error_get_order_full_tx",
+			name: "get_order_full_tx_error",
 			given: tcGiven{
 				ord: &model.Order{},
 				oss: &repository.MockOrder{
 					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						return nil, model.Error("error_get_order_full_tx")
+						return nil, model.Error("get_order_full_tx_error")
 					},
 				},
 			},
 			exp: tcExpected{
-				err: model.Error("error_get_order_full_tx"),
+				err: model.Error("get_order_full_tx_error"),
 			},
 		},
 
 		{
-			name: "error_ord_radom_sesh_id",
+			name: "radom_sesh_id_error",
 			given: tcGiven{
 				ord: &model.Order{
 					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
@@ -6380,7 +6381,7 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 		},
 
 		{
-			name: "error_radom_get_checkout_session",
+			name: "get_checkout_session_error",
 			given: tcGiven{
 				ord: &model.Order{
 					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
@@ -6403,17 +6404,17 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 				ois: &repository.MockOrderItem{},
 				rcl: &mockRadomClient{
 					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
-						return radom.GetCheckoutSessionResponse{}, model.Error("error_get_checkout_session")
+						return radom.GetCheckoutSessionResponse{}, model.Error("get_checkout_session_error")
 					},
 				},
 			},
 			exp: tcExpected{
-				err: model.Error("error_get_checkout_session"),
+				err: model.Error("get_checkout_session_error"),
 			},
 		},
 
 		{
-			name: "radom_checkout_session_not_expired",
+			name: "session_success_invalid_assoc_subs_error",
 			given: tcGiven{
 				ord: &model.Order{
 					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
@@ -6437,7 +6438,169 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 				rcl: &mockRadomClient{
 					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
 						return radom.GetCheckoutSessionResponse{
-							SessionStatus: "pending",
+							SessionStatus: "success",
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrRadomInvalidNumAssocSubs,
+			},
+		},
+
+		{
+			name: "session_success_get_radom_subscription_error",
+			given: tcGiven{
+				ord: &model.Order{
+					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				},
+				oss: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						oid := uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000")
+
+						if id != oid {
+							return nil, model.Error("wrong order id")
+						}
+
+						ord := &model.Order{
+							Metadata: datastore.Metadata{"radomCheckoutSessionId": "sesh_id"},
+						}
+
+						return ord, nil
+					},
+				},
+				ois: &repository.MockOrderItem{},
+				rcl: &mockRadomClient{
+					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
+						return radom.GetCheckoutSessionResponse{
+							SessionStatus: "success",
+							AssocSubscriptions: []radom.SubscriptionResponse{
+								{
+									ID: "radom_sub_id",
+								},
+							},
+						}, nil
+					},
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						return nil, model.Error("session_success_get_radom_subscription_error")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.Error("session_success_get_radom_subscription_error"),
+			},
+		},
+
+		{
+			name: "session_success_radom_subscription_not_active_error",
+			given: tcGiven{
+				ord: &model.Order{
+					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				},
+				oss: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						oid := uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000")
+
+						if id != oid {
+							return nil, model.Error("wrong order id")
+						}
+
+						ord := &model.Order{
+							Metadata: datastore.Metadata{"radomCheckoutSessionId": "sesh_id"},
+						}
+
+						return ord, nil
+					},
+				},
+				ois: &repository.MockOrderItem{},
+				rcl: &mockRadomClient{
+					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
+						return radom.GetCheckoutSessionResponse{
+							SessionStatus: "success",
+							AssocSubscriptions: []radom.SubscriptionResponse{
+								{
+									ID: "radom_sub_id",
+								},
+							},
+						}, nil
+					},
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						if subID != "radom_sub_id" {
+							return nil, model.Error("wrong_radom_sub_id")
+						}
+
+						return &radom.SubscriptionResponse{
+							Status: "not_active",
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrRadomSubNotActive,
+			},
+		},
+
+		{
+			name: "session_success",
+			given: tcGiven{
+				ord: &model.Order{
+					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				},
+				oss: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						oid := uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000")
+
+						if id != oid {
+							return nil, model.Error("wrong order id")
+						}
+
+						ord := &model.Order{
+							Metadata: datastore.Metadata{"radomCheckoutSessionId": "sesh_id"},
+						}
+
+						return ord, nil
+					},
+				},
+				ois: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						if orderID != uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000") {
+							return nil, model.Error("wrong order id")
+						}
+
+						items := []model.OrderItem{
+							{
+								Metadata: datastore.Metadata{"radom_product_id": "product_id"},
+							},
+						}
+
+						return items, nil
+					},
+				},
+				oph: &repository.MockOrderPayHistory{},
+				rcl: &mockRadomClient{
+					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
+						return radom.GetCheckoutSessionResponse{
+							SessionStatus: "success",
+							AssocSubscriptions: []radom.SubscriptionResponse{
+								{
+									ID: "radom_sub_id",
+								},
+							},
+						}, nil
+					},
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						if subID != "radom_sub_id" {
+							return nil, model.Error("wrong_radom_sub_id")
+						}
+
+						return &radom.SubscriptionResponse{
+							Status:            "active",
+							NextBillingDateAt: "2019-08-24T14:15:22Z",
+							Payments: []radom.Payment{
+								{
+									Date: "2019-08-24T14:15:22Z",
+								},
+							},
 						}, nil
 					},
 				},
@@ -6445,7 +6608,7 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 		},
 
 		{
-			name: "create_radom_session_error",
+			name: "session_expired_create_radom_session_error",
 			given: tcGiven{
 				ord: &model.Order{
 					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
@@ -6480,7 +6643,59 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 		},
 
 		{
-			name: "success",
+			name: "session_expired_append_metadata_error",
+			given: tcGiven{
+				ord: &model.Order{
+					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
+				},
+				oss: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						oid := uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000")
+
+						if id != oid {
+							return nil, model.Error("wrong order id")
+						}
+
+						ord := &model.Order{
+							Metadata: datastore.Metadata{"radomCheckoutSessionId": "sesh_id"},
+						}
+
+						return ord, nil
+					},
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						return model.Error("session_expired_append_metadata_error")
+					},
+				},
+				ois: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						if orderID != uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000") {
+							return nil, model.Error("wrong order id")
+						}
+
+						items := []model.OrderItem{
+							{
+								Metadata: datastore.Metadata{"radom_product_id": "product_id"},
+							},
+						}
+
+						return items, nil
+					},
+				},
+				rcl: &mockRadomClient{
+					fnGetCheckoutSession: func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error) {
+						return radom.GetCheckoutSessionResponse{
+							SessionStatus: "expired",
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.Error("session_expired_append_metadata_error"),
+			},
+		},
+
+		{
+			name: "session_expired_success",
 			given: tcGiven{
 				ord: &model.Order{
 					ID: uuid.FromStringOrNil("facade00-0000-4000-a000-000000000000"),
@@ -6533,6 +6748,7 @@ func TestService_updateOrderRadomSession(t *testing.T) {
 			svc := &Service{
 				orderRepo:     tc.given.oss,
 				orderItemRepo: tc.given.ois,
+				payHistRepo:   tc.given.oph,
 				radomClient:   tc.given.rcl,
 			}
 
