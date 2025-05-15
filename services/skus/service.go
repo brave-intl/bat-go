@@ -3067,6 +3067,11 @@ func newRadomGateway(env string) (*radom.Gateway, error) {
 						Token:              "0xd445cAAbb9eA6685D3A512439256866563a16E93", // BAT
 						DiscountPercentOff: 0.20,
 					},
+
+					{
+						Network: "SepoliaTestnet",
+						Token:   "0xa4fCE8264370437e718aE207805b4e6233638b9E", // USDC
+					},
 				},
 			},
 		}, nil
