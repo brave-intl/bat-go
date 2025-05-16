@@ -59,6 +59,25 @@ func (r *Order) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, ex
 	return result, nil
 }
 
+func (r *Order) GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error) {
+	const q = `SELECT
+		id, created_at, currency, updated_at, total_price,
+		merchant_id, location, status, allowed_payment_methods,
+		metadata, valid_for, last_paid_at, expires_at, trial_days
+	FROM orders WHERE metadata->>'radomSubscriptionId' = $1`
+
+	result := &model.Order{}
+	if err := sqlx.GetContext(ctx, dbi, result, q, rsid); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, model.ErrOrderNotFound
+		}
+
+		return nil, err
+	}
+
+	return result, nil
+}
+
 // Create creates an order with the data in req.
 func (r *Order) Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error) {
 	const q = `INSERT INTO orders

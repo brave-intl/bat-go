@@ -1768,8 +1768,8 @@ func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
 	sessID := uuid.NewV4().String()
 
 	suite.service.radomClient = &mockRadomClient{
-		fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error) {
-			return radom.CheckoutSessionResponse{
+		fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CreateCheckoutSessionRequest) (radom.CreateCheckoutSessionResponse, error) {
+			return radom.CreateCheckoutSessionResponse{
 				SessionID: sessID,
 			}, nil
 		}}

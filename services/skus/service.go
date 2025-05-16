@@ -94,6 +94,7 @@ type orderStoreSvc interface {
 	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
 	SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -131,7 +132,8 @@ type stripeClient interface {
 
 // Service contains datastore
 type radomClient interface {
-	CreateCheckoutSession(ctx context.Context, creq *radom.CheckoutSessionRequest) (radom.CheckoutSessionResponse, error)
+	CreateCheckoutSession(ctx context.Context, creq *radom.CreateCheckoutSessionRequest) (radom.CreateCheckoutSessionResponse, error)
+	GetCheckoutSession(ctx context.Context, csid string) (radom.GetCheckoutSessionResponse, error)
 	GetSubscription(ctx context.Context, subID string) (*radom.SubscriptionResponse, error)
 }
 
@@ -610,17 +612,31 @@ func (s *Service) getTransformOrderTx(ctx context.Context, dbi sqlx.ExtContext, 
 		return nil, fmt.Errorf("failed to get order (%s): %w", orderID.String(), err)
 	}
 
+	// Nothing more to do for mobile orders.
+	if ord.IsIOS() || ord.IsAndroid() {
+		return ord, nil
+	}
+
 	// Nothing more to do for orders with a Stripe subscription.
 	if _, ok := ord.StripeSubID(); ok {
 		return ord, nil
 	}
 
-	if !shouldTransformStripeOrder(ord) {
+	// Nothing more to do for orders with a Radom subscription.
+	if _, ok := ord.RadomSubID(); ok {
 		return ord, nil
 	}
 
-	if err := s.updateOrderStripeSession(ctx, dbi, ord); err != nil {
-		return nil, fmt.Errorf("failed to transform stripe order (%s): %w", orderID.String(), err)
+	switch {
+	case isStripeCheckoutSession(ord):
+		if err := s.updateOrderStripeSession(ctx, dbi, ord); err != nil {
+			return nil, fmt.Errorf("failed to transform stripe order (%s): %w", orderID.String(), err)
+		}
+
+	case isRadomCheckoutSession(ord):
+		if err := s.updateOrderRadomSession(ctx, dbi, ord); err != nil {
+			return nil, fmt.Errorf("failed to transform radom order (%s): %w", orderID.String(), err)
+		}
 	}
 
 	return s.getOrderFullTx(ctx, dbi, orderID)
@@ -644,7 +660,7 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 		newSessID = nsessID
 	}
 
-	// Below goes some leagcy stuff.
+	// Below goes some legacy stuff.
 	// There was also a bug where the old subscription would be tested for payment.
 	// The code below did not take into account that the session could have been updated just above.
 	//
@@ -677,6 +693,93 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 	paidt := time.Unix(sub.CurrentPeriodStart, 0).UTC()
 
 	return s.renewOrderStripe(ctx, dbi, ord, sub.ID, expt, paidt)
+}
+
+func (s *Service) updateOrderRadomSession(ctx context.Context, dbi sqlx.ExtContext, ord *model.Order) error {
+	ord, err := s.getOrderFullTx(ctx, dbi, ord.ID)
+	if err != nil {
+		return err
+	}
+
+	sid, ok := ord.RadomSessID()
+	if !ok {
+		return model.ErrNoRadomCheckoutSessionID
+	}
+
+	cs, err := s.radomClient.GetCheckoutSession(ctx, sid)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case cs.IsSessionSuccess():
+		// Currently there should only ever be a single sub associated with a checkout session.
+		if len(cs.AssocSubscriptions) != 1 {
+			return model.ErrRadomInvalidNumAssocSubs
+		}
+
+		rsub, err := s.radomClient.GetSubscription(ctx, cs.AssocSubscriptions[0].ID)
+		if err != nil {
+			return err
+		}
+
+		if !rsub.IsActive() {
+			return model.ErrRadomSubNotActive
+		}
+
+		return s.newRadomSub(ctx, dbi, ord.ID, rsub)
+
+	case cs.IsSessionExpired():
+		oreq := &model.CreateOrderRequestNew{
+			RadomMetadata: &model.OrderRadomMetadata{
+				SuccessURI: cs.SuccessURL,
+				CancelURI:  cs.CancelURL,
+			},
+		}
+
+		nsid, err := s.createRadomSession(ctx, oreq, ord)
+		if err != nil {
+			return err
+		}
+
+		return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "radomCheckoutSessionId", nsid)
+
+	default:
+		return nil
+
+	}
+}
+
+func (s *Service) newRadomSub(ctx context.Context, dbi sqlx.ExtContext, oid uuid.UUID, rsub *radom.SubscriptionResponse) error {
+	nxtB, err := rsub.NextBillingDate()
+	if err != nil {
+		return err
+	}
+
+	expAt := nxtB.Add(24 * time.Hour)
+
+	paidAt, err := rsub.LastPaid()
+	if err != nil {
+		return err
+	}
+
+	if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "radomSubscriptionId", rsub.ID); err != nil {
+		return err
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
+}
+
+func isStripeCheckoutSession(ord *model.Order) bool {
+	return !ord.IsPaid() && ord.IsStripePayable()
+}
+
+func isRadomCheckoutSession(ord *model.Order) bool {
+	return !ord.IsPaid() && ord.IsRadomPayable()
 }
 
 func (s *Service) CancelOrder(ctx context.Context, id uuid.UUID) error {
@@ -1303,7 +1406,7 @@ func haveCreds(creds *TimeLimitedV2Creds) bool {
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
-func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID string) ([]byte, error) {
+func (s *Service) GetActiveCredentialSigningKey(_ context.Context, merchantID string) ([]byte, error) {
 	// sorted by name, created_at, first result is most recent
 	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
 	if err != nil {
@@ -1325,7 +1428,7 @@ func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID 
 }
 
 // GetCredentialSigningKeys get the current list of credential signing keys for this merchant
-func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID string) ([][]byte, error) {
+func (s *Service) GetCredentialSigningKeys(_ context.Context, merchantID string) ([][]byte, error) {
 	var resp = [][]byte{}
 	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
 	if err != nil {
@@ -1383,7 +1486,7 @@ func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, tim
 
 // timeChunking - given a duration and interval size of credential, return number of credentials
 // to generate, and a function that takes a start time and increments it by an appropriate amount
-func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, orderID, itemID uuid.UUID, issued time.Time, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
+func timeChunking(_ context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, orderID, itemID uuid.UUID, issued time.Time, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
 	expiresAt, err := duration.From(issued)
 	if err != nil {
 		return nil, fmt.Errorf("unable to compute expiry")
@@ -1420,7 +1523,7 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 }
 
 // GetTimeLimitedCreds returns get an order's time limited creds.
-func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID, reqID uuid.UUID) ([]TimeLimitedCreds, int, error) {
+func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID, _ uuid.UUID) ([]TimeLimitedCreds, int, error) {
 	if !order.IsPaid() || order.LastPaidAt == nil {
 		return nil, http.StatusBadRequest, model.Error("order is not paid, or invalid last paid at")
 	}
@@ -2056,7 +2159,7 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 		return "", err
 	}
 
-	reqx := &radom.CheckoutSessionRequest{
+	reqx := &radom.CreateCheckoutSessionRequest{
 		LineItems:  items,
 		Gateway:    s.radomGateway,
 		SuccessURL: surl,
@@ -2379,27 +2482,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		nxtB, err := rsub.NextBillingDate()
-		if err != nil {
-			return err
-		}
-
-		expAt := nxtB.Add(24 * time.Hour)
-
-		paidAt, err := rsub.LastPaid()
-		if err != nil {
-			return err
-		}
-
-		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
-			return err
-		}
-
-		if err := s.orderRepo.AppendMetadata(ctx, dbi, oid, "radomSubscriptionId", subID.String()); err != nil {
-			return err
-		}
-
-		return s.orderRepo.AppendMetadata(ctx, dbi, oid, "paymentProcessor", model.RadomPaymentMethod)
+		return s.newRadomSub(ctx, dbi, oid, rsub)
 
 	case ntf.ShouldRenew():
 		subID, err := ntf.SubID()
@@ -2407,7 +2490,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		ord, err := s.orderRepo.GetByRadomSubscriptionID(ctx, dbi, subID.String())
 		if err != nil {
 			return err
 		}
@@ -2437,7 +2520,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		ord, err := s.orderRepo.GetByExternalID(ctx, dbi, subID.String())
+		ord, err := s.orderRepo.GetByRadomSubscriptionID(ctx, dbi, subID.String())
 		if err != nil {
 			return err
 		}
@@ -2971,33 +3054,39 @@ func newRadomGateway(env string) (*radom.Gateway, error) {
 			Managed: radom.Managed{
 				Methods: []radom.Method{
 					{
-						Network: "SepoliaTestnet",
-						Token:   "0x5D684d37922dAf7Aa2013E65A22880a11C475e25",
+						Network:            "SepoliaTestnet",
+						Token:              "0x5D684d37922dAf7Aa2013E65A22880a11C475e25", // BAT
+						DiscountPercentOff: 0.20,
 					},
 
 					{
-						Network: "PolygonTestnet",
-						Token:   "0xd445cAAbb9eA6685D3A512439256866563a16E93",
+						Network:            "PolygonTestnet",
+						Token:              "0xd445cAAbb9eA6685D3A512439256866563a16E93", // BAT
+						DiscountPercentOff: 0.20,
 					},
 				},
 			},
 		}, nil
+
 	case "production":
 		return &radom.Gateway{
 			Managed: radom.Managed{
 				Methods: []radom.Method{
 					{
-						Network: "Polygon",
-						Token:   "0x3cef98bb43d732e2f285ee605a8158cde967d219",
+						Network:            "Polygon",
+						Token:              "0x3cef98bb43d732e2f285ee605a8158cde967d219", // BAT
+						DiscountPercentOff: 0.20,
 					},
 
 					{
-						Network: "Ethereum",
-						Token:   "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+						Network:            "Ethereum",
+						Token:              "0x0d8775f648430679a709e98d2b0cb6250d2887ef", // BAT
+						DiscountPercentOff: 0.20,
 					},
 				},
 			},
 		}, nil
+
 	default:
 		return nil, model.Error("skus: unknown environment")
 	}

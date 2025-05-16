@@ -51,6 +51,11 @@ const (
 	// ErrUnsupportedCredType is returned when requested operation is not supported for the cred type.
 	ErrUnsupportedCredType Error = "unsupported credential type"
 
+	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
+
+	ErrRadomInvalidNumAssocSubs Error = "model: invalid number of associated subs"
+	ErrRadomSubNotActive        Error = "model: sub not active"
+
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 
@@ -216,6 +221,18 @@ func (o *Order) StripeSessID() (string, bool) {
 	return sessID, ok
 }
 
+func (o *Order) RadomSubID() (string, bool) {
+	sid, ok := o.Metadata["radomSubscriptionId"].(string)
+
+	return sid, ok
+}
+
+func (o *Order) RadomSessID() (string, bool) {
+	sessID, ok := o.Metadata["radomCheckoutSessionId"].(string)
+
+	return sessID, ok
+}
+
 func (o *Order) IsIOS() bool {
 	pp, ok := o.PaymentProc()
 	if !ok {
@@ -266,6 +283,10 @@ func (o *Order) Vendor() (Vendor, bool) {
 	}
 
 	return Vendor(vn), true
+}
+
+func (o *Order) UpdateCheckoutSessionID(id string) {
+	o.Metadata["stripeCheckoutSessionId"] = id
 }
 
 // OrderItem represents a particular order item.

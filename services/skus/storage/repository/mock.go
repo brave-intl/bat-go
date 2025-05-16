@@ -15,6 +15,7 @@ import (
 type MockOrder struct {
 	FnGet                               func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	FnGetByExternalID                   func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnGetByRadomSubscriptionID          func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 	FnCreate                            func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	FnSetStatus                         func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	FnSetExpiresAt                      func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -49,6 +50,14 @@ func (r *MockOrder) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return r.FnGetByExternalID(ctx, dbi, extID)
+}
+
+func (r *MockOrder) GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error) {
+	if r.FnGetByRadomSubscriptionID == nil {
+		return &model.Order{}, nil
+	}
+
+	return r.FnGetByRadomSubscriptionID(ctx, dbi, rsid)
 }
 
 func (r *MockOrder) Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error) {

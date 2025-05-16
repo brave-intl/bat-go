@@ -26,12 +26,12 @@ services:
       - TEST_DIRS
   vault:
     container_name: grant-vault
-    image: vault:0.10.2
+    image: vault:0.11.6
     networks:
       - grant
   redislog:
     container_name: grant-redis-log
-    image: redis:7.2
+    image: redis:7.4
     networks:
       - grant
     command: ["redis-cli", "-h", "grant-redis", "MONITOR"]
