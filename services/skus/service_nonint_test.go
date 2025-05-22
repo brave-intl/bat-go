@@ -5602,6 +5602,44 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 		},
 
 		{
+			name: "subscription_payment_failure",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						PaymentAttemptFailure: &radom.SubscriptionPaymentAttemptFailure{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment_overdue",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						PaymentOverdue: &radom.SubscriptionPaymentOverdue{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
 			name: "unknown_action",
 			given: tcGiven{
 				event: &radom.Notification{},
