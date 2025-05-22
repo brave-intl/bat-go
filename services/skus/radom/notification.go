@@ -26,10 +26,12 @@ type Notification struct {
 }
 
 type EventData struct {
-	New       *NewSubscription       `json:"newSubscription"`
-	Payment   *SubscriptionPayment   `json:"subscriptionPayment"`
-	Cancelled *SubscriptionCancelled `json:"subscriptionCancelled"`
-	Expired   *SubscriptionExpired   `json:"subscriptionExpired"`
+	New                   *NewSubscription                   `json:"newSubscription"`
+	Payment               *SubscriptionPayment               `json:"subscriptionPayment"`
+	Cancelled             *SubscriptionCancelled             `json:"subscriptionCancelled"`
+	Expired               *SubscriptionExpired               `json:"subscriptionExpired"`
+	PaymentAttemptFailure *SubscriptionPaymentAttemptFailure `json:"subscriptionPaymentAttemptFailure"`
+	PaymentOverdue        *SubscriptionPaymentOverdue        `json:"subscriptionPaymentOverdue"`
 }
 
 type NewSubscription struct {
@@ -45,6 +47,14 @@ type SubscriptionCancelled struct {
 }
 
 type SubscriptionExpired struct {
+	SubscriptionID uuid.UUID `json:"subscriptionId"`
+}
+
+type SubscriptionPaymentAttemptFailure struct {
+	SubscriptionID uuid.UUID `json:"subscriptionId"`
+}
+
+type SubscriptionPaymentOverdue struct {
 	SubscriptionID uuid.UUID `json:"subscriptionId"`
 }
 
@@ -104,6 +114,12 @@ func (n *Notification) SubID() (uuid.UUID, error) {
 	case n.EventData.Expired != nil:
 		return n.EventData.Expired.SubscriptionID, nil
 
+	case n.EventData.PaymentAttemptFailure != nil:
+		return n.EventData.PaymentAttemptFailure.SubscriptionID, nil
+
+	case n.EventData.PaymentOverdue != nil:
+		return n.EventData.PaymentOverdue.SubscriptionID, nil
+
 	default:
 		return uuid.Nil, ErrUnsupportedEvent
 	}
@@ -133,8 +149,24 @@ func (n *Notification) ShouldCancel() bool {
 	}
 }
 
+func (n *Notification) ShouldRecordPayFailure() bool {
+	switch {
+	case n.EventData == nil:
+		return false
+
+	case n.EventData.PaymentAttemptFailure != nil:
+		return true
+
+	case n.EventData.PaymentOverdue != nil:
+		return true
+
+	default:
+		return false
+	}
+}
+
 func (n *Notification) ShouldProcess() bool {
-	return n.IsNewSub() || n.ShouldRenew() || n.ShouldCancel()
+	return n.IsNewSub() || n.ShouldRenew() || n.ShouldCancel() || n.ShouldRecordPayFailure()
 }
 
 func (n *Notification) Effect() string {
@@ -147,6 +179,9 @@ func (n *Notification) Effect() string {
 
 	case n.ShouldCancel():
 		return "cancel"
+
+	case n.ShouldRecordPayFailure():
+		return "payment_failure"
 
 	default:
 		return "skip"

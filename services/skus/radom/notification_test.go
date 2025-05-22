@@ -175,6 +175,60 @@ func TestParseNotification(t *testing.T) {
 		},
 
 		{
+			name: "subscription_payment_attempt_failure",
+			given: tcGiven{
+				rawEvent: `{
+				  "eventType": "subscriptionPaymentAttemptFailure",
+				  "eventData": {
+					"subscriptionPaymentAttemptFailure": {
+					  "subscriptionId": "56786d4e-a994-4392-952a-a648a0d2870a"
+					}
+				  }
+				}`,
+			},
+			exp: tcExpected{
+				ntf: &Notification{
+					EventType: "subscriptionPaymentAttemptFailure",
+					EventData: &EventData{
+						PaymentAttemptFailure: &SubscriptionPaymentAttemptFailure{
+							SubscriptionID: uuid.FromStringOrNil("56786d4e-a994-4392-952a-a648a0d2870a"),
+						},
+					},
+				},
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment_overdue",
+			given: tcGiven{
+				rawEvent: `{
+				  "eventType": "subscriptionPaymentOverdue",
+				  "eventData": {
+					"subscriptionPaymentOverdue": {
+					  "subscriptionId": "56786d4e-a994-4392-952a-a648a0d2870a"
+					}
+				  }
+				}`,
+			},
+			exp: tcExpected{
+				ntf: &Notification{
+					EventType: "subscriptionPaymentOverdue",
+					EventData: &EventData{
+						PaymentOverdue: &SubscriptionPaymentOverdue{
+							SubscriptionID: uuid.FromStringOrNil("56786d4e-a994-4392-952a-a648a0d2870a"),
+						},
+					},
+				},
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+
+		{
 			name: "unknown_event",
 			given: tcGiven{
 				rawEvent: `{
@@ -532,6 +586,44 @@ func TestNotification_SubID(t *testing.T) {
 		},
 
 		{
+			name: "subscription_payment_attempt_failure",
+			given: tcGiven{
+				ntf: Notification{
+					EventData: &EventData{
+						PaymentAttemptFailure: &SubscriptionPaymentAttemptFailure{
+							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment_overdue",
+			given: tcGiven{
+				ntf: Notification{
+					EventData: &EventData{
+						PaymentOverdue: &SubscriptionPaymentOverdue{
+							SubscriptionID: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
+				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+					must.NoError(t, err)
+				},
+			},
+		},
+
+		{
 			name:  "no_event_data",
 			given: tcGiven{ntf: Notification{}},
 			exp: tcExpected{
@@ -571,7 +663,7 @@ func TestNotification_SubID(t *testing.T) {
 	}
 }
 
-func TestParseNotification2_IsNewSub(t *testing.T) {
+func TestParseNotification_IsNewSub(t *testing.T) {
 	type tcGiven struct {
 		ntf *Notification
 	}
@@ -742,6 +834,71 @@ func TestNotification_ShouldCancel(t *testing.T) {
 	}
 }
 
+func TestNotification_ShouldRecordPayFailure(t *testing.T) {
+	type tcGiven struct {
+		ntf *Notification
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   bool
+	}
+
+	tests := []testCase{
+		{
+			name: "event_data_nil",
+			given: tcGiven{
+				ntf: &Notification{},
+			},
+			exp: false,
+		},
+
+		{
+			name: "subscription_payment_failure",
+			given: tcGiven{
+				ntf: &Notification{
+					EventData: &EventData{
+						PaymentAttemptFailure: &SubscriptionPaymentAttemptFailure{},
+					},
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "subscription_overdue",
+			given: tcGiven{
+				ntf: &Notification{
+					EventData: &EventData{
+						PaymentOverdue: &SubscriptionPaymentOverdue{},
+					},
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "unknown_action",
+			given: tcGiven{
+				ntf: &Notification{
+					EventData: &EventData{},
+				},
+			},
+			exp: false,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.ntf.ShouldRecordPayFailure()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestNotification_ShouldProcess(t *testing.T) {
 	type tcGiven struct {
 		ntf *Notification
@@ -796,6 +953,30 @@ func TestNotification_ShouldProcess(t *testing.T) {
 				ntf: &Notification{
 					EventData: &EventData{
 						Expired: &SubscriptionExpired{},
+					},
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "subscription_payment_failure",
+			given: tcGiven{
+				ntf: &Notification{
+					EventData: &EventData{
+						PaymentAttemptFailure: &SubscriptionPaymentAttemptFailure{},
+					},
+				},
+			},
+			exp: true,
+		},
+
+		{
+			name: "subscription_payment_overdue",
+			given: tcGiven{
+				ntf: &Notification{
+					EventData: &EventData{
+						PaymentOverdue: &SubscriptionPaymentOverdue{},
 					},
 				},
 			},
