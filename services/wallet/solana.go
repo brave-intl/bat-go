@@ -41,8 +41,8 @@ func (c *solAddrsChecker) IsAllowed(ctx context.Context, addrs string) error {
 	}
 
 	if _, err := c.s3h.HeadObject(ctx, param); err != nil {
-		var nf *types.NotFound
-		if errors.As(err, &nf) {
+		var nfe *types.NotFound
+		if errors.As(err, &nfe) {
 			return nil
 		}
 
