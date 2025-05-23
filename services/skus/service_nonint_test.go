@@ -5564,6 +5564,46 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 		},
 
 		{
+			name: "subscription_payment_reset_payment_failed_error",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Payment: &radom.SubscriptionPayment{
+							RadomData: &radom.Data{
+								Subscription: &radom.Subscription{
+									SubscriptionID: uuid.NewV4(),
+								},
+							},
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						return model.Error("reset_payment_failed_error")
+					},
+				},
+				orderPayHistory: &repository.MockOrderPayHistory{},
+				radomCl: &mockRadomClient{
+					fnGetSubscription: func(ctx context.Context, subID string) (*radom.SubscriptionResponse, error) {
+						return &radom.SubscriptionResponse{
+							NextBillingDateAt: "2023-06-12T09:38:13.604410Z",
+							Payments: []radom.Payment{
+								{
+									Date: "2023-06-12T09:38:13.604410Z",
+								},
+							},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, model.Error("reset_payment_failed_error"))
+				},
+			},
+		},
+
+		{
 			name: "subscription_cancelled",
 			given: tcGiven{
 				event: &radom.Notification{
@@ -5583,11 +5623,72 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 		},
 
 		{
+			name: "subscription_cancelled_reset_payment_failed_error",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						Cancelled: &radom.SubscriptionCancelled{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						return model.Error("reset_payment_failed_error")
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, model.Error("reset_payment_failed_error"))
+				},
+			},
+		},
+
+		{
 			name: "subscription_expired",
 			given: tcGiven{
 				event: &radom.Notification{
 					EventData: &radom.EventData{
 						Expired: &radom.SubscriptionExpired{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment_failure",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						PaymentAttemptFailure: &radom.SubscriptionPaymentAttemptFailure{
+							SubscriptionID: uuid.NewV4(),
+						},
+					},
+				},
+				orderRepo: &repository.MockOrder{},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "subscription_payment_overdue",
+			given: tcGiven{
+				event: &radom.Notification{
+					EventData: &radom.EventData{
+						PaymentOverdue: &radom.SubscriptionPaymentOverdue{
 							SubscriptionID: uuid.NewV4(),
 						},
 					},

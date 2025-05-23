@@ -2512,7 +2512,11 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt)
+		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt); err != nil {
+			return err
+		}
+
+		return s.resetNumPaymentFailed(ctx, dbi, ord.ID)
 
 	case ntf.ShouldCancel():
 		subID, err := ntf.SubID()
@@ -2525,7 +2529,24 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		return s.cancelOrderTx(ctx, dbi, ord.ID)
+		if err := s.cancelOrderTx(ctx, dbi, ord.ID); err != nil {
+			return err
+		}
+
+		return s.resetNumPaymentFailed(ctx, dbi, ord.ID)
+
+	case ntf.ShouldRecordPayFailure():
+		subID, err := ntf.SubID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.orderRepo.GetByRadomSubscriptionID(ctx, dbi, subID.String())
+		if err != nil {
+			return err
+		}
+
+		return s.orderRepo.IncrementNumPayFailed(ctx, dbi, ord.ID)
 
 	default:
 		return errRadomUnknownAction
