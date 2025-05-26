@@ -110,5 +110,12 @@ func createSubLog(logger *zerolog.Logger, r *http.Request, status int) *zerolog.
 		result = logger.Info()
 	}
 
+	//check if we have an external request id
+	extReqID := r.Header.Get("X-Request-ID")
+
+	if extReqID != "" {
+		return result.Str("host", r.Host).Str("http_proto", r.Proto).Str("http_method", r.Method).Str("uri", r.URL.EscapedPath()).Str("x_request_id", extReqID)
+	}
+
 	return result.Str("host", r.Host).Str("http_proto", r.Proto).Str("http_method", r.Method).Str("uri", r.URL.EscapedPath())
 }
