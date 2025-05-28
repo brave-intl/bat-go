@@ -339,6 +339,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.UserAgentHandler("user_agent"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
+		r.Use(middleware.RequestCorrelationMiddleware())
 	}
 	// now we have middlewares we want included in logging
 	r.Use(chiware.Timeout(15 * time.Second))
