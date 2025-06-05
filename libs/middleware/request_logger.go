@@ -110,7 +110,6 @@ func createSubLog(logger *zerolog.Logger, r *http.Request, status int) *zerolog.
 		result = logger.Info()
 	}
 
-	//check if we have an external correlation id
 	if corrID := r.Header.Get("X-Correlation-ID"); corrID != "" {
 		result.Str("x_correlation_id", corrID)
 	}
