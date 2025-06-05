@@ -110,5 +110,9 @@ func createSubLog(logger *zerolog.Logger, r *http.Request, status int) *zerolog.
 		result = logger.Info()
 	}
 
+	if corrID := r.Header.Get("X-Correlation-ID"); corrID != "" {
+		result.Str("x_correlation_id", corrID)
+	}
+
 	return result.Str("host", r.Host).Str("http_proto", r.Proto).Str("http_method", r.Method).Str("uri", r.URL.EscapedPath())
 }
