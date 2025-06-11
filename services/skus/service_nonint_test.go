@@ -5248,6 +5248,7 @@ func TestService_createRadomSessID(t *testing.T) {
 func Test_orderItemsToLineItems(t *testing.T) {
 	type tcGiven struct {
 		orderItems []model.OrderItem
+		req        *model.CreateOrderRequestNew
 	}
 
 	type tcExpected struct {
@@ -5287,14 +5288,21 @@ func Test_orderItemsToLineItems(t *testing.T) {
 						},
 					},
 				},
+				req: &model.CreateOrderRequestNew{
+					RadomMetadata: &model.OrderRadomMetadata{
+						SubBackBtnURL: "https://example.com",
+					},
+				},
 			},
 			exp: tcExpected{
 				lineItems: []radom.LineItem{
 					{
-						ProductID: "product_1",
+						ProductID:     "product_1",
+						SubBackBtnURL: "https://example.com",
 					},
 					{
-						ProductID: "product_2",
+						ProductID:     "product_2",
+						SubBackBtnURL: "https://example.com",
 					},
 				},
 			},
@@ -5305,7 +5313,7 @@ func Test_orderItemsToLineItems(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := orderItemsToRadomLineItems(tc.given.orderItems)
+			actual, err := orderItemsToRadomLineItems(tc.given.orderItems, tc.given.req)
 			must.Equal(t, tc.exp.err, err)
 
 			should.Equal(t, tc.exp.lineItems, actual)

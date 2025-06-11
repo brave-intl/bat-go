@@ -1778,8 +1778,9 @@ func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
 		Email:    "example@example.com",
 		Currency: "USD",
 		RadomMetadata: &model.OrderRadomMetadata{
-			SuccessURI: "https://example-success.com",
-			CancelURI:  "https://example-cancel.com",
+			SuccessURI:    "https://example-success.com",
+			CancelURI:     "https://example-cancel.com",
+			SubBackBtnURL: "https://example-back-button.com",
 		},
 		PaymentMethods: []string{model.RadomPaymentMethod},
 		Items: []model.OrderItemRequestNew{
