@@ -569,8 +569,9 @@ func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
 
 // OrderRadomMetadata holds data relevant to the order in Radom.
 type OrderRadomMetadata struct {
-	SuccessURI string `json:"success_uri" validate:"http_url"`
-	CancelURI  string `json:"cancel_uri" validate:"http_url"`
+	SuccessURI    string `json:"success_uri" validate:"http_url"`
+	CancelURI     string `json:"cancel_uri" validate:"http_url"`
+	SubBackBtnURL string `json:"sub_back_button_url" validate:"omitempty,http_url"`
 }
 
 func (m *OrderRadomMetadata) SuccessURL(oid string) (string, error) {
