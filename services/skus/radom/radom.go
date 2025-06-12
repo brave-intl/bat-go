@@ -37,7 +37,8 @@ type Method struct {
 }
 
 type LineItem struct {
-	ProductID string `json:"productId"`
+	ProductID     string `json:"productId"`
+	SubBackBtnURL string `json:"subscriptionBackButtonUrl"`
 }
 
 type Metadata struct {
