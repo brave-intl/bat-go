@@ -73,7 +73,8 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 			hlog.NewHandler(*logger),
 			hlog.UserAgentHandler("user_agent"),
 			hlog.RequestIDHandler("req_id", "Request-Id"),
-			middleware.RequestLogger(logger))
+			middleware.RequestLogger(logger),
+			middleware.RequestCorrelationMiddleware())
 
 		logger.Info().
 			Str("version", ctx.Value(appctx.VersionCTXKey).(string)).
