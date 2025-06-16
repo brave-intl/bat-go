@@ -2154,16 +2154,17 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 		return "", err
 	}
 
-	items, err := orderItemsToRadomLineItems(order.Items, req)
+	items, err := orderItemsToRadomLineItems(order.Items)
 	if err != nil {
 		return "", err
 	}
 
 	reqx := &radom.CreateCheckoutSessionRequest{
-		LineItems:  items,
-		Gateway:    s.radomGateway,
-		SuccessURL: surl,
-		CancelURL:  curl,
+		LineItems:     items,
+		Gateway:       s.radomGateway,
+		SuccessURL:    surl,
+		CancelURL:     curl,
+		SubBackBtnURL: req.RadomMetadata.SubBackBtnURL,
 		Metadata: []radom.Metadata{
 			{
 				Key:   "brave_order_id",
@@ -2183,7 +2184,7 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 
 const errRadomProductIDNotFound = model.Error("product id not found in metadata")
 
-func orderItemsToRadomLineItems(orderItems []model.OrderItem, req *model.CreateOrderRequestNew) ([]radom.LineItem, error) {
+func orderItemsToRadomLineItems(orderItems []model.OrderItem) ([]radom.LineItem, error) {
 	lineItems := make([]radom.LineItem, 0, len(orderItems))
 	for i := range orderItems {
 		pid, ok := orderItems[i].RadomProductID()
@@ -2192,8 +2193,7 @@ func orderItemsToRadomLineItems(orderItems []model.OrderItem, req *model.CreateO
 		}
 
 		item := radom.LineItem{
-			ProductID:     pid,
-			SubBackBtnURL: req.RadomMetadata.SubBackBtnURL,
+			ProductID: pid,
 		}
 
 		lineItems = append(lineItems, item)
