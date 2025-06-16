@@ -2154,7 +2154,7 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 		return "", err
 	}
 
-	items, err := orderItemsToRadomLineItems(order.Items)
+	items, err := orderItemsToRadomLineItems(order.Items, req)
 	if err != nil {
 		return "", err
 	}
@@ -2183,7 +2183,7 @@ func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrder
 
 const errRadomProductIDNotFound = model.Error("product id not found in metadata")
 
-func orderItemsToRadomLineItems(orderItems []model.OrderItem) ([]radom.LineItem, error) {
+func orderItemsToRadomLineItems(orderItems []model.OrderItem, req *model.CreateOrderRequestNew) ([]radom.LineItem, error) {
 	lineItems := make([]radom.LineItem, 0, len(orderItems))
 	for i := range orderItems {
 		pid, ok := orderItems[i].RadomProductID()
@@ -2192,7 +2192,8 @@ func orderItemsToRadomLineItems(orderItems []model.OrderItem) ([]radom.LineItem,
 		}
 
 		item := radom.LineItem{
-			ProductID: pid,
+			ProductID:     pid,
+			SubBackBtnURL: req.RadomMetadata.SubBackBtnURL,
 		}
 
 		lineItems = append(lineItems, item)
