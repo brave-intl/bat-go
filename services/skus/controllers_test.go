@@ -1769,6 +1769,10 @@ func (suite *ControllersTestSuite) TestCreateOrder_RadomPayable() {
 
 	suite.service.radomClient = &mockRadomClient{
 		fnCreateCheckoutSession: func(ctx context.Context, creq *radom.CreateCheckoutSessionRequest) (radom.CreateCheckoutSessionResponse, error) {
+			if creq.SubBackBtnURL != "https://example-back-button.com" {
+				return radom.CreateCheckoutSessionResponse{}, model.Error("unexpected_response")
+			}
+
 			return radom.CreateCheckoutSessionResponse{
 				SessionID: sessID,
 			}, nil

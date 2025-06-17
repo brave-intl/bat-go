@@ -37,8 +37,7 @@ type Method struct {
 }
 
 type LineItem struct {
-	ProductID     string `json:"productId"`
-	SubBackBtnURL string `json:"subscriptionBackButtonUrl"`
+	ProductID string `json:"productId"`
 }
 
 type Metadata struct {
@@ -47,12 +46,13 @@ type Metadata struct {
 }
 
 type CreateCheckoutSessionRequest struct {
-	LineItems  []LineItem `json:"lineItems"`
-	Gateway    *Gateway   `json:"gateway"`
-	SuccessURL string     `json:"successUrl"`
-	CancelURL  string     `json:"cancelUrl"`
-	Metadata   []Metadata `json:"metadata"`
-	ExpiresAt  int64      `json:"expiresAt"` // in unix seconds
+	LineItems     []LineItem `json:"lineItems"`
+	Gateway       *Gateway   `json:"gateway"`
+	SuccessURL    string     `json:"successUrl"`
+	CancelURL     string     `json:"cancelUrl"`
+	SubBackBtnURL string     `json:"subscriptionBackButtonUrl"`
+	Metadata      []Metadata `json:"metadata"`
+	ExpiresAt     int64      `json:"expiresAt"` // in unix seconds
 }
 
 type CreateCheckoutSessionResponse struct {
