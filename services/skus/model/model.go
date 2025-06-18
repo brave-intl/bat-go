@@ -335,6 +335,22 @@ func (x *OrderItem) Issuer() string {
 	return x.SKU
 }
 
+func (x *OrderItem) IsTalkAnnual() bool {
+	if x == nil {
+		return false
+	}
+
+	return x.SKUVnt == "brave-talk-premium-year"
+}
+
+func (x *OrderItem) IsSearchAnnual() bool {
+	if x == nil {
+		return false
+	}
+
+	return x.SKUVnt == "brave-search-premium-year"
+}
+
 // OrderNew represents a request to create an order in the database.
 type OrderNew struct {
 	MerchantID            string          `db:"merchant_id"`
