@@ -1837,6 +1837,124 @@ func TestOrderItemRequestNew_IsTLV2(t *testing.T) {
 	}
 }
 
+func TestOrderItem_IsTalkAnnual(t *testing.T) {
+	type tcGiven struct {
+		oi *model.OrderItem
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "nil",
+		},
+
+		{
+			name: "false_empty",
+			given: tcGiven{
+				oi: &model.OrderItem{},
+			},
+		},
+
+		{
+			name: "false_sku_vnt",
+			given: tcGiven{
+				oi: &model.OrderItem{
+					SKUVnt: "sku_vnt",
+				},
+			},
+		},
+
+		{
+			name: "true",
+			given: tcGiven{
+				oi: &model.OrderItem{
+					SKUVnt: "brave-talk-premium-year",
+				},
+			},
+			exp: tcExpected{
+				result: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.oi.IsTalkAnnual()
+			should.Equal(t, tc.exp.result, actual)
+		})
+	}
+}
+
+func TestOrderItem_IsSearchAnnual(t *testing.T) {
+	type tcGiven struct {
+		oi *model.OrderItem
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "nil",
+		},
+
+		{
+			name: "false_empty",
+			given: tcGiven{
+				oi: &model.OrderItem{},
+			},
+		},
+
+		{
+			name: "false_sku_vnt",
+			given: tcGiven{
+				oi: &model.OrderItem{
+					SKUVnt: "sku_vnt",
+				},
+			},
+		},
+
+		{
+			name: "true",
+			given: tcGiven{
+				oi: &model.OrderItem{
+					SKUVnt: "brave-search-premium-year",
+				},
+			},
+			exp: tcExpected{
+				result: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.oi.IsSearchAnnual()
+			should.Equal(t, tc.exp.result, actual)
+		})
+	}
+}
+
 func ptrTo[T any](v T) *T {
 	return &v
 }
