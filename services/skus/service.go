@@ -1485,10 +1485,10 @@ func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, tim
 }
 
 func timeChunking(_ context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, ord *model.Order, item *model.OrderItem, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
-	// Note, given the user only pays once a year the calculating the expiresAt using the orders
+	// Note, given the user only pays once a year calculating the expiresAt using the orders
 	// lastPaidAt at won't work. For annual skus we can use the orders ExpiresAt as we know all annual skus
-	// will all have a date. For monthly or legacy skus that may not have an ExpiresAt date we can use the
-	// existing order LastPaidAt until we deprecate time limited creds.
+	// will all have an ExpiresAt date. For monthly or legacy skus that may not have an ExpiresAt value we can use the
+	// existing method i.e. using the order LastPaidAt until we deprecate time limited creds.
 
 	expiresAt, err := duration.From(*ord.LastPaidAt)
 	if err != nil {
