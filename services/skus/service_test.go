@@ -1,19 +1,21 @@
 package skus
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 
+	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/ptr"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
-
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
@@ -387,4 +389,113 @@ func mustDurationFromISO(v string) *time.Duration {
 	}
 
 	return &result
+}
+
+func TestTimeChunking(t *testing.T) {
+	type tcGiven struct {
+		issuerID          string
+		timeLimitedSecret cryptography.TimeLimitedSecret
+		ord               *model.Order
+		item              *model.OrderItem
+		duration          string
+		interval          string
+	}
+
+	type tcExpected struct {
+		numCreds int
+		err      error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		// TODO(cld11): We need to improve this test by passing time into timeChunk function.
+		{
+			name: "monthly",
+			given: tcGiven{
+				issuerID:          "monthly",
+				timeLimitedSecret: cryptography.NewTimeLimitedSecret([]byte("tester")),
+				ord: &model.Order{
+					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
+					LastPaidAt: ptrTo(time.Now()),
+				},
+				item: &model.OrderItem{
+					ID: uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
+				},
+				duration: "P1M",
+				interval: "P1M",
+			},
+			exp: tcExpected{
+				numCreds: 2,
+			},
+		},
+
+		{
+			name: "annual_search",
+			given: tcGiven{
+				issuerID:          "annual_search",
+				timeLimitedSecret: cryptography.NewTimeLimitedSecret([]byte("tester")),
+				ord: &model.Order{
+					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
+					LastPaidAt: ptrTo(time.Date(2025, time.March, 4, 4, 43, 0, 0, time.UTC)),
+					ExpiresAt:  ptrTo(time.Date(2026, time.March, 5, 4, 43, 0, 0, time.UTC)),
+				},
+				item: &model.OrderItem{
+					ID:     uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
+					SKUVnt: "brave-search-premium-year",
+				},
+				duration: "P1M",
+				interval: "P1M",
+			},
+			exp: tcExpected{
+				numCreds: 10,
+			},
+		},
+
+		{
+			name: "annual_talk",
+			given: tcGiven{
+				issuerID:          "annual_talk",
+				timeLimitedSecret: cryptography.NewTimeLimitedSecret([]byte("tester")),
+				ord: &model.Order{
+					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
+					LastPaidAt: ptrTo(time.Date(2025, time.March, 4, 4, 43, 0, 0, time.UTC)),
+					ExpiresAt:  ptrTo(time.Date(2026, time.March, 5, 4, 43, 0, 0, time.UTC)),
+				},
+				item: &model.OrderItem{
+					ID:     uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
+					SKUVnt: "brave-talk-premium-year",
+				},
+				duration: "P1M",
+				interval: "P1M",
+			},
+			exp: tcExpected{
+				numCreds: 10,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			duration, err := timeutils.ParseDuration(tc.given.duration)
+			must.NoError(t, err)
+
+			issuanceInterval, err := timeutils.ParseDuration(tc.given.interval)
+			must.NoError(t, err)
+
+			actual, err := timeChunking(ctx, tc.given.issuerID, tc.given.timeLimitedSecret, tc.given.ord, tc.given.item, *duration, *issuanceInterval)
+			must.NoError(t, err)
+
+			should.Equal(t, tc.exp.numCreds, len(actual))
+			should.Equal(t, tc.exp.err, err)
+		})
+	}
 }
