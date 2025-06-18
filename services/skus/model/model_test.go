@@ -1865,7 +1865,7 @@ func TestOrderItem_IsTalkAnnual(t *testing.T) {
 		},
 
 		{
-			name: "false",
+			name: "false_sku_vnt",
 			given: tcGiven{
 				oi: &model.OrderItem{
 					SKUVnt: "sku_vnt",
@@ -1924,7 +1924,7 @@ func TestOrderItem_IsSearchAnnual(t *testing.T) {
 		},
 
 		{
-			name: "false",
+			name: "false_sku_vnt",
 			given: tcGiven{
 				oi: &model.OrderItem{
 					SKUVnt: "sku_vnt",
