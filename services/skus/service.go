@@ -1387,7 +1387,6 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, re
 		return []TimeAwareSubIssuedCreds{}, http.StatusAccepted, errSetRetryAfter
 	}
 
-	// We have neither credentials nor a signing request so return an error.
 	return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, errNoCredsOrSigningRequest
 }
 
