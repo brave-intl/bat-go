@@ -88,6 +88,7 @@ const (
 	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
 	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
 	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
+	errNoCredsOrSigningRequest   = model.Error("error getting credentials: no credentials or signing request")
 )
 
 type orderStoreSvc interface {
@@ -1387,7 +1388,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, re
 	}
 
 	// We have neither credentials nor a signing request so return an error.
-	return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, errNoCredsOrSigningRequest
 }
 
 func filterActiveCreds(creds []TimeAwareSubIssuedCreds, now time.Time) []TimeAwareSubIssuedCreds {
