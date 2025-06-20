@@ -393,12 +393,13 @@ func mustDurationFromISO(v string) *time.Duration {
 
 func TestTimeChunking(t *testing.T) {
 	type tcGiven struct {
-		issuerID          string
-		timeLimitedSecret cryptography.TimeLimitedSecret
-		ord               *model.Order
-		item              *model.OrderItem
-		duration          string
-		interval          string
+		issuerID string
+		secret   cryptography.TimeLimitedSecret
+		ord      *model.Order
+		item     *model.OrderItem
+		duration string
+		interval string
+		start    time.Time
 	}
 
 	type tcExpected struct {
@@ -413,21 +414,21 @@ func TestTimeChunking(t *testing.T) {
 	}
 
 	tests := []testCase{
-		// TODO(cld11): We need to improve this test by passing time into timeChunk function.
 		{
-			name: "monthly",
+			name: "search_monthly",
 			given: tcGiven{
-				issuerID:          "monthly",
-				timeLimitedSecret: cryptography.NewTimeLimitedSecret([]byte("tester")),
+				issuerID: "monthly",
+				secret:   cryptography.NewTimeLimitedSecret([]byte("tester")),
 				ord: &model.Order{
 					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
-					LastPaidAt: ptrTo(time.Now()),
+					LastPaidAt: ptrTo(time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC)),
 				},
 				item: &model.OrderItem{
 					ID: uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
 				},
 				duration: "P1M",
 				interval: "P1M",
+				start:    time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
 				numCreds: 2,
@@ -435,14 +436,34 @@ func TestTimeChunking(t *testing.T) {
 		},
 
 		{
-			name: "annual_search",
+			name: "talk_monthly",
 			given: tcGiven{
-				issuerID:          "annual_search",
-				timeLimitedSecret: cryptography.NewTimeLimitedSecret([]byte("tester")),
+				issuerID: "monthly",
+				secret:   cryptography.NewTimeLimitedSecret([]byte("tester")),
 				ord: &model.Order{
 					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
-					LastPaidAt: ptrTo(time.Date(2025, time.March, 4, 4, 43, 0, 0, time.UTC)),
-					ExpiresAt:  ptrTo(time.Date(2026, time.March, 5, 4, 43, 0, 0, time.UTC)),
+					LastPaidAt: ptrTo(time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC)),
+				},
+				item: &model.OrderItem{
+					ID: uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
+				},
+				duration: "P1M",
+				interval: "P1D",
+				start:    time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC),
+			},
+			exp: tcExpected{
+				numCreds: 35,
+			},
+		},
+
+		{
+			name: "annual_expires_at_is_nil",
+			given: tcGiven{
+				issuerID: "annual_search",
+				secret:   cryptography.NewTimeLimitedSecret([]byte("tester")),
+				ord: &model.Order{
+					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
+					LastPaidAt: ptrTo(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)),
 				},
 				item: &model.OrderItem{
 					ID:     uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
@@ -452,6 +473,52 @@ func TestTimeChunking(t *testing.T) {
 				interval: "P1M",
 			},
 			exp: tcExpected{
+				err: model.Error("skus: time chunking: order expires at cannot be nil"),
+			},
+		},
+
+		{
+			name: "search_annual",
+			given: tcGiven{
+				issuerID: "annual_search",
+				secret:   cryptography.NewTimeLimitedSecret([]byte("tester")),
+				ord: &model.Order{
+					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
+					LastPaidAt: ptrTo(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)),
+					ExpiresAt:  ptrTo(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)),
+				},
+				item: &model.OrderItem{
+					ID:     uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
+					SKUVnt: "brave-search-premium-year",
+				},
+				duration: "P1M",
+				interval: "P1M",
+				start:    time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			},
+			exp: tcExpected{
+				numCreds: 13,
+			},
+		},
+
+		{
+			name: "search_annual_three_months_used",
+			given: tcGiven{
+				issuerID: "annual_search",
+				secret:   cryptography.NewTimeLimitedSecret([]byte("tester")),
+				ord: &model.Order{
+					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
+					LastPaidAt: ptrTo(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)),
+					ExpiresAt:  ptrTo(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)),
+				},
+				item: &model.OrderItem{
+					ID:     uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
+					SKUVnt: "brave-search-premium-year",
+				},
+				duration: "P1M",
+				interval: "P1M",
+				start:    time.Date(2025, time.April, 1, 0, 0, 0, 0, time.UTC),
+			},
+			exp: tcExpected{
 				numCreds: 10,
 			},
 		},
@@ -459,22 +526,46 @@ func TestTimeChunking(t *testing.T) {
 		{
 			name: "annual_talk",
 			given: tcGiven{
-				issuerID:          "annual_talk",
-				timeLimitedSecret: cryptography.NewTimeLimitedSecret([]byte("tester")),
+				issuerID: "annual_talk",
+				secret:   cryptography.NewTimeLimitedSecret([]byte("tester")),
 				ord: &model.Order{
 					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
-					LastPaidAt: ptrTo(time.Date(2025, time.March, 4, 4, 43, 0, 0, time.UTC)),
-					ExpiresAt:  ptrTo(time.Date(2026, time.March, 5, 4, 43, 0, 0, time.UTC)),
+					LastPaidAt: ptrTo(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)),
+					ExpiresAt:  ptrTo(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)),
 				},
 				item: &model.OrderItem{
 					ID:     uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
 					SKUVnt: "brave-talk-premium-year",
 				},
 				duration: "P1M",
-				interval: "P1M",
+				interval: "P1D",
+				start:    time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
-				numCreds: 10,
+				numCreds: 370,
+			},
+		},
+
+		{
+			name: "annual_talk_ten_months_used",
+			given: tcGiven{
+				issuerID: "annual_talk",
+				secret:   cryptography.NewTimeLimitedSecret([]byte("tester")),
+				ord: &model.Order{
+					ID:         uuid.FromStringOrNil("107a26ef-847d-4040-a95f-d34857c8c5bd"),
+					LastPaidAt: ptrTo(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)),
+					ExpiresAt:  ptrTo(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)),
+				},
+				item: &model.OrderItem{
+					ID:     uuid.FromStringOrNil("bfc3e99e-cf85-4985-b16d-3959c37b1722"),
+					SKUVnt: "brave-talk-premium-year",
+				},
+				duration: "P1M",
+				interval: "P1D",
+				start:    time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC), //36
+			},
+			exp: tcExpected{
+				numCreds: 36,
 			},
 		},
 	}
@@ -491,9 +582,7 @@ func TestTimeChunking(t *testing.T) {
 			issuanceInterval, err := timeutils.ParseDuration(tc.given.interval)
 			must.NoError(t, err)
 
-			actual, err := timeChunking(ctx, tc.given.issuerID, tc.given.timeLimitedSecret, tc.given.ord, tc.given.item, *duration, *issuanceInterval)
-			must.NoError(t, err)
-
+			actual, err := timeChunking(ctx, tc.given.issuerID, tc.given.secret, tc.given.ord, tc.given.item, *duration, *issuanceInterval, tc.given.start)
 			should.Equal(t, tc.exp.numCreds, len(actual))
 			should.Equal(t, tc.exp.err, err)
 		})
