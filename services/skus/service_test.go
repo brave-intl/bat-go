@@ -452,7 +452,7 @@ func TestTimeChunking(t *testing.T) {
 				start:    time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
-				numCreds: 35,
+				numCreds: 36,
 			},
 		},
 
