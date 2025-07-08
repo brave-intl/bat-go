@@ -523,7 +523,7 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 				return handlers.WrapError(ErrTooManyCardsLinked, "too many wallets linked", http.StatusConflict)
 
 			case errors.Is(err, errCustodianLinkMismatch):
-				return handlers.WrapError(errCustodianLinkMismatch, "wallet is linked to a different custodian", http.StatusBadRequest)
+				return handlers.WrapError(errCustodianLinkMismatch, "wallet is linked to a different custodian", http.StatusUnprocessableEntity)
 
 			case errors.As(err, &solErr):
 				return handlers.WrapError(solErr, "invalid solana linking message", http.StatusUnauthorized)
