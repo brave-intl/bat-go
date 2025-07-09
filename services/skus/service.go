@@ -88,6 +88,7 @@ const (
 	errLegacyOutboxNotFound      = model.Error("error no order credentials have been submitted for signing")
 	errWrongOrderIDForRequestID  = model.Error("signed request order id does not belong to request id")
 	errLegacySUCredsNotFound     = model.Error("credentials do not exist")
+	errNoCredsOrSigningRequest   = model.Error("error getting credentials: no credentials or signing request")
 )
 
 type orderStoreSvc interface {
@@ -1386,8 +1387,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, orderID, itemID, re
 		return []TimeAwareSubIssuedCreds{}, http.StatusAccepted, errSetRetryAfter
 	}
 
-	// We have neither credentials nor a signing request so return an error.
-	return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	return []TimeAwareSubIssuedCreds{}, http.StatusInternalServerError, errNoCredsOrSigningRequest
 }
 
 func filterActiveCreds(creds []TimeAwareSubIssuedCreds, now time.Time) []TimeAwareSubIssuedCreds {
@@ -1484,9 +1484,9 @@ func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, tim
 	}
 }
 
-func timeChunking(_ context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, ord *model.Order, item *model.OrderItem, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
+func timeChunking(_ context.Context, issuerID string, tlSecret cryptography.TimeLimitedSecret, ord *model.Order, item *model.OrderItem, duration, interval timeutils.ISODuration, chunkStart time.Time) ([]TimeLimitedCreds, error) {
 	// Note, given the user only pays once a year calculating the expiresAt using the orders
-	// lastPaidAt at won't work. For annual skus we can use the orders ExpiresAt as we know all annual skus
+	// lastPaidAt won't work. For annual skus we can use the orders ExpiresAt as we know all annual skus
 	// will all have an ExpiresAt date. For monthly or legacy skus that may not have an ExpiresAt value we can use the
 	// existing method i.e. using the order LastPaidAt until we deprecate time limited creds.
 
@@ -1502,34 +1502,33 @@ func timeChunking(_ context.Context, issuerID string, timeLimitedSecret cryptogr
 		}
 	}
 
-	// Add a grace period of 5 days.
-	*expiresAt = (*expiresAt).AddDate(0, 0, 5)
+	const gracePeriod = 5
+	expAtWithGrace := expiresAt.AddDate(0, 0, gracePeriod)
 
 	chunkingFn := credChunkFn(interval)
+	dEnd, _ := chunkingFn(chunkStart)
 
-	// set dEnd to today chunked
-	dEnd, _ := chunkingFn(time.Now())
-
-	var credentials []TimeLimitedCreds
 	var dStart time.Time
-	for dEnd.Before(*expiresAt) {
+	var creds []TimeLimitedCreds
+
+	for dEnd.Before(expAtWithGrace) {
 		dStart, dEnd = chunkingFn(dEnd)
 
-		timeBasedToken, err := timeLimitedSecret.Derive([]byte(issuerID), dStart, dEnd)
+		token, err := tlSecret.Derive([]byte(issuerID), dStart, dEnd)
 		if err != nil {
-			return credentials, fmt.Errorf("error generating credentials: %w", err)
+			return nil, fmt.Errorf("error generating credentials: %w", err)
 		}
 
-		credentials = append(credentials, TimeLimitedCreds{
+		creds = append(creds, TimeLimitedCreds{
 			ID:        item.ID,
 			OrderID:   ord.ID,
 			IssuedAt:  dStart.Format("2006-01-02"),
 			ExpiresAt: dEnd.Format("2006-01-02"),
-			Token:     timeBasedToken,
+			Token:     token,
 		})
 	}
 
-	return credentials, nil
+	return creds, nil
 }
 
 // GetTimeLimitedCreds returns get an order's time limited creds.
@@ -1580,7 +1579,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 		return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 	}
 
-	credentials, err := timeChunking(ctx, issuerID, timeLimitedSecret, order, item, *duration, *interval)
+	credentials, err := timeChunking(ctx, issuerID, timeLimitedSecret, order, item, *duration, *interval, time.Now())
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
 	}
