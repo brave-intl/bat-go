@@ -1484,26 +1484,11 @@ func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, tim
 	}
 }
 
-func timeChunking(_ context.Context, issuerID string, tlSecret cryptography.TimeLimitedSecret, ord *model.Order, item *model.OrderItem, duration, interval timeutils.ISODuration, chunkStart time.Time) ([]TimeLimitedCreds, error) {
-	// Note, given the user only pays once a year calculating the expiresAt using the orders
-	// lastPaidAt won't work. For annual skus we can use the orders ExpiresAt as we know all annual skus
-	// will all have an ExpiresAt date. For monthly or legacy skus that may not have an ExpiresAt value we can use the
-	// existing method i.e. using the order LastPaidAt until we deprecate time limited creds.
-
-	expiresAt, err := duration.From(*ord.LastPaidAt)
+func timeChunking(issuerID string, tlSecret cryptography.TimeLimitedSecret, ord *model.Order, item *model.OrderItem, duration, interval timeutils.ISODuration, chunkStart, now time.Time) ([]TimeLimitedCreds, error) {
+	issueToWithGrace, err := calculateIssueToWithGrace(ord, item, duration, now)
 	if err != nil {
-		return nil, fmt.Errorf("unable to compute expiry")
+		return nil, err
 	}
-
-	if item.IsSearchAnnual() || item.IsTalkAnnual() {
-		expiresAt = ord.ExpiresAt
-		if expiresAt == nil {
-			return nil, model.Error("skus: time chunking: order expires at cannot be nil")
-		}
-	}
-
-	const gracePeriod = 5
-	expAtWithGrace := expiresAt.AddDate(0, 0, gracePeriod)
 
 	chunkingFn := credChunkFn(interval)
 	dEnd, _ := chunkingFn(chunkStart)
@@ -1511,7 +1496,7 @@ func timeChunking(_ context.Context, issuerID string, tlSecret cryptography.Time
 	var dStart time.Time
 	var creds []TimeLimitedCreds
 
-	for dEnd.Before(expAtWithGrace) {
+	for dEnd.Before(issueToWithGrace) {
 		dStart, dEnd = chunkingFn(dEnd)
 
 		token, err := tlSecret.Derive([]byte(issuerID), dStart, dEnd)
@@ -1529,6 +1514,45 @@ func timeChunking(_ context.Context, issuerID string, tlSecret cryptography.Time
 	}
 
 	return creds, nil
+}
+
+func calculateIssueToWithGrace(ord *model.Order, item *model.OrderItem, duration timeutils.ISODuration, now time.Time) (time.Time, error) {
+	// Note about fix for annual subs. When calculating the issue to date we need to make sure the last paid at date + duration
+	// is greater than the current date otherwise the issue to date will be in the past. For example, for annual subs a
+	// user only pays once a year so we cannot use the last paid at date and add a duration of 1 month like we
+	// do for monthly. We must also make sure we do not have a duration greater than the payment frequency.
+
+	const gracePeriod = 5
+
+	switch {
+	// We can use the current date as last paid at date and if the issue to date is
+	// greater than the order expiry use that instead.
+	case item.IsSearchAnnual() || item.IsTalkAnnual():
+		issueTo, err := duration.From(now)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("unable to compute expiry")
+		}
+
+		if ord.ExpiresAt == nil {
+			return time.Time{}, model.Error("skus: time chunking: order expires at cannot be nil")
+		}
+
+		if issueTo.After(*ord.ExpiresAt) {
+			issueTo = ord.ExpiresAt
+		}
+
+		return issueTo.AddDate(0, 0, gracePeriod), nil
+
+	default:
+		// Leaving original code to calculate monthly. This works because
+		// the payment frequency and duration are both the same (1 month).
+		issueTo, err := duration.From(*ord.LastPaidAt)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("unable to compute expiry")
+		}
+
+		return issueTo.AddDate(0, 0, gracePeriod), nil
+	}
 }
 
 // GetTimeLimitedCreds returns get an order's time limited creds.
@@ -1579,7 +1603,9 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 		return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 	}
 
-	credentials, err := timeChunking(ctx, issuerID, timeLimitedSecret, order, item, *duration, *interval, time.Now())
+	now := time.Now()
+
+	credentials, err := timeChunking(issuerID, timeLimitedSecret, order, item, *duration, *interval, now, now)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
 	}
