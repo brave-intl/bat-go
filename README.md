@@ -1,7 +1,8 @@
 # pass "go" and collect 200 BAT
 
-![CI](https://github.com/brave-intl/bat-go/workflows/CI/badge.svg)
+![CI](https://github.com/brave-intl/bat-go/actions/workflows/ci.yml/badge.svg)
 
+The `bat-go` repository contains backend services to support Brave browser. 
 
 ## Developer Setup
 
