@@ -160,6 +160,42 @@ func TestSKUNameByMobileName(t *testing.T) {
 			given: "brave-firewall-vpn-premium-year",
 			exp:   tcExpected{skuVnt: "brave-vpn-premium-year"},
 		},
+
+		{
+			name:  "android_origin_monthly_release",
+			given: "brave.origin.monthly",
+			exp:   tcExpected{skuVnt: "brave-origin-premium"},
+		},
+
+		{
+			name:  "android_origin_monthly_beta",
+			given: "beta.origin.monthly",
+			exp:   tcExpected{skuVnt: "brave-origin-premium"},
+		},
+
+		{
+			name:  "android_origin_monthly_nightly",
+			given: "nightly.origin.monthly",
+			exp:   tcExpected{skuVnt: "brave-origin-premium"},
+		},
+
+		{
+			name:  "android_origin_yearly_release",
+			given: "brave.origin.yearly",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-year"},
+		},
+
+		{
+			name:  "android_origin_yearly_beta",
+			given: "beta.origin.yearly",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-year"},
+		},
+
+		{
+			name:  "android_origin_yearly_nightly",
+			given: "nightly.origin.yearly",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-year"},
+		},
 	}
 
 	for i := range tests {
