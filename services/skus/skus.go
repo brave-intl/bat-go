@@ -184,6 +184,14 @@ func skuVntByMobileName(subID string) (string, error) {
 	case "brave.origin.yearly", "beta.origin.yearly", "nightly.origin.yearly":
 		return "brave-origin-premium-year", nil
 
+	// iOS Origin Monthly.
+	case "braveorigin.monthly", "beta.braveorigin.monthly", "nightly.braveorigin.monthly":
+		return "brave-origin-premium", nil
+
+	// iOS Origin Annual.
+	case "braveorigin.yearly", "beta.braveorigin.yearly", "nightly.braveorigin.yearly":
+		return "brave-origin-premium-year", nil
+
 	// Legacy.
 	// Older iOS clients might still send this as subscription_id along with a receipt.
 	case "brave-firewall-vpn-premium":
