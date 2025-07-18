@@ -225,7 +225,7 @@ services:
 
   challenge-bypass:
     container_name: challenge-bypass
-    image: brave/challenge-bypass:latest
+    image: 078933103932.dkr.ecr.us-west-2.amazonaws.com/challenge-bypass:latest
     restart: always
     ports:
       - "2416:2416"
