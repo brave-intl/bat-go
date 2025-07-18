@@ -306,6 +306,36 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		// StripeMetadata depends on env.
 	}
 
+	originm := model.OrderItemRequestNew{
+		Quantity: 1,
+		SKU:      "brave-origin-premium",
+		SKUVnt:   "brave-origin-premium",
+		// Location depends on env.
+		Description:                 "brave-origin-premium",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("4.99"),
+		IssuerTokenBuffer:           ptrTo(3),
+		IssuerTokenOverlap:          ptrTo(0),
+		CredentialValidDurationEach: ptrTo("P1M"),
+		// StripeMetadata depends on env.
+	}
+
+	origina := model.OrderItemRequestNew{
+		Quantity: 1,
+		SKU:      "brave-origin-premium",
+		SKUVnt:   "brave-origin-premium-year",
+		// Location depends on env.
+		Description:                 "brave-origin-premium-year",
+		CredentialType:              "time-limited-v2",
+		CredentialValidDuration:     "P1M",
+		Price:                       decimal.RequireFromString("49.99"),
+		IssuerTokenBuffer:           ptrTo(3),
+		IssuerTokenOverlap:          ptrTo(0),
+		CredentialValidDurationEach: ptrTo("P1M"),
+		// StripeMetadata depends on env.
+	}
+
 	switch env {
 	case "prod", "production":
 		leom.Location = "leo.brave.com"
@@ -330,6 +360,18 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		vpna.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_Lhv8qsPsn6WHrx",
 			ItemID:    "price_1L7lgCBSm1mtrN9nDlAz8WT2",
+		}
+
+		originm.Location = "origin.brave.com"
+		originm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgtPlrWPPAddlH",
+			ItemID:    "price_1RlVd7BSm1mtrN9nGrrjQXiN",
+		}
+
+		origina.Location = "origin.brave.com"
+		origina.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgtPlrWPPAddlH",
+			ItemID:    "price_1RlVdwBSm1mtrN9njhstCyDf",
 		}
 
 	case "sandbox", "staging":
@@ -357,6 +399,18 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ItemID:    "price_1L8O6dBSm1mtrN9nOYyDqe0F",
 		}
 
+		originm.Location = "origin.bravesoftware.com"
+		originm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgrGEhIjFxoCkd",
+			ItemID:    "price_1RlTY0BSm1mtrN9nBICsSzCH",
+		}
+
+		origina.Location = "origin.bravesoftware.com"
+		origina.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgrGEhIjFxoCkd",
+			ItemID:    "price_1RlTbFBSm1mtrN9nIG5T5uEZ",
+		}
+
 	case "dev", "development":
 		leom.Location = "leo.brave.software"
 		leom.StripeMetadata = &model.ItemStripeMetadata{
@@ -380,6 +434,18 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		vpna.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_K1c8W3oM4mUsGw",
 			ItemID:    "price_1L7m0CHof20bphG6AYaCd9OU",
+		}
+
+		originm.Location = "origin.brave.software"
+		originm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgrUuNI96kVrue",
+			ItemID:    "price_1RlTllHof20bphG6EsmBsSzY",
+		}
+
+		origina.Location = "origin.brave.software"
+		origina.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgrUuNI96kVrue",
+			ItemID:    "price_1RlTnUHof20bphG6SjoGpYLB",
 		}
 
 	default:
@@ -407,13 +473,27 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 			ProductID: "prod_K1c8W3oM4mUsGw",
 			ItemID:    "price_1L7m0CHof20bphG6AYaCd9OU",
 		}
+
+		originm.Location = "origin.brave.software"
+		originm.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgrUuNI96kVrue",
+			ItemID:    "price_1RlTllHof20bphG6EsmBsSzY",
+		}
+
+		origina.Location = "origin.brave.software"
+		origina.StripeMetadata = &model.ItemStripeMetadata{
+			ProductID: "prod_SgrUuNI96kVrue",
+			ItemID:    "price_1RlTnUHof20bphG6SjoGpYLB",
+		}
 	}
 
 	result := map[string]model.OrderItemRequestNew{
-		leom.SKUVnt: leom,
-		leoa.SKUVnt: leoa,
-		vpnm.SKUVnt: vpnm,
-		vpna.SKUVnt: vpna,
+		leom.SKUVnt:    leom,
+		leoa.SKUVnt:    leoa,
+		vpnm.SKUVnt:    vpnm,
+		vpna.SKUVnt:    vpna,
+		originm.SKUVnt: originm,
+		origina.SKUVnt: origina,
 	}
 
 	return result
