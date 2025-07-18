@@ -57,8 +57,8 @@ jobs:
         aws-region: us-west-2
 
     - name: Login to Challenge-Bypass Amazon ECR Private
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+      id: grant-login-ecr
+      uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
 
     - name: Login to Docker Hub
       uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
