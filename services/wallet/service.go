@@ -130,10 +130,6 @@ type challengeRepo interface {
 	Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error
 }
 
-type allowListRepo interface {
-	GetAllowListEntry(ctx context.Context, dbi sqlx.QueryerContext, paymentID uuid.UUID) (model.AllowListEntry, error)
-}
-
 type solanaWaitlistRepo interface {
 	Insert(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID, joinedAt time.Time) error
 	Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error
@@ -170,7 +166,6 @@ type Service struct {
 	Datastore        Datastore
 	RoDatastore      ReadOnlyDatastore
 	chlRepo          challengeRepo
-	allowListRepo    allowListRepo
 	solWaitlistRepo  solanaWaitlistRepo
 	solAddrsChecker  solanaAddrsChecker
 	repClient        reputation.Client
@@ -196,7 +191,6 @@ func InitService(
 	datastore Datastore,
 	roDatastore ReadOnlyDatastore,
 	chlRepo challengeRepo,
-	allowList allowListRepo,
 	solWaitlistRepo solanaWaitlistRepo,
 	solAddrsChecker solanaAddrsChecker,
 	repClient reputation.Client,
@@ -210,7 +204,6 @@ func InitService(
 		Datastore:       datastore,
 		RoDatastore:     roDatastore,
 		chlRepo:         chlRepo,
-		allowListRepo:   allowList,
 		solWaitlistRepo: solWaitlistRepo,
 		solAddrsChecker: solAddrsChecker,
 		repClient:       repClient,
@@ -243,7 +236,6 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	l := logging.Logger(ctx, "wallet.SetupService")
 
 	chlRepo := storage.NewChallenge()
-	alRepo := storage.NewAllowList()
 	solWaitlistRepo := storage.NewSolanaWaitlist()
 
 	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")
@@ -334,7 +326,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		AllowedOrigins: dappAO,
 	}
 
-	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, sac, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
+	s, err := InitService(db, roDB, chlRepo, solWaitlistRepo, sac, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -833,11 +825,6 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 		return errDisabledRegion
 	}
 
-	if err := isWalletWhitelisted(ctx, service.Datastore.RawDB(), service.allowListRepo, paymentID); err != nil {
-		service.metric.LinkFailureSolanaWhitelist(repSum.GeoCountry)
-		return err
-	}
-
 	ctx, txn, rollback, commit, err := getTx(ctx, service.Datastore)
 	if err != nil {
 		return err
@@ -1138,16 +1125,6 @@ func (c *claimsZP) validateTime(now time.Time) error {
 		return errZPInvalidBefore
 	}
 
-	return nil
-}
-
-func isWalletWhitelisted(ctx context.Context, dbi sqlx.QueryerContext, alRepo allowListRepo, paymentID uuid.UUID) error {
-	if _, err := alRepo.GetAllowListEntry(ctx, dbi, paymentID); err != nil {
-		if errors.Is(err, model.ErrNotFound) {
-			return model.ErrWalletNotWhitelisted
-		}
-		return fmt.Errorf("error checking allow list entry: %w", err)
-	}
 	return nil
 }
 

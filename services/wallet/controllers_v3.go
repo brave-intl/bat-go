@@ -501,9 +501,6 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 
 			var solErr *walletutils.LinkSolanaAddressError
 			switch {
-			case errors.Is(err, model.ErrWalletNotWhitelisted):
-				return handlers.WrapError(model.ErrWalletNotWhitelisted, "rewards wallet not whitelisted", http.StatusForbidden)
-
 			case errors.Is(err, model.ErrSolAddrsNotAllowed):
 				return handlers.WrapError(model.ErrSolAddrsNotAllowed, "solana address not allowed", http.StatusForbidden)
 

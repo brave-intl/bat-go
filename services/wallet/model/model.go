@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	ErrWalletNotWhitelisted       Error = "model: wallet not whitelisted"
 	ErrNotFound                   Error = "model: not found"
 	ErrChallengeNotFound          Error = "model: challenge not found"
 	ErrChallengeExpired           Error = "model: challenge expired"
@@ -22,15 +21,6 @@ const (
 	ErrPaymentIDSignatureMismatch Error = "model: payment id in request does not match signature"
 	ErrSolAddrsNotAllowed         Error = "model: solana address not allowed"
 )
-
-type AllowListEntry struct {
-	PaymentID uuid.UUID `db:"payment_id"`
-	CreatedAt time.Time `db:"created_at"`
-}
-
-func (a AllowListEntry) IsAllowed(paymentID uuid.UUID) bool {
-	return !uuid.Equal(a.PaymentID, uuid.Nil) && uuid.Equal(a.PaymentID, paymentID)
-}
 
 type Challenge struct {
 	PaymentID uuid.UUID `db:"payment_id"`

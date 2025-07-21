@@ -1058,7 +1058,7 @@ func initSvcWithMockDB(t *testing.T) (*Service, sqlmock.Sqlmock) {
 
 	dappConf := DAppConfig{}
 
-	s, err := InitService(datastore, nil, nil, nil, nil, nil, nil, nil, nil, nil, mtc, gem, dappConf)
+	s, err := InitService(datastore, nil, nil, nil, nil, nil, nil, nil, nil, mtc, gem, dappConf)
 	require.NoError(t, err)
 
 	return s, mock
