@@ -225,7 +225,7 @@ services:
 
   challenge-bypass:
     container_name: challenge-bypass
-    image: brave/challenge-bypass:latest
+    image: 078933103932.dkr.ecr.us-west-2.amazonaws.com/challenge-bypass:latest
     restart: always
     ports:
       - "2416:2416"
@@ -261,7 +261,7 @@ services:
 
   zookeeper:
     container_name: grant-zookeeper
-    image: confluentinc/cp-zookeeper:7.9.1
+    image: confluentinc/cp-zookeeper:7.9.2
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
     ports:
@@ -277,7 +277,7 @@ services:
 
   kafka:
     container_name: grant-kafka
-    image: confluentinc/cp-kafka:7.9.0
+    image: confluentinc/cp-kafka:7.9.2
     ports:
       - "29092:29092"
     environment:
