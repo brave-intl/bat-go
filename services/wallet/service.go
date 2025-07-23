@@ -17,6 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -47,6 +49,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/metric"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/brave-intl/bat-go/services/wallet/storage"
+	"github.com/brave-intl/bat-go/services/wallet/xsolana"
 )
 
 var IsCheckerEnabled = isAddrCheckerEnabled()
@@ -161,13 +164,22 @@ type s3Getter interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
+type solanaClient interface {
+	GetTokenAccountsByOwner(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error)
+}
+
 // Service contains datastore connections
 type Service struct {
-	Datastore        Datastore
-	RoDatastore      ReadOnlyDatastore
-	chlRepo          challengeRepo
-	solWaitlistRepo  solanaWaitlistRepo
-	solAddrsChecker  solanaAddrsChecker
+	Datastore   Datastore
+	RoDatastore ReadOnlyDatastore
+
+	chlRepo challengeRepo
+
+	solWaitlistRepo solanaWaitlistRepo
+	solAddrsChecker solanaAddrsChecker
+	solCl           solanaClient
+	solConf         solanaConfig
+
 	repClient        reputation.Client
 	geminiClient     gemini.Client
 	geoValidator     GeoValidator
@@ -186,6 +198,10 @@ type DAppConfig struct {
 	AllowedOrigins []string
 }
 
+type solanaConfig struct {
+	batMintAddrs string
+}
+
 // InitService creates a new instances of the wallet service.
 func InitService(
 	datastore Datastore,
@@ -193,6 +209,8 @@ func InitService(
 	chlRepo challengeRepo,
 	solWaitlistRepo solanaWaitlistRepo,
 	solAddrsChecker solanaAddrsChecker,
+	solCl solanaClient,
+	solConf solanaConfig,
 	repClient reputation.Client,
 	geminiClient gemini.Client,
 	geoCountryValidator GeoValidator,
@@ -200,12 +218,15 @@ func InitService(
 	metric metricSvc,
 	gemini geminiSvc,
 	dappConf DAppConfig) (*Service, error) {
+
 	service := &Service{
 		Datastore:       datastore,
 		RoDatastore:     roDatastore,
 		chlRepo:         chlRepo,
 		solWaitlistRepo: solWaitlistRepo,
 		solAddrsChecker: solAddrsChecker,
+		solCl:           solCl,
+		solConf:         solConf,
 		repClient:       repClient,
 		geminiClient:    geminiClient,
 		geoValidator:    geoCountryValidator,
@@ -215,6 +236,7 @@ func InitService(
 		dappConf:        dappConf,
 		crMu:            new(sync.RWMutex),
 	}
+
 	return service, nil
 }
 
@@ -317,6 +339,22 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	sac := newSolAddrsChecker(s3Client, ccfg)
 
+	solEndpoint := os.Getenv("SOLANA_ENDPOINT")
+	if solEndpoint == "" {
+		l.Panic().Err(model.Error("wallet: invalid solana endpoint address"))
+	}
+
+	batMintAddrs := os.Getenv("SOLANA_BAT_MINT_ADDRS")
+	if solEndpoint == "" {
+		l.Panic().Err(model.Error("wallet: invalid solana bat mint address"))
+	}
+
+	solConf := solanaConfig{
+		batMintAddrs: batMintAddrs,
+	}
+
+	solCl := xsolana.New(solEndpoint)
+
 	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
 	if len(dappAO) == 0 {
 		l.Panic().Err(errors.New("dapp allowed origins missing")).Msg("failed to initialize wallet service")
@@ -326,7 +364,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		AllowedOrigins: dappAO,
 	}
 
-	s, err := InitService(db, roDB, chlRepo, solWaitlistRepo, sac, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
+	s, err := InitService(db, roDB, chlRepo, solWaitlistRepo, sac, solCl, solConf, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -815,6 +853,10 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 		}
 	}
 
+	if err := doesSolAddrsHaveATAForMint(ctx, service.solCl, req.SolanaPublicKey, service.solConf.batMintAddrs); err != nil {
+		return err
+	}
+
 	repSum, err := service.repClient.GetReputationSummary(ctx, paymentID)
 	if err != nil {
 		return err
@@ -1194,4 +1236,27 @@ func newAWSConfig(ctx context.Context) (aws.Config, error) {
 	}
 
 	return config.LoadDefaultConfig(ctx, config.WithRegion(region))
+}
+
+func doesSolAddrsHaveATAForMint(ctx context.Context, solCl solanaClient, solAddrs, mintAddrs string) error {
+	o, err := solana.PublicKeyFromBase58(solAddrs)
+	if err != nil {
+		return err
+	}
+
+	m, err := solana.PublicKeyFromBase58(mintAddrs)
+	if err != nil {
+		return err
+	}
+
+	resp, err := solCl.GetTokenAccountsByOwner(ctx, o, m)
+	if err != nil {
+		return err
+	}
+
+	if resp == nil || len(resp.Value) <= 0 {
+		return model.ErrSolAddrsHasNoATAForMint
+	}
+
+	return nil
 }

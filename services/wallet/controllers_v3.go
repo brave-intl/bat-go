@@ -504,6 +504,9 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 			case errors.Is(err, model.ErrSolAddrsNotAllowed):
 				return handlers.WrapError(model.ErrSolAddrsNotAllowed, "solana address not allowed", http.StatusForbidden)
 
+			case errors.Is(err, model.ErrSolAddrsHasNoATAForMint):
+				return handlers.WrapError(model.ErrSolAddrsHasNoATAForMint, "solana address has no associate token account for bat", http.StatusBadRequest)
+
 			case errors.Is(err, model.ErrChallengeNotFound):
 				return handlers.WrapError(model.ErrChallengeNotFound, "linking challenge not found", http.StatusNotFound)
 

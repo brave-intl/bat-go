@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcutil/base58"
+	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
@@ -553,12 +555,26 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 
 	addrsChecker := &mockSolAddrsChecker{}
 
+	solCl := &mockSolClient{
+		fnGetTokenAccountsByOwner: func(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error) {
+			return &rpc.GetTokenAccountsResult{
+				Value: []*rpc.TokenAccount{{}},
+			}, nil
+		},
+	}
+
+	solConf := solanaConfig{
+		batMintAddrs: "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz",
+	}
+
 	s := &Service{
 		Datastore:       pg,
 		repClient:       repClient,
 		metric:          mtc,
 		chlRepo:         chlRep,
 		solAddrsChecker: addrsChecker,
+		solCl:           solCl,
+		solConf:         solConf,
 		dappConf:        dac,
 		crMu:            new(sync.RWMutex),
 	}
