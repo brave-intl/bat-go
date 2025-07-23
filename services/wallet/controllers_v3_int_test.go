@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -178,6 +179,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	s := &Service{
 		Datastore: pg,
 		dappConf:  DAppConfig{},
+		crMu:      new(sync.RWMutex),
 	}
 
 	w1 := suite.NewWallet(s, "uphold")
