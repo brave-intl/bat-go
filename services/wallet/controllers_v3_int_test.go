@@ -555,6 +555,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	s := &Service{
 		Datastore:       pg,
 		metric:          mtc,
+		chlRepo:         chlRep,
 		solAddrsChecker: addrsChecker,
 		allowListRepo:   allowList,
 		dappConf:        dac,
