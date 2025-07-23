@@ -18,7 +18,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/services/wallet/storage"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 
@@ -612,12 +611,9 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4() {
 
 	whitelistWallet(suite.T(), pg, w.ID)
 
-	allowList := storage.NewAllowList()
-
 	service := &Service{
-		Datastore:     pg,
-		allowListRepo: allowList,
-		dappConf:      DAppConfig{},
+		Datastore: pg,
+		dappConf:  DAppConfig{},
 	}
 
 	handler := handlers.AppHandler(GetWalletV4(service))
@@ -659,12 +655,9 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4_Not_Whitelisted() {
 	err = pg.InsertWallet(context.TODO(), w)
 	suite.Require().NoError(err)
 
-	allowList := storage.NewAllowList()
-
 	s := &Service{
-		Datastore:     pg,
-		allowListRepo: allowList,
-		dappConf:      DAppConfig{},
+		Datastore: pg,
+		dappConf:  DAppConfig{},
 	}
 
 	handler := handlers.AppHandler(GetWalletV4(s))
