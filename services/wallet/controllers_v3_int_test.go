@@ -561,6 +561,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 		solAddrsChecker: addrsChecker,
 		allowListRepo:   allowList,
 		dappConf:        dac,
+		crMu:            new(sync.RWMutex),
 	}
 
 	cr := custodian.Regions{Solana: custodian.GeoAllowBlockMap{
