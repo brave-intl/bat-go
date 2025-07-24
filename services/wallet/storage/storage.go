@@ -96,25 +96,6 @@ func (c *Challenge) DeleteAfter(ctx context.Context, dbi sqlx.ExecerContext, int
 	return nil
 }
 
-type AllowList struct{}
-
-func NewAllowList() *AllowList { return &AllowList{} }
-
-// GetAllowListEntry retrieves a model.AllowListEntry from the database for the given paymentID.
-func (a *AllowList) GetAllowListEntry(ctx context.Context, dbi sqlx.QueryerContext, paymentID uuid.UUID) (model.AllowListEntry, error) {
-	const q = `select * from allow_list where payment_id = $1`
-
-	var result model.AllowListEntry
-	if err := sqlx.GetContext(ctx, dbi, &result, q, paymentID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return result, model.ErrNotFound
-		}
-		return result, err
-	}
-
-	return result, nil
-}
-
 type SolanaWaitlist struct{}
 
 func NewSolanaWaitlist() *SolanaWaitlist { return &SolanaWaitlist{} }

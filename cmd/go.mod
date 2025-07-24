@@ -4,11 +4,7 @@ go 1.23.0
 
 toolchain go1.23.9
 
-replace github.com/brave-intl/bat-go/services => ../services
-
 replace github.com/brave-intl/bat-go/libs => ../libs
-
-replace github.com/brave-intl/bat-go/tools => ../tools
 
 require (
 	github.com/brave-intl/bat-go/libs v0.0.0-20220913154833-730f36b772de
