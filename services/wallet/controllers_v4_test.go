@@ -679,7 +679,7 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4_Not_Whitelisted() {
 	err = json.Unmarshal(rr.Body.Bytes(), &resp)
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(true, resp.SelfCustodyAvailable["solana"])
+	suite.Assert().Equal(false, resp.SelfCustodyAvailable["solana"])
 }
 
 func signUpdateRequest(req *http.Request, paymentID string, privateKey ed25519.PrivateKey) error {
