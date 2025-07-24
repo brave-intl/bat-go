@@ -18,6 +18,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/brave-intl/bat-go/services/wallet/storage"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 
@@ -612,8 +613,9 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4() {
 	whitelistWallet(suite.T(), pg, w.ID)
 
 	service := &Service{
-		Datastore: pg,
-		dappConf:  DAppConfig{},
+		Datastore:     pg,
+		allowListRepo: storage.NewAllowList(),
+		dappConf:      DAppConfig{},
 	}
 
 	handler := handlers.AppHandler(GetWalletV4(service))
@@ -656,8 +658,9 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4_Not_Whitelisted() {
 	suite.Require().NoError(err)
 
 	s := &Service{
-		Datastore: pg,
-		dappConf:  DAppConfig{},
+		Datastore:     pg,
+		allowListRepo: storage.NewAllowList(),
+		dappConf:      DAppConfig{},
 	}
 
 	handler := handlers.AppHandler(GetWalletV4(s))
@@ -679,7 +682,7 @@ func (suite *WalletControllersTestSuite) TestGetWalletV4_Not_Whitelisted() {
 	err = json.Unmarshal(rr.Body.Bytes(), &resp)
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(true, resp.SelfCustodyAvailable["solana"])
+	suite.Assert().Equal(false, resp.SelfCustodyAvailable["solana"])
 }
 
 func signUpdateRequest(req *http.Request, paymentID string, privateKey ed25519.PrivateKey) error {
