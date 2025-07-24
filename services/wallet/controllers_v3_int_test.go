@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcutil/base58"
+	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
@@ -515,7 +517,6 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	suite.Require().NoError(err)
 
 	chlRep := storage.NewChallenge()
-	allowList := storage.NewAllowList()
 
 	// create the wallet
 	pub, priv, err := ed25519.GenerateKey(nil)
@@ -554,13 +555,26 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 
 	addrsChecker := &mockSolAddrsChecker{}
 
+	solCl := &mockSolClient{
+		fnGetTokenAccountsByOwner: func(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error) {
+			return &rpc.GetTokenAccountsResult{
+				Value: []*rpc.TokenAccount{{}},
+			}, nil
+		},
+	}
+
+	solConf := solanaConfig{
+		batMintAddrs: "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz",
+	}
+
 	s := &Service{
 		Datastore:       pg,
 		repClient:       repClient,
 		metric:          mtc,
 		chlRepo:         chlRep,
 		solAddrsChecker: addrsChecker,
-		allowListRepo:   allowList,
+		solCl:           solCl,
+		solConf:         solConf,
 		dappConf:        dac,
 		crMu:            new(sync.RWMutex),
 	}
@@ -674,8 +688,12 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, DAppConfig{})
-		suite.Require().NoError(err)
+		s := &Service{
+			Datastore:       pg,
+			solWaitlistRepo: waitlistRepo,
+			dappConf:        DAppConfig{},
+			crMu:            new(sync.RWMutex),
+		}
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
 		svr.Handler.ServeHTTP(rw, r)
@@ -711,8 +729,12 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, DAppConfig{})
-		suite.Require().NoError(err)
+		s := &Service{
+			Datastore:       pg,
+			solWaitlistRepo: waitlistRepo,
+			dappConf:        DAppConfig{},
+			crMu:            new(sync.RWMutex),
+		}
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
 		svr.Handler.ServeHTTP(rw, r)
@@ -742,8 +764,12 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, DAppConfig{})
-		suite.Require().NoError(err)
+		s := &Service{
+			Datastore:       pg,
+			solWaitlistRepo: waitlistRepo,
+			dappConf:        DAppConfig{},
+			crMu:            new(sync.RWMutex),
+		}
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
 		svr.Handler.ServeHTTP(rw, r)
@@ -776,8 +802,12 @@ func (suite *WalletControllersTestSuite) TestSolanaWaitlist() {
 
 		waitlistRepo := storage.NewSolanaWaitlist()
 
-		s, err := InitService(pg, nil, nil, nil, waitlistRepo, nil, nil, nil, nil, nil, nil, nil, DAppConfig{})
-		suite.Require().NoError(err)
+		s := &Service{
+			Datastore:       pg,
+			solWaitlistRepo: waitlistRepo,
+			dappConf:        DAppConfig{},
+			crMu:            new(sync.RWMutex),
+		}
 
 		svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
 		svr.Handler.ServeHTTP(rw, r)

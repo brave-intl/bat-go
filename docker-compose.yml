@@ -83,6 +83,8 @@ services:
       - UPHOLD_ACCESS_TOKEN
       - "DAPP_ALLOWED_CORS_ORIGINS=https://my-dapp.com"
       - "S3_OFAC_ADDRESS_BUCKET=ofac-addresses"
+      - "SOLANA_ENDPOINT=https://solana.endpoint.com"
+      - "SOLANA_BAT_MINT_ADDRS=EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -171,6 +173,8 @@ services:
       - UPHOLD_ACCESS_TOKEN
       - "DAPP_ALLOWED_CORS_ORIGINS=https://my-dapp.com"
       - "S3_OFAC_ADDRESS_BUCKET=ofac-addresses"
+      - "SOLANA_ENDPOINT=https://solana.endpoint.com"
+      - "SOLANA_BAT_MINT_ADDRS=EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations

@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/go-chi/chi"
 )
 
@@ -201,14 +200,7 @@ func GetWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handl
 			return handlers.WrapError(err, "no such wallet", http.StatusNotFound)
 		}
 
-		allow, err := s.allowListRepo.GetAllowListEntry(ctx, s.Datastore.RawDB(), paymentID)
-		if err != nil && !errors.Is(err, model.ErrNotFound) {
-			return handlers.WrapError(err, "error getting allow list entry from storage", http.StatusInternalServerError)
-		}
-
-		isSelfCustAvail := allow.IsAllowed(paymentID)
-
-		resp := infoToResponseV4(info, isSelfCustAvail)
+		resp := infoToResponseV4(info, true)
 
 		return handlers.RenderContent(ctx, resp, w, http.StatusOK)
 	}
