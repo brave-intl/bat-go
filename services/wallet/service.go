@@ -133,6 +133,10 @@ type challengeRepo interface {
 	Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error
 }
 
+type allowListRepo interface {
+	GetAllowListEntry(ctx context.Context, dbi sqlx.QueryerContext, paymentID uuid.UUID) (model.AllowListEntry, error)
+}
+
 type solanaWaitlistRepo interface {
 	Insert(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID, joinedAt time.Time) error
 	Delete(ctx context.Context, dbi sqlx.ExecerContext, paymentID uuid.UUID) error
@@ -173,7 +177,8 @@ type Service struct {
 	Datastore   Datastore
 	RoDatastore ReadOnlyDatastore
 
-	chlRepo challengeRepo
+	chlRepo       challengeRepo
+	allowListRepo allowListRepo
 
 	solWaitlistRepo solanaWaitlistRepo
 	solAddrsChecker solanaAddrsChecker
@@ -207,6 +212,7 @@ func InitService(
 	datastore Datastore,
 	roDatastore ReadOnlyDatastore,
 	chlRepo challengeRepo,
+	alRepo allowListRepo,
 	solWaitlistRepo solanaWaitlistRepo,
 	solAddrsChecker solanaAddrsChecker,
 	solCl solanaClient,
@@ -223,6 +229,7 @@ func InitService(
 		Datastore:       datastore,
 		RoDatastore:     roDatastore,
 		chlRepo:         chlRepo,
+		allowListRepo:   alRepo,
 		solWaitlistRepo: solWaitlistRepo,
 		solAddrsChecker: solAddrsChecker,
 		solCl:           solCl,
@@ -258,6 +265,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 	l := logging.Logger(ctx, "wallet.SetupService")
 
 	chlRepo := storage.NewChallenge()
+	alRepo := storage.NewAllowList()
 	solWaitlistRepo := storage.NewSolanaWaitlist()
 
 	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")
@@ -364,7 +372,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		AllowedOrigins: dappAO,
 	}
 
-	s, err := InitService(db, roDB, chlRepo, solWaitlistRepo, sac, solCl, solConf, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
+	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, sac, solCl, solConf, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}

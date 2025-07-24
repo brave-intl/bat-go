@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	ErrNotFound                   Error = "model: not found"
 	ErrChallengeNotFound          Error = "model: challenge not found"
 	ErrChallengeExpired           Error = "model: challenge expired"
 	ErrNoRowsDeleted              Error = "model: no rows deleted"
@@ -21,6 +22,15 @@ const (
 	ErrSolAddrsNotAllowed         Error = "model: solana address not allowed"
 	ErrSolAddrsHasNoATAForMint    Error = "model: solana address has no ata for mint"
 )
+
+type AllowListEntry struct {
+	PaymentID uuid.UUID `db:"payment_id"`
+	CreatedAt time.Time `db:"created_at"`
+}
+
+func (a AllowListEntry) IsAllowed(paymentID uuid.UUID) bool {
+	return !uuid.Equal(a.PaymentID, uuid.Nil) && uuid.Equal(a.PaymentID, paymentID)
+}
 
 type Challenge struct {
 	PaymentID uuid.UUID `db:"payment_id"`
