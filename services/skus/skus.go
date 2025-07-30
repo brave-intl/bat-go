@@ -321,9 +321,8 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		// Location depends on env.
 		Description:                 "brave-origin-premium",
 		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1M",
 		Price:                       decimal.RequireFromString("4.99"),
-		IssuerTokenBuffer:           ptrTo(3),
+		IssuerTokenBuffer:           ptrTo(1),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1M"),
 		// StripeMetadata depends on env.
@@ -336,9 +335,8 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		// Location depends on env.
 		Description:                 "brave-origin-premium-year",
 		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1M",
 		Price:                       decimal.RequireFromString("49.99"),
-		IssuerTokenBuffer:           ptrTo(3),
+		IssuerTokenBuffer:           ptrTo(1),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1M"),
 		// StripeMetadata depends on env.
