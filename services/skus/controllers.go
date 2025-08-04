@@ -1468,6 +1468,8 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 	if err := valid.StructCtx(ctx, &req); err != nil {
 		verrs, ok := collectValidationErrors(err)
 		if !ok {
+			lg.Err(err).Msg("failed to validate request")
+
 			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 		}
 
@@ -1476,8 +1478,12 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 
 	ord, err := svc.createOrderWithReceipt(ctx, req)
 	if err != nil {
+		lgr := lg.With().Bytes("raw_receipt", raw).Logger()
+
 		// Found an existing order, respond with the id (ord guaranteed not to be nil).
 		if errors.Is(err, model.ErrOrderExistsForReceipt) {
+			lgr.Err(err).Msg("failed order already exists for receipt")
+
 			result := model.CreateOrderWithReceiptResponse{ID: ord.ID.String()}
 
 			return handlers.RenderContent(ctx, result, w, http.StatusConflict)
@@ -1486,12 +1492,12 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 		// Use new so that the shorter IF and narrow scope are possible (via if := ...; {}).
 		// It's an example of one of the few legit uses for 'new'.
 		if rverr := new(receiptValidError); errors.As(err, &rverr) {
-			lg.Warn().Err(err).Msg("failed to validate receipt with vendor")
+			lgr.Warn().Err(rverr).Msg("failed to validate receipt with vendor")
 
 			return handleReceiptErr(rverr.err)
 		}
 
-		lg.Warn().Err(err).Msg("failed to create order")
+		lgr.Warn().Err(err).Msg("failed to create order")
 
 		return handlers.WrapError(err, "failed to create order", http.StatusInternalServerError)
 	}
