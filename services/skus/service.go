@@ -2169,6 +2169,7 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		items:      buildStripeLineItems(order.Items),
 		discounts:  buildStripeDiscounts(req.Discounts),
 		metadata:   req.Metadata,
+		Locale:     req.Locale,
 	}
 
 	return createStripeSession(ctx, s.stripeCl, sreq)
@@ -2992,6 +2993,7 @@ type createStripeSessionRequest struct {
 	items      []*stripe.CheckoutSessionLineItemParams
 	discounts  []*stripe.CheckoutSessionDiscountParams
 	metadata   map[string]string
+	Locale     string
 }
 
 func createStripeSession(ctx context.Context, cl stripeClient, req createStripeSessionRequest) (string, error) {
@@ -3004,6 +3006,10 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		SubscriptionData:   &stripe.CheckoutSessionSubscriptionDataParams{},
 		LineItems:          req.items,
 		Discounts:          req.discounts,
+	}
+
+	if req.Locale != "" {
+		params.Locale = ptrTo(req.Locale)
 	}
 
 	// Different processes can supply different info about customer:
