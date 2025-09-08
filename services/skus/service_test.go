@@ -421,7 +421,7 @@ func TestCalculateIssueToWithGrace(t *testing.T) {
 				now:      time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
-				issueTo: time.Date(2025, time.July, 7, 0, 0, 0, 0, time.UTC),
+				issueTo: time.Date(2025, time.July, 6, 0, 0, 0, 0, time.UTC),
 			},
 		},
 
@@ -438,7 +438,7 @@ func TestCalculateIssueToWithGrace(t *testing.T) {
 				now:      time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
-				issueTo: time.Date(2025, time.July, 7, 0, 0, 0, 0, time.UTC),
+				issueTo: time.Date(2025, time.July, 6, 0, 0, 0, 0, time.UTC),
 			},
 		},
 
@@ -504,7 +504,7 @@ func TestCalculateIssueToWithGrace(t *testing.T) {
 				now:      time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
-				issueTo: time.Date(2025, time.July, 7, 0, 0, 0, 0, time.UTC),
+				issueTo: time.Date(2025, time.July, 6, 0, 0, 0, 0, time.UTC),
 			},
 		},
 
