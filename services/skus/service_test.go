@@ -730,7 +730,7 @@ func TestTimeChunking(t *testing.T) {
 				now:      time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
 			},
 			exp: tcExpected{
-				numCreds: 35,
+				numCreds: 36,
 			},
 		},
 
@@ -750,7 +750,7 @@ func TestTimeChunking(t *testing.T) {
 				now:      time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC), //36
 			},
 			exp: tcExpected{
-				numCreds: 35,
+				numCreds: 36,
 			},
 		},
 
