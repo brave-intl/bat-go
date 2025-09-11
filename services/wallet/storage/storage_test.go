@@ -18,6 +18,78 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/model"
 )
 
+func TestAllowList_GetAllowListEntry(t *testing.T) {
+	dbi, err := setupDBI()
+	must.NoError(t, err)
+
+	defer func() {
+		_, _ = dbi.Exec("TRUNCATE TABLE allow_list;")
+	}()
+
+	type tcGiven struct {
+		paymentID uuid.UUID
+		allow     model.AllowListEntry
+	}
+
+	type exp struct {
+		allow model.AllowListEntry
+		err   error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   exp
+	}
+
+	tests := []testCase{
+		{
+			name: "success",
+			given: tcGiven{
+				paymentID: uuid.FromStringOrNil("6d85a314-0fa8-4594-9cb9-c9141b61a887"),
+				allow: model.AllowListEntry{
+					PaymentID: uuid.FromStringOrNil("6d85a314-0fa8-4594-9cb9-c9141b61a887"),
+					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
+				},
+			},
+			exp: exp{
+				allow: model.AllowListEntry{
+					PaymentID: uuid.FromStringOrNil("6d85a314-0fa8-4594-9cb9-c9141b61a887"),
+					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
+				},
+				err: nil,
+			},
+		},
+		{
+			name: "not_found",
+			given: tcGiven{
+				paymentID: uuid.NewV4(),
+			},
+			exp: exp{
+				err: model.ErrNotFound,
+			},
+		},
+	}
+
+	const q = `insert into allow_list (payment_id, created_at) values($1, $2)`
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			_, err1 := dbi.ExecContext(ctx, q, tc.given.allow.PaymentID, tc.given.allow.CreatedAt)
+			must.NoError(t, err1)
+
+			a := &AllowList{}
+			actual, err2 := a.GetAllowListEntry(ctx, dbi, tc.given.paymentID)
+			should.Equal(t, tc.exp.err, err2)
+			should.Equal(t, tc.exp.allow, actual)
+		})
+	}
+}
+
 func TestChallenge_Get(t *testing.T) {
 	dbi, err := setupDBI()
 	must.NoError(t, err)
@@ -328,78 +400,6 @@ func TestChallenge_DeleteAfter(t *testing.T) {
 				_, err := c.Get(ctx, dbi, tc.given.challenges[j].PaymentID)
 				must.Equal(t, tc.exp.errGet, err)
 			}
-		})
-	}
-}
-
-func TestAllowList_GetAllowListEntry(t *testing.T) {
-	dbi, err := setupDBI()
-	must.NoError(t, err)
-
-	defer func() {
-		_, _ = dbi.Exec("TRUNCATE TABLE allow_list;")
-	}()
-
-	type tcGiven struct {
-		paymentID uuid.UUID
-		allow     model.AllowListEntry
-	}
-
-	type exp struct {
-		allow model.AllowListEntry
-		err   error
-	}
-
-	type testCase struct {
-		name  string
-		given tcGiven
-		exp   exp
-	}
-
-	tests := []testCase{
-		{
-			name: "success",
-			given: tcGiven{
-				paymentID: uuid.FromStringOrNil("6d85a314-0fa8-4594-9cb9-c9141b61a887"),
-				allow: model.AllowListEntry{
-					PaymentID: uuid.FromStringOrNil("6d85a314-0fa8-4594-9cb9-c9141b61a887"),
-					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
-				},
-			},
-			exp: exp{
-				allow: model.AllowListEntry{
-					PaymentID: uuid.FromStringOrNil("6d85a314-0fa8-4594-9cb9-c9141b61a887"),
-					CreatedAt: time.Date(2024, 1, 1, 1, 1, 1, 0, time.UTC),
-				},
-				err: nil,
-			},
-		},
-		{
-			name: "not_found",
-			given: tcGiven{
-				paymentID: uuid.NewV4(),
-			},
-			exp: exp{
-				err: model.ErrNotFound,
-			},
-		},
-	}
-
-	const q = `insert into allow_list (payment_id, created_at) values($1, $2)`
-
-	for i := range tests {
-		tc := tests[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-
-			_, err1 := dbi.ExecContext(ctx, q, tc.given.allow.PaymentID, tc.given.allow.CreatedAt)
-			must.NoError(t, err1)
-
-			a := &AllowList{}
-			actual, err2 := a.GetAllowListEntry(ctx, dbi, tc.given.paymentID)
-			should.Equal(t, tc.exp.err, err2)
-			should.Equal(t, tc.exp.allow, actual)
 		})
 	}
 }

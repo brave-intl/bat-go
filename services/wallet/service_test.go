@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
+	uuid "github.com/satori/go.uuid"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 	"gopkg.in/square/go-jose.v2"
@@ -16,7 +19,6 @@ import (
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/services/wallet/model"
-	uuid "github.com/satori/go.uuid"
 )
 
 func TestClaimsZP(t *testing.T) {
@@ -445,4 +447,140 @@ func (m *mockCxLinkRepo) GetCustodianLinkByWalletID(ctx context.Context, ID uuid
 	}
 
 	return m.fnGetCustodianLinkByWalletID(ctx, ID)
+}
+
+func TestDoesSolAddrsHaveATAForMint(t *testing.T) {
+	type tcGiven struct {
+		solCl     solanaClient
+		solAddrs  string
+		mintAddrs string
+	}
+
+	type tcExpected struct {
+		assertErr should.ErrorAssertionFunc
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "solana_address_invalid",
+			exp: tcExpected{
+				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NotNil(t, err)
+				},
+			},
+		},
+
+		{
+			name: "mint_address_invalid",
+			given: tcGiven{
+				solAddrs: "Ei71196o8MpDsVdXyZEewEdxP4A8n3KMZKTFE7KE2xTR",
+			},
+			exp: tcExpected{
+				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NotNil(t, err)
+				},
+			},
+		},
+
+		{
+			name: "sol_client_error",
+			given: tcGiven{
+				solAddrs:  "Ei71196o8MpDsVdXyZEewEdxP4A8n3KMZKTFE7KE2xTR",
+				mintAddrs: "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz",
+				solCl: &mockSolClient{
+					fnGetTokenAccountsByOwner: func(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error) {
+						return nil, model.Error("solana_client_error")
+					},
+				},
+			},
+			exp: tcExpected{
+				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, model.Error("solana_client_error"))
+				},
+			},
+		},
+
+		{
+			name: "no_ata_nil",
+			given: tcGiven{
+				solAddrs:  "Ei71196o8MpDsVdXyZEewEdxP4A8n3KMZKTFE7KE2xTR",
+				mintAddrs: "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz",
+				solCl: &mockSolClient{
+					fnGetTokenAccountsByOwner: func(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error) {
+						return nil, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, model.ErrSolAddrsHasNoATAForMint)
+				},
+			},
+		},
+
+		{
+			name: "no_ata_empty",
+			given: tcGiven{
+				solAddrs:  "Ei71196o8MpDsVdXyZEewEdxP4A8n3KMZKTFE7KE2xTR",
+				mintAddrs: "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz",
+				solCl: &mockSolClient{
+					fnGetTokenAccountsByOwner: func(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error) {
+						return &rpc.GetTokenAccountsResult{}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, model.ErrSolAddrsHasNoATAForMint)
+				},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				solAddrs:  "Ei71196o8MpDsVdXyZEewEdxP4A8n3KMZKTFE7KE2xTR",
+				mintAddrs: "EPeUFDgHRxs9xxEPVaL6kfGQvCon7jmAWKVUHuux1Tpz",
+				solCl: &mockSolClient{
+					fnGetTokenAccountsByOwner: func(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error) {
+						return &rpc.GetTokenAccountsResult{Value: []*rpc.TokenAccount{{}}}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.Nil(t, err)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			actual := doesSolAddrsHaveATAForMint(ctx, tc.given.solCl, tc.given.solAddrs, tc.given.mintAddrs)
+			tc.exp.assertErr(t, actual)
+		})
+	}
+}
+
+type mockSolClient struct {
+	fnGetTokenAccountsByOwner func(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error)
+}
+
+func (c *mockSolClient) GetTokenAccountsByOwner(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error) {
+	if c.fnGetTokenAccountsByOwner == nil {
+		return &rpc.GetTokenAccountsResult{}, nil
+	}
+
+	return c.fnGetTokenAccountsByOwner(ctx, owner, mint)
 }

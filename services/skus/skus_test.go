@@ -854,7 +854,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("4.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -872,7 +872,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -968,7 +968,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("4.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -986,7 +986,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -1082,7 +1082,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("4.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -1100,7 +1100,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -1196,7 +1196,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("4.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
@@ -1214,7 +1214,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
 					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(3),
+					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{

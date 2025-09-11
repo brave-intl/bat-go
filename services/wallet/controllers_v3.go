@@ -501,11 +501,11 @@ func LinkSolanaAddress(s *Service) handlers.AppHandler {
 
 			var solErr *walletutils.LinkSolanaAddressError
 			switch {
-			case errors.Is(err, model.ErrWalletNotWhitelisted):
-				return handlers.WrapError(model.ErrWalletNotWhitelisted, "rewards wallet not whitelisted", http.StatusForbidden)
-
 			case errors.Is(err, model.ErrSolAddrsNotAllowed):
 				return handlers.WrapError(model.ErrSolAddrsNotAllowed, "solana address not allowed", http.StatusForbidden)
+
+			case errors.Is(err, model.ErrSolAddrsHasNoATAForMint):
+				return handlers.WrapError(model.ErrSolAddrsHasNoATAForMint, "solana address has no associated token account for bat", http.StatusBadRequest)
 
 			case errors.Is(err, model.ErrChallengeNotFound):
 				return handlers.WrapError(model.ErrChallengeNotFound, "linking challenge not found", http.StatusNotFound)

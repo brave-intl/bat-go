@@ -17,6 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -47,6 +49,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/metric"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/brave-intl/bat-go/services/wallet/storage"
+	"github.com/brave-intl/bat-go/services/wallet/xsolana"
 )
 
 var IsCheckerEnabled = isAddrCheckerEnabled()
@@ -165,14 +168,23 @@ type s3Getter interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
+type solanaClient interface {
+	GetTokenAccountsByOwner(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error)
+}
+
 // Service contains datastore connections
 type Service struct {
-	Datastore        Datastore
-	RoDatastore      ReadOnlyDatastore
-	chlRepo          challengeRepo
-	allowListRepo    allowListRepo
-	solWaitlistRepo  solanaWaitlistRepo
-	solAddrsChecker  solanaAddrsChecker
+	Datastore   Datastore
+	RoDatastore ReadOnlyDatastore
+
+	chlRepo       challengeRepo
+	allowListRepo allowListRepo
+
+	solWaitlistRepo solanaWaitlistRepo
+	solAddrsChecker solanaAddrsChecker
+	solCl           solanaClient
+	solConf         solanaConfig
+
 	repClient        reputation.Client
 	geminiClient     gemini.Client
 	geoValidator     GeoValidator
@@ -191,14 +203,20 @@ type DAppConfig struct {
 	AllowedOrigins []string
 }
 
+type solanaConfig struct {
+	batMintAddrs string
+}
+
 // InitService creates a new instances of the wallet service.
 func InitService(
 	datastore Datastore,
 	roDatastore ReadOnlyDatastore,
 	chlRepo challengeRepo,
-	allowList allowListRepo,
+	alRepo allowListRepo,
 	solWaitlistRepo solanaWaitlistRepo,
 	solAddrsChecker solanaAddrsChecker,
+	solCl solanaClient,
+	solConf solanaConfig,
 	repClient reputation.Client,
 	geminiClient gemini.Client,
 	geoCountryValidator GeoValidator,
@@ -206,13 +224,16 @@ func InitService(
 	metric metricSvc,
 	gemini geminiSvc,
 	dappConf DAppConfig) (*Service, error) {
+
 	service := &Service{
 		Datastore:       datastore,
 		RoDatastore:     roDatastore,
 		chlRepo:         chlRepo,
-		allowListRepo:   allowList,
+		allowListRepo:   alRepo,
 		solWaitlistRepo: solWaitlistRepo,
 		solAddrsChecker: solAddrsChecker,
+		solCl:           solCl,
+		solConf:         solConf,
 		repClient:       repClient,
 		geminiClient:    geminiClient,
 		geoValidator:    geoCountryValidator,
@@ -222,6 +243,7 @@ func InitService(
 		dappConf:        dappConf,
 		crMu:            new(sync.RWMutex),
 	}
+
 	return service, nil
 }
 
@@ -325,6 +347,22 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	sac := newSolAddrsChecker(s3Client, ccfg)
 
+	solEndpoint := os.Getenv("SOLANA_ENDPOINT")
+	if solEndpoint == "" {
+		l.Panic().Err(model.Error("wallet: invalid solana endpoint address"))
+	}
+
+	batMintAddrs := os.Getenv("SOLANA_BAT_MINT_ADDRS")
+	if solEndpoint == "" {
+		l.Panic().Err(model.Error("wallet: invalid solana bat mint address"))
+	}
+
+	solConf := solanaConfig{
+		batMintAddrs: batMintAddrs,
+	}
+
+	solCl := xsolana.New(solEndpoint)
+
 	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
 	if len(dappAO) == 0 {
 		l.Panic().Err(errors.New("dapp allowed origins missing")).Msg("failed to initialize wallet service")
@@ -334,7 +372,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		AllowedOrigins: dappAO,
 	}
 
-	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, sac, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
+	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, sac, solCl, solConf, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -823,6 +861,10 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 		}
 	}
 
+	if err := doesSolAddrsHaveATAForMint(ctx, service.solCl, req.SolanaPublicKey, service.solConf.batMintAddrs); err != nil {
+		return err
+	}
+
 	repSum, err := service.repClient.GetReputationSummary(ctx, paymentID)
 	if err != nil {
 		return err
@@ -831,11 +873,6 @@ func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UU
 	if !service.custodianRegions.Solana.Verdict(repSum.GeoCountry) {
 		service.metric.LinkFailureSolanaRegion(repSum.GeoCountry)
 		return errDisabledRegion
-	}
-
-	if err := isWalletWhitelisted(ctx, service.Datastore.RawDB(), service.allowListRepo, paymentID); err != nil {
-		service.metric.LinkFailureSolanaWhitelist(repSum.GeoCountry)
-		return err
 	}
 
 	ctx, txn, rollback, commit, err := getTx(ctx, service.Datastore)
@@ -1141,16 +1178,6 @@ func (c *claimsZP) validateTime(now time.Time) error {
 	return nil
 }
 
-func isWalletWhitelisted(ctx context.Context, dbi sqlx.QueryerContext, alRepo allowListRepo, paymentID uuid.UUID) error {
-	if _, err := alRepo.GetAllowListEntry(ctx, dbi, paymentID); err != nil {
-		if errors.Is(err, model.ErrNotFound) {
-			return model.ErrWalletNotWhitelisted
-		}
-		return fmt.Errorf("error checking allow list entry: %w", err)
-	}
-	return nil
-}
-
 const (
 	errZPParseToken       model.Error = "zebpay linking info parsing failed"
 	errZPNoHeaders        model.Error = "linking info token invalid no headers"
@@ -1217,4 +1244,27 @@ func newAWSConfig(ctx context.Context) (aws.Config, error) {
 	}
 
 	return config.LoadDefaultConfig(ctx, config.WithRegion(region))
+}
+
+func doesSolAddrsHaveATAForMint(ctx context.Context, solCl solanaClient, solAddrs, mintAddrs string) error {
+	o, err := solana.PublicKeyFromBase58(solAddrs)
+	if err != nil {
+		return err
+	}
+
+	m, err := solana.PublicKeyFromBase58(mintAddrs)
+	if err != nil {
+		return err
+	}
+
+	resp, err := solCl.GetTokenAccountsByOwner(ctx, o, m)
+	if err != nil {
+		return err
+	}
+
+	if resp == nil || len(resp.Value) <= 0 {
+		return model.ErrSolAddrsHasNoATAForMint
+	}
+
+	return nil
 }

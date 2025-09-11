@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -1056,10 +1057,13 @@ func initSvcWithMockDB(t *testing.T) (*Service, sqlmock.Sqlmock) {
 		},
 	}
 
-	dappConf := DAppConfig{}
-
-	s, err := InitService(datastore, nil, nil, nil, nil, nil, nil, nil, nil, nil, mtc, gem, dappConf)
-	require.NoError(t, err)
+	s := &Service{
+		Datastore: datastore,
+		metric:    mtc,
+		gemini:    gem,
+		dappConf:  DAppConfig{},
+		crMu:      new(sync.RWMutex),
+	}
 
 	return s, mock
 }
