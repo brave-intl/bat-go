@@ -79,7 +79,7 @@ require (
 	github.com/gagliardetto/solana-go v1.12.0 // indirect
 	github.com/gagliardetto/treeout v0.1.4 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
-	github.com/go-chi/cors v1.2.1 // indirect
+	github.com/go-chi/cors v1.2.2 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.4 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
 	github.com/go-sql-driver/mysql v1.7.1 // indirect
