@@ -458,6 +458,7 @@ type CreateOrderRequestNew struct {
 	Discounts      []string              `json:"discounts"`
 	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
 	Metadata       map[string]string     `json:"metadata"`
+	Locale         string                `json:"locale" validate:"omitempty,bcp47_language_tag"`
 }
 
 // OrderItemRequestNew represents an item in an order request.

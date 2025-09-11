@@ -4954,6 +4954,34 @@ func TestCreateStripeSession(t *testing.T) {
 				err: model.Error("something_went_wrong"),
 			},
 		},
+
+		{
+			name: "success_locale",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if *params.Locale != "en-GB" {
+							return nil, model.Error("unexpected_locale")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						panic("unexpected_find_customer")
+					},
+				},
+
+				req: createStripeSessionRequest{
+					Locale: "en-GB",
+				},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
 	}
 
 	for i := range tests {
