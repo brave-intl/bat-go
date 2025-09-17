@@ -1292,7 +1292,7 @@ func doesSolAddrsHaveATAForMint(ctx context.Context, solCl solanaClient, solAddr
 }
 
 func newSolSanctionedAddrsCompMsg(addrs string) *xslack.Message {
-	msg := &xslack.Message{
+	return &xslack.Message{
 		Channel:  "#compliance-bot",
 		Username: "compliance-bot",
 		Blocks: []xslack.Block{
@@ -1313,6 +1313,4 @@ func newSolSanctionedAddrsCompMsg(addrs string) *xslack.Message {
 			},
 		},
 	}
-
-	return msg
 }
