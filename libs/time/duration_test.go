@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	should "github.com/stretchr/testify/assert"
+
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 )
 
@@ -124,4 +126,70 @@ func TestCompareWithTimeParseDuration(t *testing.T) {
 			t.Errorf(`[%d] not equal: %q->%v != %q->%v`, i, tt.timeStr, td, tt.durationStr, dd)
 		}
 	}
+}
+
+func TestISODuration_From(t *testing.T) {
+	type tcGiven struct {
+		now      time.Time
+		duration timeutils.ISODuration
+	}
+
+	type tcExpected struct {
+		date *time.Time
+		err  error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "add_one_month",
+			given: tcGiven{
+				now:      time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+				duration: "P1M",
+			},
+			exp: tcExpected{
+				date: ptrTo(time.Date(2025, time.February, 1, 0, 0, 0, 0, time.UTC)),
+			},
+		},
+
+		{
+			name: "add_one_year",
+			given: tcGiven{
+				now:      time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+				duration: "P1Y",
+			},
+			exp: tcExpected{
+				date: ptrTo(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)),
+			},
+		},
+
+		{
+			name: "error_unsupported_format",
+			given: tcGiven{
+				duration: "unsupported_format",
+			},
+			exp: tcExpected{
+				err: timeutils.ErrUnsupportedFormat,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := tc.given.duration.From(tc.given.now)
+			should.ErrorIs(t, err, tc.exp.err)
+			should.Equal(t, tc.exp.date, actual)
+		})
+	}
+}
+
+func ptrTo[T any](v T) *T {
+	return &v
 }
