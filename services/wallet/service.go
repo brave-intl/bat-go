@@ -372,7 +372,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	solCl := xsolana.New(solEndpoint)
 
-	swURL := os.Getenv("SLACK_WEBHOOK_URL")
+	swURL := os.Getenv("SLACK_COMPLIANCE_WEBHOOK_SECRET")
 	if swURL == "" {
 		l.Panic().Err(model.Error("wallet: invalid slack webhook url"))
 	}
