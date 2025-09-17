@@ -976,15 +976,3 @@ func setupRouter(service *Service) *chi.Mux {
 func ptrTo[T any](v T) *T {
 	return &v
 }
-
-type mockSolAddrsChecker struct {
-	fnIsAllowed func(ctx context.Context, addrs string) error
-}
-
-func (c *mockSolAddrsChecker) IsAllowed(ctx context.Context, addrs string) error {
-	if c.fnIsAllowed == nil {
-		return nil
-	}
-
-	return c.fnIsAllowed(ctx, addrs)
-}
