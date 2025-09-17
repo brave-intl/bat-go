@@ -874,9 +874,11 @@ const errDisabledRegion model.Error = "disabled region"
 func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UUID, req linkSolanaAddrRequest) error {
 	if IsCheckerEnabled {
 		if err := service.solAddrsChecker.IsAllowed(ctx, req.SolanaPublicKey); err != nil {
-			msg := newSolSanctionedAddrsCompMsg(req.SolanaPublicKey)
-			if err := service.compBotCl.SendMessage(ctx, msg); err != nil {
-				return err
+			if errors.Is(err, model.ErrSolAddrsNotAllowed) {
+				msg := newSolSanctionedAddrsCompMsg(req.SolanaPublicKey)
+				if err := service.compBotCl.SendMessage(ctx, msg); err != nil {
+					return err
+				}
 			}
 
 			return err
