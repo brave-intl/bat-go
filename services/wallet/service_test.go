@@ -26,7 +26,7 @@ func TestService_LinkSolanaAddress(t *testing.T) {
 	type tcGiven struct {
 		pid             uuid.UUID
 		req             linkSolanaAddrRequest
-		solAddrsChecker solanaAddrsChecker
+		solAddrsChecker *mockAddrsChecker
 		compBotCl       compBotClient
 	}
 
@@ -44,7 +44,7 @@ func TestService_LinkSolanaAddress(t *testing.T) {
 		{
 			name: "error_address_not_allowed",
 			given: tcGiven{
-				solAddrsChecker: &mockSolAddrsChecker{
+				solAddrsChecker: &mockAddrsChecker{
 					fnIsAllowed: func(ctx context.Context, addrs string) error {
 						return model.Error("error_address_not_allowed")
 					},
@@ -58,7 +58,7 @@ func TestService_LinkSolanaAddress(t *testing.T) {
 		{
 			name: "send_sol_sanctioned_message_error",
 			given: tcGiven{
-				solAddrsChecker: &mockSolAddrsChecker{
+				solAddrsChecker: &mockAddrsChecker{
 					fnIsAllowed: func(ctx context.Context, addrs string) error {
 						return model.ErrSolAddrsNotAllowed
 					},
@@ -81,7 +81,7 @@ func TestService_LinkSolanaAddress(t *testing.T) {
 		{
 			name: "send_sol_sanctioned_message_success",
 			given: tcGiven{
-				solAddrsChecker: &mockSolAddrsChecker{
+				solAddrsChecker: &mockAddrsChecker{
 					fnIsAllowed: func(ctx context.Context, addrs string) error {
 						return model.ErrSolAddrsNotAllowed
 					},
@@ -101,6 +101,8 @@ func TestService_LinkSolanaAddress(t *testing.T) {
 			},
 		},
 	}
+
+	IsCheckerEnabled = true
 
 	for i := range tests {
 		tc := tests[i]
@@ -681,4 +683,16 @@ func (c *mockSolClient) GetTokenAccountsByOwner(ctx context.Context, owner solan
 	}
 
 	return c.fnGetTokenAccountsByOwner(ctx, owner, mint)
+}
+
+type mockAddrsChecker struct {
+	fnIsAllowed func(ctx context.Context, addrs string) error
+}
+
+func (c *mockAddrsChecker) IsAllowed(ctx context.Context, addrs string) error {
+	if c.fnIsAllowed == nil {
+		return nil
+	}
+
+	return c.fnIsAllowed(ctx, addrs)
 }
