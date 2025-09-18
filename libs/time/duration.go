@@ -28,10 +28,13 @@ func ParseDuration(s string) (*ISODuration, error) {
 	if contains.Str(invalidStrings, s) || strings.HasSuffix(s, "T") {
 		return nil, ErrInvalidString
 	}
+
 	if !pattern.MatchString(s) {
 		return nil, ErrUnsupportedFormat
 	}
+
 	d := ISODuration(s)
+
 	return &d, nil
 }
 
@@ -44,12 +47,13 @@ func (i *ISODuration) FromNow() (*time.Time, error) {
 	return t, nil
 }
 
-// From - return a time relative to a given time based on the ISODuration
+// From returns a new time relative to the ISODuration.
 func (i *ISODuration) From(t time.Time) (*time.Time, error) {
 	d, err := i.base(t)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add duration to now: %w", err)
 	}
+
 	tt := t.Add(d)
 	return &tt, nil
 }
@@ -102,7 +106,7 @@ func (i *ISODuration) base(t time.Time) (time.Duration, error) {
 		prefix = "-"
 	}
 
-	return durationFromMatchAndPrefix(match, prefix)
+	return durationFromMatchAndPrefix(match, prefix, t)
 }
 
 func durationFunc(prefix string) func(string, float64) time.Duration {
@@ -115,7 +119,7 @@ func durationFunc(prefix string) func(string, float64) time.Duration {
 	}
 }
 
-func durationFromMatchAndPrefix(match []string, prefix string) (time.Duration, error) {
+func durationFromMatchAndPrefix(match []string, prefix string, t time.Time) (time.Duration, error) {
 	d := time.Duration(0)
 
 	duration := durationFunc(prefix)
@@ -127,32 +131,31 @@ func durationFromMatchAndPrefix(match []string, prefix string) (time.Duration, e
 		}
 
 		if f, err := strconv.ParseFloat(prefix+value, 64); err == nil {
-			n := time.Now()
 			rem := f - float64(int(f))
 			switch name {
 			case "years":
 				// get actual duration (relative to now)
-				d += n.AddDate(int(f), 0, 0).Sub(n)
+				d += t.AddDate(int(f), 0, 0).Sub(t)
 				if rem > 0 {
 					d += duration("%fh", rem*HoursPerYear)
 				}
 			case "months":
 				// get actual duration (relative to now)
-				d += n.AddDate(0, int(f), 0).Sub(n)
+				d += t.AddDate(0, int(f), 0).Sub(t)
 				if rem > 0 {
 					d += duration("%fh", rem*HoursPerMonth)
 				}
 				//d += duration("%fh", f*HoursPerMonth)
 			case "weeks":
 				// get actual duration (relative to now)
-				d += n.AddDate(0, 0, int(f)*7).Sub(n)
+				d += t.AddDate(0, 0, int(f)*7).Sub(t)
 				if rem > 0 {
 					d += duration("%fh", rem*HoursPerWeek)
 				}
 				//d += duration("%fh", f*HoursPerWeek)
 			case "days":
 				// get actual duration (relative to now)
-				d += n.AddDate(0, 0, int(f)).Sub(n)
+				d += t.AddDate(0, 0, int(f)).Sub(t)
 				//d += duration("%fh", f*HoursPerDay)
 				if rem > 0 {
 					d += duration("%fh", (f-float64(int(f)))*HoursPerDay)
