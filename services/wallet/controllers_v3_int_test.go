@@ -512,8 +512,6 @@ func (suite *WalletControllersTestSuite) TestChallenges_Options() {
 func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 	viper.Set("enable-link-drain-flag", "true")
 
-	IsCheckerEnabled = true
-
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
