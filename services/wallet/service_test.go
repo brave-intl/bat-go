@@ -102,8 +102,6 @@ func TestService_LinkSolanaAddress(t *testing.T) {
 		},
 	}
 
-	IsCheckerEnabled = true
-
 	for i := range tests {
 		tc := tests[i]
 
