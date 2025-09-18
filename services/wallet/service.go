@@ -53,20 +53,6 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/xsolana"
 )
 
-var IsCheckerEnabled = isAddrCheckerEnabled()
-
-func isAddrCheckerEnabled() bool {
-	var toggle = false
-	if os.Getenv("ADDRESS_CHECKER_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("ADDRESS_CHECKER_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
 // VerifiedWalletEnable enable verified wallet call
 var VerifiedWalletEnable = isVerifiedWalletEnable()
 
@@ -872,17 +858,15 @@ func (service *Service) LinkUpholdWallet(ctx context.Context, wallet uphold.Wall
 const errDisabledRegion model.Error = "disabled region"
 
 func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UUID, req linkSolanaAddrRequest) error {
-	if IsCheckerEnabled {
-		if err := service.solAddrsChecker.IsAllowed(ctx, req.SolanaPublicKey); err != nil {
-			if errors.Is(err, model.ErrSolAddrsNotAllowed) {
-				msg := newSolSanctionedAddrsCompMsg(req.SolanaPublicKey)
-				if err := service.compBotCl.SendMessage(ctx, msg); err != nil {
-					return err
-				}
+	if err := service.solAddrsChecker.IsAllowed(ctx, req.SolanaPublicKey); err != nil {
+		if errors.Is(err, model.ErrSolAddrsNotAllowed) {
+			msg := newSolSanctionedAddrsCompMsg(req.SolanaPublicKey)
+			if err := service.compBotCl.SendMessage(ctx, msg); err != nil {
+				return err
 			}
-
-			return err
 		}
+
+		return err
 	}
 
 	if err := doesSolAddrsHaveATAForMint(ctx, service.solCl, req.SolanaPublicKey, service.solConf.batMintAddrs); err != nil {
