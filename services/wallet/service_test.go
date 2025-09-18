@@ -19,7 +19,107 @@ import (
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/services/wallet/model"
+	"github.com/brave-intl/bat-go/services/wallet/xslack"
 )
+
+func TestService_LinkSolanaAddress(t *testing.T) {
+	type tcGiven struct {
+		pid             uuid.UUID
+		req             linkSolanaAddrRequest
+		solAddrsChecker solanaAddrsChecker
+		compBotCl       compBotClient
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_address_not_allowed",
+			given: tcGiven{
+				solAddrsChecker: &mockSolAddrsChecker{
+					fnIsAllowed: func(ctx context.Context, addrs string) error {
+						return model.Error("error_address_not_allowed")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.Error("error_address_not_allowed"),
+			},
+		},
+
+		{
+			name: "send_sol_sanctioned_message_error",
+			given: tcGiven{
+				solAddrsChecker: &mockSolAddrsChecker{
+					fnIsAllowed: func(ctx context.Context, addrs string) error {
+						return model.ErrSolAddrsNotAllowed
+					},
+				},
+				compBotCl: &xslack.MockClient{
+					FnSendMessage: func(ctx context.Context, msg *xslack.Message) error {
+						if msg == nil {
+							return model.Error("message_should_not_be_nil")
+						}
+
+						return model.Error("send_message_error")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.Error("send_message_error"),
+			},
+		},
+
+		{
+			name: "send_sol_sanctioned_message_success",
+			given: tcGiven{
+				solAddrsChecker: &mockSolAddrsChecker{
+					fnIsAllowed: func(ctx context.Context, addrs string) error {
+						return model.ErrSolAddrsNotAllowed
+					},
+				},
+				compBotCl: &xslack.MockClient{
+					FnSendMessage: func(ctx context.Context, msg *xslack.Message) error {
+						if msg == nil {
+							return model.Error("message_should_not_be_nil")
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrSolAddrsNotAllowed,
+			},
+		},
+	}
+
+	IsCheckerEnabled = true
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Service{
+				solAddrsChecker: tc.given.solAddrsChecker,
+				compBotCl:       tc.given.compBotCl,
+			}
+
+			ctx := context.Background()
+
+			actual := s.LinkSolanaAddress(ctx, tc.given.pid, tc.given.req)
+			should.Equal(t, tc.exp.err, actual)
+		})
+	}
+}
 
 func TestClaimsZP(t *testing.T) {
 	type tcGiven struct {

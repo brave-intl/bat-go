@@ -43,6 +43,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/metric"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/brave-intl/bat-go/services/wallet/storage"
+	"github.com/brave-intl/bat-go/services/wallet/xslack"
 )
 
 type WalletControllersTestSuite struct {
@@ -577,6 +578,7 @@ func (suite *WalletControllersTestSuite) TestLinkSolanaAddress_Success() {
 		solConf:         solConf,
 		dappConf:        dac,
 		crMu:            new(sync.RWMutex),
+		compBotCl:       &xslack.MockClient{},
 	}
 
 	cr := custodian.Regions{Solana: custodian.GeoAllowBlockMap{
@@ -973,16 +975,4 @@ func setupRouter(service *Service) *chi.Mux {
 
 func ptrTo[T any](v T) *T {
 	return &v
-}
-
-type mockSolAddrsChecker struct {
-	fnIsAllowed func(ctx context.Context, addrs string) error
-}
-
-func (c *mockSolAddrsChecker) IsAllowed(ctx context.Context, addrs string) error {
-	if c.fnIsAllowed == nil {
-		return nil
-	}
-
-	return c.fnIsAllowed(ctx, addrs)
 }

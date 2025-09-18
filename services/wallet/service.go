@@ -49,6 +49,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet/metric"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 	"github.com/brave-intl/bat-go/services/wallet/storage"
+	"github.com/brave-intl/bat-go/services/wallet/xslack"
 	"github.com/brave-intl/bat-go/services/wallet/xsolana"
 )
 
@@ -172,6 +173,10 @@ type solanaClient interface {
 	GetTokenAccountsByOwner(ctx context.Context, owner solana.PublicKey, mint solana.PublicKey) (*rpc.GetTokenAccountsResult, error)
 }
 
+type compBotClient interface {
+	SendMessage(ctx context.Context, msg *xslack.Message) error
+}
+
 // Service contains datastore connections
 type Service struct {
 	Datastore   Datastore
@@ -197,6 +202,8 @@ type Service struct {
 	dappConf         DAppConfig
 
 	s3g s3Getter
+
+	compBotCl compBotClient
 }
 
 type DAppConfig struct {
@@ -223,7 +230,8 @@ func InitService(
 	retry backoff.RetryFunc,
 	metric metricSvc,
 	gemini geminiSvc,
-	dappConf DAppConfig) (*Service, error) {
+	dappConf DAppConfig,
+	compBotCl compBotClient) (*Service, error) {
 
 	service := &Service{
 		Datastore:       datastore,
@@ -242,6 +250,7 @@ func InitService(
 		gemini:          gemini,
 		dappConf:        dappConf,
 		crMu:            new(sync.RWMutex),
+		compBotCl:       compBotCl,
 	}
 
 	return service, nil
@@ -363,6 +372,14 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 
 	solCl := xsolana.New(solEndpoint)
 
+	swURL := os.Getenv("SLACK_COMPLIANCE_WEBHOOK_SECRET")
+	if swURL == "" {
+		l.Panic().Err(model.Error("wallet: invalid slack webhook url"))
+	}
+
+	hc := &http.Client{}
+	compBotCl := xslack.NewClient(hc, swURL)
+
 	dappAO := strings.Split(os.Getenv("DAPP_ALLOWED_CORS_ORIGINS"), ",")
 	if len(dappAO) == 0 {
 		l.Panic().Err(errors.New("dapp allowed origins missing")).Msg("failed to initialize wallet service")
@@ -372,7 +389,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		AllowedOrigins: dappAO,
 	}
 
-	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, sac, solCl, solConf, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf)
+	s, err := InitService(db, roDB, chlRepo, alRepo, solWaitlistRepo, sac, solCl, solConf, repClient, geminiClient, geoCountryValidator, backoff.Retry, mtc, gemx, dappConf, compBotCl)
 	if err != nil {
 		l.Panic().Err(err).Msg("failed to initialize wallet service")
 	}
@@ -857,6 +874,13 @@ const errDisabledRegion model.Error = "disabled region"
 func (service *Service) LinkSolanaAddress(ctx context.Context, paymentID uuid.UUID, req linkSolanaAddrRequest) error {
 	if IsCheckerEnabled {
 		if err := service.solAddrsChecker.IsAllowed(ctx, req.SolanaPublicKey); err != nil {
+			if errors.Is(err, model.ErrSolAddrsNotAllowed) {
+				msg := newSolSanctionedAddrsCompMsg(req.SolanaPublicKey)
+				if err := service.compBotCl.SendMessage(ctx, msg); err != nil {
+					return err
+				}
+			}
+
 			return err
 		}
 	}
@@ -1267,4 +1291,28 @@ func doesSolAddrsHaveATAForMint(ctx context.Context, solCl solanaClient, solAddr
 	}
 
 	return nil
+}
+
+func newSolSanctionedAddrsCompMsg(addrs string) *xslack.Message {
+	return &xslack.Message{
+		Channel:  "#compliance-bot",
+		Username: "compliance-bot",
+		Blocks: []xslack.Block{
+			{
+				Type: "header",
+				Text: xslack.Text{
+					Type:  "plain_text",
+					Text:  ":octagonal_sign: Rewards Wallet Solana Sanctioned Address Linking Attempt",
+					Emoji: true,
+				},
+			},
+			{
+				Type: "section",
+				Text: xslack.Text{
+					Type: "mrkdwn",
+					Text: "Solana address " + addrs + " was blocked from linking",
+				},
+			},
+		},
+	}
 }
