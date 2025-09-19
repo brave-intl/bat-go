@@ -460,6 +460,28 @@ func (suite *PostgresTestSuite) TestInsertSigningOrderRequestOutbox() {
 	suite.Assert().Equal(signingOrderRequest, actual)
 }
 
+func (suite *PostgresTestSuite) TestGetOutboxMovAvgDurationSeconds() {
+	raw, err := json.Marshal(SigningOrderRequest{})
+	suite.Require().NoError(err)
+
+	ctx := context.Background()
+
+	const q = `INSERT INTO signing_order_request_outbox (request_id, order_id, item_id, message_data, submitted_at, completed_at) VALUES ($1, $2, $3, $4, $5, $6)`
+
+	subAt := time.Date(2023, time.August, 1, 1, 1, 1, 0, time.UTC)
+	compAt := time.Date(2023, time.August, 1, 1, 1, 4, 0, time.UTC)
+
+	for range 3 {
+		_, err = suite.storage.RawDB().ExecContext(ctx, q, uuid.NewV4(), uuid.NewV4(), uuid.NewV4(), raw, subAt, compAt)
+		suite.Require().NoError(err)
+	}
+
+	actual, err := suite.storage.GetOutboxMovAvgDurationSeconds()
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(int64(3), actual)
+}
+
 //nolint:typecheck
 func createOrderAndIssuer(t *testing.T, ctx context.Context, storage Datastore, sku ...string) (*Order, *Issuer) {
 	var (
