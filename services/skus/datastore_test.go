@@ -476,6 +476,10 @@ func (suite *PostgresTestSuite) TestGetOutboxMovAvgDurationSeconds() {
 		suite.Require().NoError(err)
 	}
 
+	// Nil times should not be included in calculation.
+	_, err = suite.storage.RawDB().ExecContext(ctx, q, uuid.NewV4(), uuid.NewV4(), uuid.NewV4(), raw, nil, nil)
+	suite.Require().NoError(err)
+
 	actual, err := suite.storage.GetOutboxMovAvgDurationSeconds()
 	suite.Require().NoError(err)
 
