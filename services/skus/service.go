@@ -2033,6 +2033,9 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 		return nil, err
 	}
 
+	lg := logging.Logger(ctx, "CreateOrder")
+	lg.Info().Interface("req", "CreateOrder").Msg("creating order with locale")
+
 	return s.createOrderPremium(ctx, req, ordNew, items)
 }
 
@@ -2066,6 +2069,8 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 	if !order.IsPaid() {
 		switch {
 		case order.IsStripePayable():
+			lg := logging.Logger(ctx, "createOrderPremium")
+			lg.Info().Interface("req", req).Msg("create session is stripe")
 			ssid, err := s.createStripeSession(ctx, req, order)
 			if err != nil {
 				return nil, err
@@ -2171,6 +2176,9 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		metadata:   req.Metadata,
 		Locale:     req.Locale,
 	}
+
+	lg := logging.Logger(ctx, "createStripeSession")
+	lg.Info().Interface("sreq", sreq).Msg("creating stripe session sreq")
 
 	return createStripeSession(ctx, s.stripeCl, sreq)
 }
@@ -3058,6 +3066,8 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 	if err != nil {
 		return "", err
 	}
+
+	lg.Info().Interface("stripe_cs", sess).Msg("cs created")
 
 	return sess.ID, nil
 }
