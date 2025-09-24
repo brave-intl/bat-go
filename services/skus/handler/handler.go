@@ -88,8 +88,11 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	if err := json.Unmarshal(raw, req); err != nil {
 		return handlers.WrapError(err, "Failed to deserialize request", http.StatusBadRequest)
 	}
-
 	ctx := r.Context()
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderNew").Logger()
+
+	lg.Info().Interface("raw", raw).Interface("req", req).Msg("create-new")
 
 	if err := h.valid.StructCtx(ctx, req); err != nil {
 		verrs, ok := collectValidationErrors(err)
@@ -103,8 +106,6 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 			Data:    map[string]interface{}{"validationErrors": verrs},
 		}
 	}
-
-	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderNew").Logger()
 
 	result, err := h.svc.CreateOrder(ctx, req)
 	if err != nil {
