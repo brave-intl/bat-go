@@ -2998,6 +2998,10 @@ type createStripeSessionRequest struct {
 }
 
 func createStripeSession(ctx context.Context, cl stripeClient, req createStripeSessionRequest) (string, error) {
+	lg := logging.Logger(ctx, "createStripeSession")
+
+	lg.Info().Interface("req", req).Msg("creating session with req")
+
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: []*string{ptrTo("card")},
 		Mode:               ptrTo(string(stripe.CheckoutSessionModeSubscription)),
@@ -3010,6 +3014,7 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 	}
 
 	if req.Locale != "" {
+		lg.Info().Interface("locale", req.Locale).Msg("setting locale")
 		params.Locale = ptrTo(req.Locale)
 	}
 
@@ -3046,6 +3051,8 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 	for k, v := range req.metadata {
 		params.SubscriptionData.AddMetadata(k, v)
 	}
+
+	lg.Info().Interface("params", params).Msg("creating session")
 
 	sess, err := cl.CreateSession(ctx, params)
 	if err != nil {
