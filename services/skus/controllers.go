@@ -999,7 +999,7 @@ func handleVerifyCredV2(svc *Service, valid *validator.Validate) handlers.AppHan
 
 		aerr := svc.verifyCredential(ctx, req, w)
 		if aerr != nil {
-			lg.Err(aerr).Msg("failed to verify credential")
+			lg.Err(aerr).Str("sku", req.GetSKU()).Str("type", req.GetType()).Msg("failed to verify credential")
 		}
 
 		return aerr
@@ -1034,7 +1034,7 @@ func handleVerifyCredV1(svc *Service, valid *validator.Validate) handlers.AppHan
 
 		aerr := svc.verifyCredential(ctx, req, w)
 		if aerr != nil {
-			lg.Err(aerr).Msg("failed to verify credential")
+			lg.Err(aerr).Str("sku", req.GetSKU()).Str("type", req.GetType()).Msg("failed to verify credential")
 		}
 
 		return aerr
