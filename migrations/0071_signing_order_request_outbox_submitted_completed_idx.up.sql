@@ -1,0 +1,1 @@
+CREATE INDEX CONCURRENTLY IF NOT EXISTS signing_order_request_outbox_submitted_completed_idx ON signing_order_request_outbox (submitted_at DESC, completed_at) WHERE completed_at IS NOT NULL AND submitted_at IS NOT NULL;
