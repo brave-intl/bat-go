@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY signing_order_request_outbox_submitted_completed_idx;
