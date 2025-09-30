@@ -650,6 +650,9 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 		return fmt.Errorf("failed to check for expired stripe checkout session: %w", err)
 	}
 
+	lg := logging.Logger(ctx, "updateOrderStripeSession")
+	lg.Info().Interface("expSessID", expSessID).Interface("order", ord).Msg("updating session")
+
 	var newSessID string
 
 	if expSessID != "" {
