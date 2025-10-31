@@ -250,19 +250,20 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return model.ErrTLV2InvalidCredNum
 	}
 
-	if err := s.doCredentialsExist(ctx, requestID, item, blindedCreds[0]); err != nil {
-		if errors.Is(err, errCredsAlreadySubmitted) {
-			return nil
-		}
-
-		return err
-	}
-
 	// Check if truncation is necessary for in case of a Leo order with 8*192=1536 nbcreds.
 	// If yes, then truncate credentials to the desired number, 576.
 	creds := truncateTLV2BCreds(order, item, nbcreds, blindedCreds)
 
 	if err := checkNumBlindedCreds(order, item, len(creds)); err != nil {
+		return err
+	}
+
+	// CBP signs credentials in reverse chronologic order, the credentials furthest in the future will be signed first. If we check for the first credential it may not be present because we truncate signed credentials according to order expiry after getting them back from CBP.
+	if err := s.doCredentialsExist(ctx, requestID, item, creds[len(creds)-1]); err != nil {
+		if errors.Is(err, errCredsAlreadySubmitted) {
+			return nil
+		}
+
 		return err
 	}
 
