@@ -143,7 +143,7 @@ func (r *Order) GetTimeBounds(ctx context.Context, dbi sqlx.QueryerContext, id u
 // GetExpiresAtAfterISOPeriod returns a new value for expires_at that is last_paid_at plus ISO period.
 //
 // It falls back to now() when last_paid_at is NULL.
-// It uses the maximum of the order items' valid_for_iso as inverval, and falls back to 1 month.
+// It uses the maximum of the order items' valid_for_iso as interval, and falls back to 1 month.
 func (r *Order) GetExpiresAtAfterISOPeriod(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (time.Time, error) {
 	const q = `SELECT COALESCE(last_paid_at, now()) +
 	(SELECT COALESCE(MAX(valid_for_iso::interval), interval '1 month') FROM order_items WHERE order_id = $2)

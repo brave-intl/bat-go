@@ -974,7 +974,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 	); err != nil {
 		sublogger.Error().Err(err).
 			Msg("failed to update wallets with new deposit destination")
-		return fmt.Errorf("error updating wallets with new deposit desintation: %w", err)
+		return fmt.Errorf("error updating wallets with new deposit destination: %w", err)
 	} else if r != nil {
 		count, _ := r.RowsAffected()
 		if count < 1 {
