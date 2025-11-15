@@ -11,6 +11,9 @@ on:
     branches:
       - master
       - prod
+permissions:
+  contents: read
+
 jobs:
   golangci-libs:
     name: lint
