@@ -1,6 +1,6 @@
 module github.com/brave-intl/bat-go/libs
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.23.0

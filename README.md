@@ -6,7 +6,7 @@ The `bat-go` repository contains backend services to support Brave browser.
 
 ## Developer Setup
 
-1. [Install Go](https://golang.org/doc/install) (Go 1.23 or later)
+1. [Install Go](https://golang.org/doc/install) (Go 1.25 or later)
 
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 

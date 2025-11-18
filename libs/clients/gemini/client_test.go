@@ -1,5 +1,4 @@
 //go:build integration && vpn
-// +build integration,vpn
 
 package gemini
 
