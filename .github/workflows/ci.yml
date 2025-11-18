@@ -44,6 +44,8 @@ jobs:
     strategy:
       matrix:
         goversion:
+        # we need to keep 1.23 until ci passes then it can be removed
+        - 1.23
         - 1.25
 
     steps:
