@@ -1,5 +1,4 @@
 //go:build ratiosintegration
-// +build ratiosintegration
 
 package ratios
 
