@@ -1,8 +1,6 @@
 module github.com/brave-intl/bat-go/cmd
 
-go 1.23.0
-
-toolchain go1.23.9
+go 1.25.0
 
 replace github.com/brave-intl/bat-go/libs => ../libs
 
