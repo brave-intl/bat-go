@@ -282,6 +282,8 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 					if response.Status != 0 {
 						status = response.Status
 					}
+					// TODO(cld11): fix once update go
+					//nolint:all
 					err = fmt.Errorf(target.Error())
 				}
 			}
