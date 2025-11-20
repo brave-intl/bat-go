@@ -4622,6 +4622,7 @@ func TestCreateStripeSession(t *testing.T) {
 	type tcGiven struct {
 		cl  *xstripe.MockClient
 		req createStripeSessionRequest
+		slv xstripe.LocaleValidator
 	}
 
 	type tcExpected struct {
@@ -4689,6 +4690,8 @@ func TestCreateStripeSession(t *testing.T) {
 						"key_01": "val_01",
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4727,6 +4730,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4766,6 +4771,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4800,6 +4807,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4838,6 +4847,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4865,6 +4876,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4888,6 +4901,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4921,6 +4936,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4949,6 +4966,8 @@ func TestCreateStripeSession(t *testing.T) {
 						},
 					},
 				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				err: model.Error("something_went_wrong"),
@@ -4977,6 +4996,38 @@ func TestCreateStripeSession(t *testing.T) {
 				req: createStripeSessionRequest{
 					Locale: "en-GB",
 				},
+
+				slv: xstripe.NewLocaleValidator(),
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "invalid_locale",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if params.Locale != nil {
+							return nil, model.Error("unexpected_locale")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						panic("unexpected_find_customer")
+					},
+				},
+
+				req: createStripeSessionRequest{
+					Locale: "uk",
+				},
+
+				slv: xstripe.NewLocaleValidator(),
 			},
 			exp: tcExpected{
 				val: "cs_test_id",
@@ -4990,7 +5041,7 @@ func TestCreateStripeSession(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			actual, err := createStripeSession(ctx, tc.given.cl, tc.given.req)
+			actual, err := createStripeSession(ctx, tc.given.cl, tc.given.req, tc.given.slv)
 			must.Equal(t, tc.exp.err, err)
 
 			should.Equal(t, tc.exp.val, actual)
