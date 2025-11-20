@@ -281,7 +281,7 @@ services:
 
   kafka:
     container_name: grant-kafka
-    image: confluentinc/cp-kafka:7.9.2
+    image: confluentinc/cp-kafka:7.9.4
     ports:
       - "29092:29092"
     environment:
