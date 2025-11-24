@@ -72,3 +72,57 @@ func CustomerIDFromSession(sess *stripe.CheckoutSession) string {
 
 	return ""
 }
+
+type LocaleValidator map[string]struct{}
+
+func NewLocaleValidator() LocaleValidator {
+	return map[string]struct{}{
+		"auto":   {},
+		"bg":     {},
+		"cs":     {},
+		"da":     {},
+		"de":     {},
+		"el":     {},
+		"en":     {},
+		"en-GB":  {},
+		"es":     {},
+		"es-419": {},
+		"et":     {},
+		"fi":     {},
+		"fil":    {},
+		"fr":     {},
+		"fr-CA":  {},
+		"hr":     {},
+		"hu":     {},
+		"id":     {},
+		"it":     {},
+		"ja":     {},
+		"ko":     {},
+		"lt":     {},
+		"lv":     {},
+		"ms":     {},
+		"mt":     {},
+		"nb":     {},
+		"nl":     {},
+		"pl":     {},
+		"pt-BR":  {},
+		"pt":     {},
+		"ro":     {},
+		"ru":     {},
+		"sk":     {},
+		"sl":     {},
+		"sv":     {},
+		"th":     {},
+		"tr":     {},
+		"vi":     {},
+		"zh":     {},
+		"zh-HK":  {},
+		"zh-TW":  {},
+	}
+}
+
+func (v LocaleValidator) IsLocaleSupported(locale string) bool {
+	_, ok := v[locale]
+
+	return ok
+}

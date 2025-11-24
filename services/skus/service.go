@@ -175,6 +175,8 @@ type Service struct {
 
 	payProcCfg    *premiumPaymentProcConfig
 	newItemReqSet map[string]model.OrderItemRequestNew
+
+	stripeLocaleValid xstripe.LocaleValidator
 }
 
 // PauseWorker - pause worker until time specified
@@ -393,6 +395,8 @@ func InitService(
 
 		payProcCfg:    newPaymentProcessorConfig(env),
 		newItemReqSet: newOrderItemReqNewMobileSet(env),
+
+		stripeLocaleValid: xstripe.NewLocaleValidator(),
 	}
 
 	service.jobs = []srv.Job{
@@ -2172,7 +2176,7 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		Locale:     req.Locale,
 	}
 
-	return createStripeSession(ctx, s.stripeCl, sreq)
+	return createStripeSession(ctx, s.stripeCl, sreq, s.stripeLocaleValid)
 }
 
 func (s *Service) createRadomSession(ctx context.Context, req *model.CreateOrderRequestNew, order *model.Order) (string, error) {
@@ -2771,7 +2775,7 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 		req.email = xstripe.CustomerEmailFromSession(oldSess)
 	}
 
-	sessID, err := createStripeSession(ctx, s.stripeCl, req)
+	sessID, err := createStripeSession(ctx, s.stripeCl, req, s.stripeLocaleValid)
 	if err != nil {
 		return "", err
 	}
@@ -2997,7 +3001,7 @@ type createStripeSessionRequest struct {
 	Locale     string
 }
 
-func createStripeSession(ctx context.Context, cl stripeClient, req createStripeSessionRequest) (string, error) {
+func createStripeSession(ctx context.Context, cl stripeClient, req createStripeSessionRequest, slv xstripe.LocaleValidator) (string, error) {
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: []*string{ptrTo("card")},
 		Mode:               ptrTo(string(stripe.CheckoutSessionModeSubscription)),
@@ -3009,7 +3013,7 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		Discounts:          req.discounts,
 	}
 
-	if req.Locale != "" {
+	if slv.IsLocaleSupported(req.Locale) {
 		params.Locale = ptrTo(req.Locale)
 	}
 

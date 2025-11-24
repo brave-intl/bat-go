@@ -1,8 +1,6 @@
 module github.com/brave-intl/bat-go/cmd
 
-go 1.23.0
-
-toolchain go1.23.9
+go 1.25.0
 
 replace github.com/brave-intl/bat-go/libs => ../libs
 
@@ -32,10 +30,10 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
-	github.com/prometheus/client_golang v1.13.0 // indirect
+	github.com/prometheus/client_golang v1.16.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
-	github.com/prometheus/common v0.37.0 // indirect
-	github.com/prometheus/procfs v0.8.0 // indirect
+	github.com/prometheus/common v0.42.0 // indirect
+	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/redis/go-redis/v9 v9.8.0 // indirect
 	github.com/rs/xid v1.4.0 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
@@ -46,10 +44,10 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/throttled/throttled/v2 v2.12.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
+	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

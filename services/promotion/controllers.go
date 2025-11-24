@@ -282,7 +282,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 					if response.Status != 0 {
 						status = response.Status
 					}
-					err = fmt.Errorf(target.Error())
+					err = fmt.Errorf("%s", target.Error())
 				}
 			}
 			return handlers.WrapError(err, "Error claiming promotion", status)

@@ -11,6 +11,9 @@ on:
     branches:
       - master
       - prod
+permissions:
+  contents: read
+
 jobs:
   golangci-libs:
     name: lint
@@ -19,12 +22,12 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - name: golangci-lint-libs
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
         with:
           working-directory: libs
-          version: v2.2.2
+          version: v2.6.2
           args: --timeout 3m
 
   golangci-services:
@@ -34,12 +37,12 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - name: golangci-lint-services
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
         with:
           working-directory: services
-          version: v2.2.2
+          version: v2.6.2
           args: --timeout 3m
 
   golangci-tools:
@@ -49,12 +52,12 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - name: golangci-lint-tools
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
         with:
           working-directory: tools
-          version: v2.2.2
+          version: v2.6.2
           args: --timeout 3m
 
   golangci-cmd:
@@ -64,12 +67,12 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - name: golangci-lint-cmd
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
         with:
           working-directory: cmd
-          version: v2.2.2
+          version: v2.6.2
           args: --timeout 3m
 
   golangci-main:
@@ -79,10 +82,10 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - name: golangci-lint-main
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
         with:
           working-directory: main
-          version: v2.2.2
+          version: v2.6.2
           args: --timeout 3m
