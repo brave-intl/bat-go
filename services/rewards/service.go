@@ -168,10 +168,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
-	}
-
-	if s.cfg.isDevelopment() {
-		params.TOSVersion = s.cfg.TOSVersion
+		TOSVersion: s.cfg.TOSVersion,
 	}
 
 	vbatDeadline, ok := ctx.Value(appctx.ParametersVBATDeadlineCTXKey).(time.Time)
