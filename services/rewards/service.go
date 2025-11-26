@@ -54,22 +54,6 @@ type Service struct {
 	s3g                  s3Getter
 }
 
-func (c *Config) isDevelopment() bool {
-	if c == nil {
-		return false
-	}
-
-	return c.Env == "development"
-}
-
-func (c *Config) isStaging() bool {
-	if c == nil {
-		return false
-	}
-
-	return c.Env == "staging"
-}
-
 func (s *Service) Jobs() []srv.Job {
 	return s.jobs
 }
