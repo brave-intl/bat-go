@@ -54,22 +54,6 @@ type Service struct {
 	s3g                  s3Getter
 }
 
-func (c *Config) isDevelopment() bool {
-	if c == nil {
-		return false
-	}
-
-	return c.Env == "development"
-}
-
-func (c *Config) isStaging() bool {
-	if c == nil {
-		return false
-	}
-
-	return c.Env == "staging"
-}
-
 func (s *Service) Jobs() []srv.Job {
 	return s.jobs
 }
@@ -168,10 +152,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
-	}
-
-	if s.cfg.isDevelopment() {
-		params.TOSVersion = s.cfg.TOSVersion
+		TOSVersion: s.cfg.TOSVersion,
 	}
 
 	vbatDeadline, ok := ctx.Value(appctx.ParametersVBATDeadlineCTXKey).(time.Time)
