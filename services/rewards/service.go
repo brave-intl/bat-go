@@ -170,7 +170,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		},
 	}
 
-	if s.cfg.isDevelopment() {
+	if s.cfg.isDevelopment() || s.cfg.isStaging() {
 		params.TOSVersion = s.cfg.TOSVersion
 	}
 
