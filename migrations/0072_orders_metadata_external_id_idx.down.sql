@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY orders_metadata_external_id_idx;
