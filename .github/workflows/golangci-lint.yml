@@ -15,77 +15,28 @@ permissions:
   contents: read
 
 jobs:
-  golangci-libs:
-    name: lint
+  golangci:
+    name: golangci-lint
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        work-dir: [libs, services, tools, cmd, main]
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: '1.25'
-      - name: golangci-lint-libs
+      - name: golangci-lint
         uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
         with:
-          working-directory: libs
+          working-directory: ${{ matrix.work-dir }}
           version: v2.6.2
           args: --timeout 3m
 
-  golangci-services:
+  # GHA doesn't implement aggregated matrix status checks natively: https://github.com/orgs/community/discussions/26822
+  lint:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
+    needs: [golangci]
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
-        with:
-          go-version: '1.25'
-      - name: golangci-lint-services
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
-        with:
-          working-directory: services
-          version: v2.6.2
-          args: --timeout 3m
-
-  golangci-tools:
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
-        with:
-          go-version: '1.25'
-      - name: golangci-lint-tools
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
-        with:
-          working-directory: tools
-          version: v2.6.2
-          args: --timeout 3m
-
-  golangci-cmd:
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
-        with:
-          go-version: '1.25'
-      - name: golangci-lint-cmd
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
-        with:
-          working-directory: cmd
-          version: v2.6.2
-          args: --timeout 3m
-
-  golangci-main:
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
-        with:
-          go-version: '1.25'
-      - name: golangci-lint-main
-        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0
-        with:
-          working-directory: main
-          version: v2.6.2
-          args: --timeout 3m
+      - run: exit 0
