@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY orders_metadata_radom_subscription_id_idx;
