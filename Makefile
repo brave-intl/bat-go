@@ -203,7 +203,7 @@ lint: ensure-gomod-volume
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/services golangci/golangci-lint:v1.64.8 golangci-lint run -v ./...
 	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/tools golangci/golangci-lint:v1.64.8 golangci-lint run -v ./...
 
-docker-migrate-create:
+migrate-create:
 	@if [ -z "$(NAME)" ]; then echo "NAME is required. Usage: make migrate-create NAME=migration_name"; exit 1; fi
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm migrate create -ext sql -dir /migrations -seq -digits 4 $(NAME)
 
