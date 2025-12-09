@@ -2163,6 +2163,11 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		return "", err
 	}
 
+	csm := string(stripe.CheckoutSessionModeSubscription)
+	if req.IsOneOffPayment() {
+		csm = string(stripe.CheckoutSessionModePayment)
+	}
+
 	sreq := createStripeSessionRequest{
 		orderID:    oid,
 		email:      req.Email,
@@ -2174,6 +2179,7 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		discounts:  buildStripeDiscounts(req.Discounts),
 		metadata:   req.Metadata,
 		Locale:     req.Locale,
+		csMode:     csm,
 	}
 
 	return createStripeSession(ctx, s.stripeCl, sreq, s.stripeLocaleValid)
@@ -2769,6 +2775,7 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 		trialDays:  ord.GetTrialDays(),
 		items:      buildStripeLineItems(ord.Items),
 		Locale:     oldSess.Locale,
+		csMode:     string(oldSess.Mode),
 	}
 
 	if req.email == "" {
@@ -2999,16 +3006,16 @@ type createStripeSessionRequest struct {
 	discounts  []*stripe.CheckoutSessionDiscountParams
 	metadata   map[string]string
 	Locale     string
+	csMode     string
 }
 
 func createStripeSession(ctx context.Context, cl stripeClient, req createStripeSessionRequest, slv xstripe.LocaleValidator) (string, error) {
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: []*string{ptrTo("card")},
-		Mode:               ptrTo(string(stripe.CheckoutSessionModeSubscription)),
+		Mode:               ptrTo(req.csMode),
 		SuccessURL:         &req.successURL,
 		CancelURL:          &req.cancelURL,
 		ClientReferenceID:  &req.orderID,
-		SubscriptionData:   &stripe.CheckoutSessionSubscriptionDataParams{},
 		LineItems:          req.items,
 		Discounts:          req.discounts,
 	}
@@ -3035,20 +3042,34 @@ func createStripeSession(ctx context.Context, cl stripeClient, req createStripeS
 		}
 	}
 
-	if req.trialDays > 0 {
-		params.SubscriptionData.TrialPeriodDays = &req.trialDays
+	switch *params.Mode {
+	case string(stripe.CheckoutSessionModeSubscription):
+		params.SubscriptionData = &stripe.CheckoutSessionSubscriptionDataParams{}
+
+		if req.trialDays > 0 {
+			params.SubscriptionData.TrialPeriodDays = &req.trialDays
+		}
+
+		params.SubscriptionData.AddMetadata("orderID", req.orderID)
+
+		for k, v := range req.metadata {
+			params.SubscriptionData.AddMetadata(k, v)
+		}
+
+	case string(stripe.CheckoutSessionModePayment):
+		params.PaymentIntentData = &stripe.CheckoutSessionPaymentIntentDataParams{}
+
+		params.PaymentIntentData.AddMetadata("orderID", req.orderID)
+
+		for k, v := range req.metadata {
+			params.PaymentIntentData.AddMetadata(k, v)
+		}
 	}
 
 	// Only allow user-facing promotion codes if params.Discounts is empty:
 	// - allow_promotion_codes and params.Discounts are mutually exclusive in Stripe.
 	if len(params.Discounts) == 0 {
 		params.AddExtra("allow_promotion_codes", "true")
-	}
-
-	params.SubscriptionData.AddMetadata("orderID", req.orderID)
-
-	for k, v := range req.metadata {
-		params.SubscriptionData.AddMetadata(k, v)
 	}
 
 	sess, err := cl.CreateSession(ctx, params)
