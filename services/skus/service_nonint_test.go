@@ -4285,6 +4285,13 @@ func TestService_createStripeSession(t *testing.T) {
 		{
 			name: "success_mode_payment",
 			given: tcGiven{
+				req: &model.CreateOrderRequestNew{
+					Items: []model.OrderItemRequestNew{
+						{
+							Period: "one-off",
+						},
+					},
+				},
 				cl: &xstripe.MockClient{
 					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
 						if *params.Mode != string(stripe.CheckoutSessionModePayment) {
@@ -4295,9 +4302,6 @@ func TestService_createStripeSession(t *testing.T) {
 
 						return result, nil
 					},
-				},
-				req: &model.CreateOrderRequestNew{
-					PricingInterval: "one-off",
 				},
 				ord: &model.Order{},
 			},
