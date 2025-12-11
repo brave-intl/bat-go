@@ -449,16 +449,21 @@ type OrderItemRequest struct {
 
 // CreateOrderRequestNew includes information needed to create an order.
 type CreateOrderRequestNew struct {
-	Email          string                `json:"email" validate:"required,email"`
-	CustomerID     string                `json:"customer_id"` // Optional.
-	Currency       string                `json:"currency" validate:"required,iso4217"`
-	StripeMetadata *OrderStripeMetadata  `json:"stripe_metadata"`
-	RadomMetadata  *OrderRadomMetadata   `json:"radom_metadata"`
-	PaymentMethods []string              `json:"payment_methods"`
-	Discounts      []string              `json:"discounts"`
-	Items          []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
-	Metadata       map[string]string     `json:"metadata"`
-	Locale         string                `json:"locale" validate:"omitempty,bcp47_language_tag"`
+	Email           string                `json:"email" validate:"required,email"`
+	CustomerID      string                `json:"customer_id"` // Optional.
+	Currency        string                `json:"currency" validate:"required,iso4217"`
+	StripeMetadata  *OrderStripeMetadata  `json:"stripe_metadata"`
+	RadomMetadata   *OrderRadomMetadata   `json:"radom_metadata"`
+	PaymentMethods  []string              `json:"payment_methods"`
+	Discounts       []string              `json:"discounts"`
+	Items           []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
+	Metadata        map[string]string     `json:"metadata"`
+	Locale          string                `json:"locale" validate:"omitempty,bcp47_language_tag"`
+	PricingInterval string                `json:"pricing_interval" validate:"omitempty,oneof=one-off"`
+}
+
+func (r *CreateOrderRequestNew) IsOneOffPayment() bool {
+	return r.PricingInterval == "one-off"
 }
 
 // OrderItemRequestNew represents an item in an order request.

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -4260,6 +4259,52 @@ func TestService_createStripeSession(t *testing.T) {
 				val: "cs_test_id",
 			},
 		},
+
+		{
+			name: "success_mode_subscription",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if *params.Mode != string(stripe.CheckoutSessionModeSubscription) {
+							return nil, model.Error("unexpected_payment_mode")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+				},
+				req: &model.CreateOrderRequestNew{},
+				ord: &model.Order{},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_mode_payment",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if *params.Mode != string(stripe.CheckoutSessionModePayment) {
+							return nil, model.Error("unexpected_payment_mode")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+				},
+				req: &model.CreateOrderRequestNew{
+					PricingInterval: "one-off",
+				},
+				ord: &model.Order{},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
 	}
 
 	for i := range tests {
@@ -4530,6 +4575,66 @@ func TestService_recreateStripeSession(t *testing.T) {
 		},
 
 		{
+			name: "success_mode_subscription",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							Mode: stripe.CheckoutSessionModeSubscription,
+						}
+
+						return result, nil
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if *params.Mode != string(stripe.CheckoutSessionModeSubscription) {
+							return nil, model.Error("unexpected_payment_mode")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+				},
+				ord: &model.Order{},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_mode_payment",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							Mode: stripe.CheckoutSessionModePayment,
+						}
+
+						return result, nil
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if *params.Mode != string(stripe.CheckoutSessionModePayment) {
+							return nil, model.Error("unexpected_payment_mode")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+				},
+				ord: &model.Order{},
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
 			name: "success_email_from_request",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{
@@ -4651,7 +4756,6 @@ func TestCreateStripeSession(t *testing.T) {
 						}
 
 						if val, ok := params.SubscriptionData.Params.Metadata["key_01"]; !ok || val != "val_01" {
-							fmt.Println(params.SubscriptionData.Metadata)
 							return nil, model.Error("unexpected_metadata_val")
 						}
 
@@ -4689,6 +4793,7 @@ func TestCreateStripeSession(t *testing.T) {
 					metadata: map[string]string{
 						"key_01": "val_01",
 					},
+					csMode: string(stripe.CheckoutSessionModeSubscription),
 				},
 
 				slv: xstripe.NewLocaleValidator(),
@@ -4995,6 +5100,36 @@ func TestCreateStripeSession(t *testing.T) {
 
 				req: createStripeSessionRequest{
 					Locale: "en-GB",
+				},
+
+				slv: xstripe.NewLocaleValidator(),
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		{
+			name: "success_mode_payment",
+			given: tcGiven{
+				cl: &xstripe.MockClient{
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if *params.Mode != string(stripe.CheckoutSessionModePayment) {
+							return nil, model.Error("unexpected_payment_mode")
+						}
+
+						result := &stripe.CheckoutSession{ID: "cs_test_id"}
+
+						return result, nil
+					},
+
+					FnFindCustomer: func(ctx context.Context, email string) (*stripe.Customer, bool) {
+						panic("unexpected_find_customer")
+					},
+				},
+
+				req: createStripeSessionRequest{
+					csMode: string(stripe.CheckoutSessionModePayment),
 				},
 
 				slv: xstripe.NewLocaleValidator(),
@@ -6092,6 +6227,12 @@ func TestService_setOrderTrialDaysTx(t *testing.T) {
 				},
 				oirepo: &repository.MockOrderItem{},
 				scl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						return &stripe.CheckoutSession{
+							Mode: stripe.CheckoutSessionModeSubscription,
+						}, nil
+					},
+
 					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
 						if *params.SubscriptionData.TrialPeriodDays != 7 {
 							return nil, model.Error("unexpected_trial_period_days")

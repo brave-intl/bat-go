@@ -1958,3 +1958,49 @@ func TestOrderItem_IsSearchAnnual(t *testing.T) {
 func ptrTo[T any](v T) *T {
 	return &v
 }
+
+func TestCreateOrderRequestNew_IsOneOffPayment(t *testing.T) {
+	type tcGiven struct {
+		req *model.CreateOrderRequestNew
+	}
+
+	type tcExpected struct {
+		res bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "pricing_interval_none",
+			given: tcGiven{
+				req: &model.CreateOrderRequestNew{},
+			},
+		},
+
+		{
+			name: "pricing_interval_one_off",
+			given: tcGiven{
+				req: &model.CreateOrderRequestNew{
+					PricingInterval: "one-off",
+				},
+			},
+			exp: tcExpected{
+				res: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.req.IsOneOffPayment()
+			should.Equal(t, tc.exp.res, actual)
+		})
+	}
+}
