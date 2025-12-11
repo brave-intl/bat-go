@@ -16,9 +16,9 @@ func NewTLV2() *TLV2 { return &TLV2{} }
 
 func (r *TLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error) {
 	const q = `SELECT EXISTS(
-		SELECT 1 FROM time_limited_v2_order_creds WHERE order_id=$1 AND item_id=$2 AND blinded_creds->>0 = $4
+		SELECT 1 FROM time_limited_v2_order_creds WHERE order_id=$1 AND item_id=$2 AND blinded_creds->>-1 = $4
 	) AS submitted, EXISTS(
-		SELECT 1 FROM time_limited_v2_order_creds WHERE order_id=$1 AND item_id=$2 AND request_id = $3 AND blinded_creds->>0 != $4
+		SELECT 1 FROM time_limited_v2_order_creds WHERE order_id=$1 AND item_id=$2 AND request_id = $3 AND blinded_creds->>-1 != $4
 	) AS req_id_mismatch`
 
 	result := model.TLV2CredSubmissionReport{}
