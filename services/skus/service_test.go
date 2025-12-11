@@ -793,3 +793,105 @@ func TestTimeChunking(t *testing.T) {
 		})
 	}
 }
+
+func TestDetermineStripeCheckoutSessionMode(t *testing.T) {
+	type tcGiven struct {
+		items []model.OrderItemRequestNew
+	}
+
+	type tcExpected struct {
+		csm string
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_items",
+			exp: tcExpected{
+				csm: "subscription",
+			},
+		},
+
+		{
+			name: "one_item_empty_period",
+			given: tcGiven{
+				items: []model.OrderItemRequestNew{{}},
+			},
+			exp: tcExpected{
+				csm: "subscription",
+			},
+		},
+
+		{
+			name: "one_item_period_subscription",
+			given: tcGiven{
+				items: []model.OrderItemRequestNew{{
+					Period: "subscription",
+				}},
+			},
+			exp: tcExpected{
+				csm: "subscription",
+			},
+		},
+
+		{
+			name: "one_item_period_one_off",
+			given: tcGiven{
+				items: []model.OrderItemRequestNew{{
+					Period: "one-off",
+				}},
+			},
+			exp: tcExpected{
+				csm: "payment",
+			},
+		},
+
+		{
+			name: "multiple_items_period_subscription",
+			given: tcGiven{
+				items: []model.OrderItemRequestNew{
+					{
+						Period: "subscription",
+					},
+					{
+						Period: "subscription",
+					},
+				},
+			},
+			exp: tcExpected{
+				csm: "subscription",
+			},
+		},
+
+		{
+			name: "multiple_items_period_one_off",
+			given: tcGiven{
+				items: []model.OrderItemRequestNew{
+					{
+						Period: "one-off",
+					},
+					{
+						Period: "one-off",
+					},
+				},
+			},
+			exp: tcExpected{
+				csm: "subscription",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := determineStripeCheckoutSessionMode(tc.given.items)
+			should.Equal(t, tc.exp.csm, actual)
+		})
+	}
+}

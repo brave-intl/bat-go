@@ -2163,11 +2163,6 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		return "", err
 	}
 
-	csm := string(stripe.CheckoutSessionModeSubscription)
-	if req.IsOneOffPayment() {
-		csm = string(stripe.CheckoutSessionModePayment)
-	}
-
 	sreq := createStripeSessionRequest{
 		orderID:    oid,
 		email:      req.Email,
@@ -2179,7 +2174,7 @@ func (s *Service) createStripeSession(ctx context.Context, req *model.CreateOrde
 		discounts:  buildStripeDiscounts(req.Discounts),
 		metadata:   req.Metadata,
 		Locale:     req.Locale,
-		csMode:     csm,
+		csMode:     determineStripeCheckoutSessionMode(req.Items),
 	}
 
 	return createStripeSession(ctx, s.stripeCl, sreq, s.stripeLocaleValid)
@@ -3108,6 +3103,14 @@ func buildStripeDiscounts(discounts []string) []*stripe.CheckoutSessionDiscountP
 	}
 
 	return result
+}
+
+func determineStripeCheckoutSessionMode(items []model.OrderItemRequestNew) string {
+	if len(items) == 1 && items[0].Period == "one-off" {
+		return string(stripe.CheckoutSessionModePayment)
+	}
+
+	return string(stripe.CheckoutSessionModeSubscription)
 }
 
 func handleRedeemFnError(ctx context.Context, w http.ResponseWriter, kind string, cred *cbr.CredentialRedemption, err error) *handlers.AppError {
