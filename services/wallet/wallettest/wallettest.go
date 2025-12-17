@@ -2,10 +2,11 @@
 package wallettest
 
 import (
+	"testing"
+
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 var tables = []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}

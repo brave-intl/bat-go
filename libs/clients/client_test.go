@@ -3,12 +3,13 @@ package clients
 import (
 	"context"
 	"fmt"
-	"github.com/brave-intl/bat-go/libs/errors"
-	testutils "github.com/brave-intl/bat-go/libs/test"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/brave-intl/bat-go/libs/errors"
+	testutils "github.com/brave-intl/bat-go/libs/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDo_ErrorWithResponse(t *testing.T) {
