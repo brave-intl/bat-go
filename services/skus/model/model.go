@@ -56,6 +56,8 @@ const (
 	ErrRadomInvalidNumAssocSubs Error = "model: invalid number of associated subs"
 	ErrRadomSubNotActive        Error = "model: sub not active"
 
+	ErrOrderNotPerpetualLicense = Error("model: order is not perpetual license")
+
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 
@@ -289,6 +291,18 @@ func (o *Order) UpdateCheckoutSessionID(id string) {
 	o.Metadata["stripeCheckoutSessionId"] = id
 }
 
+func (o *Order) IsPerpetualLicense() bool {
+	if o == nil {
+		return false
+	}
+
+	if len(o.Items) != 1 {
+		return false
+	}
+
+	return o.Items[0].IsOriginPL()
+}
+
 // OrderItem represents a particular order item.
 type OrderItem struct {
 	ID                        uuid.UUID            `json:"id" db:"id"`
@@ -317,6 +331,10 @@ type OrderItem struct {
 
 func (x *OrderItem) IsLeo() bool {
 	return x.SKUVnt == "brave-leo-premium" || x.SKUVnt == "brave-leo-premium-year"
+}
+
+func (x *OrderItem) IsOriginPL() bool {
+	return x.SKUVnt == "brave-origin-premium-perpetual-license"
 }
 
 func (x *OrderItem) StripeItemID() (string, bool) {

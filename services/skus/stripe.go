@@ -21,9 +21,10 @@ const (
 )
 
 type stripeNotification struct {
-	raw     *stripe.Event
-	invoice *stripe.Invoice
-	sub     *stripe.Subscription
+	raw           *stripe.Event
+	invoice       *stripe.Invoice
+	sub           *stripe.Subscription
+	paymentIntent *stripe.PaymentIntent
 }
 
 func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
@@ -52,13 +53,23 @@ func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
 
 		return result, nil
 
+	case "payment_intent.succeeded":
+		val, err := parseStripeEventData[stripe.PaymentIntent](raw.Data.Raw)
+		if err != nil {
+			return nil, err
+		}
+
+		result.paymentIntent = val
+
+		return result, nil
+
 	default:
 		return nil, errStripeSkipEvent
 	}
 }
 
 func (x *stripeNotification) shouldProcess() bool {
-	return x.shouldRenew() || x.shouldCancel() || x.shouldRecordPayFailure()
+	return x.shouldRenew() || x.shouldCancel() || x.shouldRecordPayFailure() || x.shouldActivatePL()
 }
 
 func (x *stripeNotification) shouldRenew() bool {
@@ -67,6 +78,10 @@ func (x *stripeNotification) shouldRenew() bool {
 
 func (x *stripeNotification) shouldCancel() bool {
 	return x.sub != nil && x.raw.Type == "customer.subscription.deleted"
+}
+
+func (x *stripeNotification) shouldActivatePL() bool {
+	return x.paymentIntent != nil && x.raw.Type == "payment_intent.succeeded"
 }
 
 func (x *stripeNotification) shouldRecordPayFailure() bool {
@@ -79,11 +94,14 @@ func (x *stripeNotification) ntfType() string {
 
 func (x *stripeNotification) ntfSubType() string {
 	switch {
-	case x.invoice != nil && x.sub == nil:
+	case x.invoice != nil && x.sub == nil && x.paymentIntent == nil:
 		return "invoice"
 
-	case x.sub != nil && x.invoice == nil:
+	case x.sub != nil && x.invoice == nil && x.paymentIntent == nil:
 		return "subscription"
+
+	case x.paymentIntent != nil && x.sub == nil && x.invoice == nil:
+		return "payment_intent"
 
 	default:
 		return "unknown"
@@ -100,6 +118,9 @@ func (x *stripeNotification) effect() string {
 
 	case x.shouldRecordPayFailure():
 		return "record_payment_failure"
+
+	case x.shouldActivatePL():
+		return "activate_perpetual_license"
 
 	default:
 		return "skip"
@@ -145,9 +166,33 @@ func (x *stripeNotification) orderID() (uuid.UUID, error) {
 
 		return uuid.FromString(id)
 
+	case x.paymentIntent != nil:
+		id, ok := x.paymentIntent.Metadata["orderID"]
+		if !ok {
+			return uuid.Nil, errStripeOrderIDMissing
+		}
+
+		return uuid.FromString(id)
+
 	default:
 		return uuid.Nil, errStripeUnsupportedEvent
 	}
+}
+
+func (x *stripeNotification) paymentID() (string, error) {
+	if x.paymentIntent == nil {
+		return "", errStripeUnsupportedEvent
+	}
+
+	return x.paymentIntent.ID, nil
+}
+
+func (x *stripeNotification) paidAt() (time.Time, error) {
+	if x.paymentIntent == nil {
+		return time.Time{}, errStripeUnsupportedEvent
+	}
+
+	return time.Unix(x.paymentIntent.Created, 0).UTC(), nil
 }
 
 func (x *stripeNotification) expiresTime() (time.Time, error) {
