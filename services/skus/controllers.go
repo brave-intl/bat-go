@@ -1323,6 +1323,9 @@ func handleStripeWebhook(svc *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to parse event", http.StatusBadRequest)
 		}
 
+		b, _ := json.Marshal(event)
+		lg.Info().Interface("data", string(b)).Msg("FULL DATA")
+
 		if err := svc.processStripeNotification(ctx, ntf); err != nil {
 			l := lg.With().Str("ntf_type", ntf.ntfType()).Str("ntf_subtype", ntf.ntfSubType()).Str("ntf_effect", ntf.effect()).Logger()
 
