@@ -1920,7 +1920,6 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 
 		pid, err := ntf.paymentID()
 		if err != nil {
-
 			return err
 		}
 
