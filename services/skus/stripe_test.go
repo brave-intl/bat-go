@@ -127,6 +127,27 @@ func TestParseStripeNotification(t *testing.T) {
 		should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", ntf.sub.ID)
 		should.Equal(t, "f0eb952b-90df-4fd3-b079-c4ea1effb38d", ntf.sub.Metadata["orderID"])
 	})
+
+	t.Run("payment_intent_succeeded", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_payment_intent_succeeded.json"))
+		must.NoError(t, err)
+
+		event := &stripe.Event{}
+
+		{
+			err := json.Unmarshal(raw, event)
+			must.NoError(t, err)
+		}
+
+		should.Equal(t, "payment_intent.succeeded", event.Type)
+
+		ntf, err := parseStripeNotification(event)
+		must.NoError(t, err)
+
+		should.Equal(t, "payment-intent-id", ntf.paymentIntent.ID)
+		should.Equal(t, "ece7f0e8-f13b-4358-871f-2a330fb85fd4", ntf.paymentIntent.Metadata["orderID"])
+		should.Equal(t, time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC).Unix(), ntf.paymentIntent.Created)
+	})
 }
 
 func TestStripeNotification_shouldProcess(t *testing.T) {
