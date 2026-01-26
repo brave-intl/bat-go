@@ -1955,7 +1955,7 @@ func TestOrderItem_IsSearchAnnual(t *testing.T) {
 	}
 }
 
-func TestOrder_IsPerpetualLicense(t *testing.T) {
+func TestOrder_IsOneOffPayment(t *testing.T) {
 	type tcGiven struct {
 		o *model.Order
 	}
@@ -2031,7 +2031,7 @@ func TestOrder_IsPerpetualLicense(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := tc.given.o.IsPerpetualLicense()
+			actual := tc.given.o.IsOneOffPayment()
 			should.Equal(t, tc.exp.result, actual)
 		})
 	}

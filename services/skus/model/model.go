@@ -56,7 +56,7 @@ const (
 	ErrRadomInvalidNumAssocSubs Error = "model: invalid number of associated subs"
 	ErrRadomSubNotActive        Error = "model: sub not active"
 
-	ErrOrderNotPerpetualLicense = Error("model: order is not perpetual license")
+	ErrOrderNotOneOffPayment = Error("model: order is not perpetual license")
 
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
@@ -291,7 +291,7 @@ func (o *Order) UpdateCheckoutSessionID(id string) {
 	o.Metadata["stripeCheckoutSessionId"] = id
 }
 
-func (o *Order) IsPerpetualLicense() bool {
+func (o *Order) IsOneOffPayment() bool {
 	if o == nil {
 		return false
 	}

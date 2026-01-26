@@ -2259,9 +2259,10 @@ func TestService_appendOrderMetadataTx(t *testing.T) {
 
 func TestService_processStripeNotificationTx(t *testing.T) {
 	type tcGiven struct {
-		ntf     *stripeNotification
-		ordRepo orderStoreSvc
-		phRepo  orderPayHistoryStore
+		ntf         *stripeNotification
+		ordRepo     orderStoreSvc
+		ordItemRepo orderItemStore
+		phRepo      orderPayHistoryStore
 	}
 
 	type testCase struct {
@@ -2819,14 +2820,71 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 		},
 
 		{
-			name: "activate_perpetual_license_order_id_error",
+			name: "activate_perpetual_license_not_one_off_payment",
 			given: tcGiven{
 				ntf: &stripeNotification{
-					raw:           &stripe.Event{Type: "payment_intent.succeeded"},
-					paymentIntent: &stripe.PaymentIntent{},
+					raw: &stripe.Event{Type: "payment_intent.succeeded"},
+					paymentIntent: &stripe.PaymentIntent{
+						Metadata: map[string]string{"orderID": "facade00-0000-4000-a000-000000000000"},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{},
+						}
+
+						return result, nil
+					},
+				},
+				ordItemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								SKUVnt: "not-one-off",
+							},
+						}
+
+						return result, nil
+					},
 				},
 			},
-			exp: errStripeOrderIDMissing,
+			exp: model.ErrOrderNotOneOffPayment,
+		},
+
+		{
+			name: "activate_perpetual_license_success",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "payment_intent.succeeded"},
+					paymentIntent: &stripe.PaymentIntent{
+						Metadata: map[string]string{"orderID": "facade00-0000-4000-a000-000000000000"},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{
+							ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+							Metadata: datastore.Metadata{},
+						}
+
+						return result, nil
+					},
+				},
+				ordItemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						result := []model.OrderItem{
+							{
+								SKUVnt: "brave-origin-premium-perpetual-license",
+							},
+						}
+
+						return result, nil
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
 		},
 	}
 
@@ -2834,7 +2892,7 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			svc := &Service{orderRepo: tc.given.ordRepo, payHistRepo: tc.given.phRepo}
+			svc := &Service{orderRepo: tc.given.ordRepo, orderItemRepo: tc.given.ordItemRepo, payHistRepo: tc.given.phRepo}
 
 			ctx := context.Background()
 

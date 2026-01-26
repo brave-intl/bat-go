@@ -1914,8 +1914,8 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 		// Currently, we should only receive payment_intent.succeeded events for one-off payments
 		// i.e. those related to perpetual licenses. However, to safeguard we should
 		// check the order is definitely eligible before activating.
-		if !ord.IsPerpetualLicense() {
-			return model.ErrOrderNotPerpetualLicense
+		if !ord.IsOneOffPayment() {
+			return model.ErrOrderNotOneOffPayment
 		}
 
 		pid, err := ntf.paymentID()
