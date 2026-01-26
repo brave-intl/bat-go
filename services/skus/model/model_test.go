@@ -1955,6 +1955,88 @@ func TestOrderItem_IsSearchAnnual(t *testing.T) {
 	}
 }
 
+func TestOrder_IsOneOffPayment(t *testing.T) {
+	type tcGiven struct {
+		o *model.Order
+	}
+
+	type tcExpected struct {
+		result bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "null_order",
+		},
+
+		{
+			name: "no_order_items",
+			given: tcGiven{
+				&model.Order{},
+			},
+		},
+
+		{
+			name: "not_perpetual",
+			given: tcGiven{
+				&model.Order{
+					Items: []model.OrderItem{
+						{
+							SKUVnt: "sku_vnt",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "not_perpetual_multiple_order_items",
+			given: tcGiven{
+				&model.Order{
+					Items: []model.OrderItem{
+						{
+							SKUVnt: "sku_vnt",
+						},
+
+						{
+							SKUVnt: "brave-origin-premium-perpetual-license",
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "is_perpetual",
+			given: tcGiven{
+				&model.Order{
+					Items: []model.OrderItem{
+						{
+							SKUVnt: "brave-origin-premium-perpetual-license",
+						},
+					},
+				},
+			},
+			exp: tcExpected{result: true},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.o.IsOneOffPayment()
+			should.Equal(t, tc.exp.result, actual)
+		})
+	}
+}
+
 func ptrTo[T any](v T) *T {
 	return &v
 }

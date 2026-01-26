@@ -1,0 +1,57 @@
+{
+  "account": "",
+  "created": 0,
+  "data": {
+    "previous_attributes": null,
+    "object": {
+      "amount": 0,
+      "amount_capturable": 0,
+      "amount_received": 0,
+      "application": null,
+      "application_fee_amount": 0,
+      "canceled_at": 0,
+      "cancellation_reason": "",
+      "capture_method": "",
+      "charges": null,
+      "client_secret": "",
+      "confirmation_method": "",
+      "created": 1768867200,
+      "currency": "",
+      "customer": null,
+      "description": "",
+      "invoice": null,
+      "last_payment_error": null,
+      "livemode": false,
+      "id": "payment-intent-id",
+      "metadata": {
+        "orderID": "ece7f0e8-f13b-4358-871f-2a330fb85fd4"
+      },
+      "next_action": null,
+      "on_behalf_of": null,
+      "payment_method": null,
+      "payment_method_options": null,
+      "payment_method_types": null,
+      "receipt_email": "",
+      "review": null,
+      "setup_future_usage": "",
+      "shipping": {
+        "address": null,
+        "carrier": "",
+        "name": "",
+        "phone": "",
+        "tracking_number": ""
+      },
+      "source": null,
+      "statement_descriptor": "",
+      "statement_descriptor_suffix": "",
+      "status": "",
+      "transfer_data": null,
+      "transfer_group": ""
+    }
+  },
+  "id": "",
+  "livemode": false,
+  "pending_webhooks": 0,
+  "request": null,
+  "type": "payment_intent.succeeded"
+}

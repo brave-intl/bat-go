@@ -64,7 +64,6 @@ var (
 
 const (
 	// TODO(pavelb): Gradually replace it everywhere.
-	//
 	// OrderStatusCanceled - string literal used in db for canceled status
 	OrderStatusCanceled = model.OrderStatusCanceled
 	// OrderStatusPaid - string literal used in db for canceled status
@@ -768,7 +767,7 @@ func (s *Service) newRadomSub(ctx context.Context, dbi sqlx.ExtContext, oid uuid
 		return err
 	}
 
-	if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, oid, expAt, paidAt); err != nil {
 		return err
 	}
 
@@ -1877,7 +1876,6 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		// Reset numPaymentFailed.
 		if err := s.resetNumPaymentFailed(ctx, dbi, oid); err != nil {
 			return err
 		}
@@ -1901,6 +1899,38 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 		}
 
 		return s.recordPayFailureStripe(ctx, dbi, ord, subID)
+
+	case ntf.shouldActivatePL():
+		oid, err := ntf.orderID()
+		if err != nil {
+			return err
+		}
+
+		ord, err := s.getOrderFullTx(ctx, dbi, oid)
+		if err != nil {
+			return err
+		}
+
+		// Currently, we should only receive payment_intent.succeeded events for one-off payments
+		// i.e. those related to perpetual licenses. However, to safeguard we should
+		// check the order is definitely eligible before activating.
+		if !ord.IsOneOffPayment() {
+			return model.ErrOrderNotOneOffPayment
+		}
+
+		pid, err := ntf.paymentID()
+		if err != nil {
+			return err
+		}
+
+		paidt, err := ntf.paidAt()
+		if err != nil {
+			return err
+		}
+
+		expt := paidt.AddDate(100, 0, 0)
+
+		return s.activateStripePL(ctx, dbi, ord, pid, paidt, expt)
 
 	default:
 		return nil
@@ -1944,7 +1974,7 @@ func (s *Service) processAppStoreNotificationTx(ctx context.Context, dbi sqlx.Ex
 		expt := txn.expiresTime().Add(24 * time.Hour)
 		paidt := time.Now()
 
-		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
+		return s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
 
 	case ntf.shouldCancel():
 		return s.cancelOrderTx(ctx, dbi, ord.ID)
@@ -1994,7 +2024,7 @@ func (s *Service) processPlayStoreNotificationTx(ctx context.Context, dbi sqlx.E
 		expt := sub.expiresTime().Add(24 * time.Hour)
 		paidt := time.Now()
 
-		return s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
+		return s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt)
 
 	// Sub cancellation.
 	case ntf.SubscriptionNtf != nil && ntf.SubscriptionNtf.shouldCancel():
@@ -2293,24 +2323,22 @@ func (s *Service) createOrderTx(ctx context.Context, dbi sqlx.ExtContext, oreq *
 	return result, nil
 }
 
-func (s *Service) renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+func (s *Service) updateOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
 	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.renewOrderWithExpPaidTimeTx(ctx, tx, id, expt, paidt); err != nil {
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, tx, id, expt, paidt); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-// renewOrderWithExpPaidTimeTx performs updates relevant to advancing a paid order forward after renewal.
-//
 // TODO: Add a repo method to update all three fields at once.
-func (s *Service) renewOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, expt, paidt time.Time) error {
+func (s *Service) updateOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, expt, paidt time.Time) error {
 	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
 		return err
 	}
@@ -2416,7 +2444,7 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		// Examples:
 		// - annual VPN users on mobile pre-July 2024;
 		// - mobile Developers and QAs using the same store id repeatedly.
-		if err := s.renewOrderWithExpPaidTime(ctx, ord.ID, rcpt.ExpiresAt, paidt); err != nil {
+		if err := s.updateOrderWithExpPaidTime(ctx, ord.ID, rcpt.ExpiresAt, paidt); err != nil {
 			return nil, err
 		}
 
@@ -2468,7 +2496,7 @@ func (s *Service) processSubmitReceipt(ctx context.Context, req model.ReceiptReq
 
 	paidt := time.Now()
 
-	if err := s.renewOrderWithExpPaidTimeTx(ctx, tx, oid, rcpt.ExpiresAt, paidt); err != nil {
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, tx, oid, rcpt.ExpiresAt, paidt); err != nil {
 		return model.ReceiptData{}, err
 	}
 
@@ -2552,7 +2580,7 @@ func (s *Service) processRadomNotificationTx(ctx context.Context, dbi sqlx.ExtCo
 			return err
 		}
 
-		if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt); err != nil {
+		if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expAt, paidAt); err != nil {
 			return err
 		}
 
@@ -2611,7 +2639,7 @@ func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderS
 // This interface exists because in its current form Service is hardly testable.
 type paidOrderCreator interface {
 	createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
-	renewOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
+	updateOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
 	appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
 }
 
@@ -2662,7 +2690,7 @@ func createOrderWithReceipt(
 	}
 
 	// 4. Mark order as paid with proper expiration.
-	if err := svc.renewOrderWithExpPaidTime(ctx, order.ID, rcpt.ExpiresAt, paidt); err != nil {
+	if err := svc.updateOrderWithExpPaidTime(ctx, order.ID, rcpt.ExpiresAt, paidt); err != nil {
 		return nil, err
 	}
 
@@ -2708,7 +2736,7 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	// Add 1-day leeway in case next billing cycle's webhook gets delayed.
 	expt = expt.Add(24 * time.Hour)
 
-	if err := s.renewOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
 		return err
 	}
 
@@ -2723,6 +2751,18 @@ func (s *Service) renewOrderStripe(ctx context.Context, dbi sqlx.ExecerContext, 
 	}
 
 	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod)
+}
+
+func (s *Service) activateStripePL(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, paymentID string, paidt, expt time.Time) error {
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, expt, paidt); err != nil {
+		return err
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
+		return err
+	}
+
+	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripePaymentId", paymentID)
 }
 
 func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
