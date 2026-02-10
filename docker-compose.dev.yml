@@ -40,3 +40,14 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+  migrate:
+    image: migrate/migrate:v4.19.0@sha256:d5c978181e3bfa55cc50e3bd8d7da3d87418a87693453250a8804b81ee6494db
+    profiles:
+      - tools
+    volumes:
+      - ./migrations:/migrations
+    networks:
+      - grant
+    security_opt:
+      - no-new-privileges=true
+    read_only: true

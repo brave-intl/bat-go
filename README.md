@@ -66,3 +66,15 @@ is installed then run `make docker`.
 
 ## Build mock files
 `make mock`
+
+## Creating a New Migration
+
+To create a new migration, run the following command. This ensures the migration file follows the project's naming convention (sequential 4-digit prefix).
+
+```bash
+make migrate-create NAME=your_migration_name
+```
+
+This will create two files in the `migrations/` directory:
+- `XXXX_your_migration_name.up.sql`
+- `XXXX_your_migration_name.down.sql`

@@ -127,6 +127,27 @@ func TestParseStripeNotification(t *testing.T) {
 		should.Equal(t, "sub_1PZ6NTBSm1mtrN9nhOEgB0jm", ntf.sub.ID)
 		should.Equal(t, "f0eb952b-90df-4fd3-b079-c4ea1effb38d", ntf.sub.Metadata["orderID"])
 	})
+
+	t.Run("payment_intent_succeeded", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_payment_intent_succeeded.json"))
+		must.NoError(t, err)
+
+		event := &stripe.Event{}
+
+		{
+			err := json.Unmarshal(raw, event)
+			must.NoError(t, err)
+		}
+
+		should.Equal(t, "payment_intent.succeeded", event.Type)
+
+		ntf, err := parseStripeNotification(event)
+		must.NoError(t, err)
+
+		should.Equal(t, "payment-intent-id", ntf.paymentIntent.ID)
+		should.Equal(t, "ece7f0e8-f13b-4358-871f-2a330fb85fd4", ntf.paymentIntent.Metadata["orderID"])
+		should.Equal(t, time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC).Unix(), ntf.paymentIntent.Created)
+	})
 }
 
 func TestStripeNotification_shouldProcess(t *testing.T) {
@@ -158,6 +179,15 @@ func TestStripeNotification_shouldProcess(t *testing.T) {
 			given: &stripeNotification{
 				raw:     &stripe.Event{Type: "invoice.payment_failed"},
 				invoice: &stripe.Invoice{},
+			},
+			exp: true,
+		},
+
+		{
+			name: "activate_perpetual_license",
+			given: &stripeNotification{
+				raw:           &stripe.Event{Type: "payment_intent.succeeded"},
+				paymentIntent: &stripe.PaymentIntent{},
 			},
 			exp: true,
 		},
@@ -354,6 +384,14 @@ func TestStripeNotification_ntfType(t *testing.T) {
 			},
 			exp: "invoice.payment_failed",
 		},
+
+		{
+			name: "payment_intent_succeeded",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "payment_intent.succeeded"},
+			},
+			exp: "payment_intent.succeeded",
+		},
 	}
 
 	for i := range tests {
@@ -386,6 +424,14 @@ func TestStripeNotification_ntfSubType(t *testing.T) {
 				sub: &stripe.Subscription{},
 			},
 			exp: "subscription",
+		},
+
+		{
+			name: "payment_intent",
+			given: &stripeNotification{
+				paymentIntent: &stripe.PaymentIntent{},
+			},
+			exp: "payment_intent",
 		},
 
 		{
@@ -445,6 +491,15 @@ func TestStripeNotification_effect(t *testing.T) {
 				invoice: &stripe.Invoice{},
 			},
 			exp: "record_payment_failure",
+		},
+
+		{
+			name: "activate_perpetual_license",
+			given: &stripeNotification{
+				raw:           &stripe.Event{Type: "payment_intent.succeeded"},
+				paymentIntent: &stripe.PaymentIntent{},
+			},
+			exp: "activate_perpetual_license",
 		},
 
 		{
@@ -650,6 +705,21 @@ func TestStripeNotification_orderID(t *testing.T) {
 		},
 
 		{
+			name: "payment_intent_valid",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "payment_intent.succeeded"},
+				paymentIntent: &stripe.PaymentIntent{
+					Metadata: map[string]string{
+						"orderID": "f100ded0-0000-4000-a000-000000000000",
+					},
+				},
+			},
+			exp: tcExpected{
+				val: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+			},
+		},
+
+		{
 			name: "unsupported",
 			given: &stripeNotification{
 				raw: &stripe.Event{Type: "unsupported"},
@@ -785,6 +855,113 @@ func TestStripeNotification_expiresTime(t *testing.T) {
 			must.Equal(t, tc.exp.err, err)
 
 			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestStripeNotification_paymentID(t *testing.T) {
+	type tcGiven struct {
+		ntf *stripeNotification
+	}
+
+	type tcExpected struct {
+		pid string
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_unsupported_webhook_event",
+			given: tcGiven{
+				ntf: &stripeNotification{},
+			},
+			exp: tcExpected{
+				err: errStripeUnsupportedEvent,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					paymentIntent: &stripe.PaymentIntent{
+						ID: "id",
+					},
+				},
+			},
+			exp: tcExpected{
+				pid: "id",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := tc.given.ntf.paymentID()
+			must.ErrorIs(t, err, tc.exp.err)
+			should.Equal(t, tc.exp.pid, actual)
+		})
+	}
+}
+
+func TestStripeNotification_paidAt(t *testing.T) {
+	type tcGiven struct {
+		ntf *stripeNotification
+	}
+
+	type tcExpected struct {
+		paidt time.Time
+		err   error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_unsupported_webhook_event",
+			given: tcGiven{
+				ntf: &stripeNotification{},
+			},
+			exp: tcExpected{
+				err: errStripeUnsupportedEvent,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					paymentIntent: &stripe.PaymentIntent{
+						Created: time.Date(2021, time.January, 20, 0, 0, 0, 0, time.UTC).Unix(),
+						ID:      "id",
+					},
+				},
+			},
+			exp: tcExpected{
+				paidt: time.Date(2021, time.January, 20, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := tc.given.ntf.paidAt()
+			must.ErrorIs(t, err, tc.exp.err)
+			should.Equal(t, tc.exp.paidt, actual)
 		})
 	}
 }
