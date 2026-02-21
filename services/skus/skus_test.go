@@ -162,39 +162,21 @@ func TestSKUNameByMobileName(t *testing.T) {
 		},
 
 		{
-			name:  "android_origin_monthly_release",
-			given: "brave.origin.monthly",
-			exp:   tcExpected{skuVnt: "brave-origin-premium"},
+			name:  "android_brave_origin_perpetual",
+			given: "brave.origin.perpetual",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-perpetual-license"},
 		},
 
 		{
-			name:  "android_origin_monthly_beta",
-			given: "beta.origin.monthly",
-			exp:   tcExpected{skuVnt: "brave-origin-premium"},
+			name:  "android_brave_origin_perpetual_beta",
+			given: "beta.origin.perpetual",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-perpetual-license"},
 		},
 
 		{
-			name:  "android_origin_monthly_nightly",
-			given: "nightly.origin.monthly",
-			exp:   tcExpected{skuVnt: "brave-origin-premium"},
-		},
-
-		{
-			name:  "android_origin_yearly_release",
-			given: "brave.origin.yearly",
-			exp:   tcExpected{skuVnt: "brave-origin-premium-year"},
-		},
-
-		{
-			name:  "android_origin_yearly_beta",
-			given: "beta.origin.yearly",
-			exp:   tcExpected{skuVnt: "brave-origin-premium-year"},
-		},
-
-		{
-			name:  "android_origin_yearly_nightly",
-			given: "nightly.origin.yearly",
-			exp:   tcExpected{skuVnt: "brave-origin-premium-year"},
+			name:  "android_brave_origin_perpetual_nightly",
+			given: "nightly.origin.perpetual",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-perpetual-license"},
 		},
 
 		{
@@ -845,39 +827,21 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					},
 				},
 
-				"brave-origin-premium": {
+				"brave-origin-premium-perpetual-license": {
 					Quantity:                    1,
 					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium",
+					SKUVnt:                      "brave-origin-premium-perpetual-license",
 					Location:                    "origin.brave.com",
-					Description:                 "brave-origin-premium",
+					Description:                 "brave-origin-premium-perpetual-license",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("4.99"),
+					Price:                       decimal.RequireFromString("60.00"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgtPlrWPPAddlH",
-						ItemID:    "price_1RlVd7BSm1mtrN9nGrrjQXiN",
-					},
-				},
-
-				"brave-origin-premium-year": {
-					Quantity:                    1,
-					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium-year",
-					Location:                    "origin.brave.com",
-					Description:                 "brave-origin-premium-year",
-					CredentialType:              "time-limited-v2",
-					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(1),
-					IssuerTokenOverlap:          ptrTo(0),
-					CredentialValidDurationEach: ptrTo("P1M"),
-					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgtPlrWPPAddlH",
-						ItemID:    "price_1RlVdwBSm1mtrN9njhstCyDf",
+						ProductID: "prod_TZAuP2GKA3laWY",
+						ItemID:    "price_1Sc2YKBSm1mtrN9nqprVq0Fe",
 					},
 				},
 			},
@@ -959,39 +923,21 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					},
 				},
 
-				"brave-origin-premium": {
+				"brave-origin-premium-perpetual-license": {
 					Quantity:                    1,
 					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium",
+					SKUVnt:                      "brave-origin-premium-perpetual-license",
 					Location:                    "origin.bravesoftware.com",
-					Description:                 "brave-origin-premium",
+					Description:                 "brave-origin-premium-perpetual-license",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("4.99"),
+					Price:                       decimal.RequireFromString("60.00"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgrGEhIjFxoCkd",
-						ItemID:    "price_1RlTY0BSm1mtrN9nBICsSzCH",
-					},
-				},
-
-				"brave-origin-premium-year": {
-					Quantity:                    1,
-					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium-year",
-					Location:                    "origin.bravesoftware.com",
-					Description:                 "brave-origin-premium-year",
-					CredentialType:              "time-limited-v2",
-					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(1),
-					IssuerTokenOverlap:          ptrTo(0),
-					CredentialValidDurationEach: ptrTo("P1M"),
-					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgrGEhIjFxoCkd",
-						ItemID:    "price_1RlTbFBSm1mtrN9nIG5T5uEZ",
+						ProductID: "prod_TZArNEn4pFPvs7",
+						ItemID:    "price_1Sc2WDBSm1mtrN9nzZ9HuCtj",
 					},
 				},
 			},
@@ -1073,39 +1019,21 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					},
 				},
 
-				"brave-origin-premium": {
+				"brave-origin-premium-perpetual-license": {
 					Quantity:                    1,
 					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium",
+					SKUVnt:                      "brave-origin-premium-perpetual-license",
 					Location:                    "origin.brave.software",
-					Description:                 "brave-origin-premium",
+					Description:                 "brave-origin-premium-perpetual-license",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("4.99"),
+					Price:                       decimal.RequireFromString("60.00"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgrUuNI96kVrue",
-						ItemID:    "price_1RlTllHof20bphG6EsmBsSzY",
-					},
-				},
-
-				"brave-origin-premium-year": {
-					Quantity:                    1,
-					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium-year",
-					Location:                    "origin.brave.software",
-					Description:                 "brave-origin-premium-year",
-					CredentialType:              "time-limited-v2",
-					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(1),
-					IssuerTokenOverlap:          ptrTo(0),
-					CredentialValidDurationEach: ptrTo("P1M"),
-					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgrUuNI96kVrue",
-						ItemID:    "price_1RlTnUHof20bphG6SjoGpYLB",
+						ProductID: "prod_TUIQJzhz8JKwOa",
+						ItemID:    "price_1Sc2MdHof20bphG6U2qoENGZ",
 					},
 				},
 			},
@@ -1187,39 +1115,21 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					},
 				},
 
-				"brave-origin-premium": {
+				"brave-origin-premium-perpetual-license": {
 					Quantity:                    1,
 					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium",
+					SKUVnt:                      "brave-origin-premium-perpetual-license",
 					Location:                    "origin.brave.software",
-					Description:                 "brave-origin-premium",
+					Description:                 "brave-origin-premium-perpetual-license",
 					CredentialType:              "time-limited-v2",
 					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("4.99"),
+					Price:                       decimal.RequireFromString("60.00"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1M"),
 					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgrUuNI96kVrue",
-						ItemID:    "price_1RlTllHof20bphG6EsmBsSzY",
-					},
-				},
-
-				"brave-origin-premium-year": {
-					Quantity:                    1,
-					SKU:                         "brave-origin-premium",
-					SKUVnt:                      "brave-origin-premium-year",
-					Location:                    "origin.brave.software",
-					Description:                 "brave-origin-premium-year",
-					CredentialType:              "time-limited-v2",
-					CredentialValidDuration:     "P1M",
-					Price:                       decimal.RequireFromString("49.99"),
-					IssuerTokenBuffer:           ptrTo(1),
-					IssuerTokenOverlap:          ptrTo(0),
-					CredentialValidDurationEach: ptrTo("P1M"),
-					StripeMetadata: &model.ItemStripeMetadata{
-						ProductID: "prod_SgrUuNI96kVrue",
-						ItemID:    "price_1RlTnUHof20bphG6SjoGpYLB",
+						ProductID: "prod_TUIQJzhz8JKwOa",
+						ItemID:    "price_1Sc2MdHof20bphG6U2qoENGZ",
 					},
 				},
 			},
