@@ -45,6 +45,7 @@ func (c *mockASClient) Verify(ctx context.Context, req appstore.IAPRequest, resu
 
 type mockPSClient struct {
 	fnVerifySubscription func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+	fnVerifyProduct      func(ctx context.Context, packageName string, productID string, token string) (*androidpublisher.ProductPurchase, error)
 }
 
 func (c *mockPSClient) VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
@@ -58,6 +59,18 @@ func (c *mockPSClient) VerifySubscription(ctx context.Context, pkgName, subID, t
 	}
 
 	return c.fnVerifySubscription(ctx, pkgName, subID, token)
+}
+
+func (c *mockPSClient) VerifyProduct(ctx context.Context, packageName string, productID string, token string) (*androidpublisher.ProductPurchase, error) {
+	if c.fnVerifyProduct == nil {
+		result := &androidpublisher.ProductPurchase{
+			PurchaseState: 1,
+		}
+
+		return result, nil
+	}
+
+	return c.fnVerifyProduct(ctx, packageName, productID, token)
 }
 
 func TestReceiptVerifier_validateGoogleTime(t *testing.T) {

@@ -26,7 +26,10 @@ const (
 	errGPSNoPurchaseToken    = model.Error("playstore: notification has no purchase")
 )
 
-type playStoreSubPurchase androidpublisher.SubscriptionPurchase
+type (
+	playStoreSubPurchase    androidpublisher.SubscriptionPurchase
+	playStoreOneOffPurchase androidpublisher.ProductPurchase
+)
 
 func (x *playStoreSubPurchase) hasExpired(now time.Time) bool {
 	return x.ExpiryTimeMillis < now.UnixMilli()
@@ -339,6 +342,17 @@ func newReceiptDataGoogle(req model.ReceiptRequest, item *playStoreSubPurchase) 
 		ProductID: req.SubscriptionID,
 		ExtID:     req.Blob,
 		ExpiresAt: item.expiresTime(),
+	}
+
+	return result
+}
+
+func newReceiptDataGoogleOneOff(req model.ReceiptRequest, now time.Time) model.ReceiptData {
+	result := model.ReceiptData{
+		Type:      req.Type,
+		ProductID: req.SubscriptionID,
+		ExtID:     req.Blob,
+		ExpiresAt: now,
 	}
 
 	return result
