@@ -24,6 +24,7 @@ type appStoreVerifier interface {
 
 type playStoreVerifier interface {
 	VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+	VerifyProduct(ctx context.Context, pkgName, productID, token string) (*androidpublisher.ProductPurchase, error)
 }
 
 type receiptVerifier struct {
@@ -102,20 +103,37 @@ func (v *receiptVerifier) validateGoogle(ctx context.Context, req model.ReceiptR
 }
 
 func (v *receiptVerifier) validateGoogleTime(ctx context.Context, req model.ReceiptRequest, now time.Time) (model.ReceiptData, error) {
-	sub, err := v.fetchSubPlayStore(ctx, req.Package, req.SubscriptionID, req.Blob)
+	key, err := skuVntByMobileName(req.SubscriptionID)
 	if err != nil {
-		return model.ReceiptData{}, fmt.Errorf("failed to fetch subscription purchase: %w", err)
+		return model.ReceiptData{}, err
 	}
 
-	if sub.hasExpired(now) {
-		return model.ReceiptData{}, errGPSSubPurchaseExpired
-	}
+	switch key {
+	case "brave-origin-premium-perpetual-license":
+		if _, err := v.playStoreCl.VerifyProduct(ctx, req.Package, req.SubscriptionID, req.Blob); err != nil {
+			return model.ReceiptData{}, err
+		}
 
-	if sub.isPending() {
-		return model.ReceiptData{}, errGPSSubPurchasePending
-	}
+		expt := now.AddDate(100, 0, 0)
 
-	return newReceiptDataGoogle(req, sub), nil
+		return newReceiptDataGoogleOneOff(req, expt), nil
+
+	default:
+		sub, err := v.fetchSubPlayStore(ctx, req.Package, req.SubscriptionID, req.Blob)
+		if err != nil {
+			return model.ReceiptData{}, fmt.Errorf("failed to fetch subscription purchase: %w", err)
+		}
+
+		if sub.hasExpired(now) {
+			return model.ReceiptData{}, errGPSSubPurchaseExpired
+		}
+
+		if sub.isPending() {
+			return model.ReceiptData{}, errGPSSubPurchasePending
+		}
+
+		return newReceiptDataGoogle(req, sub), nil
+	}
 }
 
 func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, pkgName, subID, token string) (*playStoreSubPurchase, error) {

@@ -45,6 +45,7 @@ func (c *mockASClient) Verify(ctx context.Context, req appstore.IAPRequest, resu
 
 type mockPSClient struct {
 	fnVerifySubscription func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
+	fnVerifyProduct      func(ctx context.Context, packageName string, productID string, token string) (*androidpublisher.ProductPurchase, error)
 }
 
 func (c *mockPSClient) VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
@@ -58,6 +59,18 @@ func (c *mockPSClient) VerifySubscription(ctx context.Context, pkgName, subID, t
 	}
 
 	return c.fnVerifySubscription(ctx, pkgName, subID, token)
+}
+
+func (c *mockPSClient) VerifyProduct(ctx context.Context, packageName string, productID string, token string) (*androidpublisher.ProductPurchase, error) {
+	if c.fnVerifyProduct == nil {
+		result := &androidpublisher.ProductPurchase{
+			PurchaseState: 1,
+		}
+
+		return result, nil
+	}
+
+	return c.fnVerifyProduct(ctx, packageName, productID, token)
 }
 
 func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
@@ -80,7 +93,54 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "client_error",
+			name: "product_client_error",
+			given: tcGiven{
+				cl: &mockPSClient{
+					fnVerifyProduct: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.ProductPurchase, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.origin.perpetual",
+				},
+				now: time.Now(),
+			},
+			exp: tcExpected{
+				err: model.Error("something_went_wrong"),
+			},
+		},
+
+		{
+			name: "product_success",
+			given: tcGiven{
+				cl: &mockPSClient{
+					fnVerifyProduct: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.ProductPurchase, error) {
+						return &androidpublisher.ProductPurchase{}, nil
+					},
+				},
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "brave.origin.perpetual",
+				},
+				now: time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
+			},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorGoogle,
+					ProductID: "brave.origin.perpetual",
+					ExtID:     "blob",
+					ExpiresAt: time.Date(2124, time.January, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+
+		{
+			name: "sub_client_error",
 			given: tcGiven{
 				cl: &mockPSClient{
 					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
@@ -91,7 +151,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 					Type:           model.VendorGoogle,
 					Blob:           "blob",
 					Package:        "package",
-					SubscriptionID: "sub_id",
+					SubscriptionID: "brave.leo.monthly",
 				},
 				now: time.Now(),
 			},
@@ -101,7 +161,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 		},
 
 		{
-			name: "has_expired",
+			name: "sub_has_expired",
 			given: tcGiven{
 				cl: &mockPSClient{
 					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
@@ -117,7 +177,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 					Type:           model.VendorGoogle,
 					Blob:           "blob",
 					Package:        "package",
-					SubscriptionID: "sub_id",
+					SubscriptionID: "brave.leo.monthly",
 				},
 				now: time.Now(),
 			},
@@ -127,7 +187,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 		},
 
 		{
-			name: "is_pending",
+			name: "sub_is_pending",
 			given: tcGiven{
 				cl: &mockPSClient{
 					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
@@ -143,7 +203,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 					Type:           model.VendorGoogle,
 					Blob:           "blob",
 					Package:        "package",
-					SubscriptionID: "sub_id",
+					SubscriptionID: "brave.leo.monthly",
 				},
 				now: time.Now(),
 			},
@@ -153,7 +213,7 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 		},
 
 		{
-			name: "success",
+			name: "sub_success",
 			given: tcGiven{
 				cl: &mockPSClient{
 					fnVerifySubscription: func(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error) {
@@ -169,14 +229,14 @@ func TestReceiptVerifier_validateGoogleTime(t *testing.T) {
 					Type:           model.VendorGoogle,
 					Blob:           "blob",
 					Package:        "package",
-					SubscriptionID: "sub_id",
+					SubscriptionID: "brave.leo.monthly",
 				},
 				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 			},
 			exp: tcExpected{
 				val: model.ReceiptData{
 					Type:      model.VendorGoogle,
-					ProductID: "sub_id",
+					ProductID: "brave.leo.monthly",
 					ExtID:     "blob",
 					ExpiresAt: time.Date(2024, time.February, 1, 0, 0, 0, 0, time.UTC),
 				},

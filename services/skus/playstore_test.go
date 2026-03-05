@@ -928,3 +928,47 @@ func TestNewReceiptDataGoogle(t *testing.T) {
 		})
 	}
 }
+
+func TestNewReceiptDataGoogleOneOff(t *testing.T) {
+	type tcGiven struct {
+		req  model.ReceiptRequest
+		expt time.Time
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   model.ReceiptData
+	}
+
+	tests := []testCase{
+		{
+			name: "valid",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorGoogle,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "sub_id",
+				},
+				expt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: model.ReceiptData{
+				Type:      model.VendorGoogle,
+				ProductID: "sub_id",
+				ExtID:     "blob",
+				ExpiresAt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newReceiptDataGoogleOneOff(tc.given.req, tc.given.expt)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
