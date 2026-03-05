@@ -24,7 +24,7 @@ type appStoreVerifier interface {
 
 type playStoreVerifier interface {
 	VerifySubscription(ctx context.Context, pkgName, subID, token string) (*androidpublisher.SubscriptionPurchase, error)
-	VerifyProduct(ctx context.Context, packageName string, productID string, token string) (*androidpublisher.ProductPurchase, error)
+	VerifyProduct(ctx context.Context, pkgName, productID, token string) (*androidpublisher.ProductPurchase, error)
 }
 
 type receiptVerifier struct {
