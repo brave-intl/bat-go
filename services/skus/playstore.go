@@ -343,3 +343,14 @@ func newReceiptDataGoogle(req model.ReceiptRequest, item *playStoreSubPurchase) 
 
 	return result
 }
+
+func newReceiptDataGoogleOneOff(req model.ReceiptRequest, expt time.Time) model.ReceiptData {
+	result := model.ReceiptData{
+		Type:      req.Type,
+		ProductID: req.SubscriptionID,
+		ExtID:     req.Blob,
+		ExpiresAt: expt,
+	}
+
+	return result
+}

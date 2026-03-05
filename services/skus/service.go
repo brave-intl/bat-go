@@ -2650,14 +2650,7 @@ type paidOrderCreator interface {
 //
 // NOTE: This is expressed as a function and not a method on Service due to the ugly dependency on Datastore inside s.createOrderPremium.
 // That will eventually be refactored, and this will be promoted to a method once testing is possible without Datastore.
-func createOrderWithReceipt(
-	ctx context.Context,
-	svc paidOrderCreator,
-	itemReqSet map[string]model.OrderItemRequestNew,
-	ppcfg *premiumPaymentProcConfig,
-	rcpt model.ReceiptData,
-	paidt time.Time,
-) (*model.Order, error) {
+func createOrderWithReceipt(ctx context.Context, svc paidOrderCreator, itemReqSet map[string]model.OrderItemRequestNew, ppcfg *premiumPaymentProcConfig, rcpt model.ReceiptData, paidt time.Time) (*model.Order, error) {
 	// 1. Find out what's being purchased from SubscriptionID.
 	/*
 		Android:
