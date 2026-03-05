@@ -314,7 +314,7 @@ services:
 
   dynamodb:
     container_name: dynamodb
-    image: amazon/dynamodb-local:1.25.1
+    image: amazon/dynamodb-local:3.3.0
     networks:
       - grant
     ports:
