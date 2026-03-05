@@ -5,7 +5,7 @@ go 1.25.0
 replace github.com/brave-intl/bat-go/libs => ../libs
 
 require (
-	github.com/brave-intl/bat-go/libs v0.0.0-20220913154833-730f36b772de
+	github.com/brave-intl/bat-go/libs v0.0.0-20260221141946-49fc913008bf
 	github.com/rs/zerolog v1.28.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.13.0
