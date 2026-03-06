@@ -1083,7 +1083,7 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 		return nil, errorutils.Wrap(err, "error validating order is paid")
 	}
 
-	// If the transaction that was satisifies the order then let's update the status
+	// If the transaction that was satisfies the order then let's update the status
 	if isPaid {
 		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
@@ -1095,7 +1095,7 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 	return transaction, err
 }
 
-// UpdateTransactionFromRequest queries the endpoints and creates a transaciton
+// UpdateTransactionFromRequest queries the endpoints and creates a transaction
 func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTransactionRequest, orderID uuid.UUID, getCustodialTx getCustodialTxFn) (*Transaction, error) {
 
 	sublogger := logging.Logger(ctx, "payments").With().
@@ -1121,7 +1121,7 @@ func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTr
 		return nil, errorutils.Wrap(err, "error validating order is paid")
 	}
 
-	// If the transaction that was satisifies the order then let's update the status
+	// If the transaction that was satisfies the order then let's update the status
 	if isPaid {
 		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
@@ -2280,7 +2280,7 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 	case timeLimitedV2:
 		redeemFn = s.cbClient.RedeemCredentialV3
 	default:
-		return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", kind), "unknown credential type %s", http.StatusBadRequest)
+		return handlers.WrapError(fmt.Errorf("credential type %s not supported", kind), "unknown credential type %s", http.StatusBadRequest)
 	}
 
 	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
