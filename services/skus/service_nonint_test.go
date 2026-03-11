@@ -7297,6 +7297,195 @@ func TestService_activateStripePL(t *testing.T) {
 	}
 }
 
+func TestService_updateOrderIntervals(t *testing.T) {
+	type tcGiven struct {
+		ordRepo  *repository.MockOrder
+		oid      uuid.UUID
+		items    []model.OrderItem
+		nintvals int
+	}
+
+	type tcExpected struct {
+		shouldErr should.ErrorAssertionFunc
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_num_intervals",
+			given: tcGiven{
+				nintvals: 4,
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if key != "numIntervals" {
+							return model.Error("unexpected call")
+						}
+
+						return model.Error("error_num_intervals")
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, model.Error("error_num_intervals"))
+				},
+			},
+		},
+
+		{
+			name: "error_num_per_intervals",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if key != "numPerInterval" {
+							return model.Error("unexpected call")
+						}
+
+						return model.Error("error_num_per_intervals")
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.ErrorIs(t, err, model.Error("error_num_per_intervals"))
+				},
+			},
+		},
+
+		{
+			name: "success_default",
+			given: tcGiven{
+				oid:      uuid.Must(uuid.FromString("5863a578-eb81-49f1-baa4-a8153e9b0995")),
+				nintvals: 4,
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if id != uuid.Must(uuid.FromString("5863a578-eb81-49f1-baa4-a8153e9b0995")) {
+							return model.Error("unexpected uuid")
+						}
+
+						switch key {
+						case "numIntervals":
+							if val != 4 {
+								return model.Error("unexpected uuid")
+							}
+
+						case "numPerInterval":
+							if val != 2 {
+								return model.Error("unexpected uuid")
+							}
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "success_leo",
+			given: tcGiven{
+				oid:      uuid.Must(uuid.FromString("5863a578-eb81-49f1-baa4-a8153e9b0995")),
+				nintvals: 4,
+				items: []model.OrderItem{
+					{
+						SKUVnt: "brave-leo-premium",
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if id != uuid.Must(uuid.FromString("5863a578-eb81-49f1-baa4-a8153e9b0995")) {
+							return model.Error("unexpected uuid")
+						}
+
+						switch key {
+						case "numIntervals":
+							if val != 4 {
+								return model.Error("unexpected num intervals")
+							}
+
+						case "numPerInterval":
+							if val != 192 {
+								return model.Error("unexpected num per interval")
+							}
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+
+		{
+			name: "success_origin_pl",
+			given: tcGiven{
+				oid:      uuid.Must(uuid.FromString("5863a578-eb81-49f1-baa4-a8153e9b0995")),
+				nintvals: 1,
+				items: []model.OrderItem{
+					{
+						SKUVnt: "brave-origin-premium-perpetual-license",
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if id != uuid.Must(uuid.FromString("5863a578-eb81-49f1-baa4-a8153e9b0995")) {
+							return model.Error("unexpected uuid")
+						}
+
+						switch key {
+						case "numIntervals":
+							if val != 1 {
+								return model.Error("unexpected num intervals")
+							}
+
+						case "numPerInterval":
+							if val != 1 {
+								return model.Error("unexpected num per interval")
+							}
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{
+				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+					return should.NoError(t, err)
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Service{
+				orderRepo: tc.given.ordRepo,
+			}
+
+			ctx := context.Background()
+
+			actual := s.updateOrderIntervals(ctx, nil, tc.given.oid, tc.given.items, tc.given.nintvals)
+			tc.exp.shouldErr(t, actual)
+		})
+	}
+}
+
 type mockRadomClient struct {
 	fnCreateCheckoutSession func(ctx context.Context, creq *radom.CreateCheckoutSessionRequest) (radom.CreateCheckoutSessionResponse, error)
 	fnGetCheckoutSession    func(ctx context.Context, seshID string) (radom.GetCheckoutSessionResponse, error)
