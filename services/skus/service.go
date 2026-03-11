@@ -2147,6 +2147,10 @@ func (s *Service) updateOrderIntervals(ctx context.Context, dbi sqlx.ExecerConte
 			numPerInterval = 192
 		}
 
+		if len(items) == 1 && items[0].IsOriginPL() {
+			numPerInterval = 1
+		}
+
 		if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, "numPerInterval", numPerInterval); err != nil {
 			return err
 		}
