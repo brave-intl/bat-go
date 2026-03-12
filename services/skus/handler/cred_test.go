@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi"
@@ -20,7 +21,9 @@ import (
 )
 
 type mockTLV2Svc struct {
-	FnUniqBatches func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
+	FnUniqBatches      func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
+	FnListBatches      func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
+	FnDeleteBatchSeats func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
@@ -29,6 +32,22 @@ func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID
 	}
 
 	return s.FnUniqBatches(ctx, orderID, itemID)
+}
+
+func (s *mockTLV2Svc) ListBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+	if s.FnListBatches == nil {
+		return nil, nil
+	}
+
+	return s.FnListBatches(ctx, orderID, itemID)
+}
+
+func (s *mockTLV2Svc) DeleteBatchSeats(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+	if s.FnDeleteBatchSeats == nil {
+		return nil
+	}
+
+	return s.FnDeleteBatchSeats(ctx, orderID, itemID, seats)
 }
 
 func TestCred_CountBatches(t *testing.T) {
@@ -265,6 +284,436 @@ func TestCred_CountBatches(t *testing.T) {
 
 			should.Equal(t, tc.exp.lim, act2.L)
 			should.Equal(t, tc.exp.nact, act2.A)
+		})
+	}
+}
+
+func TestCred_ListBatches(t *testing.T) {
+	orderCtx := func(orderID string) context.Context {
+		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+			URLParams: chi.RouteParams{
+				Keys:   []string{"orderID"},
+				Values: []string{orderID},
+			},
+		})
+	}
+
+	type tcGiven struct {
+		ctx    context.Context
+		itemID string // query param; empty means omitted
+		svc    *mockTLV2Svc
+	}
+
+	type tcExpected struct {
+		batches []model.TLV2ActiveBatch
+		err     *handlers.AppError
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_orderID",
+			given: tcGiven{
+				ctx: orderCtx("not-a-uuid"),
+				svc: &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "invalid_item_id",
+			given: tcGiven{
+				ctx:    orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				itemID: "not-a-uuid",
+				svc:    &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						return nil, model.ErrOrderNotPaid
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotPaid, "order not paid", http.StatusPaymentRequired),
+			},
+		},
+
+		{
+			name: "cred_type_not_supported",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						return nil, model.ErrUnsupportedCredType
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrUnsupportedCredType, "credential type not supported", http.StatusBadRequest),
+			},
+		},
+
+		{
+			name: "context_canceled",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						return nil, context.Canceled
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.Canceled, "client ended request", model.StatusClientClosedConn),
+			},
+		},
+
+		{
+			name: "deadline_exceeded",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						return nil, context.DeadlineExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.DeadlineExceeded, "request timed out", http.StatusGatewayTimeout),
+			},
+		},
+
+		{
+			name: "internal_error",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						return nil, model.Error("unexpected")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError),
+			},
+		},
+
+		{
+			name: "success_empty_returns_array_not_null",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						return nil, nil // service may return nil slice
+					},
+				},
+			},
+			exp: tcExpected{
+				batches: []model.TLV2ActiveBatch{}, // handler must promote nil → []
+			},
+		},
+
+		{
+			name: "success_no_item_filter",
+			given: tcGiven{
+				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						should.Equal(t, uuid.Nil, itemID)
+						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				batches: []model.TLV2ActiveBatch{{RequestID: "req-01"}},
+			},
+		},
+
+		{
+			name: "success_with_item_filter",
+			given: tcGiven{
+				ctx:    orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				itemID: "ad0be000-0000-4000-a000-000000000000",
+				svc: &mockTLV2Svc{
+					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
+						return []model.TLV2ActiveBatch{{RequestID: "req-02"}}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				batches: []model.TLV2ActiveBatch{{RequestID: "req-02"}},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewCred(tc.given.svc)
+
+			target := "http://localhost"
+			if tc.given.itemID != "" {
+				target += "?item_id=" + tc.given.itemID
+			}
+
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			req = req.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			appErr := h.ListBatches(rw, req)
+			must.Equal(t, tc.exp.err, appErr)
+
+			if tc.exp.err != nil {
+				appErr.ServeHTTP(rw, req)
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+				should.Equal(t, exp, bytes.TrimSpace(rw.Body.Bytes()))
+				return
+			}
+
+			resp := &struct {
+				Batches []model.TLV2ActiveBatch `json:"batches"`
+			}{}
+			must.Equal(t, nil, json.Unmarshal(rw.Body.Bytes(), resp))
+			should.Equal(t, tc.exp.batches, resp.Batches)
+		})
+	}
+}
+
+func TestCred_DeleteBatchSeats(t *testing.T) {
+	orderCtx := func(orderID string) context.Context {
+		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+			URLParams: chi.RouteParams{
+				Keys:   []string{"orderID"},
+				Values: []string{orderID},
+			},
+		})
+	}
+
+	type tcGiven struct {
+		ctx  context.Context
+		body string
+		svc  *mockTLV2Svc
+	}
+
+	type tcExpected struct {
+		err *handlers.AppError
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_orderID",
+			given: tcGiven{
+				ctx:  orderCtx("not-a-uuid"),
+				body: `{"seats":1}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "invalid_json_body",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{not json}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(
+					json.NewDecoder(strings.NewReader(`{not json}`)).Decode(&struct{}{}),
+					"failed to parse request body",
+					http.StatusBadRequest,
+				),
+			},
+		},
+
+		{
+			name: "seats_zero",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":0}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"seats": "must be a positive integer"}),
+			},
+		},
+
+		{
+			name: "invalid_item_id",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":1,"item_id":"not-a-uuid"}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":1}`,
+				svc: &mockTLV2Svc{
+					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+						return model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":1}`,
+				svc: &mockTLV2Svc{
+					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+						return model.ErrOrderNotPaid
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotPaid, "order not paid", http.StatusPaymentRequired),
+			},
+		},
+
+		{
+			name: "cred_type_not_supported",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":1}`,
+				svc: &mockTLV2Svc{
+					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+						return model.ErrUnsupportedCredType
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrUnsupportedCredType, "credential type not supported", http.StatusBadRequest),
+			},
+		},
+
+		{
+			name: "deadline_exceeded",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":1}`,
+				svc: &mockTLV2Svc{
+					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+						return context.DeadlineExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.DeadlineExceeded, "request timed out", http.StatusGatewayTimeout),
+			},
+		},
+
+		{
+			name: "internal_error",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":1}`,
+				svc: &mockTLV2Svc{
+					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+						return model.Error("unexpected")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":2,"item_id":"ad0be000-0000-4000-a000-000000000000"}`,
+				svc: &mockTLV2Svc{
+					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+						should.Equal(t, 2, seats)
+						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewCred(tc.given.svc)
+
+			req := httptest.NewRequest(http.MethodDelete, "http://localhost", strings.NewReader(tc.given.body))
+			req = req.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			appErr := h.DeleteBatchSeats(rw, req)
+			must.Equal(t, tc.exp.err, appErr)
+
+			if tc.exp.err != nil {
+				appErr.ServeHTTP(rw, req)
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+				should.Equal(t, exp, bytes.TrimSpace(rw.Body.Bytes()))
+				return
+			}
+
+			should.Equal(t, http.StatusOK, rw.Code)
 		})
 	}
 }

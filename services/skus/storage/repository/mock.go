@@ -248,6 +248,8 @@ type MockTLV2 struct {
 	FnGetCredSubmissionReport func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error)
 	FnUniqBatches             func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
 	FnDeleteLegacy            func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
+	FnActiveBatches           func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error)
+	FnDeleteByRequestIDs      func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error
 }
 
 func (r *MockTLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error) {
@@ -272,4 +274,20 @@ func (r *MockTLV2) DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, ord
 	}
 
 	return r.FnDeleteLegacy(ctx, dbi, orderID)
+}
+
+func (r *MockTLV2) ActiveBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+	if r.FnActiveBatches == nil {
+		return nil, nil
+	}
+
+	return r.FnActiveBatches(ctx, dbi, orderID, itemID, now)
+}
+
+func (r *MockTLV2) DeleteByRequestIDs(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+	if r.FnDeleteByRequestIDs == nil {
+		return nil
+	}
+
+	return r.FnDeleteByRequestIDs(ctx, dbi, orderID, requestIDs)
 }

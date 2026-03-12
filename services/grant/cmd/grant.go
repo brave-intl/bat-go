@@ -483,9 +483,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 		authMwr := skus.NewAuthMwr(skusService)
 
+		supportMwr, err := skus.NewSupportMwr(os.Getenv("ENV"))
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to initialise support middleware")
+		}
+
 		r.Mount("/v1/credentials", skus.CredentialRouter(skusService, authMwr))
 		r.Mount("/v2/credentials", skus.CredentialV2Router(skusService, authMwr))
-		r.Mount("/v1/orders", skus.Router(skusService, authMwr, middleware.InstrumentHandler, corsOpts))
+		r.Mount("/v1/orders", skus.Router(skusService, authMwr, supportMwr, middleware.InstrumentHandler, corsOpts))
 
 		subr := chi.NewRouter()
 		orderh := handler.NewOrder(skusService)

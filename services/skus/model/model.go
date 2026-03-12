@@ -720,6 +720,12 @@ type TLV2CredSubmissionReport struct {
 	ReqIDMismatch bool `db:"req_id_mismatch"`
 }
 
+// TLV2ActiveBatch summarises one active credential batch, corresponding to one linked device.
+type TLV2ActiveBatch struct {
+	RequestID       string    `db:"request_id"        json:"request_id"`
+	OldestValidFrom time.Time `db:"oldest_valid_from" json:"oldest_valid_from"`
+}
+
 // ReceiptRequest represents a receipt submitted by a mobile or web client.
 type ReceiptRequest struct {
 	Type           Vendor `json:"type" validate:"required,oneof=ios android"`
