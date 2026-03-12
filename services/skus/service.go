@@ -2143,8 +2143,15 @@ func (s *Service) updateOrderIntervals(ctx context.Context, dbi sqlx.ExecerConte
 	// Backporting changes from https://github.com/brave-intl/bat-go/pull/1998.
 	{
 		numPerInterval := 2
-		if len(items) == 1 && items[0].IsLeo() {
-			numPerInterval = 192
+
+		if len(items) == 1 {
+			switch {
+			case items[0].IsLeo():
+				numPerInterval = 192
+
+			case items[0].IsOriginPL():
+				numPerInterval = 1
+			}
 		}
 
 		if err := s.orderRepo.AppendMetadataInt(ctx, dbi, oid, "numPerInterval", numPerInterval); err != nil {
