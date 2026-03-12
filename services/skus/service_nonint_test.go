@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/awa/go-iap/appstore"
+	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -7544,4 +7546,481 @@ func (s *mockPaidOrderCreator) appendOrderMetadata(ctx context.Context, oid uuid
 	}
 
 	return s.fnAppendOrderMetadata(ctx, oid, mdata)
+}
+
+func TestService_ListBatches(t *testing.T) {
+	type tcGiven struct {
+		orderID  uuid.UUID
+		itemID   uuid.UUID
+		ordRepo  *repository.MockOrder
+		itemRepo *repository.MockOrderItem
+		tlv2Repo *repository.MockTLV2
+	}
+
+	type tcExpected struct {
+		val []model.TLV2ActiveBatch
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	paidOrder := func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+		return &model.Order{ID: id, Status: "paid"}, nil
+	}
+
+	oneItem := func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+		return []model.OrderItem{
+			{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited-v2"},
+		}, nil
+	}
+
+	tests := []testCase{
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotFound},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return &model.Order{ID: id, Status: "pending"}, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotPaid},
+		},
+
+		{
+			name: "invalid_order_no_items",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrInvalidOrderNoItems},
+		},
+
+		{
+			name: "explicit_item_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000001")), // not in the order
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderItemNotFound},
+		},
+
+		{
+			// All items are non-TLV2: no TLV2 item exists, so the operation
+			// would be a silent no-op. Return an error instead of empty data.
+			name: "unsupported_cred_type_no_tlv2_items",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrUnsupportedCredType},
+		},
+
+		{
+			// Explicit item is non-TLV2: the specific item check catches it.
+			name: "unsupported_cred_type_explicit_item",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrUnsupportedCredType},
+		},
+
+		{
+			// Mixed-item order: Items[0] is non-TLV2, Items[1] is TLV2. With no
+			// item filter the old Items[0]-only check would wrongly reject this;
+			// the at-least-one check allows it and passes iid=nil to the repo.
+			name: "mixed_items_no_filter_uses_tlv2_item",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited"},
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000001")), OrderID: orderID, CredentialType: "time-limited-v2"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+						must.Equal(t, (*uuid.UUID)(nil), itemID)
+						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
+					},
+				},
+			},
+			exp: tcExpected{val: []model.TLV2ActiveBatch{{RequestID: "req-01"}}},
+		},
+
+		{
+			name: "all_items_returns_batches",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Nil,
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
+				tlv2Repo: &repository.MockTLV2{
+					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+						// itemID must be nil when no specific item is requested
+						must.Equal(t, (*uuid.UUID)(nil), itemID)
+						return []model.TLV2ActiveBatch{
+							{RequestID: "req-01"},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				val: []model.TLV2ActiveBatch{{RequestID: "req-01"}},
+			},
+		},
+
+		{
+			name: "explicit_item_passes_item_id",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
+				tlv2Repo: &repository.MockTLV2{
+					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+						must.NotEqual(t, (*uuid.UUID)(nil), itemID)
+						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
+						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				val: []model.TLV2ActiveBatch{{RequestID: "req-01"}},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			ds := NewMockDatastore(ctrl)
+			ds.EXPECT().RawDB().AnyTimes().Return(nil)
+
+			svc := &Service{
+				Datastore:     ds,
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itemRepo,
+				tlv2Repo:      tc.given.tlv2Repo,
+			}
+
+			ctx := context.Background()
+
+			actual, err := svc.ListBatches(ctx, tc.given.orderID, tc.given.itemID)
+			must.Equal(t, true, errors.Is(err, tc.exp.err))
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestService_DeleteBatchSeats(t *testing.T) {
+	type tcGiven struct {
+		orderID  uuid.UUID
+		itemID   uuid.UUID
+		seats    int
+		ordRepo  *repository.MockOrder
+		itemRepo *repository.MockOrderItem
+		tlv2Repo *repository.MockTLV2
+	}
+
+	type tcExpected struct {
+		err             error
+		deletedReqIDs   []string // what DeleteByRequestIDs should receive (nil = not called)
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	paidOrder := func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+		return &model.Order{ID: id, Status: "paid"}, nil
+	}
+
+	oneItem := func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+		return []model.OrderItem{
+			{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited-v2"},
+		}, nil
+	}
+
+	twoBatches := func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+		return []model.TLV2ActiveBatch{
+			{RequestID: "req-01"},
+			{RequestID: "req-02"},
+		}, nil
+	}
+
+	tests := []testCase{
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:   1,
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotFound},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:   1,
+				ordRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return &model.Order{ID: id, Status: "pending"}, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotPaid},
+		},
+
+		{
+			// All items are non-TLV2: no TLV2 item exists, so the delete
+			// would be a silent no-op. Return an error instead.
+			name: "unsupported_cred_type_no_tlv2_items",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:   1,
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrUnsupportedCredType},
+		},
+
+		{
+			// Explicit item is non-TLV2: the specific item check catches it.
+			name: "unsupported_cred_type_explicit_item",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				seats:   1,
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrUnsupportedCredType},
+		},
+
+		{
+			// Mixed-item order: Items[0] is non-TLV2, Items[1] is TLV2. With no
+			// item filter the old Items[0]-only check would wrongly reject this;
+			// the at-least-one check allows it and passes iid=nil to the repo.
+			name: "mixed_items_no_filter_targets_tlv2_batches",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:   1,
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")), OrderID: orderID, CredentialType: "time-limited"},
+							{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000001")), OrderID: orderID, CredentialType: "time-limited-v2"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+						must.Equal(t, (*uuid.UUID)(nil), itemID)
+						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
+					},
+					FnDeleteByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{deletedReqIDs: []string{"req-01"}},
+		},
+
+		{
+			name: "no_active_batches_noop",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:   1,
+				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
+				tlv2Repo: &repository.MockTLV2{
+					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+						return []model.TLV2ActiveBatch{}, nil
+					},
+				},
+			},
+			// no error, DeleteByRequestIDs not called
+			exp: tcExpected{deletedReqIDs: nil},
+		},
+
+		{
+			name: "seats_capped_to_batch_count",
+			given: tcGiven{
+				orderID:  uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:    10, // > 2 active batches
+				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
+				tlv2Repo: &repository.MockTLV2{
+					FnActiveBatches:      twoBatches,
+					FnDeleteByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error { return nil },
+				},
+			},
+			// all 2 batches deleted even though 10 were requested
+			exp: tcExpected{deletedReqIDs: []string{"req-01", "req-02"}},
+		},
+
+		{
+			name: "deletes_oldest_n",
+			given: tcGiven{
+				orderID:  uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:    1,
+				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
+				tlv2Repo: &repository.MockTLV2{
+					FnActiveBatches:      twoBatches,
+					FnDeleteByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error { return nil },
+				},
+			},
+			// only the oldest batch (req-01) should be deleted
+			exp: tcExpected{deletedReqIDs: []string{"req-01"}},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			var capturedIDs []string
+
+			// Wrap FnDeleteByRequestIDs to capture what IDs were passed.
+			if tc.given.tlv2Repo.FnDeleteByRequestIDs != nil {
+				inner := tc.given.tlv2Repo.FnDeleteByRequestIDs
+				tc.given.tlv2Repo.FnDeleteByRequestIDs = func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+					capturedIDs = requestIDs
+					return inner(ctx, dbi, orderID, requestIDs)
+				}
+			}
+
+			ds := NewMockDatastore(ctrl)
+
+			if tc.exp.deletedReqIDs != nil {
+				// Success path reaches BeginTxx — use a sqlmock DB.
+				mockDB, sqlMock, err := sqlmock.New()
+				must.Equal(t, nil, err)
+				t.Cleanup(func() { mockDB.Close() })
+
+				sqlMock.ExpectBegin()
+				sqlMock.ExpectCommit()
+
+				db := sqlx.NewDb(mockDB, "sqlmock")
+				ds.EXPECT().RawDB().AnyTimes().Return(db)
+				ds.EXPECT().RollbackTx(gomock.Any())
+			} else {
+				ds.EXPECT().RawDB().AnyTimes().Return(nil)
+			}
+
+			svc := &Service{
+				Datastore:     ds,
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itemRepo,
+				tlv2Repo:      tc.given.tlv2Repo,
+			}
+
+			ctx := context.Background()
+
+			err := svc.DeleteBatchSeats(ctx, tc.given.orderID, tc.given.itemID, tc.given.seats)
+			must.Equal(t, true, errors.Is(err, tc.exp.err))
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			if tc.exp.deletedReqIDs != nil {
+				should.Equal(t, tc.exp.deletedReqIDs, capturedIDs)
+			} else {
+				should.Nil(t, capturedIDs)
+			}
+		})
+	}
 }
