@@ -317,11 +317,11 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		// Location depends on env.
 		Description:                 "brave-origin-premium-perpetual-license",
 		CredentialType:              "time-limited-v2",
-		CredentialValidDuration:     "P1M",
+		CredentialValidDuration:     "P100Y",
 		Price:                       decimal.RequireFromString("60.00"),
 		IssuerTokenBuffer:           ptrTo(1),
 		IssuerTokenOverlap:          ptrTo(0),
-		CredentialValidDurationEach: ptrTo("P1M"),
+		CredentialValidDurationEach: ptrTo("P100Y"),
 		// StripeMetadata depends on env.
 	}
 
