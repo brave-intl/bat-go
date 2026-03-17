@@ -60,15 +60,14 @@ func (r *TLV2) DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID
 // oldest-first by valid_from. Each batch corresponds to one linked device.
 // If itemID is non-nil, results are scoped to that item only.
 func (r *TLV2) ActiveBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
-	var (
-		result []model.TLV2ActiveBatch
-		err    error
-	)
+	result := []model.TLV2ActiveBatch{}
+
+	var err error
 
 	if itemID != nil {
 		const q = `SELECT request_id, MIN(valid_from) AS oldest_valid_from
 			FROM time_limited_v2_order_creds
-			WHERE order_id=$1 AND item_id=$2 AND valid_to > $3 AND valid_from < $3
+			WHERE order_id=$1 AND item_id=$2 AND valid_to > $3
 			GROUP BY request_id
 			ORDER BY MIN(valid_from) ASC`
 
@@ -76,7 +75,7 @@ func (r *TLV2) ActiveBatches(ctx context.Context, dbi sqlx.QueryerContext, order
 	} else {
 		const q = `SELECT request_id, MIN(valid_from) AS oldest_valid_from
 			FROM time_limited_v2_order_creds
-			WHERE order_id=$1 AND valid_to > $2 AND valid_from < $2
+			WHERE order_id=$1 AND valid_to > $2
 			GROUP BY request_id
 			ORDER BY MIN(valid_from) ASC`
 
