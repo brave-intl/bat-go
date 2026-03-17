@@ -31,8 +31,9 @@ import (
 var prodSupportKeys = []string{}
 
 // Development and sandbox support operator public keys.
-// TODO: add developer keys here.
-var devSupportKeys = []string{}
+var devSupportKeys = []string{
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDJ+CKHb3hMyD8kA7Wxlk1DeyUXGUtUUdpHL8zrE+pH5 jegan+support-test@brave.com",
+}
 
 // supportKeystore implements httpsignature.Keystore using a fixed set of ed25519 public keys.
 // Each key belongs to a named support operator.
