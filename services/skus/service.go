@@ -110,6 +110,8 @@ type tlv2Store interface {
 	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error)
 	UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
 	DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
+	ActiveBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error)
+	DeleteByRequestIDs(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error
 }
 
 type vendorReceiptValidator interface {
@@ -1263,6 +1265,165 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return maxTLV2ActiveDailyItemCreds, nact, nil
+}
+
+// ListBatches returns the currently active credential batches for an order, ordered oldest-first.
+// When itemID is uuid.Nil, batches across all items in the order are returned.
+func (s *Service) ListBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+	sublogger := logging.Logger(ctx, "skus").With().
+		Str("func", "ListBatches").
+		Logger()
+
+	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get order")
+		return nil, err
+	}
+
+	if !ord.IsPaid() {
+		return nil, model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return nil, model.ErrInvalidOrderNoItems
+	}
+
+	var iid *uuid.UUID
+	if !uuid.Equal(itemID, uuid.Nil) {
+		// A specific item was requested: verify that exact item is TLV2.
+		item, ok := ord.HasItem(itemID)
+		if !ok {
+			return nil, model.ErrOrderItemNotFound
+		}
+		if item.CredentialType != timeLimitedV2 {
+			return nil, model.ErrUnsupportedCredType
+		}
+		iid = &itemID
+	} else {
+		// No item filter: ActiveBatches will query across all items in the order,
+		// so checking only Items[0] would be misleading — it validates one item
+		// while the operation touches all of them. Instead we require that at
+		// least one item is TLV2. An order with no TLV2 items has no rows in
+		// time_limited_v2_order_creds and the operation would be a silent no-op;
+		// returning an error here gives the caller an actionable signal instead.
+		hasTLV2 := false
+		for _, it := range ord.Items {
+			if it.CredentialType == timeLimitedV2 {
+				hasTLV2 = true
+				break
+			}
+		}
+		if !hasTLV2 {
+			return nil, model.ErrUnsupportedCredType
+		}
+	}
+
+	batches, err := s.tlv2Repo.ActiveBatches(ctx, s.Datastore.RawDB(), orderID, iid, time.Now())
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to list active batches")
+		return nil, err
+	}
+
+	return batches, nil
+}
+
+// DeleteBatchSeats frees device linking slots by deleting the oldest active credential
+// batches for an order. seats controls how many slots to free.
+// When itemID is uuid.Nil, the oldest batches across all items are targeted.
+func (s *Service) DeleteBatchSeats(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+	sublogger := logging.Logger(ctx, "skus").With().
+		Str("func", "DeleteBatchSeats").
+		Logger()
+
+	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get order")
+		return err
+	}
+
+	if !ord.IsPaid() {
+		return model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return model.ErrInvalidOrderNoItems
+	}
+
+	var iid *uuid.UUID
+	if !uuid.Equal(itemID, uuid.Nil) {
+		// A specific item was requested: verify that exact item is TLV2.
+		item, ok := ord.HasItem(itemID)
+		if !ok {
+			return model.ErrOrderItemNotFound
+		}
+		if item.CredentialType != timeLimitedV2 {
+			return model.ErrUnsupportedCredType
+		}
+		iid = &itemID
+	} else {
+		// No item filter: ActiveBatches will query and DeleteByRequestIDs will
+		// delete across all items in the order. Checking only Items[0] would
+		// give false confidence — it validates one item while the operation
+		// spans all of them. Require at least one TLV2 item so that the error
+		// is accurate: an order with no TLV2 items has no rows in
+		// time_limited_v2_order_creds and any delete would silently do nothing.
+		hasTLV2 := false
+		for _, it := range ord.Items {
+			if it.CredentialType == timeLimitedV2 {
+				hasTLV2 = true
+				break
+			}
+		}
+		if !hasTLV2 {
+			return model.ErrUnsupportedCredType
+		}
+	}
+
+	// Batches are queried before the transaction so the caller can preview
+	// what will be deleted. The server re-selects the oldest N at delete time.
+	batches, err := s.tlv2Repo.ActiveBatches(ctx, s.Datastore.RawDB(), orderID, iid, time.Now())
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to list active batches for deletion")
+		return err
+	}
+
+	if len(batches) == 0 {
+		return nil
+	}
+
+	if seats > len(batches) {
+		seats = len(batches)
+	}
+
+	requestIDs := make([]string, seats)
+	for i := range seats {
+		requestIDs[i] = batches[i].RequestID
+	}
+
+	sublogger.Info().
+		Str("order_id", orderID.String()).
+		Int("seats", seats).
+		Strs("request_ids", requestIDs).
+		Msg("deleting credential batches")
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to begin transaction")
+		return err
+	}
+	defer s.Datastore.RollbackTx(tx)
+
+	if err := s.tlv2Repo.DeleteByRequestIDs(ctx, tx, orderID, requestIDs); err != nil {
+		sublogger.Error().Err(err).Msg("failed to delete batches")
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		sublogger.Error().Err(err).Msg("failed to commit batch deletion")
+		return err
+	}
+
+	return nil
 }
 
 // GetItemCredentials returns credentials based on the order, item and request id.
