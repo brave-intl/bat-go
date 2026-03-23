@@ -21,9 +21,9 @@ import (
 )
 
 type mockTLV2Svc struct {
-	FnUniqBatches      func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
-	FnListBatches      func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
-	FnDeleteBatchSeats func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	FnUniqBatches       func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
+	FnListActiveBatches func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
+	FnDeleteBatches     func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
@@ -34,20 +34,20 @@ func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID
 	return s.FnUniqBatches(ctx, orderID, itemID)
 }
 
-func (s *mockTLV2Svc) ListBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
-	if s.FnListBatches == nil {
+func (s *mockTLV2Svc) ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+	if s.FnListActiveBatches == nil {
 		return nil, nil
 	}
 
-	return s.FnListBatches(ctx, orderID, itemID)
+	return s.FnListActiveBatches(ctx, orderID, itemID)
 }
 
-func (s *mockTLV2Svc) DeleteBatchSeats(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
-	if s.FnDeleteBatchSeats == nil {
+func (s *mockTLV2Svc) DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+	if s.FnDeleteBatches == nil {
 		return nil
 	}
 
-	return s.FnDeleteBatchSeats(ctx, orderID, itemID, seats)
+	return s.FnDeleteBatches(ctx, orderID, itemID, seats)
 }
 
 func TestCred_CountBatches(t *testing.T) {
@@ -344,7 +344,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						return nil, model.ErrOrderNotFound
 					},
 				},
@@ -359,7 +359,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						return nil, model.ErrOrderNotPaid
 					},
 				},
@@ -374,7 +374,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						return nil, model.ErrUnsupportedCredType
 					},
 				},
@@ -389,7 +389,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						return nil, context.Canceled
 					},
 				},
@@ -404,7 +404,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						return nil, context.DeadlineExceeded
 					},
 				},
@@ -419,7 +419,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						return nil, model.Error("unexpected")
 					},
 				},
@@ -434,7 +434,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						return nil, nil // service may return nil slice
 					},
 				},
@@ -449,7 +449,7 @@ func TestCred_ListBatches(t *testing.T) {
 			given: tcGiven{
 				ctx: orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						should.Equal(t, uuid.Nil, itemID)
 						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
 					},
@@ -466,7 +466,7 @@ func TestCred_ListBatches(t *testing.T) {
 				ctx:    orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				itemID: "ad0be000-0000-4000-a000-000000000000",
 				svc: &mockTLV2Svc{
-					FnListBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+					FnListActiveBatches: func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
 						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
 						return []model.TLV2ActiveBatch{{RequestID: "req-02"}}, nil
 					},
@@ -515,7 +515,7 @@ func TestCred_ListBatches(t *testing.T) {
 	}
 }
 
-func TestCred_DeleteBatchSeats(t *testing.T) {
+func TestCred_DeleteBatches(t *testing.T) {
 	orderCtx := func(orderID string) context.Context {
 		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 			URLParams: chi.RouteParams{
@@ -600,7 +600,7 @@ func TestCred_DeleteBatchSeats(t *testing.T) {
 				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				body: `{"seats":1}`,
 				svc: &mockTLV2Svc{
-					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+					FnDeleteBatches: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
 						return model.ErrOrderNotFound
 					},
 				},
@@ -616,7 +616,7 @@ func TestCred_DeleteBatchSeats(t *testing.T) {
 				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				body: `{"seats":1}`,
 				svc: &mockTLV2Svc{
-					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+					FnDeleteBatches: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
 						return model.ErrOrderNotPaid
 					},
 				},
@@ -632,7 +632,7 @@ func TestCred_DeleteBatchSeats(t *testing.T) {
 				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				body: `{"seats":1}`,
 				svc: &mockTLV2Svc{
-					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+					FnDeleteBatches: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
 						return model.ErrUnsupportedCredType
 					},
 				},
@@ -648,7 +648,7 @@ func TestCred_DeleteBatchSeats(t *testing.T) {
 				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				body: `{"seats":1}`,
 				svc: &mockTLV2Svc{
-					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+					FnDeleteBatches: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
 						return context.DeadlineExceeded
 					},
 				},
@@ -664,7 +664,7 @@ func TestCred_DeleteBatchSeats(t *testing.T) {
 				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				body: `{"seats":1}`,
 				svc: &mockTLV2Svc{
-					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+					FnDeleteBatches: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
 						return model.Error("unexpected")
 					},
 				},
@@ -680,7 +680,7 @@ func TestCred_DeleteBatchSeats(t *testing.T) {
 				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
 				body: `{"seats":2,"item_id":"ad0be000-0000-4000-a000-000000000000"}`,
 				svc: &mockTLV2Svc{
-					FnDeleteBatchSeats: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+					FnDeleteBatches: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
 						should.Equal(t, 2, seats)
 						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
 						return nil
@@ -702,7 +702,7 @@ func TestCred_DeleteBatchSeats(t *testing.T) {
 			rw := httptest.NewRecorder()
 			rw.Header().Set("content-type", "application/json")
 
-			appErr := h.DeleteBatchSeats(rw, req)
+			appErr := h.DeleteBatches(rw, req)
 			must.Equal(t, tc.exp.err, appErr)
 
 			if tc.exp.err != nil {

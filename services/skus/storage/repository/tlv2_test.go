@@ -540,7 +540,7 @@ func TestTLV2_DeleteLegacy(t *testing.T) {
 	}
 }
 
-func TestTLV2_ActiveBatches(t *testing.T) {
+func TestTLV2_ActiveBatchesByOrder(t *testing.T) {
 	dbi, err := setupDBI()
 	must.Equal(t, nil, err)
 
@@ -754,7 +754,15 @@ func TestTLV2_ActiveBatches(t *testing.T) {
 				must.Equal(t, nil, err)
 			}
 
-			actual, err := repo.ActiveBatches(ctx, tx, tc.given.orderID, tc.given.itemID, tc.given.now)
+			var (
+				actual []model.TLV2ActiveBatch
+				err    error
+			)
+			if tc.given.itemID != nil {
+				actual, err = repo.ActiveBatchesByOrderItem(ctx, tx, tc.given.orderID, *tc.given.itemID, tc.given.now)
+			} else {
+				actual, err = repo.ActiveBatchesByOrder(ctx, tx, tc.given.orderID, tc.given.now)
+			}
 			must.Equal(t, tc.exp.err, err)
 
 			if tc.exp.err != nil {
@@ -896,7 +904,10 @@ func TestTLV2_DeleteByRequestIDs(t *testing.T) {
 				must.Equal(t, nil, err)
 			}
 
-			err = repo.DeleteByRequestIDs(ctx, tx, tc.given.orderID, tc.given.requestIDs)
+			err = repo.DeleteCredsByRequestIDs(ctx, tx, tc.given.orderID, tc.given.requestIDs)
+			if err == nil {
+				err = repo.DeleteOutboxByRequestIDs(ctx, tx, tc.given.orderID, tc.given.requestIDs)
+			}
 			must.Equal(t, tc.exp.err, err)
 
 			if tc.exp.err != nil {

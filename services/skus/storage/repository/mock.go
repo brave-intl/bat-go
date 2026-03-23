@@ -245,11 +245,13 @@ func (r *MockOrderPayHistory) Insert(ctx context.Context, dbi sqlx.ExecerContext
 }
 
 type MockTLV2 struct {
-	FnGetCredSubmissionReport func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error)
-	FnUniqBatches             func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
-	FnDeleteLegacy            func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
-	FnActiveBatches           func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error)
-	FnDeleteByRequestIDs      func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error
+	FnGetCredSubmissionReport  func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error)
+	FnUniqBatches              func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
+	FnDeleteLegacy             func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
+	FnActiveBatchesByOrder     func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error)
+	FnActiveBatchesByOrderItem func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error)
+	FnDeleteCredsByRequestIDs  func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error
+	FnDeleteOutboxByRequestIDs func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error
 }
 
 func (r *MockTLV2) GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error) {
@@ -276,18 +278,34 @@ func (r *MockTLV2) DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, ord
 	return r.FnDeleteLegacy(ctx, dbi, orderID)
 }
 
-func (r *MockTLV2) ActiveBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
-	if r.FnActiveBatches == nil {
+func (r *MockTLV2) ActiveBatchesByOrder(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+	if r.FnActiveBatchesByOrder == nil {
 		return nil, nil
 	}
 
-	return r.FnActiveBatches(ctx, dbi, orderID, itemID, now)
+	return r.FnActiveBatchesByOrder(ctx, dbi, orderID, now)
 }
 
-func (r *MockTLV2) DeleteByRequestIDs(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
-	if r.FnDeleteByRequestIDs == nil {
+func (r *MockTLV2) ActiveBatchesByOrderItem(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+	if r.FnActiveBatchesByOrderItem == nil {
+		return nil, nil
+	}
+
+	return r.FnActiveBatchesByOrderItem(ctx, dbi, orderID, itemID, now)
+}
+
+func (r *MockTLV2) DeleteCredsByRequestIDs(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+	if r.FnDeleteCredsByRequestIDs == nil {
 		return nil
 	}
 
-	return r.FnDeleteByRequestIDs(ctx, dbi, orderID, requestIDs)
+	return r.FnDeleteCredsByRequestIDs(ctx, dbi, orderID, requestIDs)
+}
+
+func (r *MockTLV2) DeleteOutboxByRequestIDs(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+	if r.FnDeleteOutboxByRequestIDs == nil {
+		return nil
+	}
+
+	return r.FnDeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }

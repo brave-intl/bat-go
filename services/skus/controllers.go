@@ -124,7 +124,7 @@ func Router(
 		// By the time Bundles arrive, the caller would either have to fetch order anyway, or this can be communicated in another way.
 		cr.Method(http.MethodGet, "/batches/count", metricsMwr("CountBatches", authMwr(handlers.AppHandler(credh.CountBatches))))
 		cr.Method(http.MethodGet, "/batches", metricsMwr("ListBatches", supportMwr(handlers.AppHandler(credh.ListBatches))))
-		cr.Method(http.MethodDelete, "/batches", metricsMwr("DeleteBatchSeats", supportMwr(handlers.AppHandler(credh.DeleteBatchSeats))))
+		cr.Method(http.MethodDelete, "/batches", metricsMwr("DeleteBatches", supportMwr(handlers.AppHandler(credh.DeleteBatches))))
 
 		// Handle the old endpoint while the new is being rolled out:
 		// - true: the handler uses itemID as the request id, which is the old mode;

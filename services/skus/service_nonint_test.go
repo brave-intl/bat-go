@@ -7548,7 +7548,7 @@ func (s *mockPaidOrderCreator) appendOrderMetadata(ctx context.Context, oid uuid
 	return s.fnAppendOrderMetadata(ctx, oid, mdata)
 }
 
-func TestService_ListBatches(t *testing.T) {
+func TestService_ListActiveBatches(t *testing.T) {
 	type tcGiven struct {
 		orderID  uuid.UUID
 		itemID   uuid.UUID
@@ -7692,8 +7692,7 @@ func TestService_ListBatches(t *testing.T) {
 					},
 				},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
-						must.Equal(t, (*uuid.UUID)(nil), itemID)
+					FnActiveBatchesByOrder: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
 						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
 					},
 				},
@@ -7709,9 +7708,7 @@ func TestService_ListBatches(t *testing.T) {
 				ordRepo: &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
-						// itemID must be nil when no specific item is requested
-						must.Equal(t, (*uuid.UUID)(nil), itemID)
+					FnActiveBatchesByOrder: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
 						return []model.TLV2ActiveBatch{
 							{RequestID: "req-01"},
 						}, nil
@@ -7731,8 +7728,7 @@ func TestService_ListBatches(t *testing.T) {
 				ordRepo: &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
-						must.NotEqual(t, (*uuid.UUID)(nil), itemID)
+					FnActiveBatchesByOrderItem: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
 						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
 						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
 					},
@@ -7762,7 +7758,7 @@ func TestService_ListBatches(t *testing.T) {
 
 			ctx := context.Background()
 
-			actual, err := svc.ListBatches(ctx, tc.given.orderID, tc.given.itemID)
+			actual, err := svc.ListActiveBatches(ctx, tc.given.orderID, tc.given.itemID)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
 			if tc.exp.err != nil {
@@ -7774,7 +7770,7 @@ func TestService_ListBatches(t *testing.T) {
 	}
 }
 
-func TestService_DeleteBatchSeats(t *testing.T) {
+func TestService_DeleteBatches(t *testing.T) {
 	type tcGiven struct {
 		orderID  uuid.UUID
 		itemID   uuid.UUID
@@ -7805,7 +7801,7 @@ func TestService_DeleteBatchSeats(t *testing.T) {
 		}, nil
 	}
 
-	twoBatches := func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+	twoBatches := func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
 		return []model.TLV2ActiveBatch{
 			{RequestID: "req-01"},
 			{RequestID: "req-02"},
@@ -7903,11 +7899,10 @@ func TestService_DeleteBatchSeats(t *testing.T) {
 					},
 				},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
-						must.Equal(t, (*uuid.UUID)(nil), itemID)
+					FnActiveBatchesByOrder: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
 						return []model.TLV2ActiveBatch{{RequestID: "req-01"}}, nil
 					},
-					FnDeleteByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+					FnDeleteCredsByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
 						return nil
 					},
 				},
@@ -7923,7 +7918,7 @@ func TestService_DeleteBatchSeats(t *testing.T) {
 				ordRepo: &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, itemID *uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
+					FnActiveBatchesByOrder: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
 						return []model.TLV2ActiveBatch{}, nil
 					},
 				},
@@ -7933,19 +7928,17 @@ func TestService_DeleteBatchSeats(t *testing.T) {
 		},
 
 		{
-			name: "seats_capped_to_batch_count",
+			name: "seats_exceeds_batch_count",
 			given: tcGiven{
 				orderID:  uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
 				seats:    10, // > 2 active batches
 				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatches:      twoBatches,
-					FnDeleteByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error { return nil },
+					FnActiveBatchesByOrder: twoBatches,
 				},
 			},
-			// all 2 batches deleted even though 10 were requested
-			exp: tcExpected{deletedReqIDs: []string{"req-01", "req-02"}},
+			exp: tcExpected{err: model.ErrBatchSeatsExceeded},
 		},
 
 		{
@@ -7956,8 +7949,8 @@ func TestService_DeleteBatchSeats(t *testing.T) {
 				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatches:      twoBatches,
-					FnDeleteByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error { return nil },
+					FnActiveBatchesByOrder:    twoBatches,
+					FnDeleteCredsByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error { return nil },
 				},
 			},
 			// only the oldest batch (req-01) should be deleted
@@ -7973,10 +7966,10 @@ func TestService_DeleteBatchSeats(t *testing.T) {
 
 			var capturedIDs []string
 
-			// Wrap FnDeleteByRequestIDs to capture what IDs were passed.
-			if tc.given.tlv2Repo.FnDeleteByRequestIDs != nil {
-				inner := tc.given.tlv2Repo.FnDeleteByRequestIDs
-				tc.given.tlv2Repo.FnDeleteByRequestIDs = func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+			// Wrap FnDeleteCredsByRequestIDs to capture what IDs were passed.
+			if tc.given.tlv2Repo.FnDeleteCredsByRequestIDs != nil {
+				inner := tc.given.tlv2Repo.FnDeleteCredsByRequestIDs
+				tc.given.tlv2Repo.FnDeleteCredsByRequestIDs = func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
 					capturedIDs = requestIDs
 					return inner(ctx, dbi, orderID, requestIDs)
 				}
@@ -8009,8 +8002,8 @@ func TestService_DeleteBatchSeats(t *testing.T) {
 
 			ctx := context.Background()
 
-			err := svc.DeleteBatchSeats(ctx, tc.given.orderID, tc.given.itemID, tc.given.seats)
-			must.Equal(t, true, errors.Is(err, tc.exp.err))
+			err := svc.DeleteBatches(ctx, tc.given.orderID, tc.given.itemID, tc.given.seats)
+			must.ErrorIs(t, err, tc.exp.err)
 
 			if tc.exp.err != nil {
 				return
