@@ -675,6 +675,22 @@ func TestCred_DeleteBatches(t *testing.T) {
 		},
 
 		{
+			name: "seats_exceeds_batch_count",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"seats":5}`,
+				svc: &mockTLV2Svc{
+					FnDeleteBatches: func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+						return model.ErrBatchSeatsExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrBatchSeatsExceeded, "seats exceeds active batch count", http.StatusBadRequest),
+			},
+		},
+
+		{
 			name: "success",
 			given: tcGiven{
 				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),

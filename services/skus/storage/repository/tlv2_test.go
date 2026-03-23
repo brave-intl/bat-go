@@ -754,10 +754,7 @@ func TestTLV2_ActiveBatchesByOrder(t *testing.T) {
 				must.Equal(t, nil, err)
 			}
 
-			var (
-				actual []model.TLV2ActiveBatch
-				err    error
-			)
+			var actual []model.TLV2ActiveBatch
 			if tc.given.itemID != nil {
 				actual, err = repo.ActiveBatchesByOrderItem(ctx, tx, tc.given.orderID, *tc.given.itemID, tc.given.now)
 			} else {
