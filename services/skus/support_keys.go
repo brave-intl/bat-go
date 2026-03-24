@@ -159,5 +159,13 @@ func SignSupportRequest(key ed25519.PrivateKey, r *http.Request) error {
 
 	r.Header.Set("Date", time.Now().UTC().Format(time.RFC1123))
 
+	// BuildSigningString skips digest computation when req.Body is nil,
+	// producing an empty "SHA-256=" header that doesn't match what the
+	// server computes (SHA-256 of zero bytes). Treat a nil body as
+	// http.NoBody so the empty-body hash is always included in the signature.
+	if r.Body == nil {
+		r.Body = http.NoBody
+	}
+
 	return ps.SignRequest(r)
 }
