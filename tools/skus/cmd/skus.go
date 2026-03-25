@@ -122,7 +122,6 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	// Resolve order ID from email if needed.
 	if email != "" {
 		subsURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
 		subsToken := viper.GetString("subscriptions-token")
@@ -190,8 +189,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// subsSearchResult mirrors the JSON returned by the subscriptions service
-// support endpoint.
+// subsSearchResult mirrors the JSON returned by the subscriptions service support endpoint.
 type subsSearchResult struct {
 	SubscriberID   string     `json:"subscriber_id"`
 	Email          string     `json:"email"`
@@ -200,10 +198,15 @@ type subsSearchResult struct {
 	CreatedAt      *time.Time `json:"created_at"`
 }
 
-// resolveOrderIDByEmail queries the subscriptions service for orders
-// associated with the given email fragment, presents the results to the
-// support operator, and returns the chosen order ID.
-func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, token, email string) (string, error) {
+// resolveOrderIDByEmail queries the subscriptions service for orders associated with
+// the given email fragment, presents the results to the support operator, and returns
+// the chosen order ID.
+func resolveOrderIDByEmail(
+	ctx context.Context,
+	client *http.Client,
+	subsURL,
+	token, email string,
+) (string, error) {
 	searchURL := subsURL + "/v1/support/subscribers/search?" + url.Values{"email": {email}}.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
@@ -236,7 +239,6 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, to
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Filter to results that actually have an order ID.
 	var withOrder []subsSearchResult
 	for _, r := range result.Results {
 		if r.OrderID != nil && *r.OrderID != "" {
@@ -253,7 +255,6 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, to
 		return *withOrder[0].OrderID, nil
 	}
 
-	// Multiple results — let support choose.
 	fmt.Printf("Found %d order(s) matching %q:\n\n", len(withOrder), email)
 	fmt.Printf("  %-3s  %-36s  %-40s  %-20s  %s\n",
 		"#", "order_id", "subscription_id", "created_at", "email")
@@ -287,7 +288,13 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, to
 	}
 }
 
-func listBatches(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey) ([]model.TLV2ActiveBatch, error) {
+func listBatches(
+	ctx context.Context,
+	client *http.Client,
+	endpoint string,
+	key ed25519.PrivateKey) ([]model.TLV2ActiveBatch,
+	error,
+) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -323,7 +330,14 @@ func listBatches(ctx context.Context, client *http.Client, endpoint string, key 
 	return result.Batches, nil
 }
 
-func deleteBatchSeats(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey, seats int, itemID string) error {
+func deleteBatchSeats(
+	ctx context.Context,
+	client *http.Client,
+	endpoint string,
+	key ed25519.PrivateKey,
+	seats int,
+	itemID string,
+) error {
 	payload := struct {
 		Seats  int    `json:"seats"`
 		ItemID string `json:"item_id,omitempty"`
