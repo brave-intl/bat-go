@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,8 +36,16 @@ var resetLinkingLimitCmd = &cobra.Command{
 	Long: `Frees N device linking slots for a TLV2 order by deleting the oldest active
 credential batches. Each batch corresponds to one linked device.
 
+The order can be identified by --order-id or by --email (which looks up
+the subscriber in the subscriptions service). If multiple orders match an
+email you will be prompted to choose one.
+
 The command shows which batches will be removed and asks for confirmation
-before making any changes.`,
+before making any changes.
+
+Note: email lookup only works for desktop/browser orders created through
+the subscriptions service. iOS and Android orders use anonymous receipts
+and cannot be looked up by email.`,
 	RunE: runResetLinkingLimit,
 }
 
@@ -53,9 +62,22 @@ func init() {
 		Require()
 
 	fb.Flag().String("order-id", "",
-		"the order UUID to reset linking slots for").
-		Bind("order-id").
-		Require()
+		"the order UUID to reset linking slots for (mutually exclusive with --email)").
+		Bind("order-id")
+
+	fb.Flag().String("email", "",
+		"subscriber email to look up orders for (mutually exclusive with --order-id)").
+		Bind("email")
+
+	fb.Flag().String("subscriptions-base-url", "",
+		"base URL of the subscriptions service, required when --email is used").
+		Env("SUBSCRIPTIONS_BASE_URL").
+		Bind("subscriptions-base-url")
+
+	fb.Flag().String("subscriptions-token", "",
+		"bearer token for the subscriptions service support API, required when --email is used").
+		Env("SUBSCRIPTIONS_SUPPORT_TOKEN").
+		Bind("subscriptions-token")
 
 	fb.Flag().Int("seats", 0,
 		"number of device slots to free (deletes this many oldest batches)").
@@ -76,11 +98,20 @@ func init() {
 func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	baseURL := strings.TrimRight(viper.GetString("skus-base-url"), "/")
 	orderID := viper.GetString("order-id")
+	email := strings.TrimSpace(viper.GetString("email"))
 	seats := viper.GetInt("seats")
 	itemID := viper.GetString("item-id")
 
 	if seats <= 0 {
 		return fmt.Errorf("--seats must be a positive integer")
+	}
+
+	if orderID == "" && email == "" {
+		return fmt.Errorf("one of --order-id or --email is required")
+	}
+
+	if orderID != "" && email != "" {
+		return fmt.Errorf("--order-id and --email are mutually exclusive")
 	}
 
 	privKey, err := loadED25519PrivateKey(viper.GetString("private-key"))
@@ -90,6 +121,26 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
+
+	// Resolve order ID from email if needed.
+	if email != "" {
+		subsURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
+		subsToken := viper.GetString("subscriptions-token")
+
+		if subsURL == "" {
+			return fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required when --email is used")
+		}
+		if subsToken == "" {
+			return fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required when --email is used")
+		}
+
+		resolved, err := resolveOrderIDByEmail(ctx, client, subsURL, subsToken, email)
+		if err != nil {
+			return fmt.Errorf("email lookup failed: %w", err)
+		}
+
+		orderID = resolved
+	}
 
 	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
 	if itemID != "" {
@@ -137,6 +188,131 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Done. %d device slot(s) freed for order %s.\n", seats, orderID)
 
 	return nil
+}
+
+// subsSearchResult mirrors the JSON returned by the subscriptions service
+// support endpoint.
+type subsSearchResult struct {
+	SubscriberID   string       `json:"subscriber_id"`
+	Email          string       `json:"email"`
+	SubscriptionID string       `json:"subscription_id"`
+	OrderID        nullString   `json:"order_id"`
+	ExpiresAt      *time.Time   `json:"expires_at"`
+	CreatedAt      *time.Time   `json:"created_at"`
+}
+
+// nullString unmarshals a JSON object with {"String":"...","Valid":true} as
+// produced by database/sql.NullString, as well as a plain JSON string.
+type nullString struct {
+	sql.NullString
+}
+
+func (n *nullString) UnmarshalJSON(b []byte) error {
+	// Plain string
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		n.String = s
+		n.Valid = s != ""
+		return nil
+	}
+	// sql.NullString object
+	var obj struct {
+		String string `json:"String"`
+		Valid  bool   `json:"Valid"`
+	}
+	if err := json.Unmarshal(b, &obj); err != nil {
+		return err
+	}
+	n.String = obj.String
+	n.Valid = obj.Valid
+	return nil
+}
+
+// resolveOrderIDByEmail queries the subscriptions service for orders
+// associated with the given email fragment, presents the results to the
+// support operator, and returns the chosen order ID.
+func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, token, email string) (string, error) {
+	searchURL := subsURL + "/v1/support/subscribers/search?" + url.Values{"email": {email}}.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("subscriptions service returned %d: %s", resp.StatusCode, body)
+	}
+
+	var result struct {
+		Results []subsSearchResult `json:"results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Filter to results that actually have an order ID.
+	var withOrder []subsSearchResult
+	for _, r := range result.Results {
+		if r.OrderID.Valid && r.OrderID.String != "" {
+			withOrder = append(withOrder, r)
+		}
+	}
+
+	if len(withOrder) == 0 {
+		return "", fmt.Errorf("no orders found for email %q", email)
+	}
+
+	if len(withOrder) == 1 {
+		fmt.Printf("Found 1 order for %s  (subscriber %s)\n\n", withOrder[0].Email, withOrder[0].SubscriberID)
+		return withOrder[0].OrderID.String, nil
+	}
+
+	// Multiple results — let support choose.
+	fmt.Printf("Found %d order(s) matching %q:\n\n", len(withOrder), email)
+	fmt.Printf("  %-3s  %-36s  %-40s  %-20s  %s\n",
+		"#", "order_id", "subscription_id", "created_at", "email")
+	fmt.Printf("  %-3s  %-36s  %-40s  %-20s  %s\n",
+		"---", strings.Repeat("-", 36), strings.Repeat("-", 40), strings.Repeat("-", 20), strings.Repeat("-", 30))
+
+	for i, r := range withOrder {
+		created := ""
+		if r.CreatedAt != nil {
+			created = r.CreatedAt.UTC().Format("2006-01-02 15:04")
+		}
+		fmt.Printf("  %-3d  %-36s  %-40s  %-20s  %s\n",
+			i+1, r.OrderID.String, r.SubscriptionID, created, r.Email)
+	}
+	fmt.Println()
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Printf("Select order [1-%d]: ", len(withOrder))
+		if !scanner.Scan() {
+			return "", fmt.Errorf("no selection made")
+		}
+
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimSpace(scanner.Text()), "%d", &n); err != nil || n < 1 || n > len(withOrder) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(withOrder))
+			continue
+		}
+
+		return withOrder[n-1].OrderID.String, nil
+	}
 }
 
 func listBatches(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey) ([]model.TLV2ActiveBatch, error) {
