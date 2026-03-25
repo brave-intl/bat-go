@@ -5,13 +5,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -193,39 +193,11 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 // subsSearchResult mirrors the JSON returned by the subscriptions service
 // support endpoint.
 type subsSearchResult struct {
-	SubscriberID   string       `json:"subscriber_id"`
-	Email          string       `json:"email"`
-	SubscriptionID string       `json:"subscription_id"`
-	OrderID        nullString   `json:"order_id"`
-	ExpiresAt      *time.Time   `json:"expires_at"`
-	CreatedAt      *time.Time   `json:"created_at"`
-}
-
-// nullString unmarshals a JSON object with {"String":"...","Valid":true} as
-// produced by database/sql.NullString, as well as a plain JSON string.
-type nullString struct {
-	sql.NullString
-}
-
-func (n *nullString) UnmarshalJSON(b []byte) error {
-	// Plain string
-	var s string
-	if err := json.Unmarshal(b, &s); err == nil {
-		n.String = s
-		n.Valid = s != ""
-		return nil
-	}
-	// sql.NullString object
-	var obj struct {
-		String string `json:"String"`
-		Valid  bool   `json:"Valid"`
-	}
-	if err := json.Unmarshal(b, &obj); err != nil {
-		return err
-	}
-	n.String = obj.String
-	n.Valid = obj.Valid
-	return nil
+	SubscriberID   string     `json:"subscriber_id"`
+	Email          string     `json:"email"`
+	SubscriptionID string     `json:"subscription_id"`
+	OrderID        *string    `json:"order_id"`
+	CreatedAt      *time.Time `json:"created_at"`
 }
 
 // resolveOrderIDByEmail queries the subscriptions service for orders
@@ -267,7 +239,7 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, to
 	// Filter to results that actually have an order ID.
 	var withOrder []subsSearchResult
 	for _, r := range result.Results {
-		if r.OrderID.Valid && r.OrderID.String != "" {
+		if r.OrderID != nil && *r.OrderID != "" {
 			withOrder = append(withOrder, r)
 		}
 	}
@@ -278,7 +250,7 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, to
 
 	if len(withOrder) == 1 {
 		fmt.Printf("Found 1 order for %s  (subscriber %s)\n\n", withOrder[0].Email, withOrder[0].SubscriberID)
-		return withOrder[0].OrderID.String, nil
+		return *withOrder[0].OrderID, nil
 	}
 
 	// Multiple results — let support choose.
@@ -294,7 +266,7 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, to
 			created = r.CreatedAt.UTC().Format("2006-01-02 15:04")
 		}
 		fmt.Printf("  %-3d  %-36s  %-40s  %-20s  %s\n",
-			i+1, r.OrderID.String, r.SubscriptionID, created, r.Email)
+			i+1, *r.OrderID, r.SubscriptionID, created, r.Email)
 	}
 	fmt.Println()
 
@@ -305,13 +277,13 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, subsURL, to
 			return "", fmt.Errorf("no selection made")
 		}
 
-		var n int
-		if _, err := fmt.Sscanf(strings.TrimSpace(scanner.Text()), "%d", &n); err != nil || n < 1 || n > len(withOrder) {
+		n, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
+		if err != nil || n < 1 || n > len(withOrder) {
 			fmt.Printf("Please enter a number between 1 and %d.\n", len(withOrder))
 			continue
 		}
 
-		return withOrder[n-1].OrderID.String, nil
+		return *withOrder[n-1].OrderID, nil
 	}
 }
 
