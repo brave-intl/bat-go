@@ -947,7 +947,7 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 		return h
 	}
 
-	router := Router(suite.service, authMwr, instrumentHandler, newCORSOptsEnv())
+	router := Router(suite.service, authMwr, noopMwr, instrumentHandler, newCORSOptsEnv())
 
 	router.Mount("/vote", VoteRouter(suite.service, instrumentHandler))
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -1470,7 +1470,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		return h
 	}
 
-	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
+	router := Router(skuService, authMwr, noopMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1621,7 +1621,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		return h
 	}
 
-	router := Router(skuService, authMwr, instrumentHandler, newCORSOptsEnv())
+	router := Router(skuService, authMwr, noopMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -1740,7 +1740,7 @@ func (suite *ControllersTestSuite) TestCreateOrderCreds_SingleUse_ExistingOrderC
 		return h
 	}
 
-	router := Router(service, authMwr, instrumentHandler, newCORSOptsEnv())
+	router := Router(service, authMwr, noopMwr, instrumentHandler, newCORSOptsEnv())
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, r)
@@ -2004,6 +2004,8 @@ func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string 
 
 	return mac
 }
+
+func noopMwr(next http.Handler) http.Handler { return next }
 
 func newCORSOptsEnv() cors.Options {
 	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
