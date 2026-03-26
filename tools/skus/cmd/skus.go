@@ -194,7 +194,8 @@ type subsSearchResult struct {
 	SubscriberID   string     `json:"subscriber_id"`
 	Email          string     `json:"email"`
 	SubscriptionID string     `json:"subscription_id"`
-	OrderID        *string    `json:"order_id"`
+	OrderID        string     `json:"order_id"`
+	ProductName    string     `json:"product_name"`
 	CreatedAt      *time.Time `json:"created_at"`
 }
 
@@ -207,6 +208,10 @@ func resolveOrderIDByEmail(
 	subsURL,
 	token, email string,
 ) (string, error) {
+	if len(email) < 6 {
+		return "", fmt.Errorf("email must be at least 6 characters")
+	}
+
 	searchURL := subsURL + "/v1/support/subscribers/search?" + url.Values{"email": {email}}.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
@@ -239,52 +244,49 @@ func resolveOrderIDByEmail(
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	var withOrder []subsSearchResult
-	for _, r := range result.Results {
-		if r.OrderID != nil && *r.OrderID != "" {
-			withOrder = append(withOrder, r)
-		}
-	}
-
-	if len(withOrder) == 0 {
+	matches := result.Results
+	if len(matches) == 0 {
 		return "", fmt.Errorf("no orders found for email %q", email)
 	}
 
-	if len(withOrder) == 1 {
-		fmt.Printf("Found 1 order for %s  (subscriber %s)\n\n", withOrder[0].Email, withOrder[0].SubscriberID)
-		return *withOrder[0].OrderID, nil
+	if len(matches) == 1 {
+		fmt.Printf("Found 1 order for %s (subscriber %s)\n\n", matches[0].Email, matches[0].SubscriberID)
+		return matches[0].OrderID, nil
 	}
 
-	fmt.Printf("Found %d order(s) matching %q:\n\n", len(withOrder), email)
-	fmt.Printf("  %-3s  %-36s  %-40s  %-20s  %s\n",
-		"#", "order_id", "subscription_id", "created_at", "email")
-	fmt.Printf("  %-3s  %-36s  %-40s  %-20s  %s\n",
-		"---", strings.Repeat("-", 36), strings.Repeat("-", 40), strings.Repeat("-", 20), strings.Repeat("-", 30))
+	fmt.Printf("Found %d order(s) matching %q:\n\n", len(matches), email)
+	fmt.Printf("  %-3s  %-36s  %-20s  %-40s  %-20s  %s\n",
+		"#", "order_id", "product", "subscription_id", "created_at", "email")
+	fmt.Printf("  %-3s  %-36s  %-20s  %-40s  %-20s  %s\n",
+		"---", strings.Repeat("-", 36), strings.Repeat("-", 20), strings.Repeat("-", 40), strings.Repeat("-", 20), strings.Repeat("-", 30))
 
-	for i, r := range withOrder {
+	for i, r := range matches {
 		created := ""
 		if r.CreatedAt != nil {
 			created = r.CreatedAt.UTC().Format("2006-01-02 15:04")
 		}
-		fmt.Printf("  %-3d  %-36s  %-40s  %-20s  %s\n",
-			i+1, *r.OrderID, r.SubscriptionID, created, r.Email)
+		fmt.Printf("  %-3d  %-36s  %-20s  %-40s  %-20s  %s\n",
+			i+1, r.OrderID, r.ProductName, r.SubscriptionID, created, r.Email)
 	}
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Printf("Select order [1-%d]: ", len(withOrder))
+		fmt.Printf("Select order [1-%d]: ", len(matches))
 		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return "", fmt.Errorf("reading stdin: %w", err)
+			}
 			return "", fmt.Errorf("no selection made")
 		}
 
 		n, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
-		if err != nil || n < 1 || n > len(withOrder) {
-			fmt.Printf("Please enter a number between 1 and %d.\n", len(withOrder))
+		if err != nil || n < 1 || n > len(matches) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(matches))
 			continue
 		}
 
-		return *withOrder[n-1].OrderID, nil
+		return matches[n-1].OrderID, nil
 	}
 }
 
@@ -292,9 +294,8 @@ func listBatches(
 	ctx context.Context,
 	client *http.Client,
 	endpoint string,
-	key ed25519.PrivateKey) ([]model.TLV2ActiveBatch,
-	error,
-) {
+	key ed25519.PrivateKey,
+) ([]model.TLV2ActiveBatch, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
