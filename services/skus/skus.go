@@ -318,7 +318,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		Description:                 "brave-origin-premium-perpetual-license",
 		CredentialType:              "time-limited-v2",
 		CredentialValidDuration:     "P100Y",
-		Price:                       decimal.RequireFromString("60.00"),
+		Price:                       decimal.RequireFromString("59.99"),
 		IssuerTokenBuffer:           ptrTo(1),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P100Y"),
@@ -354,7 +354,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		originpl.Location = "origin.brave.com"
 		originpl.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_TZAuP2GKA3laWY",
-			ItemID:    "price_1Sc2YKBSm1mtrN9nqprVq0Fe",
+			ItemID:    "price_1TGxS9BSm1mtrN9naVeS1AXT",
 		}
 
 	case "sandbox", "staging":
@@ -385,7 +385,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		originpl.Location = "origin.bravesoftware.com"
 		originpl.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_TZArNEn4pFPvs7",
-			ItemID:    "price_1Sc2WDBSm1mtrN9nzZ9HuCtj",
+			ItemID:    "price_1TGxPkBSm1mtrN9n8jxLTz68",
 		}
 
 	case "dev", "development":
@@ -416,7 +416,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		originpl.Location = "origin.brave.software"
 		originpl.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_TUIQJzhz8JKwOa",
-			ItemID:    "price_1Sc2MdHof20bphG6U2qoENGZ",
+			ItemID:    "price_1TGxggHof20bphG6rCcEDzwh",
 		}
 
 	default:
@@ -448,7 +448,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		originpl.Location = "origin.brave.software"
 		originpl.StripeMetadata = &model.ItemStripeMetadata{
 			ProductID: "prod_TUIQJzhz8JKwOa",
-			ItemID:    "price_1Sc2MdHof20bphG6U2qoENGZ",
+			ItemID:    "price_1TGxggHof20bphG6rCcEDzwh",
 		}
 	}
 
