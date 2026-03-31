@@ -110,6 +110,10 @@ type tlv2Store interface {
 	GetCredSubmissionReport(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID, reqID uuid.UUID, firstBCred string) (model.TLV2CredSubmissionReport, error)
 	UniqBatches(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error)
 	DeleteLegacy(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID) error
+	ActiveBatchesByOrder(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error)
+	ActiveBatchesByOrderItem(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error)
+	DeleteCredsByRequestIDs(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error
+	DeleteOutboxByRequestIDs(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error
 }
 
 type vendorReceiptValidator interface {
@@ -1253,7 +1257,7 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		}
 	}
 
-	if item.CredentialType != timeLimitedV2 {
+	if !item.IsCredTLV2() {
 		return 0, 0, model.ErrUnsupportedCredType
 	}
 
@@ -1263,6 +1267,125 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return maxTLV2ActiveDailyItemCreds, nact, nil
+}
+
+// ListActiveBatches returns the currently active credential batches for an order, ordered oldest-first.
+// When itemID is uuid.Nil, batches across all items in the order are returned.
+func (s *Service) ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error) {
+	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !ord.IsPaid() {
+		return nil, model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return nil, model.ErrInvalidOrderNoItems
+	}
+
+	if err := isValidBatchReq(ord, itemID); err != nil {
+		return nil, err
+	}
+
+	if !uuid.Equal(itemID, uuid.Nil) {
+		return s.tlv2Repo.ActiveBatchesByOrderItem(ctx, s.Datastore.RawDB(), orderID, itemID, time.Now())
+	}
+
+	return s.tlv2Repo.ActiveBatchesByOrder(ctx, s.Datastore.RawDB(), orderID, time.Now())
+}
+
+// DeleteBatches frees device linking slots by deleting the oldest active credential
+// batches for an order. seats controls how many slots to free.
+// When itemID is uuid.Nil, the oldest batches across all items are targeted.
+func (s *Service) DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error {
+	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord.IsPaid() {
+		return model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return model.ErrInvalidOrderNoItems
+	}
+
+	if err := isValidBatchReq(ord, itemID); err != nil {
+		return err
+	}
+
+	db := s.Datastore.RawDB()
+
+	var batches []model.TLV2ActiveBatch
+	if !uuid.Equal(itemID, uuid.Nil) {
+		batches, err = s.tlv2Repo.ActiveBatchesByOrderItem(ctx, db, orderID, itemID, time.Now())
+	} else {
+		batches, err = s.tlv2Repo.ActiveBatchesByOrder(ctx, db, orderID, time.Now())
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if len(batches) == 0 {
+		return nil
+	}
+
+	if seats > len(batches) {
+		return model.ErrBatchSeatsExceeded
+	}
+
+	requestIDs := make([]string, seats)
+	for i := range seats {
+		requestIDs[i] = batches[i].RequestID
+	}
+
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer s.Datastore.RollbackTx(tx)
+
+	if err := s.deleteBatchesTx(ctx, tx, orderID, requestIDs); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+	if err := s.tlv2Repo.DeleteCredsByRequestIDs(ctx, dbi, orderID, requestIDs); err != nil {
+		return err
+	}
+
+	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
+}
+
+// isValidBatchReq validates that the order contains TLV2 credentials. When itemID is
+// non-nil it checks that the specific item exists and is TLV2; otherwise it requires
+// at least one TLV2 item in the order.
+func isValidBatchReq(ord *model.Order, itemID uuid.UUID) error {
+	if !uuid.Equal(itemID, uuid.Nil) {
+		item, ok := ord.HasItem(itemID)
+		if !ok {
+			return model.ErrOrderItemNotFound
+		}
+
+		if !item.IsCredTLV2() {
+			return model.ErrUnsupportedCredType
+		}
+
+		return nil
+	}
+
+	if !ord.ContainsTLV2Creds() {
+		return model.ErrUnsupportedCredType
+	}
+
+	return nil
 }
 
 // GetItemCredentials returns credentials based on the order, item and request id.

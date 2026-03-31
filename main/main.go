@@ -28,6 +28,8 @@ import (
 	_ "github.com/brave-intl/bat-go/services/ratios/cmd"
 	// pull in grants module. setup code is in init
 	_ "github.com/brave-intl/bat-go/services/grant/cmd"
+	// pull in skus support tooling. setup code is in init
+	_ "github.com/brave-intl/bat-go/tools/skus/cmd"
 )
 
 var (

@@ -51,6 +51,9 @@ const (
 	// ErrUnsupportedCredType is returned when requested operation is not supported for the cred type.
 	ErrUnsupportedCredType Error = "unsupported credential type"
 
+	// ErrBatchSeatsExceeded is returned when the requested seats exceeds the number of active batches.
+	ErrBatchSeatsExceeded Error = "model: seats exceeds active batch count"
+
 	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
 
 	ErrRadomInvalidNumAssocSubs Error = "model: invalid number of associated subs"
@@ -211,6 +214,16 @@ func (o *Order) HasItem(id uuid.UUID) (*OrderItem, bool) {
 	return OrderItemList(o.Items).HasItem(id)
 }
 
+func (o *Order) ContainsTLV2Creds() bool {
+	for _, it := range o.Items {
+		if it.IsCredTLV2() {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (o *Order) StripeSubID() (string, bool) {
 	sid, ok := o.Metadata["stripeSubscriptionId"].(string)
 
@@ -327,6 +340,10 @@ type OrderItem struct {
 	// TODO: Remove this when products & issuers have been reworked.
 	// The issuer for a product must be created when the product is created.
 	IssuerConfig *IssuerConfig `json:"-" db:"-"`
+}
+
+func (x *OrderItem) IsCredTLV2() bool {
+	return x.CredentialType == "time-limited-v2"
 }
 
 func (x *OrderItem) IsLeo() bool {
@@ -718,6 +735,23 @@ func (c *IssuerConfig) NumIntervals() int {
 type TLV2CredSubmissionReport struct {
 	Submitted     bool `db:"submitted"`
 	ReqIDMismatch bool `db:"req_id_mismatch"`
+}
+
+// TLV2ActiveBatch summarises one active credential batch, corresponding to one linked device.
+type TLV2ActiveBatch struct {
+	RequestID       string    `db:"request_id"        json:"request_id"`
+	OldestValidFrom time.Time `db:"oldest_valid_from" json:"oldest_valid_from"`
+}
+
+// BatchListResp is the response body for the list active batches endpoint.
+type BatchListResp struct {
+	Batches []TLV2ActiveBatch `json:"batches"`
+}
+
+// DeleteBatchesReq is the request body for the delete batches endpoint.
+type DeleteBatchesReq struct {
+	Seats  int    `json:"seats"`
+	ItemID string `json:"item_id"`
 }
 
 // ReceiptRequest represents a receipt submitted by a mobile or web client.
