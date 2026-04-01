@@ -230,6 +230,12 @@ func (o *Order) StripeSubID() (string, bool) {
 	return sid, ok
 }
 
+func (o *Order) StripePaymentID() (string, bool) {
+	sid, ok := o.Metadata["stripePaymentId"].(string)
+
+	return sid, ok
+}
+
 func (o *Order) StripeSessID() (string, bool) {
 	sessID, ok := o.Metadata["stripeCheckoutSessionId"].(string)
 
