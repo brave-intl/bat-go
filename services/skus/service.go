@@ -630,6 +630,11 @@ func (s *Service) getTransformOrderTx(ctx context.Context, dbi sqlx.ExtContext, 
 		return ord, nil
 	}
 
+	// Nothing more to do for orders with a Stripe payment id.
+	if _, ok := ord.StripePaymentID(); ok {
+		return ord, nil
+	}
+
 	// Nothing more to do for orders with a Radom subscription.
 	if _, ok := ord.RadomSubID(); ok {
 		return ord, nil
