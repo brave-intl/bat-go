@@ -2446,7 +2446,7 @@ func (s *Service) createOrderTx(ctx context.Context, dbi sqlx.ExtContext, oreq *
 	if len(items) == 1 && items[0].SKUVnt == "brave-search-premium-origin" {
 		expt := time.Now().AddDate(100, 0, 0)
 
-		if err := s.orderRepo.SetExpiresAt(ctx, dbi, result.ID, expt); err != nil {
+		if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, result.ID, expt, time.Now()); err != nil {
 			return nil, err
 		}
 	}
