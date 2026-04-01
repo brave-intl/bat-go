@@ -2443,6 +2443,14 @@ func (s *Service) createOrderTx(ctx context.Context, dbi sqlx.ExtContext, oreq *
 		return nil, err
 	}
 
+	if len(items) == 1 && items[0].SKUVnt == "brave-search-premium-origin" {
+		expt := time.Now().AddDate(100, 0, 0)
+
+		if err := s.orderRepo.SetExpiresAt(ctx, dbi, result.ID, expt); err != nil {
+			return nil, err
+		}
+	}
+
 	model.OrderItemList(items).SetOrderID(result.ID)
 
 	result.Items, err = s.orderItemRepo.InsertMany(ctx, dbi, items...)
