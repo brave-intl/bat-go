@@ -179,6 +179,14 @@ func (x *stripeNotification) orderID() (uuid.UUID, error) {
 	}
 }
 
+func (x *stripeNotification) payIntentInv() (*stripe.Invoice, error) {
+	if x.paymentIntent == nil {
+		return nil, errStripeUnsupportedEvent
+	}
+
+	return x.paymentIntent.Invoice, nil
+}
+
 func (x *stripeNotification) paymentID() (string, error) {
 	if x.paymentIntent == nil {
 		return "", errStripeUnsupportedEvent
