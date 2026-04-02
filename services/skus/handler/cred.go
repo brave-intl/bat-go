@@ -67,11 +67,11 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 	return handlers.RenderContent(ctx, result, w, http.StatusOK)
 }
 
-// ListBatches returns the active credential batches (linked devices) for an order.
+// ListActiveBatches returns the active credential batches (linked devices) for an order.
 // An optional item_id query parameter scopes the results to a specific order item.
 //
 // GET /v1/orders/{orderID}/credentials/batches
-func (h *Cred) ListBatches(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+func (h *Cred) ListActiveBatches(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
@@ -89,7 +89,7 @@ func (h *Cred) ListBatches(w http.ResponseWriter, r *http.Request) *handlers.App
 
 	batches, err := h.tlv2.ListActiveBatches(ctx, orderID, itemID)
 	if err != nil {
-		lg := logging.Logger(ctx, "skus").With().Str("func", "ListBatches").Logger()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "ListActiveBatches").Logger()
 
 		switch {
 		case errors.Is(err, context.Canceled):
