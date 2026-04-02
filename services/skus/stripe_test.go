@@ -965,3 +965,71 @@ func TestStripeNotification_paidAt(t *testing.T) {
 		})
 	}
 }
+
+func TestStripeNotification_payIntentInv(t *testing.T) {
+	type tcGiven struct {
+		ntf *stripeNotification
+	}
+
+	type tcExpected struct {
+		inv *stripe.Invoice
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_unsupported_event",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					sub: &stripe.Subscription{},
+				},
+			},
+			exp: tcExpected{
+				err: errStripeUnsupportedEvent,
+			},
+		},
+
+		{
+			name: "has_invoice",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					paymentIntent: &stripe.PaymentIntent{
+						Invoice: &stripe.Invoice{
+							AccountName: "has_invoice",
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				inv: &stripe.Invoice{
+					AccountName: "has_invoice",
+				},
+			},
+		},
+
+		{
+			name: "no_invoice",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					paymentIntent: &stripe.PaymentIntent{},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := tc.given.ntf.payIntentInv()
+			must.ErrorIs(t, err, tc.exp.err)
+			should.Equal(t, tc.exp.inv, actual)
+		})
+	}
+}

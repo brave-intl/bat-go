@@ -2811,6 +2811,18 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 		},
 
 		{
+			name: "activate_perpetual_license_has_invoice",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "payment_intent.succeeded"},
+					paymentIntent: &stripe.PaymentIntent{
+						Invoice: &stripe.Invoice{},
+					},
+				},
+			},
+		},
+
+		{
 			name: "activate_perpetual_license_order_id_error",
 			given: tcGiven{
 				ntf: &stripeNotification{
@@ -7627,9 +7639,9 @@ func TestService_ListActiveBatches(t *testing.T) {
 		{
 			name: "explicit_item_not_found",
 			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000001")), // not in the order
-				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				orderID:  uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:   uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000001")), // not in the order
+				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{},
 			},
@@ -7703,9 +7715,9 @@ func TestService_ListActiveBatches(t *testing.T) {
 		{
 			name: "all_items_returns_batches",
 			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				itemID:  uuid.Nil,
-				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				orderID:  uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:   uuid.Nil,
+				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
 					FnActiveBatchesByOrder: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
@@ -7723,9 +7735,9 @@ func TestService_ListActiveBatches(t *testing.T) {
 		{
 			name: "explicit_item_passes_item_id",
 			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
-				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				orderID:  uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:   uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
 					FnActiveBatchesByOrderItem: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
@@ -7781,8 +7793,8 @@ func TestService_DeleteBatches(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		err             error
-		deletedReqIDs   []string // what DeleteByRequestIDs should receive (nil = not called)
+		err           error
+		deletedReqIDs []string // what DeleteByRequestIDs should receive (nil = not called)
 	}
 
 	type testCase struct {
@@ -7913,9 +7925,9 @@ func TestService_DeleteBatches(t *testing.T) {
 		{
 			name: "no_active_batches_noop",
 			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				seats:   1,
-				ordRepo: &repository.MockOrder{FnGet: paidOrder},
+				orderID:  uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				seats:    1,
+				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
 					FnActiveBatchesByOrder: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, now time.Time) ([]model.TLV2ActiveBatch, error) {
@@ -7949,8 +7961,10 @@ func TestService_DeleteBatches(t *testing.T) {
 				ordRepo:  &repository.MockOrder{FnGet: paidOrder},
 				itemRepo: &repository.MockOrderItem{FnFindByOrderID: oneItem},
 				tlv2Repo: &repository.MockTLV2{
-					FnActiveBatchesByOrder:    twoBatches,
-					FnDeleteCredsByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error { return nil },
+					FnActiveBatchesByOrder: twoBatches,
+					FnDeleteCredsByRequestIDs: func(ctx context.Context, dbi sqlx.ExecerContext, orderID uuid.UUID, requestIDs []string) error {
+						return nil
+					},
 				},
 			},
 			// only the oldest batch (req-01) should be deleted

@@ -2029,6 +2029,19 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 		return s.recordPayFailureStripe(ctx, dbi, ord, subID)
 
 	case ntf.shouldActivatePL():
+		// We receive payment_intent.succeeded events for both subscriptions and one-off payments.
+		// Subscriptions are handled using a different event. In order to skip subscriptions
+		// generated payment_intent.succeeded events we can check for the existence of an invoice.
+		// If an invoice exists then we can assume it is a subscription and skip the event.
+		inv, err := ntf.payIntentInv()
+		if err != nil {
+			return err
+		}
+
+		if inv != nil {
+			return nil
+		}
+
 		oid, err := ntf.orderID()
 		if err != nil {
 			return err
@@ -2039,9 +2052,6 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		// Currently, we should only receive payment_intent.succeeded events for one-off payments
-		// i.e. those related to perpetual licenses. However, to safeguard we should
-		// check the order is definitely eligible before activating.
 		if !ord.IsOneOffPayment() {
 			return model.ErrOrderNotOneOffPayment
 		}
