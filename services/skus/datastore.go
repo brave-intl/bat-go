@@ -1233,6 +1233,10 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 			}
 
 		case timeLimitedV2:
+			if soResult.Data[i].ValidTo == nil {
+				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is nil", metadata.OrderID, metadata.ItemID)
+			}
+
 			validToRaw := soResult.Data[i].ValidTo.Value()
 			if validToRaw == nil {
 				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null", metadata.OrderID, metadata.ItemID)
