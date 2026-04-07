@@ -836,8 +836,11 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			avg, err := svc.Datastore.GetOutboxMovAvgDurationSeconds()
 			if err != nil {
 				l.Err(err).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", status).Msg("failed to get obx mov avg")
+
 				return handlers.WrapError(err, "Error getting credential retry-after", status)
 			}
+
+			l.Info().Int64("Retry-After", avg).Msg("avg retry after")
 
 			w.Header().Set("Retry-After", strconv.FormatInt(avg, 10))
 		}
@@ -846,6 +849,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			suCreds, ok := creds.([]OrderCreds)
 			if !ok {
 				l.Err(errTypeAssertion).Str("orderID", orderID.String()).Str("itemID", itemIDv.String()).Int("status", http.StatusInternalServerError).Msg("error getting credentials type assertion")
+
 				return handlers.WrapError(err, "Error getting credentials", http.StatusInternalServerError)
 			}
 
