@@ -28,7 +28,13 @@ import (
 
 // Production and staging support operator public keys.
 // TODO: replace with real operator keys before deploying to production.
-var prodSupportKeys = []string{}
+var prodSupportKeys = []string{
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOrfu3+NSBuhbWVMvfDBx0Q8PFrbW/lDmudBAHnh+JEn brian@brave.com",
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHztDxjww5PQlIh5xc7kyiH6C1chhr6iZZgBYSbVeEud egardner@brave.com",
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQBMZgw6sVSpCSv6OiGUtW+5Fl/IPfwcDUseOB+vLru mevangelista@brave.com",
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHU7Ag6PCwbpDPWhjFRh0YsOAaD+XwccpxDMmi/TRg1H steven@brave.com",
+	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDJ+CKHb3hMyD8kA7Wxlk1DeyUXGUtUUdpHL8zrE+pH5 jegan+support-test@brave.com",
+}
 
 // Development and sandbox support operator public keys.
 var devSupportKeys = []string{
