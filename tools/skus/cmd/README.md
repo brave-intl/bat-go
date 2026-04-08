@@ -1,5 +1,20 @@
 # bat-go skus — Support Runbook
 
+## Building
+
+The `bat-go` binary is built from the `main/` module at the root of the repository, which pulls in the skus tooling via its import of `tools/skus/cmd`.
+
+```bash
+cd main
+go build -o bat-go .
+```
+
+This produces a `bat-go` binary in the `main/` directory. Move it somewhere on your `PATH` or invoke it with its full path.
+
+You need Go 1.25 or later. Run `go version` to check.
+
+---
+
 ## reset-linking-limit
 
 Frees device linking slots for a premium subscriber. When a user hits their device limit and can't link new devices, this command deletes the oldest active credential batches (one batch = one linked device slot).
@@ -14,16 +29,18 @@ Frees device linking slots for a premium subscriber. When a user hits their devi
 
 ### Flags
 
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--skus-base-url` | Yes | Base URL of the SKUs/payments service |
-| `--private-key` | Yes | Path to your ed25519 private key file |
-| `--seats` | Yes | Number of device slots to free |
-| `--order-id` | One of these | Order UUID (mutually exclusive with `--email`) |
-| `--email` | One of these | Subscriber email (mutually exclusive with `--order-id`) |
-| `--subscriptions-base-url` | Yes, with `--email` | Base URL of the subscriptions service |
-| `--subscriptions-token` | Yes, with `--email` | Bearer token for the support API |
-| `--item-id` | No | Scope the reset to a specific order item UUID |
+| Flag | Env var | Required | Description |
+|------|---------|----------|-------------|
+| `--skus-base-url` | `SKUS_BASE_URL` | Yes | Base URL of the SKUs/payments service |
+| `--private-key` | `SKUS_SUPPORT_PRIVATE_KEY` | Yes | Path to your ed25519 private key file |
+| `--seats` | — | Yes | Number of device slots to free |
+| `--order-id` | — | One of these | Order UUID (mutually exclusive with `--email`) |
+| `--email` | `SUBSCRIBER_EMAIL` | One of these | Subscriber email (mutually exclusive with `--order-id`) |
+| `--subscriptions-base-url` | `SUBSCRIPTIONS_BASE_URL` | Yes, with `--email` | Base URL of the subscriptions service |
+| `--subscriptions-token` | `SUBSCRIPTIONS_SUPPORT_TOKEN` | Yes, with `--email` | Bearer token for the support API |
+| `--item-id` | — | No | Scope the reset to a specific order item UUID |
+
+Flags take precedence over env vars.
 
 ### Usage
 

@@ -58,8 +58,7 @@ func init() {
 	fb.Flag().String("skus-base-url", "",
 		"base URL of the SKUs service (e.g. https://payment.rewards.brave.com)").
 		Env("SKUS_BASE_URL").
-		Bind("skus-base-url").
-		Require()
+		Bind("skus-base-url")
 
 	fb.Flag().String("order-id", "",
 		"the order UUID to reset linking slots for (mutually exclusive with --email)").
@@ -92,8 +91,7 @@ func init() {
 	fb.Flag().String("private-key", "",
 		"path to the ed25519 private key file in SSH format used to sign requests").
 		Env("SKUS_SUPPORT_PRIVATE_KEY").
-		Bind("private-key").
-		Require()
+		Bind("private-key")
 }
 
 func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
@@ -102,6 +100,14 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	email := strings.TrimSpace(viper.GetString("email"))
 	seats := viper.GetInt("seats")
 	itemID := viper.GetString("item-id")
+
+	if baseURL == "" {
+		return fmt.Errorf("--skus-base-url (or SKUS_BASE_URL) is required")
+	}
+
+	if viper.GetString("private-key") == "" {
+		return fmt.Errorf("--private-key (or SKUS_SUPPORT_PRIVATE_KEY) is required")
+	}
 
 	if seats <= 0 {
 		return fmt.Errorf("--seats must be a positive integer")
