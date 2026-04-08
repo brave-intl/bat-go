@@ -66,16 +66,17 @@ func init() {
 		Bind("order-id")
 
 	fb.Flag().String("email", "",
-		"subscriber email to look up orders for (mutually exclusive with --order-id)").
+		"subscriber email to look up the order ID (mutually exclusive with --order-id)").
+		Env("SUBSCRIBER_EMAIL").
 		Bind("email")
 
 	fb.Flag().String("subscriptions-base-url", "",
-		"base URL of the subscriptions service, required when --email is used").
+		"base URL of the subscriptions service, required when using --email").
 		Env("SUBSCRIPTIONS_BASE_URL").
 		Bind("subscriptions-base-url")
 
 	fb.Flag().String("subscriptions-token", "",
-		"bearer token for the subscriptions service support API, required when --email is used").
+		"bearer token for the subscriptions support API, required when using --email").
 		Env("SUBSCRIPTIONS_SUPPORT_TOKEN").
 		Bind("subscriptions-token")
 
@@ -106,11 +107,10 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--seats must be a positive integer")
 	}
 
-	if orderID == "" && email == "" {
+	switch {
+	case orderID == "" && email == "":
 		return fmt.Errorf("one of --order-id or --email is required")
-	}
-
-	if orderID != "" && email != "" {
+	case orderID != "" && email != "":
 		return fmt.Errorf("--order-id and --email are mutually exclusive")
 	}
 
@@ -123,22 +123,21 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	if email != "" {
-		subsURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
+		subsBaseURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
 		subsToken := viper.GetString("subscriptions-token")
 
-		if subsURL == "" {
-			return fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required when --email is used")
+		if subsBaseURL == "" {
+			return fmt.Errorf("--subscriptions-base-url is required when using --email")
 		}
+
 		if subsToken == "" {
-			return fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required when --email is used")
+			return fmt.Errorf("--subscriptions-token is required when using --email")
 		}
 
-		resolved, err := resolveOrderIDByEmail(ctx, client, subsURL, subsToken, email)
+		orderID, err = resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
 		if err != nil {
-			return fmt.Errorf("email lookup failed: %w", err)
+			return err
 		}
-
-		orderID = resolved
 	}
 
 	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
@@ -189,38 +188,25 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// subsSearchResult mirrors the JSON returned by the subscriptions service support endpoint.
 type subsSearchResult struct {
-	SubscriberID   string     `json:"subscriber_id"`
-	Email          string     `json:"email"`
-	SubscriptionID string     `json:"subscription_id"`
-	OrderID        string     `json:"order_id"`
-	ProductName    string     `json:"product_name"`
-	CreatedAt      *time.Time `json:"created_at"`
+	Email       string `json:"email"`
+	OrderID     string `json:"order_id"`
+	ProductName string `json:"product_name"`
 }
 
-// resolveOrderIDByEmail queries the subscriptions service for orders associated with
-// the given email fragment, presents the results to the support operator, and returns
-// the chosen order ID.
-func resolveOrderIDByEmail(
-	ctx context.Context,
-	client *http.Client,
-	subsURL,
-	token, email string,
-) (string, error) {
-	if len(email) < 6 {
-		return "", fmt.Errorf("email must be at least 6 characters")
-	}
+type subsSearchResp struct {
+	Results []subsSearchResult `json:"results"`
+}
 
-	searchURL := subsURL + "/v1/support/subscribers/search?" + url.Values{"email": {email}}.Encode()
+func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, email, token string) (string, error) {
+	u := baseURL + "/v1/support/subscribers/" + url.PathEscape(email)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -228,51 +214,43 @@ func resolveOrderIDByEmail(
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
+	if resp.StatusCode == http.StatusNotFound {
+		return "", fmt.Errorf("no subscriber found for email %q", email)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("subscriptions service returned %d: %s", resp.StatusCode, body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
 	}
 
-	var result struct {
-		Results []subsSearchResult `json:"results"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+	var result subsSearchResp
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	matches := result.Results
-	if len(matches) == 0 {
-		return "", fmt.Errorf("no orders found for email %q", email)
+	if len(result.Results) == 0 {
+		return "", fmt.Errorf("no active subscriptions found for email %q", email)
 	}
 
-	if len(matches) == 1 {
-		fmt.Printf("Found 1 order for %s (subscriber %s)\n\n", matches[0].Email, matches[0].SubscriberID)
-		return matches[0].OrderID, nil
+	if len(result.Results) == 1 {
+		r := result.Results[0]
+		fmt.Printf("Found 1 active subscription for %s (%s)\n\n", r.Email, r.ProductName)
+		return r.OrderID, nil
 	}
 
-	fmt.Printf("Found %d order(s) matching %q:\n\n", len(matches), email)
-	fmt.Printf("  %-3s  %-36s  %-20s  %-40s  %-20s  %s\n",
-		"#", "order_id", "product", "subscription_id", "created_at", "email")
-	fmt.Printf("  %-3s  %-36s  %-20s  %-40s  %-20s  %s\n",
-		"---", strings.Repeat("-", 36), strings.Repeat("-", 20), strings.Repeat("-", 40), strings.Repeat("-", 20), strings.Repeat("-", 30))
+	fmt.Printf("Found %d active subscriptions matching %q:\n\n", len(result.Results), email)
+	fmt.Printf("  %-3s  %-36s  %-20s  %s\n", "#", "order_id", "product", "email")
+	fmt.Printf("  %-3s  %-36s  %-20s  %s\n",
+		"---", strings.Repeat("-", 36), strings.Repeat("-", 20), strings.Repeat("-", 30))
 
-	for i, r := range matches {
-		created := ""
-		if r.CreatedAt != nil {
-			created = r.CreatedAt.UTC().Format("2006-01-02 15:04")
-		}
-		fmt.Printf("  %-3d  %-36s  %-20s  %-40s  %-20s  %s\n",
-			i+1, r.OrderID, r.ProductName, r.SubscriptionID, created, r.Email)
+	for i, r := range result.Results {
+		fmt.Printf("  %-3d  %-36s  %-20s  %s\n", i+1, r.OrderID, r.ProductName, r.Email)
 	}
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Printf("Select order [1-%d]: ", len(matches))
+		fmt.Printf("Select subscription [1-%d]: ", len(result.Results))
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
 				return "", fmt.Errorf("reading stdin: %w", err)
@@ -281,21 +259,16 @@ func resolveOrderIDByEmail(
 		}
 
 		n, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
-		if err != nil || n < 1 || n > len(matches) {
-			fmt.Printf("Please enter a number between 1 and %d.\n", len(matches))
+		if err != nil || n < 1 || n > len(result.Results) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(result.Results))
 			continue
 		}
 
-		return matches[n-1].OrderID, nil
+		return result.Results[n-1].OrderID, nil
 	}
 }
 
-func listBatches(
-	ctx context.Context,
-	client *http.Client,
-	endpoint string,
-	key ed25519.PrivateKey,
-) ([]model.TLV2ActiveBatch, error) {
+func listBatches(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey) ([]model.TLV2ActiveBatch, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
