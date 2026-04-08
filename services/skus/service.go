@@ -3054,6 +3054,7 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 		ValidForISO:               &req.CredentialValidDuration,
 		EachCredentialValidForISO: req.CredentialValidDurationEach,
 		IssuanceIntervalISO:       req.IssuanceInterval,
+		MaxActiveTLV2Creds:        req.MaxActiveTLV2Creds,
 
 		Price: req.Price,
 		Location: datastore.NullString{
