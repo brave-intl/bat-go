@@ -1271,7 +1271,12 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		return 0, 0, err
 	}
 
-	return maxTLV2ActiveDailyItemCreds, nact, nil
+	mc, err := item.MaxActiveTLV2CredsOrDefault()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return mc, nact, nil
 }
 
 // ListActiveBatches returns the currently active credential batches for an order, ordered oldest-first.
@@ -3054,6 +3059,7 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 		ValidForISO:               &req.CredentialValidDuration,
 		EachCredentialValidForISO: req.CredentialValidDurationEach,
 		IssuanceIntervalISO:       req.IssuanceInterval,
+		MaxActiveTLV2Creds:        req.MaxActiveTLV2Creds,
 
 		Price: req.Price,
 		Location: datastore.NullString{
