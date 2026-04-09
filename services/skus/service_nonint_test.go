@@ -289,7 +289,7 @@ func TestService_uniqBatchesTxTime(t *testing.T) {
 		},
 
 		{
-			name: "explicit_item_success",
+			name: "explicit_item_with_specific_max_creds_success",
 			given: tcGiven{
 				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
 				itemID:  uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
@@ -309,9 +309,10 @@ func TestService_uniqBatchesTxTime(t *testing.T) {
 					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
 						result := []model.OrderItem{
 							{
-								ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
-								OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-								CredentialType: "time-limited-v2",
+								ID:                 uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+								OrderID:            uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+								CredentialType:     "time-limited-v2",
+								MaxActiveTLV2Creds: ptrTo(40),
 							},
 						}
 
@@ -325,7 +326,7 @@ func TestService_uniqBatchesTxTime(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				lim: 10,
+				lim: 40,
 				val: 2,
 			},
 		},
@@ -1973,9 +1974,10 @@ func TestService_doTLV2ExistTxTime(t *testing.T) {
 			given: tcGiven{
 				reqID: uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
 				item: &model.OrderItem{
-					ID:             uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
-					OrderID:        uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-					CredentialType: "time-limited-v2",
+					ID:                 uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+					OrderID:            uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					CredentialType:     "time-limited-v2",
+					MaxActiveTLV2Creds: ptrTo(10),
 				},
 				firstBCred: "cred_01",
 				from:       time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),

@@ -328,7 +328,7 @@ func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.
 }
 
 func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, item *model.OrderItem, firstBCred string, from, to time.Time) error {
-	if item.CredentialType != timeLimitedV2 {
+	if !item.IsCredTLV2() {
 		return model.ErrUnsupportedCredType
 	}
 
@@ -353,7 +353,12 @@ func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		return err
 	}
 
-	return checkTLV2BatchLimit(maxTLV2ActiveDailyItemCreds, nact)
+	mc, err := item.MaxActiveTLV2CredsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	return checkTLV2BatchLimit(mc, nact)
 }
 
 func (s *Service) doCredsExist(ctx context.Context, item *model.OrderItem) error {
