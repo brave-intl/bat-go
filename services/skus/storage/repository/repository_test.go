@@ -26,6 +26,7 @@ func TestOrder_GetByRadomSubscriptionID(t *testing.T) {
 	must.NoError(t, err)
 
 	defer func() {
+		_, _ = dbi.Exec("DELETE FROM order_items;")
 		_, _ = dbi.Exec("DELETE FROM orders;")
 	}()
 
@@ -116,6 +117,9 @@ func TestOrder_GetByRadomSubscriptionID(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
+
+			_, err = dbi.Exec("DELETE FROM order_items;")
+			must.NoError(t, err)
 
 			_, err = dbi.Exec("DELETE FROM orders;")
 			must.NoError(t, err)

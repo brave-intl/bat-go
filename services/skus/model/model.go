@@ -79,7 +79,7 @@ const (
 
 	issuerBufferDefault              = 30
 	issuerOverlapDefault             = 5
-	maxActiveBatchesTLV2CredsDefault = 10
+	MaxActiveBatchesTLV2CredsDefault = 10
 )
 
 const (
@@ -404,7 +404,7 @@ func (x *OrderItem) MaxActiveBatchesTLV2CredsOrDefault() (int, error) {
 	}
 
 	if x.MaxActiveBatchesTLV2Creds == nil {
-		return maxActiveBatchesTLV2CredsDefault, nil
+		return MaxActiveBatchesTLV2CredsDefault, nil
 	}
 
 	return *x.MaxActiveBatchesTLV2Creds, nil
