@@ -77,9 +77,9 @@ const (
 	OrderStatusPaid     = "paid"
 	OrderStatusPending  = "pending"
 
-	issuerBufferDefault       = 30
-	issuerOverlapDefault      = 5
-	maxActiveTLV2CredsDefault = 10
+	issuerBufferDefault              = 30
+	issuerOverlapDefault             = 5
+	maxActiveBatchesTLV2CredsDefault = 10
 )
 
 const (
@@ -338,7 +338,7 @@ type OrderItem struct {
 	Location                  datastore.NullString `json:"location" db:"location"`
 	Description               datastore.NullString `json:"description" db:"description"`
 	CredentialType            string               `json:"credentialType" db:"credential_type"`
-	MaxActiveTLV2Creds        *int                 `json:"max_active_tlv2_creds" db:"max_active_tlv2_creds"`
+	MaxActiveBatchesTLV2Creds *int                 `json:"max_active_batches_tlv2_creds" db:"max_active_batches_tlv2_creds"`
 	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
 	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
@@ -394,7 +394,7 @@ func (x *OrderItem) IsSearchAnnual() bool {
 	return x.SKUVnt == "brave-search-premium-year"
 }
 
-func (x *OrderItem) MaxActiveTLV2CredsOrDefault() (int, error) {
+func (x *OrderItem) MaxActiveBatchesTLV2CredsOrDefault() (int, error) {
 	if x == nil {
 		return 0, ErrUnsupportedCredType
 	}
@@ -403,11 +403,11 @@ func (x *OrderItem) MaxActiveTLV2CredsOrDefault() (int, error) {
 		return 0, ErrUnsupportedCredType
 	}
 
-	if x.MaxActiveTLV2Creds == nil {
-		return maxActiveTLV2CredsDefault, nil
+	if x.MaxActiveBatchesTLV2Creds == nil {
+		return maxActiveBatchesTLV2CredsDefault, nil
 	}
 
-	return *x.MaxActiveTLV2Creds, nil
+	return *x.MaxActiveBatchesTLV2Creds, nil
 }
 
 // OrderNew represents a request to create an order in the database.
@@ -533,7 +533,7 @@ type OrderItemRequestNew struct {
 	Price                       decimal.Decimal     `json:"price"`
 	IssuerTokenBuffer           *int                `json:"issuer_token_buffer"`
 	IssuerTokenOverlap          *int                `json:"issuer_token_overlap"`
-	MaxActiveTLV2Creds          *int                `json:"max_active_tlv2_creds"`
+	MaxActiveBatchesTLV2Creds   *int                `json:"max_active_batches_tlv2_creds"`
 	CredentialValidDurationEach *string             `json:"each_credential_valid_duration"`
 	IssuanceInterval            *string             `json:"issuance_interval"`
 	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
