@@ -262,7 +262,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(3),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(maxTLV2ActiveDailyItemCreds),
 		// StripeMetadata depends on env.
 	}
 
@@ -278,7 +278,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(3),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(maxTLV2ActiveDailyItemCreds),
 		// StripeMetadata depends on env.
 	}
 
@@ -294,7 +294,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(31),
 		IssuerTokenOverlap:          ptrTo(2),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(maxTLV2ActiveDailyItemCreds),
 		// StripeMetadata depends on env.
 	}
 
@@ -310,7 +310,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(31),
 		IssuerTokenOverlap:          ptrTo(2),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(maxTLV2ActiveDailyItemCreds),
 		// StripeMetadata depends on env.
 	}
 
@@ -326,7 +326,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(1),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P100Y"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(maxTLV2ActiveDailyItemCreds),
 		// StripeMetadata depends on env.
 	}
 

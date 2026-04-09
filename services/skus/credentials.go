@@ -353,7 +353,7 @@ func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		return err
 	}
 
-	mc, err := item.MaxActiveTLV2CredsOrDefault()
+	mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
 	if err != nil {
 		return err
 	}
