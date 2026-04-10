@@ -288,7 +288,7 @@ func TestCred_CountBatches(t *testing.T) {
 	}
 }
 
-func TestCred_ListBatches(t *testing.T) {
+func TestCred_ListActiveBatches(t *testing.T) {
 	orderCtx := func(orderID string) context.Context {
 		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 			URLParams: chi.RouteParams{
@@ -495,7 +495,7 @@ func TestCred_ListBatches(t *testing.T) {
 			rw := httptest.NewRecorder()
 			rw.Header().Set("content-type", "application/json")
 
-			appErr := h.ListBatches(rw, req)
+			appErr := h.ListActiveBatches(rw, req)
 			must.Equal(t, tc.exp.err, appErr)
 
 			if tc.exp.err != nil {
