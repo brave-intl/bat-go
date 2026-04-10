@@ -49,7 +49,7 @@ func RestRun(command *cobra.Command, args []string) {
 	// setup the service now
 	ctx, s, err := ratios.InitService(ctx)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initalize ratios service")
+		logger.Fatal().Err(err).Msg("failed to initialize ratios service")
 	}
 
 	// do rest endpoints
