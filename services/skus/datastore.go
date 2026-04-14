@@ -1118,7 +1118,13 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	if err != nil {
 		return fmt.Errorf("error send signing request could not begin tx: %w", err)
 	}
-	defer rollback()
+
+	txTransferred := false
+	defer func() {
+		if !txTransferred {
+			rollback()
+		}
+	}()
 
 	var soro []SigningOrderRequestOutbox
 	err = tx.SelectContext(ctx, &soro, `select request_id, order_id, item_id, message_data from signing_order_request_outbox
@@ -1132,10 +1138,19 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 		return nil
 	}
 
-	// If there is an error writing messages to kafka we need to log the failed messages here instead of returning
-	// to the job runner, we can then update the messages as processed and continue to the next batch rather than
-	// retrying, these errors are likely not transient and need checked before retry.
+	soroIDs := make([]uuid.UUID, len(soro))
+	for i := 0; i < len(soroIDs); i++ {
+		soroIDs[i] = soro[i].RequestID
+	}
+
+	txTransferred = true
 	go func() {
+		defer rollback()
+
+		// If there is a total failure writing to kafka, return without committing so the rows
+		// remain unsubmitted and are retried on the next cycle. Per-message WriteErrors are
+		// logged and the rows are still marked submitted to avoid duplicate sends for those
+		// that succeeded.
 		switch err := signingRequestWriter.WriteMessages(ctx, soro).(type) {
 		case nil:
 		case kafka.WriteErrors:
@@ -1152,38 +1167,41 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 				Interface("messages", soro).
 				Msg("error writing outbox messages")
 			sentry.CaptureException(err)
+			return
+		}
+
+		qry, args, err := sqlx.In(`update signing_order_request_outbox
+											set submitted_at = now() where request_id IN (?)`, soroIDs)
+		if err != nil {
+			logging.FromContext(ctx).Err(err).Msg("error creating sql update statement")
+			sentry.CaptureException(err)
+			return
+		}
+
+		result, err := tx.ExecContext(ctx, pg.Rebind(qry), args...)
+		if err != nil {
+			logging.FromContext(ctx).Err(err).Msg("error updating outbox message")
+			sentry.CaptureException(err)
+			return
+		}
+
+		rows, err := result.RowsAffected()
+		if err != nil {
+			logging.FromContext(ctx).Err(err).Msg("error getting updated outbox message rows")
+			sentry.CaptureException(err)
+			return
+		}
+
+		if rows != int64(len(soroIDs)) {
+			logging.FromContext(ctx).Error().Msgf("error updating rows expected %d got %d", len(soroIDs), rows)
+			return
+		}
+
+		if err := commit(); err != nil {
+			logging.FromContext(ctx).Err(err).Msg("error committing signing order request outbox")
+			sentry.CaptureException(err)
 		}
 	}()
-
-	soroIDs := make([]uuid.UUID, len(soro))
-	for i := 0; i < len(soroIDs); i++ {
-		soroIDs[i] = soro[i].RequestID
-	}
-
-	qry, args, err := sqlx.In(`update signing_order_request_outbox
-										set submitted_at = now() where request_id IN (?)`, soroIDs)
-	if err != nil {
-		return fmt.Errorf("error creating sql update statement: %w", err)
-	}
-
-	result, err := tx.ExecContext(ctx, pg.Rebind(qry), args...)
-	if err != nil {
-		return fmt.Errorf("error updating outbox message: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("error getting updated outbox message rows: %w", err)
-	}
-
-	if rows != int64(len(soroIDs)) {
-		return fmt.Errorf("error updating rows expected %d got %d", len(soroIDs), rows)
-	}
-
-	err = commit()
-	if err != nil {
-		return fmt.Errorf("error committing signing order request outbox: %w", err)
-	}
 
 	return nil
 }
