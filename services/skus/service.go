@@ -1271,7 +1271,12 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		return 0, 0, err
 	}
 
-	return maxTLV2ActiveDailyItemCreds, nact, nil
+	mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return mc, nact, nil
 }
 
 // ListActiveBatches returns the currently active credential batches for an order, ordered oldest-first.
@@ -1895,9 +1900,10 @@ func (s *Service) RunStoreSignedOrderCredentials(ctx context.Context, backoff ti
 	}
 
 	handler := &SignedOrderCredentialsHandler{
-		decoder:   decoder,
-		datastore: s.Datastore,
-		tlv2Repo:  s.tlv2Repo,
+		decoder:       decoder,
+		datastore:     s.Datastore,
+		tlv2Repo:      s.tlv2Repo,
+		orderItemReop: s.orderItemRepo,
 	}
 
 	errorHandler := &SigningOrderResultErrorHandler{
@@ -3054,6 +3060,7 @@ func createOrderItem(req *model.OrderItemRequestNew) (*model.OrderItem, error) {
 		ValidForISO:               &req.CredentialValidDuration,
 		EachCredentialValidForISO: req.CredentialValidDurationEach,
 		IssuanceIntervalISO:       req.IssuanceInterval,
+		MaxActiveBatchesTLV2Creds: req.MaxActiveBatchesTLV2Creds,
 
 		Price: req.Price,
 		Location: datastore.NullString{

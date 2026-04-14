@@ -31,9 +31,6 @@ const (
 	defaultMaxTokensPerIssuer       = 4000000 // ~1M BAT
 	defaultCohort             int16 = 1
 
-	// maxTLV2ActiveDailyItemCreds specifies the number of credentials an item is allowed to have in a given day.
-	maxTLV2ActiveDailyItemCreds = 10
-
 	ErrCredsAlreadyExist = model.Error("credentials already exist")
 
 	errInvalidIssuerResp             = model.Error("invalid issuer response")
@@ -328,7 +325,7 @@ func (s *Service) doTLV2Exist(ctx context.Context, reqID uuid.UUID, item *model.
 }
 
 func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext, reqID uuid.UUID, item *model.OrderItem, firstBCred string, from, to time.Time) error {
-	if item.CredentialType != timeLimitedV2 {
+	if !item.IsCredTLV2() {
 		return model.ErrUnsupportedCredType
 	}
 
@@ -353,7 +350,12 @@ func (s *Service) doTLV2ExistTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		return err
 	}
 
-	return checkTLV2BatchLimit(maxTLV2ActiveDailyItemCreds, nact)
+	mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	return checkTLV2BatchLimit(mc, nact)
 }
 
 func (s *Service) doCredsExist(ctx context.Context, item *model.OrderItem) error {
@@ -585,9 +587,10 @@ func encodeIssuerID(merchantID, sku string) (string, error) {
 
 // SignedOrderCredentialsHandler handles requests for signing credentials.
 type SignedOrderCredentialsHandler struct {
-	decoder   Decoder
-	datastore Datastore
-	tlv2Repo  tlv2Store
+	decoder       Decoder
+	datastore     Datastore
+	tlv2Repo      tlv2Store
+	orderItemReop orderItemStore
 }
 
 // Handle processes Kafka message of type SigningOrderResult.
@@ -620,6 +623,16 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 		return nil
 	}
 
+	item, err := h.orderItemReop.Get(ctx, tx, sor.ItemID)
+	if err != nil {
+		return err
+	}
+
+	mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
+	if err != nil {
+		return err
+	}
+
 	now := time.Now()
 
 	nact, err := h.tlv2Repo.UniqBatches(ctx, tx, sor.OrderID, sor.ItemID, now, now)
@@ -627,7 +640,7 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 		return fmt.Errorf("failed to get number of active batches: %w", err)
 	}
 
-	if err := checkTLV2BatchLimit(maxTLV2ActiveDailyItemCreds, nact); err != nil {
+	if err := checkTLV2BatchLimit(mc, nact); err != nil {
 		// Save to the dead letter queue for now.
 		return fmt.Errorf("failed to pass active batches limit check: %w", err)
 	}
