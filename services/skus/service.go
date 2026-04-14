@@ -424,7 +424,7 @@ func InitService(
 	if enabled, ok := ctx.Value(appctx.SkusEnableStoreSignedOrderCredsConsumer).(bool); ok && enabled {
 		if consumers, ok := ctx.Value(appctx.SkusNumberStoreSignedOrderCredsConsumer).(int); ok {
 			for i := 0; i < consumers; i++ {
-				go service.RunStoreSignedOrderCredentials(ctx, 10*time.Second)
+				go service.RunStoreSignedOrderCredentials(ctx, 1*time.Second)
 			}
 		}
 	}
