@@ -623,26 +623,35 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 		return nil
 	}
 
-	item, err := h.orderItemReop.Get(ctx, tx, sor.ItemID)
-	if err != nil {
-		return err
-	}
-
-	mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
-	if err != nil {
-		return err
-	}
-
 	now := time.Now()
 
-	nact, err := h.tlv2Repo.UniqBatches(ctx, tx, sor.OrderID, sor.ItemID, now, now)
-	if err != nil {
-		return fmt.Errorf("failed to get number of active batches: %w", err)
-	}
+	if len(soresult.Data) > 0 {
+		var md Metadata
+		if err := json.Unmarshal(soresult.Data[0].AssociatedData, &md); err != nil {
+			return fmt.Errorf("error deserializing associated data: %w", err)
+		}
 
-	if err := checkTLV2BatchLimit(mc, nact); err != nil {
-		// Save to the dead letter queue for now.
-		return fmt.Errorf("failed to pass active batches limit check: %w", err)
+		if md.CredentialType == timeLimitedV2 {
+			item, err := h.orderItemReop.Get(ctx, tx, sor.ItemID)
+			if err != nil {
+				return err
+			}
+
+			mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
+			if err != nil {
+				return err
+			}
+
+			nact, err := h.tlv2Repo.UniqBatches(ctx, tx, sor.OrderID, sor.ItemID, now, now)
+			if err != nil {
+				return fmt.Errorf("failed to get number of active batches: %w", err)
+			}
+
+			if err := checkTLV2BatchLimit(mc, nact); err != nil {
+				// Save to the dead letter queue for now.
+				return fmt.Errorf("failed to pass active batches limit check: %w", err)
+			}
+		}
 	}
 
 	if err := h.datastore.InsertSignedOrderCredentialsTx(ctx, tx, soresult); err != nil {
