@@ -1616,6 +1616,77 @@ func TestOrderItem_Issuer(t *testing.T) {
 	}
 }
 
+func TestOrderItem_MaxActiveBatchesTLV2CredsOrDefault(t *testing.T) {
+	type tcGiven struct {
+		oi *model.OrderItem
+	}
+
+	type tcExpected struct {
+		mc  int
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "oi_null_unsupported_type",
+			exp: tcExpected{
+				err: model.ErrUnsupportedCredType,
+			},
+		},
+
+		{
+			name: "oi_not_tlv2",
+			given: tcGiven{
+				oi: &model.OrderItem{},
+			},
+			exp: tcExpected{
+				err: model.ErrUnsupportedCredType,
+			},
+		},
+
+		{
+			name: "oi_max_active_batches_tlv2_creds_nil",
+			given: tcGiven{
+				oi: &model.OrderItem{
+					CredentialType: "time-limited-v2",
+				},
+			},
+			exp: tcExpected{
+				mc: 10,
+			},
+		},
+
+		{
+			name: "oi_max_active_batches_tlv2_creds",
+			given: tcGiven{
+				oi: &model.OrderItem{
+					CredentialType:            "time-limited-v2",
+					MaxActiveBatchesTLV2Creds: ptrTo(20),
+				},
+			},
+			exp: tcExpected{
+				mc: 20,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := tc.given.oi.MaxActiveBatchesTLV2CredsOrDefault()
+			must.ErrorIs(t, err, tc.exp.err)
+			should.Equal(t, tc.exp.mc, actual)
+		})
+	}
+}
+
 func TestOrderItemRequestNew_Metadata(t *testing.T) {
 	type tcGiven struct {
 		oreq model.OrderItemRequestNew

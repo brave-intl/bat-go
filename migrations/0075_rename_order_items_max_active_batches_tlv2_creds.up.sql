@@ -1,0 +1,1 @@
+ALTER TABLE order_items RENAME COLUMN max_active_tlv2_creds TO max_active_batches_tlv2_creds;

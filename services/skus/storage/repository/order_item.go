@@ -61,10 +61,10 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 
 	const q = `
 	INSERT INTO order_items (
-		order_id, sku, sku_variant, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval
+		order_id, sku, sku_variant, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval, max_active_batches_tlv2_creds
 	) VALUES (
-		:order_id, :sku, :sku_variant, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type, :metadata, :valid_for, :valid_for_iso, :issuance_interval
-	) RETURNING id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for`
+		:order_id, :sku, :sku_variant, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type, :metadata, :valid_for, :valid_for_iso, :issuance_interval, :max_active_batches_tlv2_creds
+	) RETURNING id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for, max_active_batches_tlv2_creds`
 
 	rows, err := sqlx.NamedQueryContext(ctx, dbi, q, items)
 	if err != nil {
