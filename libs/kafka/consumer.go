@@ -41,14 +41,13 @@ func Consume(ctx context.Context, reader Consumer, handler Handler, errorHandler
 			if err != nil {
 				sentry.CaptureException(err)
 				logger.Err(err).Msg("error processing message sending to dlq")
-				err := errorHandler.Handle(ctx, message, err)
-				if err != nil {
-					logger.Err(err).
+				if dlqErr := errorHandler.Handle(ctx, message, err); dlqErr != nil {
+					logger.Err(dlqErr).
 						Str("key", string(message.Key)).
 						Int("partition", message.Partition).
 						Int64("offset", message.Offset).
 						Msg("error writing message to dlq")
-					return fmt.Errorf("error writing message to dlq: %w", err)
+					return fmt.Errorf("error writing message to dlq: %w", dlqErr)
 				}
 			}
 
