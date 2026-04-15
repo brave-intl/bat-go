@@ -46,11 +46,11 @@ var (
 
 	retryPolicy    = retrypolicy.DefaultRetry
 	dontRetryCodes = map[int]struct{}{
-		http.StatusBadRequest:          struct{}{},
-		http.StatusUnauthorized:        struct{}{},
-		http.StatusForbidden:           struct{}{},
-		http.StatusInternalServerError: struct{}{},
-		http.StatusConflict:            struct{}{},
+		http.StatusBadRequest:          {},
+		http.StatusUnauthorized:        {},
+		http.StatusForbidden:           {},
+		http.StatusInternalServerError: {},
+		http.StatusConflict:            {},
 	}
 )
 
@@ -623,8 +623,6 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 		return nil
 	}
 
-	now := time.Now()
-
 	if len(soresult.Data) > 0 {
 		var md Metadata
 		if err := json.Unmarshal(soresult.Data[0].AssociatedData, &md); err != nil {
@@ -642,6 +640,7 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 				return err
 			}
 
+			now := time.Now()
 			nact, err := h.tlv2Repo.UniqBatches(ctx, tx, sor.OrderID, sor.ItemID, now, now)
 			if err != nil {
 				return fmt.Errorf("failed to get number of active batches: %w", err)
@@ -658,7 +657,7 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 		return fmt.Errorf("error inserting signed order credentials: %w", err)
 	}
 
-	if err := h.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, now); err != nil {
+	if err := h.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, time.Now()); err != nil {
 		return fmt.Errorf("error updating signing order request outbox: %w", err)
 	}
 
