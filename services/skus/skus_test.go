@@ -214,6 +214,24 @@ func TestSKUNameByMobileName(t *testing.T) {
 			given: "nightly.braveorigin.yearly",
 			exp:   tcExpected{skuVnt: "brave-origin-premium-year"},
 		},
+
+		{
+			name:  "ios_origin_pl",
+			given: "braveorigin.perpetual",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-perpetual-license"},
+		},
+
+		{
+			name:  "ios_origin_pl_nightly",
+			given: "nightly.braveorigin.perpetual",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-perpetual-license"},
+		},
+
+		{
+			name:  "ios_origin_pl_beta",
+			given: "beta.braveorigin.perpetual",
+			exp:   tcExpected{skuVnt: "brave-origin-premium-perpetual-license"},
+		},
 	}
 
 	for i := range tests {
@@ -290,7 +308,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("14.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
@@ -318,7 +336,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("14.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
@@ -346,7 +364,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("149.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
@@ -374,7 +392,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("149.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
@@ -402,7 +420,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("9.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -430,7 +448,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("9.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -458,7 +476,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("99.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -486,7 +504,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 					Price:                       decimal.RequireFromString("99.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -549,7 +567,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						Price:                       decimal.RequireFromString("14.99"),
 						IssuerTokenBuffer:           ptrTo(3),
 						IssuerTokenOverlap:          ptrTo(0),
-						MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+						MaxActiveBatchesTLV2Creds:   ptrTo(10),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_OtZCXOCIO3AJE6",
@@ -586,7 +604,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						Price:                       decimal.RequireFromString("149.99"),
 						IssuerTokenBuffer:           ptrTo(3),
 						IssuerTokenOverlap:          ptrTo(0),
-						MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+						MaxActiveBatchesTLV2Creds:   ptrTo(10),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_OKRYJ77wYOk771",
@@ -623,7 +641,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						Price:                       decimal.RequireFromString("14.99"),
 						IssuerTokenBuffer:           ptrTo(3),
 						IssuerTokenOverlap:          ptrTo(0),
-						MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+						MaxActiveBatchesTLV2Creds:   ptrTo(10),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_O9uKDYsRPXNgfB",
@@ -661,7 +679,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						Price:                       decimal.RequireFromString("9.99"),
 						IssuerTokenBuffer:           ptrTo(31),
 						IssuerTokenOverlap:          ptrTo(2),
-						MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+						MaxActiveBatchesTLV2Creds:   ptrTo(10),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_K1c8W3oM4mUsGw",
@@ -698,7 +716,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						Price:                       decimal.RequireFromString("99.99"),
 						IssuerTokenBuffer:           ptrTo(31),
 						IssuerTokenOverlap:          ptrTo(2),
-						MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+						MaxActiveBatchesTLV2Creds:   ptrTo(10),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_Lhv4OM1aAPxflY",
@@ -735,7 +753,7 @@ func TestNewCreateOrderReqNewMobile(t *testing.T) {
 						Price:                       decimal.RequireFromString("9.99"),
 						IssuerTokenBuffer:           ptrTo(31),
 						IssuerTokenOverlap:          ptrTo(2),
-						MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+						MaxActiveBatchesTLV2Creds:   ptrTo(10),
 						CredentialValidDurationEach: ptrTo("P1D"),
 						StripeMetadata: &model.ItemStripeMetadata{
 							ProductID: "prod_Lhv8qsPsn6WHrx",
@@ -780,7 +798,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("14.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_O9uKDYsRPXNgfB",
@@ -799,7 +817,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("149.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_O9uKDYsRPXNgfB",
@@ -818,7 +836,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("9.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_Lhv8qsPsn6WHrx",
@@ -837,7 +855,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("99.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_Lhv8qsPsn6WHrx",
@@ -856,7 +874,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("59.99"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P100Y"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_TZAuP2GKA3laWY",
@@ -881,7 +899,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("14.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OKRYJ77wYOk771",
@@ -900,7 +918,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("149.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OKRYJ77wYOk771",
@@ -919,7 +937,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("9.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_Lhv4OM1aAPxflY",
@@ -938,7 +956,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("99.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_Lhv4OM1aAPxflY",
@@ -957,7 +975,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("59.99"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P100Y"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_TZArNEn4pFPvs7",
@@ -983,7 +1001,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
 					CredentialValidDurationEach: ptrTo("P1D"),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
 						ItemID:    "price_1OuRqmHof20bphG6RXl7EHP2",
@@ -1001,7 +1019,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("149.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
@@ -1020,7 +1038,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("9.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -1039,7 +1057,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("99.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -1058,7 +1076,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("59.99"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P100Y"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_TUIQJzhz8JKwOa",
@@ -1083,7 +1101,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("14.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
@@ -1102,7 +1120,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("149.99"),
 					IssuerTokenBuffer:           ptrTo(3),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_OtZCXOCIO3AJE6",
@@ -1121,7 +1139,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("9.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -1140,7 +1158,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("99.99"),
 					IssuerTokenBuffer:           ptrTo(31),
 					IssuerTokenOverlap:          ptrTo(2),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P1D"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_K1c8W3oM4mUsGw",
@@ -1159,7 +1177,7 @@ func TestNewOrderItemReqNewMobileSet(t *testing.T) {
 					Price:                       decimal.RequireFromString("59.99"),
 					IssuerTokenBuffer:           ptrTo(1),
 					IssuerTokenOverlap:          ptrTo(0),
-					MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+					MaxActiveBatchesTLV2Creds:   ptrTo(10),
 					CredentialValidDurationEach: ptrTo("P100Y"),
 					StripeMetadata: &model.ItemStripeMetadata{
 						ProductID: "prod_TUIQJzhz8JKwOa",

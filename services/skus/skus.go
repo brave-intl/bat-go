@@ -188,6 +188,10 @@ func skuVntByMobileName(subID string) (string, error) {
 	case "braveorigin.yearly", "beta.braveorigin.yearly", "nightly.braveorigin.yearly":
 		return "brave-origin-premium-year", nil
 
+	// iOS Origin Perpetual.
+	case "braveorigin.perpetual", "nightly.braveorigin.perpetual", "beta.braveorigin.perpetual":
+		return "brave-origin-premium-perpetual-license", nil
+
 	// Legacy.
 	// Older iOS clients might still send this as subscription_id along with a receipt.
 	case "brave-firewall-vpn-premium":
@@ -262,7 +266,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(3),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(model.MaxActiveBatchesTLV2CredsDefault),
 		// StripeMetadata depends on env.
 	}
 
@@ -278,7 +282,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(3),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(model.MaxActiveBatchesTLV2CredsDefault),
 		// StripeMetadata depends on env.
 	}
 
@@ -294,7 +298,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(31),
 		IssuerTokenOverlap:          ptrTo(2),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(model.MaxActiveBatchesTLV2CredsDefault),
 		// StripeMetadata depends on env.
 	}
 
@@ -310,7 +314,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(31),
 		IssuerTokenOverlap:          ptrTo(2),
 		CredentialValidDurationEach: ptrTo("P1D"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(model.MaxActiveBatchesTLV2CredsDefault),
 		// StripeMetadata depends on env.
 	}
 
@@ -326,7 +330,7 @@ func newOrderItemReqNewMobileSet(env string) map[string]model.OrderItemRequestNe
 		IssuerTokenBuffer:           ptrTo(1),
 		IssuerTokenOverlap:          ptrTo(0),
 		CredentialValidDurationEach: ptrTo("P100Y"),
-		MaxActiveTLV2Creds:          ptrTo(maxTLV2ActiveDailyItemCreds),
+		MaxActiveBatchesTLV2Creds:   ptrTo(model.MaxActiveBatchesTLV2CredsDefault),
 		// StripeMetadata depends on env.
 	}
 

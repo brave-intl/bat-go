@@ -20,8 +20,8 @@ func (r *OrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UU
 	const q = `
 	SELECT
 		id, order_id, sku, sku_variant, created_at, updated_at, currency,
-		quantity, price, (quantity * price) as subtotal,
-		location, description, credential_type,metadata, valid_for_iso, issuance_interval
+		quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, 
+		valid_for_iso, issuance_interval, max_active_batches_tlv2_creds
 	FROM order_items WHERE id = $1`
 
 	result := &model.OrderItem{}
@@ -40,9 +40,9 @@ func (r *OrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UU
 func (r *OrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
 	const q = `
 	SELECT
-		id, order_id, sku, sku_variant, created_at, updated_at, currency,
-		quantity, price, (quantity * price) as subtotal,
-		location, description, credential_type, metadata, valid_for_iso, issuance_interval
+		id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, 
+		(quantity * price) as subtotal,	location, description, credential_type, metadata, valid_for_iso, 
+		issuance_interval, max_active_batches_tlv2_creds
 	FROM order_items WHERE order_id = $1`
 
 	result := make([]model.OrderItem, 0)
@@ -61,10 +61,10 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 
 	const q = `
 	INSERT INTO order_items (
-		order_id, sku, sku_variant, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval, max_active_tlv2_creds
+		order_id, sku, sku_variant, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval, max_active_batches_tlv2_creds
 	) VALUES (
-		:order_id, :sku, :sku_variant, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type, :metadata, :valid_for, :valid_for_iso, :issuance_interval, :max_active_tlv2_creds
-	) RETURNING id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for, max_active_tlv2_creds`
+		:order_id, :sku, :sku_variant, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type, :metadata, :valid_for, :valid_for_iso, :issuance_interval, :max_active_batches_tlv2_creds
+	) RETURNING id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for, max_active_batches_tlv2_creds`
 
 	rows, err := sqlx.NamedQueryContext(ctx, dbi, q, items)
 	if err != nil {

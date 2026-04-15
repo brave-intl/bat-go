@@ -1616,7 +1616,7 @@ func TestOrderItem_Issuer(t *testing.T) {
 	}
 }
 
-func TestOrderItem_MaxActiveTLV2CredsOrDefault(t *testing.T) {
+func TestOrderItem_MaxActiveBatchesTLV2CredsOrDefault(t *testing.T) {
 	type tcGiven struct {
 		oi *model.OrderItem
 	}
@@ -1651,7 +1651,7 @@ func TestOrderItem_MaxActiveTLV2CredsOrDefault(t *testing.T) {
 		},
 
 		{
-			name: "oi_max_active_tlv2_creds_nil",
+			name: "oi_max_active_batches_tlv2_creds_nil",
 			given: tcGiven{
 				oi: &model.OrderItem{
 					CredentialType: "time-limited-v2",
@@ -1663,11 +1663,11 @@ func TestOrderItem_MaxActiveTLV2CredsOrDefault(t *testing.T) {
 		},
 
 		{
-			name: "oi_max_active_tlv2_creds",
+			name: "oi_max_active_batches_tlv2_creds",
 			given: tcGiven{
 				oi: &model.OrderItem{
-					CredentialType:     "time-limited-v2",
-					MaxActiveTLV2Creds: ptrTo(20),
+					CredentialType:            "time-limited-v2",
+					MaxActiveBatchesTLV2Creds: ptrTo(20),
 				},
 			},
 			exp: tcExpected{
@@ -1680,7 +1680,7 @@ func TestOrderItem_MaxActiveTLV2CredsOrDefault(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := tc.given.oi.MaxActiveTLV2CredsOrDefault()
+			actual, err := tc.given.oi.MaxActiveBatchesTLV2CredsOrDefault()
 			must.ErrorIs(t, err, tc.exp.err)
 			should.Equal(t, tc.exp.mc, actual)
 		})
