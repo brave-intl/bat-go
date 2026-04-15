@@ -206,7 +206,7 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 		Balancer:     &kafka.LeastBytes{},
 		Dialer:       dialer,
 		Topic:        topic,
-		BatchTimeout: 1 * time.Second,
+		BatchTimeout: 50 * time.Millisecond,
 		Logger:       kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
