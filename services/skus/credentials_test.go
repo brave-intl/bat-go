@@ -106,9 +106,10 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_KafkaDuplic
 	}
 
 	handler := &SignedOrderCredentialsHandler{
-		decoder:   &SigningOrderResultDecoder{codec: codec},
-		datastore: suite.storage,
-		tlv2Repo:  repository.NewTLV2(),
+		decoder:       &SigningOrderResultDecoder{codec: codec},
+		datastore:     suite.storage,
+		tlv2Repo:      repository.NewTLV2(),
+		orderItemReop: repository.NewOrderItem(),
 	}
 
 	// Send them to handler with varied times and routines to mock different consumers.
@@ -180,9 +181,10 @@ func (suite *CredentialsTestSuite) TestSignedOrderCredentialsHandler_RequestDupl
 	}
 
 	handler := &SignedOrderCredentialsHandler{
-		decoder:   &SigningOrderResultDecoder{codec: codec},
-		datastore: suite.storage,
-		tlv2Repo:  repository.NewTLV2(),
+		decoder:       &SigningOrderResultDecoder{codec: codec},
+		datastore:     suite.storage,
+		tlv2Repo:      repository.NewTLV2(),
+		orderItemReop: repository.NewOrderItem(),
 	}
 
 	// Send them to handler with varied times and routines to mock different consumers.

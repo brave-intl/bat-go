@@ -72,49 +72,49 @@ func TestOrderItem_InsertMany(t *testing.T) {
 			name: "two_items",
 			given: []model.OrderItem{
 				{
-					SKU:                "sku_02_01",
-					SKUVnt:             "sku_vnt_02_01",
-					Quantity:           2,
-					Price:              mustDecimalFromString("3"),
-					Currency:           "USD",
-					Subtotal:           mustDecimalFromString("6"),
-					CredentialType:     "something",
-					MaxActiveTLV2Creds: ptr.To(10),
+					SKU:                       "sku_02_01",
+					SKUVnt:                    "sku_vnt_02_01",
+					Quantity:                  2,
+					Price:                     mustDecimalFromString("3"),
+					Currency:                  "USD",
+					Subtotal:                  mustDecimalFromString("6"),
+					CredentialType:            "something",
+					MaxActiveBatchesTLV2Creds: ptr.To(10),
 				},
 
 				{
-					SKU:                "sku_02_02",
-					SKUVnt:             "sku_vnt_02_02",
-					Quantity:           3,
-					Price:              mustDecimalFromString("4"),
-					Currency:           "USD",
-					Subtotal:           mustDecimalFromString("12"),
-					CredentialType:     "something",
-					MaxActiveTLV2Creds: ptr.To(10),
+					SKU:                       "sku_02_02",
+					SKUVnt:                    "sku_vnt_02_02",
+					Quantity:                  3,
+					Price:                     mustDecimalFromString("4"),
+					Currency:                  "USD",
+					Subtotal:                  mustDecimalFromString("12"),
+					CredentialType:            "something",
+					MaxActiveBatchesTLV2Creds: ptr.To(10),
 				},
 			},
 
 			exp: []model.OrderItem{
 				{
-					SKU:                "sku_02_01",
-					SKUVnt:             "sku_vnt_02_01",
-					Quantity:           2,
-					Price:              mustDecimalFromString("3"),
-					Currency:           "USD",
-					Subtotal:           mustDecimalFromString("6"),
-					CredentialType:     "something",
-					MaxActiveTLV2Creds: ptr.To(10),
+					SKU:                       "sku_02_01",
+					SKUVnt:                    "sku_vnt_02_01",
+					Quantity:                  2,
+					Price:                     mustDecimalFromString("3"),
+					Currency:                  "USD",
+					Subtotal:                  mustDecimalFromString("6"),
+					CredentialType:            "something",
+					MaxActiveBatchesTLV2Creds: ptr.To(10),
 				},
 
 				{
-					SKU:                "sku_02_02",
-					SKUVnt:             "sku_vnt_02_02",
-					Quantity:           3,
-					Price:              mustDecimalFromString("4"),
-					Currency:           "USD",
-					Subtotal:           mustDecimalFromString("12"),
-					CredentialType:     "something",
-					MaxActiveTLV2Creds: ptr.To(10),
+					SKU:                       "sku_02_02",
+					SKUVnt:                    "sku_vnt_02_02",
+					Quantity:                  3,
+					Price:                     mustDecimalFromString("4"),
+					Currency:                  "USD",
+					Subtotal:                  mustDecimalFromString("12"),
+					CredentialType:            "something",
+					MaxActiveBatchesTLV2Creds: ptr.To(10),
 				},
 			},
 		},
@@ -155,7 +155,7 @@ func TestOrderItem_InsertMany(t *testing.T) {
 				should.Equal(t, tc.exp[j].Currency, actual[j].Currency)
 				should.Equal(t, tc.exp[j].Subtotal.String(), actual[j].Subtotal.String())
 				should.Equal(t, tc.exp[j].CredentialType, actual[j].CredentialType)
-				should.Equal(t, tc.exp[j].MaxActiveTLV2Creds, actual[j].MaxActiveTLV2Creds)
+				should.Equal(t, tc.exp[j].MaxActiveBatchesTLV2Creds, actual[j].MaxActiveBatchesTLV2Creds)
 			}
 		})
 	}
