@@ -113,3 +113,98 @@ The subscriptions service URL and support token are environment-specific — con
 **"No active device batches found for this order"** — the order has no linked devices to clear. The user's limit issue may have a different cause.
 
 **Unexpected status 401** — your private key is not in the authorized keystore for this environment, or your system clock is off by more than 10 minutes (requests are signed with a timestamp).
+
+---
+
+## set-linking-limit
+
+Raises the maximum number of devices that can be simultaneously linked to a premium order. The default limit is 10. Use this when a user has a legitimate need to exceed that limit.
+
+This command only works for **desktop/browser Leo Premium orders** (TLV2 credential type). It cannot be used for iOS or Android orders — those use anonymous receipt-based credentials and do not have a device linking limit.
+
+### Prerequisites
+
+Same as `reset-linking-limit`: `bat-go` binary, an ed25519 private key, and (when using `--email`) the subscriptions service support token.
+
+### Flags
+
+| Flag | Env var | Required | Description |
+|------|---------|----------|-------------|
+| `--skus-base-url` | `SKUS_BASE_URL` | Yes | Base URL of the SKUs/payments service |
+| `--private-key` | `SKUS_SUPPORT_PRIVATE_KEY` | Yes | Path to your ed25519 private key file |
+| `--max` | — | Yes | New maximum number of linked devices (must be a positive integer) |
+| `--order-id` | — | One of these | Order UUID (mutually exclusive with `--email`) |
+| `--email` | `SUBSCRIBER_EMAIL` | One of these | Subscriber email (mutually exclusive with `--order-id`) |
+| `--subscriptions-base-url` | `SUBSCRIPTIONS_BASE_URL` | Yes, with `--email` | Base URL of the subscriptions service |
+| `--subscriptions-token` | `SUBSCRIPTIONS_SUPPORT_TOKEN` | Yes, with `--email` | Bearer token for the support API |
+| `--item-id` | — | No | Scope the change to a specific order item UUID |
+
+Flags take precedence over env vars.
+
+### Usage
+
+#### When you have the order ID
+
+```bash
+bat-go skus set-linking-limit \
+  --skus-base-url https://payment.rewards.brave.com \
+  --order-id <ORDER_UUID> \
+  --max <N> \
+  --private-key /path/to/operator.key
+```
+
+#### When the user provides only their email
+
+```bash
+bat-go skus set-linking-limit \
+  --skus-base-url https://payment.rewards.brave.com \
+  --subscriptions-base-url https://subscriptions.rewards.brave.com \
+  --subscriptions-token <SUPPORT_API_TOKEN> \
+  --email <USER_EMAIL> \
+  --max <N> \
+  --private-key /path/to/operator.key
+```
+
+### Multiple subscriptions (VPN + Leo)
+
+If the email matches more than one active subscription, the command prints a numbered list and prompts for a selection:
+
+```
+Found 2 active subscriptions matching "user@example.com":
+
+  #    order_id                              product               email
+  ---  ------------------------------------  --------------------  ------------------------------
+  1    aaaa-...                              leo-premium           user@example.com
+  2    bbbb-...                              vpn-premium           user@example.com
+
+Select subscription [1-2]:
+```
+
+Select the Leo Premium entry. The linking limit only applies to Leo — selecting the VPN order will fail with "credential type not supported".
+
+### Interactive flow
+
+The command shows the current number of active linked devices and the new limit before making any change:
+
+```
+Order bf399efe-... has 3 active linked device(s).
+New linking limit: 15
+
+Set linking limit to 15 for order bf399efe-...? [y/N]:
+```
+
+Type `y` to confirm. Anything else aborts with no changes made.
+
+### Orders with multiple items
+
+If an order has more than one item and you omit `--item-id`, the command targets the first item. If that item is not a Leo credential (e.g. a bundle containing both Leo and VPN items), the command will fail with "credential type not supported". In that case, obtain the correct item UUID from the order and re-run with `--item-id`.
+
+### Troubleshooting
+
+**"credential type not supported"** — the order is not a desktop Leo Premium order. This command cannot be used for iOS/Android orders. If the user has both Leo and VPN subscriptions, make sure you selected Leo when prompted, and use `--item-id` if the order has multiple items.
+
+**"order not paid"** — the user's subscription has expired or been cancelled. Raising the limit won't help until they renew.
+
+**"no subscriber found for email"** / **"no active subscriptions found for email"** — see the same entries under `reset-linking-limit` above.
+
+**Unexpected status 401** — your private key is not authorized for this environment, or your system clock is skewed by more than 10 minutes.
