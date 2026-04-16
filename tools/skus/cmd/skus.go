@@ -40,9 +40,35 @@ before making any changes.`,
 	RunE: runResetLinkingLimit,
 }
 
+var updateEmailCmd = &cobra.Command{
+	Use:   "update-email",
+	Short: "Update the email address on a Premium order",
+	Long: `Updates the Stripe customer email associated with a Premium order.
+
+Use this when a user cannot change their email through the account page.`,
+	RunE: runUpdateEmail,
+}
+
 func init() {
 	SkusCmd.AddCommand(resetLinkingLimitCmd)
+	SkusCmd.AddCommand(updateEmailCmd)
 	rootcmd.RootCmd.AddCommand(SkusCmd)
+
+	{
+		// Flags for update-email are read directly from cmd.Flags() in runUpdateEmail
+		// to avoid collisions with reset-linking-limit's viper bindings.
+		ue := updateEmailCmd.Flags()
+
+		ue.String("skus-base-url", "", "base URL of the SKUs service (e.g. https://payment.rewards.brave.com)")
+		ue.String("order-id", "", "the order UUID whose email should be updated")
+		ue.String("email", "", "the new email address to set")
+		ue.String("private-key", "", "path to the ed25519 private key file in SSH format used to sign requests")
+
+		rootcmd.Must(updateEmailCmd.MarkFlagRequired("skus-base-url"))
+		rootcmd.Must(updateEmailCmd.MarkFlagRequired("order-id"))
+		rootcmd.Must(updateEmailCmd.MarkFlagRequired("email"))
+		rootcmd.Must(updateEmailCmd.MarkFlagRequired("private-key"))
+	}
 
 	fb := rootcmd.NewFlagBuilder(resetLinkingLimitCmd)
 
@@ -228,6 +254,64 @@ func loadED25519PrivateKey(path string) (ed25519.PrivateKey, error) {
 	}
 
 	return *key, nil
+}
+
+func runUpdateEmail(cmd *cobra.Command, args []string) error {
+	baseURL, _ := cmd.Flags().GetString("skus-base-url")
+	baseURL = strings.TrimRight(baseURL, "/")
+	orderID, _ := cmd.Flags().GetString("order-id")
+	email, _ := cmd.Flags().GetString("email")
+	privKeyPath, _ := cmd.Flags().GetString("private-key")
+
+	privKey, err := loadED25519PrivateKey(privKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to load private key: %w", err)
+	}
+
+	if !confirm(fmt.Sprintf("Update email for order %s to %q?", orderID, email)) {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	endpoint := fmt.Sprintf("%s/v1/orders/%s/email", baseURL, orderID)
+
+	payload := struct {
+		Email string `json:"email"`
+	}{Email: email}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	if err := skus.SignSupportRequest(privKey, req); err != nil {
+		return fmt.Errorf("failed to sign request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, respBody)
+	}
+
+	fmt.Printf("Done. Email updated for order %s.\n", orderID)
+
+	return nil
 }
 
 func confirm(prompt string) bool {
