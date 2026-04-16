@@ -55,6 +55,9 @@ func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader,
 		GroupID:       groupID,
 		Topic:         topic,
 		Dialer:        dialer,
+		MinBytes:      1,
+		MaxBytes:      10e6, // 10MB
+		MaxWait:       1 * time.Second,
 		Logger:        kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
@@ -206,7 +209,7 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 		Balancer:     &kafka.LeastBytes{},
 		Dialer:       dialer,
 		Topic:        topic,
-		BatchTimeout: 1 * time.Second,
+		BatchTimeout: 50 * time.Millisecond,
 		Logger:       kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
