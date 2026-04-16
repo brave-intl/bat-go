@@ -53,6 +53,17 @@ func (r *OrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, 
 	return result, nil
 }
 
+// SetMaxActiveBatches updates the max_active_batches_tlv2_creds column for the given order item.
+func (r *OrderItem) SetMaxActiveBatches(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, max int) error {
+	const q = `UPDATE order_items SET max_active_batches_tlv2_creds = $2 WHERE id = $1`
+
+	if _, err := dbi.ExecContext(ctx, q, id, max); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // InsertMany inserts given items and returns the result.
 func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error) {
 	if len(items) == 0 {

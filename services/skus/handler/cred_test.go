@@ -24,6 +24,7 @@ type mockTLV2Svc struct {
 	FnUniqBatches       func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
 	FnListActiveBatches func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	FnDeleteBatches     func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	FnSetLinkingLimit   func(ctx context.Context, orderID, itemID uuid.UUID, max int) error
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
@@ -48,6 +49,14 @@ func (s *mockTLV2Svc) DeleteBatches(ctx context.Context, orderID, itemID uuid.UU
 	}
 
 	return s.FnDeleteBatches(ctx, orderID, itemID, seats)
+}
+
+func (s *mockTLV2Svc) SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+	if s.FnSetLinkingLimit == nil {
+		return nil
+	}
+
+	return s.FnSetLinkingLimit(ctx, orderID, itemID, max)
 }
 
 func TestCred_CountBatches(t *testing.T) {

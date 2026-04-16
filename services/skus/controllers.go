@@ -125,6 +125,7 @@ func Router(
 		cr.Method(http.MethodGet, "/batches/count", metricsMwr("CountBatches", authMwr(handlers.AppHandler(credh.CountBatches))))
 		cr.Method(http.MethodGet, "/batches", metricsMwr("ListActiveBatches", supportMwr(handlers.AppHandler(credh.ListActiveBatches))))
 		cr.Method(http.MethodDelete, "/batches", metricsMwr("DeleteBatches", supportMwr(handlers.AppHandler(credh.DeleteBatches))))
+		cr.Method(http.MethodPatch, "/batches/limit", metricsMwr("SetLinkingLimit", supportMwr(handlers.AppHandler(credh.SetLinkingLimit))))
 
 		// Handle the old endpoint while the new is being rolled out:
 		// - true: the handler uses itemID as the request id, which is the old mode;
