@@ -194,14 +194,14 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-type subsSearchResult struct {
+type activeSubsResp struct {
 	Email       string `json:"email"`
 	OrderID     string `json:"order_id"`
 	ProductName string `json:"product_name"`
 }
 
-type subsSearchResp struct {
-	Results []subsSearchResult `json:"results"`
+type activeSubsListResp struct {
+	Results []activeSubsResp `json:"results"`
 }
 
 func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, email, token string) (string, error) {
@@ -225,11 +225,14 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, em
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if err != nil {
+			return "", fmt.Errorf("unexpected status %d: failed to read response body: %w", resp.StatusCode, err)
+		}
 		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
 	}
 
-	var result subsSearchResp
+	var result activeSubsListResp
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
