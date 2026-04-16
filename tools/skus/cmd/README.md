@@ -137,7 +137,7 @@ Same as `reset-linking-limit`: `bat-go` binary, an ed25519 private key, and (whe
 | `--email` | `SUBSCRIBER_EMAIL` | One of these | Subscriber email (mutually exclusive with `--order-id`) |
 | `--subscriptions-base-url` | `SUBSCRIPTIONS_BASE_URL` | Yes, with `--email` | Base URL of the subscriptions service |
 | `--subscriptions-token` | `SUBSCRIPTIONS_SUPPORT_TOKEN` | Yes, with `--email` | Bearer token for the support API |
-| `--item-id` | — | No | Scope the change to a specific order item UUID |
+| `--item-id` | — | No | Order item UUID to set the limit for; prompted if omitted |
 
 Flags take precedence over env vars.
 
@@ -149,6 +149,17 @@ Flags take precedence over env vars.
 bat-go skus set-linking-limit \
   --skus-base-url https://payment.rewards.brave.com \
   --order-id <ORDER_UUID> \
+  --max <N> \
+  --private-key /path/to/operator.key
+```
+
+If the order has more than one TLV2 item, you will be prompted to pick one. To skip the prompt, provide `--item-id` directly:
+
+```bash
+bat-go skus set-linking-limit \
+  --skus-base-url https://payment.rewards.brave.com \
+  --order-id <ORDER_UUID> \
+  --item-id <ITEM_UUID> \
   --max <N> \
   --private-key /path/to/operator.key
 ```
@@ -195,13 +206,33 @@ Set linking limit to 15 for order bf399efe-...? [y/N]:
 
 Type `y` to confirm. Anything else aborts with no changes made.
 
-### Orders with multiple items
+### Item selection
 
-If an order has more than one item and you omit `--item-id`, the command targets the first item. If that item is not a Leo credential (e.g. a bundle containing both Leo and VPN items), the command will fail with "credential type not supported". In that case, obtain the correct item UUID from the order and re-run with `--item-id`.
+If `--item-id` is omitted, the command fetches the order's TLV2 items automatically:
+
+- **One item** — selected silently, no prompt:
+  ```
+  Using item ad0be000-... (leo-premium-year) for order bf399efe-...
+  ```
+
+- **Multiple items** — a numbered list is shown and you are asked to choose:
+  ```
+  Found 2 TLV2 items for order bf399efe-...:
+
+    #    item_id                               sku                             current_limit
+    ---  ------------------------------------  ------------------------------  -------------
+    1    ad0be000-...                          leo-premium-year                10
+    2    be0ef000-...                          leo-premium-month               (default)
+
+  Select item [1-2]:
+  ```
+  The `current_limit` column shows the value already set via this command, or `(default)` if it has never been changed.
+
+If you already know the item UUID, pass `--item-id` to skip the selection entirely.
 
 ### Troubleshooting
 
-**"credential type not supported"** — the order is not a desktop Leo Premium order. This command cannot be used for iOS/Android orders. If the user has both Leo and VPN subscriptions, make sure you selected Leo when prompted, and use `--item-id` if the order has multiple items.
+**"credential type not supported"** — the order or item is not a desktop Leo Premium credential. This command cannot be used for iOS/Android orders. If the user has both Leo and VPN subscriptions, make sure you selected Leo when prompted, and verify that `--item-id` points to the Leo item.
 
 **"order not paid"** — the user's subscription has expired or been cancelled. Raising the limit won't help until they renew.
 

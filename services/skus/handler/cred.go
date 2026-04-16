@@ -190,15 +190,20 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 }
 
 // SetLinkingLimit updates the maximum number of active TLV2 credential batches (linked devices)
-// for an order. An optional item_id in the request body scopes the change to a specific item.
+// for a specific order item.
 //
-// PATCH /v1/orders/{orderID}/credentials/batches/limit
+// PATCH /v1/orders/{orderID}/credentials/items/{itemID}/batches/limit
 func (h *Cred) SetLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
 		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
@@ -211,19 +216,11 @@ func (h *Cred) SetLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers
 		return handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest)
 	}
 
-	if req.Max <= 0 {
-		return handlers.ValidationError("request", map[string]interface{}{"max": "must be a positive integer"})
+	if req.MaxActiveBatchesTLV2Creds <= 0 {
+		return handlers.ValidationError("request", map[string]interface{}{"max_active_batches_tlv2_creds": "must be a positive integer"})
 	}
 
-	itemID := uuid.Nil
-	if req.ItemID != "" {
-		itemID, err = uuid.FromString(req.ItemID)
-		if err != nil {
-			return handlers.ValidationError("request", map[string]interface{}{"item_id": err.Error()})
-		}
-	}
-
-	if err := h.tlv2.SetLinkingLimit(ctx, orderID, itemID, req.Max); err != nil {
+	if err := h.tlv2.SetLinkingLimit(ctx, orderID, itemID, req.MaxActiveBatchesTLV2Creds); err != nil {
 		lg := logging.Logger(ctx, "skus").With().Str("func", "SetLinkingLimit").Logger()
 
 		switch {

@@ -302,17 +302,22 @@ func runSetLinkingLimit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
-	if itemID != "" {
-		listURL += "?" + url.Values{"item_id": {itemID}}.Encode()
+	if itemID == "" {
+		itemID, err = resolveItemID(ctx, client, baseURL, orderID)
+		if err != nil {
+			return err
+		}
 	}
+
+	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches?%s", baseURL, orderID,
+		url.Values{"item_id": {itemID}}.Encode())
 
 	batches, err := listBatches(ctx, client, listURL, privKey)
 	if err != nil {
 		return fmt.Errorf("failed to fetch active batches: %w", err)
 	}
 
-	fmt.Printf("Order %s has %d active linked device(s).\n", orderID, len(batches))
+	fmt.Printf("Item %s has %d active linked device(s).\n", itemID, len(batches))
 	fmt.Printf("New linking limit: %d\n\n", max)
 
 	if !confirm(fmt.Sprintf("Set linking limit to %d for order %s?", max, orderID)) {
@@ -320,8 +325,8 @@ func runSetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	limitURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches/limit", baseURL, orderID)
-	if err := setLinkingLimitHTTP(ctx, client, limitURL, privKey, max, itemID); err != nil {
+	limitURL := fmt.Sprintf("%s/v1/orders/%s/credentials/items/%s/batches/limit", baseURL, orderID, itemID)
+	if err := setLinkingLimitHTTP(ctx, client, limitURL, privKey, max); err != nil {
 		return fmt.Errorf("failed to set linking limit: %w", err)
 	}
 
@@ -413,11 +418,111 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, em
 	}
 }
 
-func setLinkingLimitHTTP(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey, max int, itemID string) error {
+type orderItemEntry struct {
+	ID                        string `json:"id"`
+	SKU                       string `json:"sku"`
+	CredentialType            string `json:"credentialType"`
+	MaxActiveBatchesTLV2Creds *int   `json:"max_active_batches_tlv2_creds"`
+}
+
+type orderEntry struct {
+	Items []orderItemEntry `json:"items"`
+}
+
+func getOrderItems(ctx context.Context, client *http.Client, baseURL, orderID string) ([]orderItemEntry, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/orders/"+orderID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("order %q not found", orderID)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
+	}
+
+	var result orderEntry
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode order: %w", err)
+	}
+
+	return result.Items, nil
+}
+
+func resolveItemID(ctx context.Context, client *http.Client, baseURL, orderID string) (string, error) {
+	items, err := getOrderItems(ctx, client, baseURL, orderID)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch order items: %w", err)
+	}
+
+	var tlv2 []orderItemEntry
+	for _, item := range items {
+		if item.CredentialType == "time-limited-v2" {
+			tlv2 = append(tlv2, item)
+		}
+	}
+
+	if len(tlv2) == 0 {
+		return "", fmt.Errorf("no TLV2 credential items found for order %q", orderID)
+	}
+
+	if len(tlv2) == 1 {
+		item := tlv2[0]
+		fmt.Printf("Using item %s (%s) for order %s\n\n", item.ID, item.SKU, orderID)
+		return item.ID, nil
+	}
+
+	fmt.Printf("Found %d TLV2 items for order %s:\n\n", len(tlv2), orderID)
+	fmt.Printf("  %-3s  %-36s  %-30s  %s\n", "#", "item_id", "sku", "current_limit")
+	fmt.Printf("  %-3s  %-36s  %-30s  %s\n",
+		"---", strings.Repeat("-", 36), strings.Repeat("-", 30), strings.Repeat("-", 13))
+
+	for i, item := range tlv2 {
+		limit := "(default)"
+		if item.MaxActiveBatchesTLV2Creds != nil {
+			limit = strconv.Itoa(*item.MaxActiveBatchesTLV2Creds)
+		}
+		fmt.Printf("  %-3d  %-36s  %-30s  %s\n", i+1, item.ID, item.SKU, limit)
+	}
+	fmt.Println()
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Printf("Select item [1-%d]: ", len(tlv2))
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return "", fmt.Errorf("reading stdin: %w", err)
+			}
+			return "", fmt.Errorf("no selection made")
+		}
+
+		n, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
+		if err != nil || n < 1 || n > len(tlv2) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(tlv2))
+			continue
+		}
+
+		return tlv2[n-1].ID, nil
+	}
+}
+
+func setLinkingLimitHTTP(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey, max int) error {
 	payload := struct {
-		Max    int    `json:"max"`
-		ItemID string `json:"item_id,omitempty"`
-	}{Max: max, ItemID: itemID}
+		Max int `json:"max_active_batches_tlv2_creds"`
+	}{Max: max}
 
 	body, err := json.Marshal(payload)
 	if err != nil {

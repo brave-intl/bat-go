@@ -744,14 +744,19 @@ func TestCred_DeleteBatches(t *testing.T) {
 }
 
 func TestCred_SetLinkingLimit(t *testing.T) {
-	orderCtx := func(orderID string) context.Context {
+	orderItemCtx := func(orderID, itemID string) context.Context {
 		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
 			URLParams: chi.RouteParams{
-				Keys:   []string{"orderID"},
-				Values: []string{orderID},
+				Keys:   []string{"orderID", "itemID"},
+				Values: []string{orderID, itemID},
 			},
 		})
 	}
+
+	const (
+		validOrderID = "c0c0a000-0000-4000-a000-000000000000"
+		validItemID  = "ad0be000-0000-4000-a000-000000000000"
+	)
 
 	type tcGiven struct {
 		ctx  context.Context
@@ -773,8 +778,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "invalid_orderID",
 			given: tcGiven{
-				ctx:  orderCtx("not-a-uuid"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx("not-a-uuid", validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc:  &mockTLV2Svc{},
 			},
 			exp: tcExpected{
@@ -783,9 +788,21 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		},
 
 		{
+			name: "invalid_itemID",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, "not-a-uuid"),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"itemID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
 			name: "invalid_json_body",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				ctx:  orderItemCtx(validOrderID, validItemID),
 				body: `{not json}`,
 				svc:  &mockTLV2Svc{},
 			},
@@ -801,32 +818,20 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "max_zero",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":0}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":0}`,
 				svc:  &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"max": "must be a positive integer"}),
-			},
-		},
-
-		{
-			name: "invalid_item_id",
-			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15,"item_id":"not-a-uuid"}`,
-				svc:  &mockTLV2Svc{},
-			},
-			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
+				err: handlers.ValidationError("request", map[string]interface{}{"max_active_batches_tlv2_creds": "must be a positive integer"}),
 			},
 		},
 
 		{
 			name: "context_cancelled",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return context.Canceled
@@ -841,8 +846,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "deadline_exceeded",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return context.DeadlineExceeded
@@ -857,8 +862,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "order_not_found",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return model.ErrOrderNotFound
@@ -873,8 +878,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "order_not_found_no_items",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return model.ErrInvalidOrderNoItems
@@ -889,8 +894,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "order_item_not_found",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15,"item_id":"ad0be000-0000-4000-a000-000000000000"}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return model.ErrOrderItemNotFound
@@ -905,8 +910,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "order_not_paid",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return model.ErrOrderNotPaid
@@ -921,8 +926,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "cred_type_not_supported",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return model.ErrUnsupportedCredType
@@ -937,8 +942,8 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "internal_error",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						return model.Error("unexpected")
@@ -953,12 +958,12 @@ func TestCred_SetLinkingLimit(t *testing.T) {
 		{
 			name: "success",
 			given: tcGiven{
-				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
-				body: `{"max":15,"item_id":"ad0be000-0000-4000-a000-000000000000"}`,
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
 				svc: &mockTLV2Svc{
 					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
 						should.Equal(t, 15, max)
-						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
+						should.Equal(t, validItemID, itemID.String())
 						return nil
 					},
 				},
