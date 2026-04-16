@@ -742,3 +742,254 @@ func TestCred_DeleteBatches(t *testing.T) {
 		})
 	}
 }
+
+func TestCred_SetLinkingLimit(t *testing.T) {
+	orderCtx := func(orderID string) context.Context {
+		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+			URLParams: chi.RouteParams{
+				Keys:   []string{"orderID"},
+				Values: []string{orderID},
+			},
+		})
+	}
+
+	type tcGiven struct {
+		ctx  context.Context
+		body string
+		svc  *mockTLV2Svc
+	}
+
+	type tcExpected struct {
+		err *handlers.AppError
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_orderID",
+			given: tcGiven{
+				ctx:  orderCtx("not-a-uuid"),
+				body: `{"max":15}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "invalid_json_body",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{not json}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(
+					json.NewDecoder(strings.NewReader(`{not json}`)).Decode(&struct{}{}),
+					"failed to parse request body",
+					http.StatusBadRequest,
+				),
+			},
+		},
+
+		{
+			name: "max_zero",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":0}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"max": "must be a positive integer"}),
+			},
+		},
+
+		{
+			name: "invalid_item_id",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15,"item_id":"not-a-uuid"}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "context_cancelled",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return context.Canceled
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.Canceled, "client ended request", model.StatusClientClosedConn),
+			},
+		},
+
+		{
+			name: "deadline_exceeded",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return context.DeadlineExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.DeadlineExceeded, "request timed out", http.StatusGatewayTimeout),
+			},
+		},
+
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_not_found_no_items",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrInvalidOrderNoItems
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrInvalidOrderNoItems, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_item_not_found",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15,"item_id":"ad0be000-0000-4000-a000-000000000000"}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrOrderItemNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderItemNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrOrderNotPaid
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotPaid, "order not paid", http.StatusPaymentRequired),
+			},
+		},
+
+		{
+			name: "cred_type_not_supported",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrUnsupportedCredType
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrUnsupportedCredType, "credential type not supported", http.StatusBadRequest),
+			},
+		},
+
+		{
+			name: "internal_error",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.Error("unexpected")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx:  orderCtx("c0c0a000-0000-4000-a000-000000000000"),
+				body: `{"max":15,"item_id":"ad0be000-0000-4000-a000-000000000000"}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						should.Equal(t, 15, max)
+						should.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewCred(tc.given.svc)
+
+			req := httptest.NewRequest(http.MethodPatch, "http://localhost", strings.NewReader(tc.given.body))
+			req = req.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			appErr := h.SetLinkingLimit(rw, req)
+			must.Equal(t, tc.exp.err, appErr)
+
+			if tc.exp.err != nil {
+				appErr.ServeHTTP(rw, req)
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+				should.Equal(t, exp, bytes.TrimSpace(rw.Body.Bytes()))
+				return
+			}
+
+			should.Equal(t, http.StatusOK, rw.Code)
+		})
+	}
+}

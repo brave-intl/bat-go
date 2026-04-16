@@ -228,20 +228,33 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 
 func runSetLinkingLimit(cmd *cobra.Command, args []string) error {
 	baseURL, _ := cmd.Flags().GetString("skus-base-url")
+	if baseURL == "" {
+		baseURL = os.Getenv("SKUS_BASE_URL")
+	}
 	baseURL = strings.TrimRight(baseURL, "/")
+
 	orderID, _ := cmd.Flags().GetString("order-id")
+
 	emailRaw, _ := cmd.Flags().GetString("email")
+	if emailRaw == "" {
+		emailRaw = os.Getenv("SUBSCRIBER_EMAIL")
+	}
 	email := strings.TrimSpace(emailRaw)
+
 	max, _ := cmd.Flags().GetInt("max")
 	itemID, _ := cmd.Flags().GetString("item-id")
+
 	privKeyPath, _ := cmd.Flags().GetString("private-key")
+	if privKeyPath == "" {
+		privKeyPath = os.Getenv("SKUS_SUPPORT_PRIVATE_KEY")
+	}
 
 	if baseURL == "" {
-		return fmt.Errorf("--skus-base-url is required")
+		return fmt.Errorf("--skus-base-url (or SKUS_BASE_URL) is required")
 	}
 
 	if privKeyPath == "" {
-		return fmt.Errorf("--private-key is required")
+		return fmt.Errorf("--private-key (or SKUS_SUPPORT_PRIVATE_KEY) is required")
 	}
 
 	if max <= 0 {
@@ -265,15 +278,22 @@ func runSetLinkingLimit(cmd *cobra.Command, args []string) error {
 
 	if email != "" {
 		subsBaseURL, _ := cmd.Flags().GetString("subscriptions-base-url")
+		if subsBaseURL == "" {
+			subsBaseURL = os.Getenv("SUBSCRIPTIONS_BASE_URL")
+		}
 		subsBaseURL = strings.TrimRight(subsBaseURL, "/")
+
 		subsToken, _ := cmd.Flags().GetString("subscriptions-token")
+		if subsToken == "" {
+			subsToken = os.Getenv("SUBSCRIPTIONS_SUPPORT_TOKEN")
+		}
 
 		if subsBaseURL == "" {
-			return fmt.Errorf("--subscriptions-base-url is required when using --email")
+			return fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required when using --email")
 		}
 
 		if subsToken == "" {
-			return fmt.Errorf("--subscriptions-token is required when using --email")
+			return fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required when using --email")
 		}
 
 		orderID, err = resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
@@ -282,14 +302,18 @@ func runSetLinkingLimit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	countURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches/count", baseURL, orderID)
-	lim, nact, err := countBatches(ctx, client, countURL, privKey)
-	if err != nil {
-		return fmt.Errorf("failed to fetch current batch count: %w", err)
+	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
+	if itemID != "" {
+		listURL += "?" + url.Values{"item_id": {itemID}}.Encode()
 	}
 
-	fmt.Printf("Order %s current linking limit: %d (active devices: %d)\n\n", orderID, lim, nact)
-	fmt.Printf("New limit: %d\n\n", max)
+	batches, err := listBatches(ctx, client, listURL, privKey)
+	if err != nil {
+		return fmt.Errorf("failed to fetch active batches: %w", err)
+	}
+
+	fmt.Printf("Order %s has %d active linked device(s).\n", orderID, len(batches))
+	fmt.Printf("New linking limit: %d\n\n", max)
 
 	if !confirm(fmt.Sprintf("Set linking limit to %d for order %s?", max, orderID)) {
 		fmt.Println("Aborted.")
@@ -387,43 +411,6 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, em
 
 		return result.Results[n-1].OrderID, nil
 	}
-}
-
-func countBatches(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey) (lim, active int, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	if err := skus.SignSupportRequest(key, req); err != nil {
-		return 0, 0, fmt.Errorf("failed to sign request: %w", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if err != nil {
-		return 0, 0, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, 0, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
-	}
-
-	var result struct {
-		Limit  int `json:"limit"`
-		Active int `json:"active"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return 0, 0, err
-	}
-
-	return result.Limit, result.Active, nil
 }
 
 func setLinkingLimitHTTP(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey, max int, itemID string) error {

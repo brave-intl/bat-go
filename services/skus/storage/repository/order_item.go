@@ -57,8 +57,18 @@ func (r *OrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, 
 func (r *OrderItem) SetMaxActiveBatches(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, max int) error {
 	const q = `UPDATE order_items SET max_active_batches_tlv2_creds = $2 WHERE id = $1`
 
-	if _, err := dbi.ExecContext(ctx, q, id, max); err != nil {
+	result, err := dbi.ExecContext(ctx, q, id, max)
+	if err != nil {
 		return err
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if n == 0 {
+		return model.ErrOrderItemNotFound
 	}
 
 	return nil

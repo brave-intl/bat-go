@@ -1403,17 +1403,7 @@ func (s *Service) SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID
 		return model.ErrUnsupportedCredType
 	}
 
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer s.Datastore.RollbackTx(tx)
-
-	if err := s.orderItemRepo.SetMaxActiveBatches(ctx, tx, item.ID, max); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return s.orderItemRepo.SetMaxActiveBatches(ctx, s.Datastore.RawDB(), item.ID, max)
 }
 
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is
