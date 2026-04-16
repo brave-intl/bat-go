@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
@@ -597,15 +598,25 @@ type SignedOrderCredentialsHandler struct {
 //
 // TODO(pavelb): Refactor this to not require real database for testing, and use deterministic time.
 func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Message) error {
+	lg := logging.Logger(ctx, "").Log()
+
+	start := time.Now().UTC()
+
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("1")
+
 	soresult, err := h.decoder.Decode(msg)
 	if err != nil {
 		return fmt.Errorf("error decoding message key %s partition %d offset %d: %w", string(msg.Key), msg.Partition, msg.Offset, err)
 	}
 
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("2")
+
 	requestID, err := uuid.FromString(soresult.RequestID)
 	if err != nil {
 		return fmt.Errorf("error getting uuid from signed order request: %w", err)
 	}
+
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("3")
 
 	ctx, tx, rollback, commit, err := datastore.GetTx(ctx, h.datastore)
 	if err != nil {
@@ -613,15 +624,21 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 	}
 	defer rollback()
 
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("4")
+
 	// Check to see if the signing request has not been deleted whilst signing the request.
 	sor, err := h.datastore.GetSigningOrderRequestOutboxByRequestID(ctx, tx, requestID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("error get signing order credentials tx: %w", err)
 	}
 
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("5")
+
 	if sor == nil || sor.CompletedAt != nil {
 		return nil
 	}
+
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("6")
 
 	if len(soresult.Data) > 0 {
 		var md Metadata
@@ -629,16 +646,22 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 			return fmt.Errorf("error deserializing associated data: %w", err)
 		}
 
+		lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("7")
+
 		if md.CredentialType == timeLimitedV2 {
 			item, err := h.orderItemReop.Get(ctx, tx, sor.ItemID)
 			if err != nil {
 				return err
 			}
 
+			lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("8")
+
 			mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
 			if err != nil {
 				return err
 			}
+
+			lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("9")
 
 			now := time.Now()
 			nact, err := h.tlv2Repo.UniqBatches(ctx, tx, sor.OrderID, sor.ItemID, now, now)
@@ -646,20 +669,30 @@ func (h *SignedOrderCredentialsHandler) Handle(ctx context.Context, msg kafka.Me
 				return fmt.Errorf("failed to get number of active batches: %w", err)
 			}
 
+			lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("10")
+
 			if err := checkTLV2BatchLimit(mc, nact); err != nil {
 				// Save to the dead letter queue for now.
 				return fmt.Errorf("failed to pass active batches limit check: %w", err)
 			}
+
+			lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("11")
 		}
 	}
+
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("12")
 
 	if err := h.datastore.InsertSignedOrderCredentialsTx(ctx, tx, soresult); err != nil {
 		return fmt.Errorf("error inserting signed order credentials: %w", err)
 	}
 
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("13")
+
 	if err := h.datastore.UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, time.Now()); err != nil {
 		return fmt.Errorf("error updating signing order request outbox: %w", err)
 	}
+
+	lg.Str("func", "SignedOrderCredentialsHandler").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("14")
 
 	if err := commit(); err != nil {
 		return fmt.Errorf("error commiting signing order request outbox: %w", err)

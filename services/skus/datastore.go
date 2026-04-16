@@ -1192,29 +1192,48 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 //
 // It handles both TimeLimitedV2Creds and SingleUse credentials. All SigningOrder's in the SigningOrderResult must be successful to persist the overall result.
 func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx.Tx, soResult *SigningOrderResult) error {
+	lg := logging.Logger(ctx, "").Log()
+
+	start := time.Now().UTC()
+
+	lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("1")
+
 	if len(soResult.Data) == 0 {
 		return fmt.Errorf("error no signing order result is empty for requestID %s", soResult.RequestID)
 	}
 
+	lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("2")
+
 	for i := range soResult.Data {
+
+		lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("3")
+
 		var metadata Metadata
 		if err := json.Unmarshal(soResult.Data[i].AssociatedData, &metadata); err != nil {
 			return fmt.Errorf("error desearializing associated data for requestID %s: %w", soResult.RequestID, err)
 		}
 
+		lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("4")
+
 		if soResult.Data[i].Status != SignedOrderStatusOk {
 			return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s", metadata.OrderID, metadata.ItemID, metadata.IssuerID, soResult.Data[i].Status.String())
 		}
+
+		lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("5")
 
 		blindedCreds := jsonutils.JSONStringArray(soResult.Data[i].BlindedTokens)
 		if len(blindedCreds) == 0 {
 			return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s", metadata.OrderID, metadata.ItemID)
 		}
 
+		lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("6")
+
 		signedTokens := jsonutils.JSONStringArray(soResult.Data[i].SignedTokens)
 		if len(signedTokens) == 0 {
 			return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s", metadata.OrderID, metadata.ItemID)
 		}
+
+		lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("7")
 
 		switch metadata.CredentialType {
 		case singleUse:
@@ -1233,36 +1252,50 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 			}
 
 		case timeLimitedV2:
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("8")
+
 			validToRaw := soResult.Data[i].ValidTo.Value()
 			if validToRaw == nil {
 				return fmt.Errorf("error validTo for order creds orderID %s itemID %s is null", metadata.OrderID, metadata.ItemID)
 			}
+
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("9")
 
 			validTo, err := time.Parse(time.RFC3339, *validToRaw)
 			if err != nil {
 				return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("10")
+
 			validToFromRaw := soResult.Data[i].ValidFrom.Value()
 			if validToFromRaw == nil {
 				return fmt.Errorf("error validFrom for order creds orderID %s itemID %s is null: %w", metadata.OrderID, metadata.ItemID, err)
 			}
+
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("11")
 
 			validFrom, err := time.Parse(time.RFC3339, *validToFromRaw)
 			if err != nil {
 				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
 
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("12")
+
 			ord, err := pg.orderRepo.Get(ctx, tx, metadata.OrderID)
 			if err != nil {
 				return fmt.Errorf("failed to get the order %s: %w", metadata.OrderID, err)
 			}
+
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("13")
 
 			// Filter out credentials for order with no or after the expiry date.
 			// It accounts for the grace period set in timeChunking (5 days).
 			if ord.ExpiresAt == nil || validFrom.After((*ord.ExpiresAt).AddDate(0, 0, 5)) {
 				continue
 			}
+
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("14")
 
 			cred := TimeAwareSubIssuedCreds{
 				ItemID:       metadata.ItemID,
@@ -1277,9 +1310,13 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				RequestID:    soResult.RequestID,
 			}
 
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("15")
+
 			if err := pg.InsertTimeLimitedV2OrderCredsTx(ctx, tx, cred); err != nil {
 				return fmt.Errorf("error inserting time limited order credential orderID %s itemID %s: %w", metadata.OrderID, metadata.ItemID, err)
 			}
+
+			lg.Str("func", "InsertSignedOrderCredentialsTx").Time("start", start).Interface("diff", time.Now().UTC().Sub(start)).Msg("16")
 
 		default:
 			return fmt.Errorf("error unknown credential type %s for order credential orderID %s itemID %s", metadata.CredentialType, metadata.OrderID, metadata.ItemID)
