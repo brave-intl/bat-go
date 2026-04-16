@@ -911,6 +911,40 @@ func (s *Service) setOrderTrialDaysTx(ctx context.Context, dbi sqlx.ExtContext, 
 	return err
 }
 
+// relinkOrderSubscription points an order at a new active Stripe subscription and
+// renews it. This fixes users whose order still references an old canceled subscription
+// after they cancel and resubscribe, leaving them unable to load new credentials.
+func (s *Service) relinkOrderSubscription(ctx context.Context, orderID uuid.UUID, subID string) error {
+	sub, err := s.stripeCl.Subscription(ctx, subID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to fetch stripe subscription: %w", err)
+	}
+
+	if sub.Status != stripe.SubscriptionStatusActive && sub.Status != stripe.SubscriptionStatusTrialing {
+		return model.ErrStripeSubscriptionNotActive
+	}
+
+	expt := time.Unix(sub.CurrentPeriodEnd, 0).UTC()
+	paidt := time.Unix(sub.CurrentPeriodStart, 0).UTC()
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	ord, err := s.orderRepo.Get(ctx, tx, orderID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.renewOrderStripe(ctx, tx, ord, subID, expt, paidt); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
 func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 	// get the order
