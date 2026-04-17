@@ -81,6 +81,10 @@ const (
 	timeLimited   = "time-limited"
 	timeLimitedV2 = "time-limited-v2"
 
+	// selfExtensionCap is the lifetime maximum number of self-service linking limit extensions
+	// per order item. Raise by changing this constant.
+	selfExtensionCap = 25
+
 	errSetRetryAfter             = model.Error("set retry-after")
 	errClosingResource           = model.Error("error closing resource")
 	errGeminiClientNotConfigured = model.Error("service: gemini client not configured")
@@ -1372,6 +1376,105 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	}
 
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
+}
+
+// ExtendLinkingLimit grants model.ExtensionSlots additional device linking slots for a TLV2
+// order item. It is rate-limited to once per model.ExtensionMinInterval and rejected when
+// the item already has enough free slots or the lifetime cap has been reached.
+func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID) error {
+	// Verify the caller owns this order before any read or mutation.
+	if err := s.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
+		switch {
+		case errors.Is(err, model.ErrOrderNotFound):
+			return err
+		case errors.Is(err, errMerchantMismatch),
+			errors.Is(err, errLocationMismatch),
+			errors.Is(err, errUnexpectedSKUCvt),
+			errors.Is(err, errInvalidMerchant):
+			return model.ErrOrderForbidden
+		default:
+			return err
+		}
+	}
+
+	now := time.Now()
+
+	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord.IsPaid() {
+		return model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return model.ErrInvalidOrderNoItems
+	}
+
+	item, ok := ord.HasItem(itemID)
+	if !ok {
+		return model.ErrOrderItemNotFound
+	}
+
+	if !item.IsCredTLV2() {
+		return model.ErrUnsupportedCredType
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer s.Datastore.RollbackTx(tx)
+
+	locked, err := s.orderItemRepo.LockForUpdate(ctx, tx, item.ID)
+	if err != nil {
+		return err
+	}
+
+	// Re-verify payment status inside the transaction after acquiring the row lock.
+	// The pre-lock IsPaid() check above used a non-locking snapshot; re-checking here
+	// closes the TOCTOU window between that snapshot and the mutation.
+	ord2, err := s.orderRepo.Get(ctx, tx, orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord2.IsPaid() {
+		return model.ErrOrderNotPaid
+	}
+
+	// nact is read without a lock on time_limited_v2_order_creds. A concurrent
+	// device-linking could insert a new batch between here and ApplyExtension, making the
+	// free-slots check overly permissive (granting an extension when slots become available
+	// concurrently). This is acceptable: the race makes the extension generous, not under-protective.
+	nact, err := s.tlv2Repo.UniqBatches(ctx, tx, orderID, itemID, now, now)
+	if err != nil {
+		return err
+	}
+
+	effectiveLimit, err := locked.MaxActiveBatchesTLV2CredsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	if effectiveLimit-nact >= model.ExtensionSlots {
+		return model.ErrExtensionSlotsAvailable
+	}
+
+	if locked.NumSelfExtensions >= selfExtensionCap {
+		return model.ErrExtensionCapReached
+	}
+
+	if locked.LastSelfExtensionAt != nil && now.Sub(*locked.LastSelfExtensionAt) < model.ExtensionMinInterval {
+		return model.ErrExtensionRateLimited
+	}
+
+	if err := s.orderItemRepo.ApplyExtension(ctx, tx, locked.ID, effectiveLimit+model.ExtensionSlots); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is

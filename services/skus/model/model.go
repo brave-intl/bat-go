@@ -54,6 +54,18 @@ const (
 	// ErrBatchSeatsExceeded is returned when the requested seats exceeds the number of active batches.
 	ErrBatchSeatsExceeded Error = "model: seats exceeds active batch count"
 
+	// ErrOrderForbidden is returned when the authenticated caller does not own the order.
+	ErrOrderForbidden Error = "model: order access forbidden"
+
+	// ErrExtensionRateLimited is returned when a self-service extension is attempted too soon.
+	ErrExtensionRateLimited Error = "model: extension rate limited"
+
+	// ErrExtensionSlotsAvailable is returned when there are already enough free slots.
+	ErrExtensionSlotsAvailable Error = "model: extension not needed, slots available"
+
+	// ErrExtensionCapReached is returned when the lifetime self-service extension cap is hit.
+	ErrExtensionCapReached Error = "model: extension cap reached"
+
 	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
 
 	ErrRadomInvalidNumAssocSubs Error = "model: invalid number of associated subs"
@@ -80,6 +92,12 @@ const (
 	issuerBufferDefault              = 30
 	issuerOverlapDefault             = 5
 	MaxActiveBatchesTLV2CredsDefault = 10
+
+	// ExtensionSlots is the number of device slots granted per self-service extension.
+	ExtensionSlots = 3
+
+	// ExtensionMinInterval is the minimum time between self-service extensions.
+	ExtensionMinInterval = 30 * 24 * time.Hour
 )
 
 const (
@@ -339,6 +357,8 @@ type OrderItem struct {
 	Description               datastore.NullString `json:"description" db:"description"`
 	CredentialType            string               `json:"credentialType" db:"credential_type"`
 	MaxActiveBatchesTLV2Creds *int                 `json:"max_active_batches_tlv2_creds" db:"max_active_batches_tlv2_creds"`
+	NumSelfExtensions         int                  `json:"-" db:"num_self_extensions"`
+	LastSelfExtensionAt       *time.Time           `json:"-" db:"last_self_extension_at"`
 	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
 	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
