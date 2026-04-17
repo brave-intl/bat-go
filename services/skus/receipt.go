@@ -16,6 +16,7 @@ import (
 const (
 	errNoInAppTx           model.Error = "no in app info in response"
 	errIOSPurchaseNotFound model.Error = "ios: purchase not found"
+	errInvalidPurchaseDate model.Error = "ios: invalid purchase date"
 )
 
 type appStoreVerifier interface {
@@ -68,33 +69,55 @@ func (v *receiptVerifier) validateAppleTime(ctx context.Context, req model.Recei
 		return model.ReceiptData{}, fmt.Errorf("failed to verify receipt: %w", err)
 	}
 
-	// ProductID on an InApp object must match the SubscriptionID.
-	//
-	// By doing so we:
-	// - find the purchase that is being verified (i.e. to disambiguate VPN from Leo);
-	// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
-	item, ok := findInAppBySubIDIAP(resp, req.SubscriptionID, now)
-	if ok {
-		return newReceiptDataApple(req, item), nil
+	svnt, err := skuVntByMobileName(req.SubscriptionID)
+	if err != nil {
+		return model.ReceiptData{}, err
 	}
 
-	// Special case for VPN.
-	// The client may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
-	if req.SubscriptionID == "bravevpn.monthly" {
-		item, ok := findInAppBySubIDIAP(resp, "bravevpn.yearly", now)
-		if ok {
-			return newReceiptDataApple(req, item), nil
+	switch svnt {
+	case "brave-origin-premium-perpetual-license":
+		iap, ok := findInAppBySubIDIAPOneOff(resp, req.SubscriptionID)
+		if !ok {
+			return model.ReceiptData{}, errIOSPurchaseNotFound
 		}
-	}
 
-	// Handle legacy iOS versions predating the release that started using proper values for subscription_id.
-	// This only applies to VPN.
-	item, ok = findInAppBySubIDLegacy(resp, req.SubscriptionID, now)
-	if !ok {
-		return model.ReceiptData{}, errIOSPurchaseNotFound
-	}
+		if iap.PurchaseDate.PurchaseDateMS == "" {
+			return model.ReceiptData{}, errInvalidPurchaseDate
+		}
 
-	return newReceiptDataApple(req, item), nil
+		expt := now.AddDate(100, 0, 0)
+
+		return newReceiptDataAppleOneOff(req, iap, expt), nil
+
+	default:
+		// ProductID on an InApp object must match the SubscriptionID.
+		//
+		// By doing so we:
+		// - find the purchase that is being verified (i.e. to disambiguate VPN from Leo);
+		// - utilise Apple verification to make sure the client supplied data (SubscriptionID) is valid and to be trusted.
+		item, ok := findInAppBySubIDIAPSub(resp, req.SubscriptionID, now)
+		if ok {
+			return newReceiptDataAppleSub(req, item), nil
+		}
+
+		// Special case for VPN.
+		// The client may send bravevpn.monthly as subscription_id for bravevpn.yearly product.
+		if req.SubscriptionID == "bravevpn.monthly" {
+			item, ok := findInAppBySubIDIAPSub(resp, "bravevpn.yearly", now)
+			if ok {
+				return newReceiptDataAppleSub(req, item), nil
+			}
+		}
+
+		// Handle legacy iOS versions predating the release that started using proper values for subscription_id.
+		// This only applies to VPN.
+		item, ok = findInAppBySubIDVPNLegacy(resp, req.SubscriptionID, now)
+		if !ok {
+			return model.ReceiptData{}, errIOSPurchaseNotFound
+		}
+
+		return newReceiptDataAppleSub(req, item), nil
+	}
 }
 
 // validateGoogle validates a Play Store receipt.
@@ -145,16 +168,35 @@ func (v *receiptVerifier) fetchSubPlayStore(ctx context.Context, pkgName, subID,
 	return (*playStoreSubPurchase)(sub), nil
 }
 
-func findInAppBySubIDIAP(iap *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
-	result, ok := findInAppBySubID(iap.LatestReceiptInfo, subID, now)
+func findInAppBySubIDIAPOneOff(iap *appstore.IAPResponse, subID string) (*appstore.InApp, bool) {
+	result, ok := findInAppBySubIDOneOff(iap.LatestReceiptInfo, subID)
 	if ok {
 		return result, true
 	}
 
-	return findInAppBySubID(iap.Receipt.InApp, subID, now)
+	return findInAppBySubIDOneOff(iap.Receipt.InApp, subID)
 }
 
-func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
+func findInAppBySubIDOneOff(iap []appstore.InApp, subID string) (*appstore.InApp, bool) {
+	for i := range iap {
+		if iap[i].ProductID == subID {
+			return &iap[i], true
+		}
+	}
+
+	return nil, false
+}
+
+func findInAppBySubIDIAPSub(iap *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
+	result, ok := findInAppBySubIDSub(iap.LatestReceiptInfo, subID, now)
+	if ok {
+		return result, true
+	}
+
+	return findInAppBySubIDSub(iap.Receipt.InApp, subID, now)
+}
+
+func findInAppBySubIDSub(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
 	for i := range iap {
 		if iap[i].ProductID == subID {
 			item := newWrapAppStoreInApp(&iap[i])
@@ -168,7 +210,7 @@ func findInAppBySubID(iap []appstore.InApp, subID string, now time.Time) (*wrapA
 	return nil, false
 }
 
-func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
+func findInAppBySubIDVPNLegacy(resp *appstore.IAPResponse, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
 	item, ok := findInAppVPNLegacy(resp.LatestReceiptInfo, subID, now)
 	if ok {
 		return item, true
@@ -180,17 +222,17 @@ func findInAppBySubIDLegacy(resp *appstore.IAPResponse, subID string, now time.T
 func findInAppVPNLegacy(iap []appstore.InApp, subID string, now time.Time) (*wrapAppStoreInApp, bool) {
 	switch subID {
 	case "brave-firewall-vpn-premium":
-		item, ok := findInAppBySubID(iap, "bravevpn.monthly", now)
+		item, ok := findInAppBySubIDSub(iap, "bravevpn.monthly", now)
 		if ok {
 			return item, true
 		}
 
 		// Quick fix for linking coming from iOS v1.61.1 and below.
 		// The old clients might send brave-firewall-vpn-premium for bravevpn.yearly.
-		return findInAppBySubID(iap, "bravevpn.yearly", now)
+		return findInAppBySubIDSub(iap, "bravevpn.yearly", now)
 
 	case "brave-firewall-vpn-premium-year":
-		return findInAppBySubID(iap, "bravevpn.yearly", now)
+		return findInAppBySubIDSub(iap, "bravevpn.yearly", now)
 	default:
 		return nil, false
 	}
