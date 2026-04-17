@@ -19,6 +19,7 @@ type tlv2Svc interface {
 	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, max int) error
 }
 
 type Cred struct {
@@ -181,6 +182,65 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 
 		default:
 			lg.Error().Err(err).Msg("failed to delete batches")
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+// SetLinkingLimit updates the maximum number of active TLV2 credential batches (linked devices)
+// for a specific order item.
+//
+// PATCH /v1/orders/{orderID}/credentials/items/{itemID}/batches/limit
+func (h *Cred) SetLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return handlers.WrapError(err, "failed to read request body", http.StatusBadRequest)
+	}
+
+	var req model.SetLinkingLimitReq
+	if err := json.Unmarshal(body, &req); err != nil {
+		return handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest)
+	}
+
+	if req.MaxActiveBatchesTLV2Creds <= 0 {
+		return handlers.ValidationError("request", map[string]interface{}{"max_active_batches_tlv2_creds": "must be a positive integer"})
+	}
+
+	if err := h.tlv2.SetLinkingLimit(ctx, orderID, itemID, req.MaxActiveBatchesTLV2Creds); err != nil {
+		lg := logging.Logger(ctx, "skus").With().Str("func", "SetLinkingLimit").Logger()
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
+			return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+		case errors.Is(err, model.ErrOrderNotPaid):
+			return handlers.WrapError(err, "order not paid", http.StatusPaymentRequired)
+
+		case errors.Is(err, model.ErrUnsupportedCredType):
+			return handlers.WrapError(err, "credential type not supported", http.StatusBadRequest)
+
+		default:
+			lg.Error().Err(err).Msg("failed to set linking limit")
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}

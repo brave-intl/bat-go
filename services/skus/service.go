@@ -1374,6 +1374,38 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
+// SetLinkingLimit sets the maximum number of active TLV2 credential batches (linked devices)
+// allowed for an order item. When itemID is uuid.Nil, the first item in the order is used.
+func (s *Service) SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord.IsPaid() {
+		return model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return model.ErrInvalidOrderNoItems
+	}
+
+	item := &ord.Items[0]
+	if !uuid.Equal(itemID, uuid.Nil) {
+		var ok bool
+		item, ok = ord.HasItem(itemID)
+		if !ok {
+			return model.ErrOrderItemNotFound
+		}
+	}
+
+	if !item.IsCredTLV2() {
+		return model.ErrUnsupportedCredType
+	}
+
+	return s.orderItemRepo.SetMaxActiveBatches(ctx, s.Datastore.RawDB(), item.ID, max)
+}
+
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is
 // non-nil it checks that the specific item exists and is TLV2; otherwise it requires
 // at least one TLV2 item in the order.
