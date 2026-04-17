@@ -19,6 +19,7 @@ type tlv2Svc interface {
 	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID) error
 }
 
 type Cred struct {
@@ -181,6 +182,64 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 
 		default:
 			lg.Error().Err(err).Msg("failed to delete batches")
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+// ExtendLinkingLimit grants model.ExtensionSlots additional device linking slots for a TLV2
+// order item. Rate-limited to once per model.ExtensionMinInterval; rejected if slots already
+// available or the lifetime cap has been reached.
+//
+// POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
+func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
+	}
+
+	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID); err != nil {
+		lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimit").Logger()
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
+			return handlers.WrapError(err, "order not found", http.StatusNotFound)
+
+		case errors.Is(err, model.ErrOrderNotPaid):
+			return handlers.WrapError(err, "order not paid", http.StatusPaymentRequired)
+
+		case errors.Is(err, model.ErrUnsupportedCredType):
+			return handlers.WrapError(err, "credential type not supported", http.StatusBadRequest)
+
+		case errors.Is(err, model.ErrOrderForbidden):
+			return handlers.WrapError(err, "order access forbidden", http.StatusForbidden)
+
+		case errors.Is(err, model.ErrExtensionSlotsAvailable):
+			return handlers.WrapError(err, "slots already available", http.StatusBadRequest)
+
+		case errors.Is(err, model.ErrExtensionCapReached):
+			return handlers.WrapError(err, "extension cap reached", http.StatusForbidden)
+
+		case errors.Is(err, model.ErrExtensionRateLimited):
+			return handlers.WrapError(err, "extension rate limited", http.StatusTooManyRequests)
+
+		default:
+			lg.Error().Err(err).Msg("failed to extend linking limit")
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}

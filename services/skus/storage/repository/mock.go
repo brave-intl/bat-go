@@ -152,9 +152,11 @@ func (r *MockOrder) IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerCo
 }
 
 type MockOrderItem struct {
-	FnGet           func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
-	FnFindByOrderID func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
-	FnInsertMany    func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+	FnGet            func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FnFindByOrderID  func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
+	FnInsertMany     func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+	FnLockForUpdate  func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FnApplyExtension func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, newLimit int) error
 }
 
 func (r *MockOrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
@@ -179,6 +181,22 @@ func (r *MockOrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, ite
 	}
 
 	return r.FnInsertMany(ctx, dbi, items...)
+}
+
+func (r *MockOrderItem) LockForUpdate(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+	if r.FnLockForUpdate == nil {
+		return &model.OrderItem{ID: id}, nil
+	}
+
+	return r.FnLockForUpdate(ctx, dbi, id)
+}
+
+func (r *MockOrderItem) ApplyExtension(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, newLimit int) error {
+	if r.FnApplyExtension == nil {
+		return nil
+	}
+
+	return r.FnApplyExtension(ctx, dbi, id, newLimit)
 }
 
 type MockIssuer struct {

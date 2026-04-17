@@ -21,9 +21,10 @@ import (
 )
 
 type mockTLV2Svc struct {
-	FnUniqBatches       func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
-	FnListActiveBatches func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
-	FnDeleteBatches     func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	FnUniqBatches        func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
+	FnListActiveBatches  func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
+	FnDeleteBatches      func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	FnExtendLinkingLimit func(ctx context.Context, orderID, itemID uuid.UUID) error
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
@@ -48,6 +49,14 @@ func (s *mockTLV2Svc) DeleteBatches(ctx context.Context, orderID, itemID uuid.UU
 	}
 
 	return s.FnDeleteBatches(ctx, orderID, itemID, seats)
+}
+
+func (s *mockTLV2Svc) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID) error {
+	if s.FnExtendLinkingLimit == nil {
+		return nil
+	}
+
+	return s.FnExtendLinkingLimit(ctx, orderID, itemID)
 }
 
 func TestCred_CountBatches(t *testing.T) {
@@ -719,6 +728,247 @@ func TestCred_DeleteBatches(t *testing.T) {
 			rw.Header().Set("content-type", "application/json")
 
 			appErr := h.DeleteBatches(rw, req)
+			must.Equal(t, tc.exp.err, appErr)
+
+			if tc.exp.err != nil {
+				appErr.ServeHTTP(rw, req)
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+				should.Equal(t, exp, bytes.TrimSpace(rw.Body.Bytes()))
+				return
+			}
+
+			should.Equal(t, http.StatusOK, rw.Code)
+		})
+	}
+}
+
+func TestCred_ExtendLinkingLimit(t *testing.T) {
+	routeCtx := func(orderID, itemID string) context.Context {
+		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+			URLParams: chi.RouteParams{
+				Keys:   []string{"orderID", "itemID"},
+				Values: []string{orderID, itemID},
+			},
+		})
+	}
+
+	type tcGiven struct {
+		ctx context.Context
+		svc *mockTLV2Svc
+	}
+
+	type tcExpected struct {
+		err *handlers.AppError
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_orderID",
+			given: tcGiven{
+				ctx: routeCtx("not-a-uuid", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "invalid_itemID",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "not-a-uuid"),
+				svc: &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"itemID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "order_forbidden",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.ErrOrderForbidden
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderForbidden, "order access forbidden", http.StatusForbidden),
+			},
+		},
+
+		{
+			name: "context_canceled",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return context.Canceled
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.Canceled, "client ended request", model.StatusClientClosedConn),
+			},
+		},
+
+		{
+			name: "deadline_exceeded",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return context.DeadlineExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.DeadlineExceeded, "request timed out", http.StatusGatewayTimeout),
+			},
+		},
+
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.ErrOrderNotPaid
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotPaid, "order not paid", http.StatusPaymentRequired),
+			},
+		},
+
+		{
+			name: "unsupported_cred_type",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.ErrUnsupportedCredType
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrUnsupportedCredType, "credential type not supported", http.StatusBadRequest),
+			},
+		},
+
+		{
+			name: "slots_already_available",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.ErrExtensionSlotsAvailable
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrExtensionSlotsAvailable, "slots already available", http.StatusBadRequest),
+			},
+		},
+
+		{
+			name: "extension_cap_reached",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.ErrExtensionCapReached
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrExtensionCapReached, "extension cap reached", http.StatusForbidden),
+			},
+		},
+
+		{
+			name: "rate_limited",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.ErrExtensionRateLimited
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrExtensionRateLimited, "extension rate limited", http.StatusTooManyRequests),
+			},
+		},
+
+		{
+			name: "internal_error",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						return model.Error("unexpected")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx: routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID) error {
+						must.Equal(t, "c0c0a000-0000-4000-a000-000000000000", orderID.String())
+						must.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewCred(tc.given.svc)
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost", nil)
+			req = req.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			appErr := h.ExtendLinkingLimit(rw, req)
 			must.Equal(t, tc.exp.err, appErr)
 
 			if tc.exp.err != nil {
