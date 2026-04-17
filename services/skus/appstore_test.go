@@ -392,7 +392,56 @@ func TestShouldCancelOrderIOS(t *testing.T) {
 	}
 }
 
-func TestNewReceiptDataApple(t *testing.T) {
+func TestNewReceiptDataAppleOneOff(t *testing.T) {
+	type tcGiven struct {
+		req  model.ReceiptRequest
+		iap  *appstore.InApp
+		expt time.Time
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   model.ReceiptData
+	}
+
+	tests := []testCase{
+		{
+			name: "valid",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Blob:           "blob",
+					Package:        "package",
+					SubscriptionID: "one-off",
+				},
+				iap: &appstore.InApp{
+					ProductID:             "one-off",
+					OriginalTransactionID: "720000000000001",
+				},
+				expt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: model.ReceiptData{
+				Type:      model.VendorApple,
+				ProductID: "one-off",
+				ExtID:     "720000000000001",
+				ExpiresAt: time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := newReceiptDataAppleOneOff(tc.given.req, tc.given.iap, tc.given.expt)
+
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestNewReceiptDataAppleSub(t *testing.T) {
 	type tcGiven struct {
 		req  model.ReceiptRequest
 		item *wrapAppStoreInApp
@@ -435,7 +484,7 @@ func TestNewReceiptDataApple(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual := newReceiptDataApple(tc.given.req, tc.given.item)
+			actual := newReceiptDataAppleSub(tc.given.req, tc.given.item)
 
 			should.Equal(t, tc.exp, actual)
 		})
