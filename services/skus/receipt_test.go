@@ -800,6 +800,163 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "ios_one_off_not_found",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Package:        "com.brave.ios.browser",
+					Blob:           "blob",
+					SubscriptionID: "braveorigin.perpetual",
+				},
+
+				cl: &mockASClient{
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+						resp, ok := result.(*appstore.IAPResponse)
+						if !ok {
+							return model.Error("invalid response type")
+						}
+
+						resp.Receipt.BundleID = "com.brave.ios.browser"
+						resp.LatestReceiptInfo = []appstore.InApp{}
+
+						return nil
+					},
+				},
+
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: tcExpected{
+				err: errIOSPurchaseNotFound,
+			},
+		},
+
+		{
+			name: "ios_one_off_purchase_date_ms_empty",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Package:        "com.brave.ios.browser",
+					Blob:           "blob",
+					SubscriptionID: "braveorigin.perpetual",
+				},
+
+				cl: &mockASClient{
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+						resp, ok := result.(*appstore.IAPResponse)
+						if !ok {
+							return model.Error("invalid response type")
+						}
+
+						resp.Receipt.BundleID = "com.brave.ios.browser"
+
+						resp.LatestReceiptInfo = []appstore.InApp{
+							{
+								ProductID:             "braveorigin.perpetual",
+								OriginalTransactionID: "720000000000002",
+							},
+						}
+
+						return nil
+					},
+				},
+
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: tcExpected{
+				err: errInvalidPurchaseDate,
+			},
+		},
+
+		{
+			name: "ios_one_off_latest_receipt_info",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Package:        "com.brave.ios.browser",
+					Blob:           "blob",
+					SubscriptionID: "braveorigin.perpetual",
+				},
+
+				cl: &mockASClient{
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+						resp, ok := result.(*appstore.IAPResponse)
+						if !ok {
+							return model.Error("invalid response type")
+						}
+
+						resp.Receipt.BundleID = "com.brave.ios.browser"
+
+						resp.LatestReceiptInfo = []appstore.InApp{
+							{
+								ProductID:             "braveorigin.perpetual",
+								OriginalTransactionID: "720000000000002",
+								PurchaseDate: appstore.PurchaseDate{
+									PurchaseDateMS: "1111",
+								},
+							},
+						}
+
+						return nil
+					},
+				},
+
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "braveorigin.perpetual",
+					ExtID:     "720000000000002",
+					ExpiresAt: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC).AddDate(100, 0, 0),
+				},
+			},
+		},
+
+		{
+			name: "ios_one_off_receipt_inapp",
+			given: tcGiven{
+				req: model.ReceiptRequest{
+					Type:           model.VendorApple,
+					Package:        "com.brave.ios.browser",
+					Blob:           "blob",
+					SubscriptionID: "braveorigin.perpetual",
+				},
+
+				cl: &mockASClient{
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+						resp, ok := result.(*appstore.IAPResponse)
+						if !ok {
+							return model.Error("invalid response type")
+						}
+
+						resp.Receipt.BundleID = "com.brave.ios.browser"
+						resp.Receipt.InApp = []appstore.InApp{
+							{
+								ProductID:             "braveorigin.perpetual",
+								OriginalTransactionID: "720000000000001",
+								PurchaseDate: appstore.PurchaseDate{
+									PurchaseDateMS: "1111",
+								},
+							},
+						}
+
+						return nil
+					},
+				},
+
+				now: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+			},
+			exp: tcExpected{
+				val: model.ReceiptData{
+					Type:      model.VendorApple,
+					ProductID: "braveorigin.perpetual",
+					ExtID:     "720000000000001",
+					ExpiresAt: time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC).AddDate(100, 0, 0),
+				},
+			},
+		},
 	}
 
 	for i := range tests {
@@ -816,7 +973,213 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 	}
 }
 
-func TestFindInAppBySubIDIAP(t *testing.T) {
+func TestFindInAppBySubIDIAPOneOff(t *testing.T) {
+	type tcGiven struct {
+		resp  *appstore.IAPResponse
+		subID string
+	}
+
+	type tcExpected struct {
+		iap *appstore.InApp
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "empty",
+			given: tcGiven{
+				subID: "one-off",
+				resp:  &appstore.IAPResponse{},
+			},
+		},
+
+		{
+			name: "found_latest_receipt_info",
+			given: tcGiven{
+				resp: &appstore.IAPResponse{
+					LatestReceiptInfo: []appstore.InApp{
+						{
+							ProductID: "one-off",
+						},
+					},
+				},
+				subID: "one-off",
+			},
+			exp: tcExpected{
+				iap: &appstore.InApp{
+					ProductID: "one-off",
+				},
+				ok: true,
+			},
+		},
+
+		{
+			name: "found_receipt",
+			given: tcGiven{
+				resp: &appstore.IAPResponse{
+					Receipt: appstore.Receipt{
+						InApp: []appstore.InApp{
+							{
+								ProductID: "one-off",
+							},
+						},
+					},
+				},
+				subID: "one-off",
+			},
+			exp: tcExpected{
+				iap: &appstore.InApp{
+					ProductID: "one-off",
+				},
+				ok: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := findInAppBySubIDIAPOneOff(tc.given.resp, tc.given.subID)
+			must.Equal(t, tc.exp.ok, ok)
+
+			if !tc.exp.ok {
+				return
+			}
+
+			should.Equal(t, tc.exp.iap, actual)
+		})
+	}
+}
+
+func TestFindInAppBySubIDOneOff(t *testing.T) {
+	type tcGiven struct {
+		iap   []appstore.InApp
+		subID string
+	}
+
+	type tcExpected struct {
+		iap *appstore.InApp
+		ok  bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "empty",
+			given: tcGiven{
+				iap:   []appstore.InApp{},
+				subID: "one-off",
+			},
+			exp: tcExpected{},
+		},
+
+		{
+			name: "one_item_not_found_product_id_sub_id_mismatch",
+			given: tcGiven{
+				iap: []appstore.InApp{
+					{
+						ProductID: "one-off",
+						ExpiresDate: appstore.ExpiresDate{
+							ExpiresDateMS: strconv.FormatInt(time.Now().Add(15*24*time.Hour).UnixMilli(), 10),
+						},
+					},
+				},
+
+				subID: "sub-id",
+			},
+			exp: tcExpected{},
+		},
+
+		{
+			name: "two_items_not_found",
+			given: tcGiven{
+				iap: []appstore.InApp{
+					{
+						ProductID: "one-off-1",
+					},
+
+					{
+						ProductID: "one-off-2",
+					},
+				},
+
+				subID: "sub-id",
+			},
+			exp: tcExpected{},
+		},
+
+		{
+			name: "one_item_found",
+			given: tcGiven{
+				iap: []appstore.InApp{
+					{
+						ProductID: "one-off",
+					},
+				},
+
+				subID: "one-off",
+			},
+			exp: tcExpected{
+				iap: &appstore.InApp{
+					ProductID: "one-off",
+				},
+				ok: true,
+			},
+		},
+
+		{
+			name: "two_items_found",
+			given: tcGiven{
+				iap: []appstore.InApp{
+					{
+						ProductID: "one-off-1",
+					},
+
+					{
+						ProductID: "one-off-2",
+					},
+				},
+
+				subID: "one-off-2",
+			},
+			exp: tcExpected{
+				iap: &appstore.InApp{
+					ProductID: "one-off-2",
+				},
+				ok: true,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, ok := findInAppBySubIDOneOff(tc.given.iap, tc.given.subID)
+			must.Equal(t, tc.exp.ok, ok)
+
+			if !tc.exp.ok {
+				return
+			}
+
+			should.Equal(t, tc.exp.iap, actual)
+		})
+	}
+}
+
+func TestFindInAppBySubIDIAPSub(t *testing.T) {
 	type tcGiven struct {
 		resp  *appstore.IAPResponse
 		subID string
@@ -910,7 +1273,7 @@ func TestFindInAppBySubIDIAP(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, ok := findInAppBySubIDIAP(tc.given.resp, tc.given.subID, tc.given.now)
+			actual, ok := findInAppBySubIDIAPSub(tc.given.resp, tc.given.subID, tc.given.now)
 			must.Equal(t, tc.exp.ok, ok)
 
 			if !tc.exp.ok {
@@ -922,7 +1285,7 @@ func TestFindInAppBySubIDIAP(t *testing.T) {
 	}
 }
 
-func TestFindInAppBySubID(t *testing.T) {
+func TestFindInAppBySubIDSub(t *testing.T) {
 	type tcGiven struct {
 		iap   []appstore.InApp
 		subID string
@@ -1082,7 +1445,7 @@ func TestFindInAppBySubID(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, ok := findInAppBySubID(tc.given.iap, tc.given.subID, tc.given.now)
+			actual, ok := findInAppBySubIDSub(tc.given.iap, tc.given.subID, tc.given.now)
 			must.Equal(t, tc.exp.ok, ok)
 
 			if !tc.exp.ok {
@@ -1094,7 +1457,7 @@ func TestFindInAppBySubID(t *testing.T) {
 	}
 }
 
-func TestFindInAppBySubIDLegacy(t *testing.T) {
+func TestFindInAppBySubIDVPNLegacy(t *testing.T) {
 	type tcGiven struct {
 		resp  *appstore.IAPResponse
 		subID string
@@ -1202,7 +1565,7 @@ func TestFindInAppBySubIDLegacy(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, ok := findInAppBySubIDLegacy(tc.given.resp, tc.given.subID, tc.given.now)
+			actual, ok := findInAppBySubIDVPNLegacy(tc.given.resp, tc.given.subID, tc.given.now)
 			must.Equal(t, tc.exp.ok, ok)
 
 			if !tc.exp.ok {
