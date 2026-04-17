@@ -353,7 +353,18 @@ func (x *appStoreTransaction) isRevoked(now time.Time) bool {
 	return x.RevocationDate > 0 && now.After(time.UnixMilli(x.RevocationDate))
 }
 
-func newReceiptDataApple(req model.ReceiptRequest, item *wrapAppStoreInApp) model.ReceiptData {
+func newReceiptDataAppleOneOff(req model.ReceiptRequest, iap *appstore.InApp, expt time.Time) model.ReceiptData {
+	result := model.ReceiptData{
+		Type:      req.Type,
+		ProductID: iap.ProductID,
+		ExtID:     iap.OriginalTransactionID,
+		ExpiresAt: expt,
+	}
+
+	return result
+}
+
+func newReceiptDataAppleSub(req model.ReceiptRequest, item *wrapAppStoreInApp) model.ReceiptData {
 	result := model.ReceiptData{
 		Type:      req.Type,
 		ProductID: item.ProductID,
