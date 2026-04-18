@@ -88,6 +88,12 @@ func Router(
 		metricsMwr("SetOrderTrialDays", NewCORSMwr(copts, http.MethodPatch)(authMwr(handleSetOrderTrialDays(svc)))),
 	)
 
+	r.Method(
+		http.MethodPatch,
+		"/{orderID}/subscription",
+		metricsMwr("RelinkOrderSubscription", supportMwr(handlers.AppHandler(handleRelinkOrderSubscription(svc)))),
+	)
+
 	r.Method(http.MethodGet, "/{orderID}/transactions", metricsMwr("GetTransactions", GetTransactions(svc)))
 
 	r.Method(
@@ -335,6 +341,39 @@ func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 
 		if err := svc.setOrderTrialDays(ctx, orderID, req, now); err != nil {
 			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	})
+}
+
+func handleRelinkOrderSubscription(svc *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+		if err != nil {
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		}
+
+		req := &model.RelinkSubscriptionRequest{}
+		if err := requestutils.ReadJSON(ctx, r.Body, req); err != nil {
+			return handlers.WrapError(err, "failed to read request body", http.StatusBadRequest)
+		}
+
+		if _, err := govalidator.ValidateStruct(req); err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		if err := svc.relinkOrderSubscription(ctx, orderID, req.SubscriptionID); err != nil {
+			switch {
+			case errors.Is(err, model.ErrOrderNotFound):
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+			case errors.Is(err, model.ErrStripeSubscriptionNotActive):
+				return handlers.WrapError(err, "stripe subscription is not active", http.StatusUnprocessableEntity)
+			default:
+				return handlers.WrapError(err, "failed to relink order subscription", http.StatusInternalServerError)
+			}
 		}
 
 		return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
