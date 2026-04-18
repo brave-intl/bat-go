@@ -7,11 +7,12 @@ import (
 )
 
 type MockClient struct {
-	FnSession       func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
-	FnCreateSession func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
-	FnSubscription  func(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
-	FnFindCustomer  func(ctx context.Context, email string) (*stripe.Customer, bool)
-	FnCancelSub     func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error
+	FnSession        func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
+	FnCreateSession  func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
+	FnSubscription   func(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
+	FnFindCustomer   func(ctx context.Context, email string) (*stripe.Customer, bool)
+	FnCancelSub      func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error
+	FnUpdateCustomer func(ctx context.Context, id string, params *stripe.CustomerParams) (*stripe.Customer, error)
 }
 
 func (c *MockClient) Session(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
@@ -82,4 +83,17 @@ func (c *MockClient) CancelSub(ctx context.Context, id string, params *stripe.Su
 	}
 
 	return c.FnCancelSub(ctx, id, params)
+}
+
+func (c *MockClient) UpdateCustomer(ctx context.Context, id string, params *stripe.CustomerParams) (*stripe.Customer, error) {
+	if c.FnUpdateCustomer == nil {
+		result := &stripe.Customer{ID: id}
+		if params.Email != nil {
+			result.Email = *params.Email
+		}
+
+		return result, nil
+	}
+
+	return c.FnUpdateCustomer(ctx, id, params)
 }

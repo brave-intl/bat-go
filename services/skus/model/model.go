@@ -61,6 +61,9 @@ const (
 
 	ErrOrderNotOneOffPayment = Error("model: order is not perpetual license")
 
+	ErrNoStripeSubscriptionID Error = "model: order: no stripe subscription id"
+	ErrNoStripeCustomer       Error = "model: order: no stripe customer on subscription"
+
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 )
 
@@ -862,6 +865,10 @@ type VerifyCredentialOpaque struct {
 type SetTrialDaysRequest struct {
 	Email     string `json:"email"` // TODO: Make it required.
 	TrialDays int64  `json:"trialDays"`
+}
+
+type UpdateEmailRequest struct {
+	Email string `json:"email" valid:"email,required"`
 }
 
 func addURLParam(src, name, val string) (string, error) {
