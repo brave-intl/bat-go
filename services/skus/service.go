@@ -1458,16 +1458,16 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 		return err
 	}
 
-	if effectiveLimit-nact >= model.ExtensionSlots {
-		return model.ErrExtensionSlotsAvailable
-	}
-
 	if locked.NumSelfExtensions >= selfExtensionCap {
 		return model.ErrExtensionCapReached
 	}
 
 	if locked.LastSelfExtensionAt != nil && now.Sub(*locked.LastSelfExtensionAt) < model.ExtensionMinInterval {
 		return model.ErrExtensionRateLimited
+	}
+
+	if effectiveLimit-nact >= model.ExtensionSlots {
+		return model.ErrExtensionSlotsAvailable
 	}
 
 	if err := s.orderItemRepo.ApplyExtension(ctx, tx, locked.ID, effectiveLimit+model.ExtensionSlots); err != nil {

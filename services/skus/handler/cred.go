@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -217,6 +218,9 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 		case errors.Is(err, context.DeadlineExceeded):
 			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
 
+		case errors.Is(err, model.ErrOrderForbidden):
+			return handlers.WrapError(err, "order access forbidden", http.StatusForbidden)
+
 		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
 			return handlers.WrapError(err, "order not found", http.StatusNotFound)
 
@@ -226,17 +230,15 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 		case errors.Is(err, model.ErrUnsupportedCredType):
 			return handlers.WrapError(err, "credential type not supported", http.StatusBadRequest)
 
-		case errors.Is(err, model.ErrOrderForbidden):
-			return handlers.WrapError(err, "order access forbidden", http.StatusForbidden)
-
-		case errors.Is(err, model.ErrExtensionSlotsAvailable):
-			return handlers.WrapError(err, "slots already available", http.StatusBadRequest)
-
 		case errors.Is(err, model.ErrExtensionCapReached):
 			return handlers.WrapError(err, "extension cap reached", http.StatusForbidden)
 
 		case errors.Is(err, model.ErrExtensionRateLimited):
+			w.Header().Set("Retry-After", strconv.FormatInt(int64(model.ExtensionMinInterval.Seconds()), 10))
 			return handlers.WrapError(err, "extension rate limited", http.StatusTooManyRequests)
+
+		case errors.Is(err, model.ErrExtensionSlotsAvailable):
+			return handlers.WrapError(err, "slots already available", http.StatusBadRequest)
 
 		default:
 			lg.Error().Err(err).Msg("failed to extend linking limit")

@@ -13,7 +13,8 @@ device slots on a time-based cadence without requiring support intervention.
 | Slots granted per extension | 3 |
 | Rate limit | Once per 30 days |
 | Pre-condition | Available slots (limit − active) must be < 3 |
-| Lifetime cap | 25 self-service extensions per order item (global constant) |
+| Lifetime cap | 25 self-service extensions per order item (`selfExtensionCap` in `service.go`) |
+| Guard evaluation order | cap → rate limit → slots available |
 
 ---
 
@@ -74,11 +75,14 @@ ErrExtensionCapReached     Error = "model: extension cap reached"
 New constants:
 
 ```go
+// in model/model.go
 const (
     ExtensionSlots       = 3
     ExtensionMinInterval = 30 * 24 * time.Hour
-    selfExtensionCap     = 25 // unexported — raise by changing the constant
 )
+
+// in service.go (unexported — raise by deploying a new constant value)
+const selfExtensionCap = 25
 ```
 
 ---
@@ -130,26 +134,31 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 Logic:
 
 ```
-1.  Begin transaction (RawDB().BeginTxx)
-2.  getOrderFullTx(ctx, tx, orderID)          → ErrOrderNotFound if missing
-3.  order.IsPaid()                             → ErrOrderNotPaid
-4.  Find itemID in order items                 → ErrOrderItemNotFound
-5.  item.IsCredTLV2()                          → ErrUnsupportedCredType
+0.  validateOrderMerchantAndCaveats(ctx, orderID) ← ownership/BOLA check
+      ErrOrderNotFound                          → 404 (bubble through)
+      errMerchantMismatch / errLocationMismatch
+      errUnexpectedSKUCvt / errInvalidMerchant  → ErrOrderForbidden (403)
+1.  getOrderFullTx(ctx, rawDB, orderID)         → ErrOrderNotFound if missing
+2.  order.IsPaid()                              → ErrOrderNotPaid
+3.  Find itemID in order items                  → ErrOrderItemNotFound
+4.  item.IsCredTLV2()                           → ErrUnsupportedCredType
+5.  Begin transaction (RawDB().BeginTxx)
 6.  orderItemRepo.LockForUpdate(ctx, tx, item.ID)   ← re-fetch under row lock
-7.  tlv2Repo.UniqBatches(ctx, tx, orderID, item.ID, now, now) → activeCount
-8.  effectiveLimit = item.MaxActiveBatchesTLV2CredsOrDefault()
-9.  available = effectiveLimit − activeCount
-      available >= ExtensionSlots              → ErrExtensionSlotsAvailable
-10. item.NumSelfExtensions >= selfExtensionCap → ErrExtensionCapReached
-11. item.LastSelfExtensionAt != nil &&
-    time.Since(*item.LastSelfExtensionAt) < ExtensionMinInterval
-                                               → ErrExtensionRateLimited
-12. orderItemRepo.ApplyExtension(ctx, tx, item.ID, effectiveLimit + ExtensionSlots)
-13. Commit
+7.  orderRepo.Get(ctx, tx, orderID).IsPaid()    ← TOCTOU re-check inside tx
+8.  tlv2Repo.UniqBatches(ctx, tx, orderID, item.ID, now, now) → activeCount
+9.  effectiveLimit = locked.MaxActiveBatchesTLV2CredsOrDefault()
+10. locked.NumSelfExtensions >= selfExtensionCap → ErrExtensionCapReached
+11. locked.LastSelfExtensionAt != nil &&
+    now.Sub(*locked.LastSelfExtensionAt) < ExtensionMinInterval
+                                                → ErrExtensionRateLimited
+12. available = effectiveLimit − activeCount
+      available >= ExtensionSlots               → ErrExtensionSlotsAvailable
+13. orderItemRepo.ApplyExtension(ctx, tx, item.ID, effectiveLimit + ExtensionSlots)
+14. Commit
 ```
 
-The `FOR UPDATE` lock in step 6 ensures two simultaneous requests cannot both pass step 9 —
-the second request serializes behind the first and sees the updated available count after commit.
+The `FOR UPDATE` lock in step 6 serializes concurrent self-service requests — the second
+request blocks until the first commits and then sees the updated limit and extension count.
 
 ---
 
@@ -167,12 +176,13 @@ POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
 
 | Error | HTTP status |
 |-------|-------------|
-| `ErrExtensionRateLimited` | 429 Too Many Requests |
-| `ErrExtensionCapReached` | 403 Forbidden |
-| `ErrExtensionSlotsAvailable` | 400 Bad Request |
+| `ErrOrderForbidden` | 403 Forbidden |
 | `ErrOrderNotFound` / `ErrInvalidOrderNoItems` / `ErrOrderItemNotFound` | 404 Not Found |
 | `ErrOrderNotPaid` | 402 Payment Required |
 | `ErrUnsupportedCredType` | 400 Bad Request |
+| `ErrExtensionCapReached` | 403 Forbidden |
+| `ErrExtensionRateLimited` | 429 Too Many Requests + `Retry-After: 2592000` |
+| `ErrExtensionSlotsAvailable` | 400 Bad Request |
 | `context.Canceled` | 499 Client Closed Connection |
 | `context.DeadlineExceeded` | 504 Gateway Timeout |
 
@@ -189,14 +199,16 @@ cr.Method(http.MethodPost, "/items/{itemID}/batches/extend",
 
 ### Handler unit tests (`handler/cred_test.go`)
 
-Table-driven, same pattern as `TestCred_SetLinkingLimit`. Cases:
+Table-driven (`TestCred_ExtendLinkingLimit`). Cases:
 
 - `invalid_orderID`, `invalid_itemID`
-- `context_cancelled`, `deadline_exceeded`
-- `order_not_found`, `order_not_paid`, `cred_type_not_supported`
-- `extension_rate_limited` (429)
-- `extension_slots_available` (400)
+- `order_forbidden` (403)
+- `context_canceled`, `deadline_exceeded`
+- `order_not_found`, `order_not_paid`, `unsupported_cred_type`
 - `extension_cap_reached` (403)
+- `rate_limited` (429, asserts `Retry-After: 2592000` response header)
+- `slots_already_available` (400)
+- `internal_error` (500)
 - `success` (200)
 
 ### Service unit tests (`service_test.go`)

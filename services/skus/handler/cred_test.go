@@ -759,7 +759,8 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		err *handlers.AppError
+		err        *handlers.AppError
+		retryAfter string
 	}
 
 	type testCase struct {
@@ -922,7 +923,8 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				err: handlers.WrapError(model.ErrExtensionRateLimited, "extension rate limited", http.StatusTooManyRequests),
+				err:        handlers.WrapError(model.ErrExtensionRateLimited, "extension rate limited", http.StatusTooManyRequests),
+				retryAfter: "2592000",
 			},
 		},
 
@@ -976,6 +978,11 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				exp, err := json.Marshal(tc.exp.err)
 				must.Equal(t, nil, err)
 				should.Equal(t, exp, bytes.TrimSpace(rw.Body.Bytes()))
+
+				if tc.exp.retryAfter != "" {
+					should.Equal(t, tc.exp.retryAfter, rw.Header().Get("Retry-After"))
+				}
+
 				return
 			}
 

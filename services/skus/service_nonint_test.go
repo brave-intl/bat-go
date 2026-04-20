@@ -8033,3 +8033,355 @@ func TestService_DeleteBatches(t *testing.T) {
 		})
 	}
 }
+
+func TestService_ExtendLinkingLimit(t *testing.T) {
+	const (
+		orderIDStr = "c0c0a000-0000-4000-a000-000000000000"
+		itemIDStr  = "ad0be000-0000-4000-a000-000000000000"
+	)
+
+	orderID := uuid.Must(uuid.FromString(orderIDStr))
+	itemID := uuid.Must(uuid.FromString(itemIDStr))
+
+	// ctx carries the merchant key so validateOrderMerchantAndCaveats passes.
+	authCtx := context.WithValue(context.Background(), merchantCtxKey{}, "brave.com")
+
+	// paidTLV2Order is a paid order with MerchantID = "brave.com" and one TLV2 item.
+	paidTLV2Order := func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+		return &model.Order{ID: id, Status: "paid", MerchantID: "brave.com"}, nil
+	}
+
+	tlv2Items := func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+		return []model.OrderItem{
+			{ID: itemID, OrderID: oID, CredentialType: "time-limited-v2"},
+		}, nil
+	}
+
+	type tcGiven struct {
+		ordRepo  *repository.MockOrder
+		itemRepo *repository.MockOrderItem
+		tlv2Repo *repository.MockTLV2
+		// needsTx signals the test reaches BeginTxx (post-lock path).
+		needsTx bool
+		// applyExtCalled is set by FnApplyExtension when it is invoked.
+	}
+
+	type tcExpected struct {
+		err              error
+		applyExtCalled   bool
+		applyExtNewLimit int
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	recent := time.Now().Add(-24 * time.Hour) // 1 day ago — within 30-day rate limit window
+
+	// errDBSentinel is a model.Error (string-backed) used to verify that unexpected errors
+	// from validateOrderMerchantAndCaveats bubble through the switch default branch unchanged.
+	errDBSentinel := model.Error("service_nonint_test: db sentinel")
+
+	tests := []testCase{
+		{
+			// Validation: order not found — ErrOrderNotFound bubbles through as-is (not masked as 403).
+			name: "validation_order_not_found",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotFound},
+		},
+
+		{
+			// Validation: merchant mismatch → ErrOrderForbidden (BOLA guard).
+			// Verifies errMerchantMismatch is translated, not passed through raw.
+			name: "validation_merchant_mismatch",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return &model.Order{ID: id, Status: "paid", MerchantID: "other-merchant.com"}, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderForbidden},
+		},
+
+		{
+			// Validation: unexpected DB error bubbles through unchanged (default branch).
+			// Ensures DB timeouts and connection errors are NOT masked as 403.
+			name: "validation_db_error_bubbles_through",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, errDBSentinel
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: errDBSentinel},
+		},
+
+		{
+			// Pre-lock: order is unpaid, method returns before BeginTxx.
+			name: "order_not_paid",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return &model.Order{ID: id, Status: "pending", MerchantID: "brave.com"}, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: tlv2Items},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotPaid},
+		},
+
+		{
+			// Pre-lock: order has no items.
+			name: "no_items",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrInvalidOrderNoItems},
+		},
+
+		{
+			// Pre-lock: order has items but none match the requested itemID.
+			name: "item_not_found",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("dead0000-0000-4000-a000-000000000000")), OrderID: oID, CredentialType: "time-limited-v2"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderItemNotFound},
+		},
+
+		{
+			// Pre-lock: item is not TLV2.
+			name: "unsupported_cred_type",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: itemID, OrderID: oID, CredentialType: "time-limited"},
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrUnsupportedCredType},
+		},
+
+		{
+			// Post-lock TOCTOU: order was paid at the pre-lock snapshot but was cancelled
+			// before the row lock was acquired. The re-check inside the transaction catches it.
+			name: "toctou_order_unpaid_after_lock",
+			given: tcGiven{
+				needsTx: true,
+				ordRepo: &repository.MockOrder{
+					FnGet: func() func(context.Context, sqlx.QueryerContext, uuid.UUID) (*model.Order, error) {
+						calls := 0
+						return func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+							calls++
+							// Calls 1 (validateOrderMerchantAndCaveats) and 2 (getOrderFullTx)
+							// see a paid order. Call 3 (TOCTOU inside tx) sees it as cancelled.
+							if calls <= 2 {
+								return &model.Order{ID: id, Status: "paid", MerchantID: "brave.com"}, nil
+							}
+							return &model.Order{ID: id, Status: "canceled", MerchantID: "brave.com"}, nil
+						}
+					}(),
+				},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: tlv2Items,
+					FnLockForUpdate: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						return &model.OrderItem{ID: id, CredentialType: "time-limited-v2"}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotPaid},
+		},
+
+		{
+			// Guard 1 (cap): NumSelfExtensions at lifetime cap — fires before rate-limit check.
+			// Also proves cap guard fires even when LastSelfExtensionAt is recent.
+			name: "extension_cap_reached",
+			given: tcGiven{
+				needsTx: true,
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: tlv2Items,
+					FnLockForUpdate: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						return &model.OrderItem{
+							ID:                  id,
+							CredentialType:      "time-limited-v2",
+							NumSelfExtensions:   selfExtensionCap, // at cap
+							LastSelfExtensionAt: &recent,          // would trigger rate limit if cap didn't fire first
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{},
+			},
+			exp: tcExpected{err: model.ErrExtensionCapReached},
+		},
+
+		{
+			// Guard 2 (rate limit): cap not reached but within rate-limit window —
+			// fires before slots-available check.
+			// Also proves rate fires even when slots would be available (nact=0, limit=10).
+			name: "rate_limited",
+			given: tcGiven{
+				needsTx: true,
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: tlv2Items,
+					FnLockForUpdate: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						return &model.OrderItem{
+							ID:                  id,
+							CredentialType:      "time-limited-v2",
+							NumSelfExtensions:   0,       // cap not reached
+							LastSelfExtensionAt: &recent, // within window
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(_ context.Context, _ sqlx.QueryerContext, _, _ uuid.UUID, _, _ time.Time) (int, error) {
+						return 0, nil // all slots free — would pass slots check if rate didn't fire first
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrExtensionRateLimited},
+		},
+
+		{
+			// Guard 3 (slots): cap not reached, not rate-limited, but slots already available.
+			name: "slots_available",
+			given: tcGiven{
+				needsTx: true,
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: tlv2Items,
+					FnLockForUpdate: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						return &model.OrderItem{
+							ID:             id,
+							CredentialType: "time-limited-v2",
+							// default limit = 10, nact = 0 → 10 free slots >= ExtensionSlots(3)
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(_ context.Context, _ sqlx.QueryerContext, _, _ uuid.UUID, _, _ time.Time) (int, error) {
+						return 0, nil // all slots free
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrExtensionSlotsAvailable},
+		},
+
+		{
+			// Success: all guards pass, ApplyExtension called with effectiveLimit+ExtensionSlots.
+			name: "success",
+			given: tcGiven{
+				needsTx: true,
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: tlv2Items,
+					FnLockForUpdate: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						return &model.OrderItem{
+							ID:             id,
+							CredentialType: "time-limited-v2",
+							// default limit = 10, nact = 9 → 1 free slot < ExtensionSlots(3)
+						}, nil
+					},
+				},
+				tlv2Repo: &repository.MockTLV2{
+					FnUniqBatches: func(_ context.Context, _ sqlx.QueryerContext, _, _ uuid.UUID, _, _ time.Time) (int, error) {
+						return 9, nil // only 1 slot free — below threshold
+					},
+				},
+			},
+			exp: tcExpected{
+				applyExtCalled:   true,
+				applyExtNewLimit: 10 + model.ExtensionSlots, // 13
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			var applyExtCalled bool
+			var applyExtNewLimit int
+
+			if tc.given.itemRepo.FnApplyExtension == nil {
+				tc.given.itemRepo.FnApplyExtension = func(_ context.Context, _ sqlx.ExecerContext, _ uuid.UUID, newLimit int) error {
+					applyExtCalled = true
+					applyExtNewLimit = newLimit
+					return nil
+				}
+			}
+
+			ds := NewMockDatastore(ctrl)
+
+			if tc.given.needsTx {
+				mockDB, sqlMock, err := sqlmock.New()
+				must.Equal(t, nil, err)
+				t.Cleanup(func() { mockDB.Close() })
+
+				sqlMock.ExpectBegin()
+				if tc.exp.err == nil {
+					sqlMock.ExpectCommit()
+				}
+
+				db := sqlx.NewDb(mockDB, "sqlmock")
+				ds.EXPECT().RawDB().AnyTimes().Return(db)
+				ds.EXPECT().RollbackTx(gomock.Any())
+			} else {
+				ds.EXPECT().RawDB().AnyTimes().Return(nil)
+			}
+
+			svc := &Service{
+				Datastore:     ds,
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itemRepo,
+				tlv2Repo:      tc.given.tlv2Repo,
+			}
+
+			err := svc.ExtendLinkingLimit(authCtx, orderID, itemID)
+			must.ErrorIs(t, err, tc.exp.err)
+
+			should.Equal(t, tc.exp.applyExtCalled, applyExtCalled)
+			if tc.exp.applyExtCalled {
+				should.Equal(t, tc.exp.applyExtNewLimit, applyExtNewLimit)
+			}
+		})
+	}
+}
