@@ -13,7 +13,7 @@ device slots on a time-based cadence without requiring support intervention.
 | Slots granted per extension | 3 |
 | Rate limit | Once per 30 days |
 | Pre-condition | Available slots (limit − active) must be < 3 |
-| Lifetime cap | 25 self-service extensions per order item (`selfExtensionCap` in `service.go`) |
+| Lifetime cap | 10 self-service extensions per order item (`selfExtensionCap` in `service.go`), giving a maximum of 10 + 10×3 = 40 total activations |
 | Guard evaluation order | cap → rate limit → slots available |
 
 ---
@@ -83,7 +83,7 @@ const (
 )
 
 // in service.go (unexported — raise by deploying a new constant value)
-const selfExtensionCap = 25
+const selfExtensionCap = 10
 ```
 
 ---

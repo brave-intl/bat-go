@@ -82,8 +82,10 @@ const (
 	timeLimitedV2 = "time-limited-v2"
 
 	// selfExtensionCap is the lifetime maximum number of self-service linking limit extensions
-	// per order item. Raise by changing this constant.
-	selfExtensionCap = 25
+	// per order item, giving a maximum total of
+	// MaxActiveBatchesTLV2CredsDefault + selfExtensionCap*ExtensionSlots activations
+	// (currently 10 + 10*3 = 40). Raise by changing this constant.
+	selfExtensionCap = 10
 
 	errSetRetryAfter             = model.Error("set retry-after")
 	errClosingResource           = model.Error("error closing resource")
