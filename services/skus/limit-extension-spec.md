@@ -44,7 +44,7 @@ Because vectors 1 and 3 use arbitrary increments, `num_self_extensions` cannot b
 ```sql
 -- up
 ALTER TABLE order_items
-  ADD COLUMN num_self_extensions    INT         NOT NULL DEFAULT 0,
+  ADD COLUMN num_self_extensions    INT         NOT NULL DEFAULT 0 CHECK (num_self_extensions >= 0),
   ADD COLUMN last_self_extension_at TIMESTAMPTZ;
 
 -- down
@@ -67,9 +67,10 @@ LastSelfExtensionAt *time.Time `db:"last_self_extension_at" json:"-"`
 New error constants:
 
 ```go
-ErrExtensionRateLimited    Error = "model: extension rate limited"
-ErrExtensionSlotsAvailable Error = "model: extension not needed, slots available"
-ErrExtensionCapReached     Error = "model: extension cap reached"
+ErrOrderForbidden           Error = "model: order access forbidden"
+ErrExtensionRateLimited     Error = "model: extension rate limited"
+ErrExtensionSlotsAvailable  Error = "model: extension not needed, slots available"
+ErrExtensionCapReached      Error = "model: extension cap reached"
 ```
 
 New constants:
@@ -140,24 +141,25 @@ Logic:
       errUnexpectedSKUCvt / errInvalidMerchant  → ErrOrderForbidden (403)
 1.  getOrderFullTx(ctx, rawDB, orderID)         → ErrOrderNotFound if missing
 2.  order.IsPaid()                              → ErrOrderNotPaid
-3.  Find itemID in order items                  → ErrOrderItemNotFound
-4.  item.IsCredTLV2()                           → ErrUnsupportedCredType
-5.  Begin transaction (RawDB().BeginTxx)
-6.  orderItemRepo.LockForUpdate(ctx, tx, item.ID)   ← re-fetch under row lock
-7.  orderRepo.Get(ctx, tx, orderID).IsPaid()    ← TOCTOU re-check inside tx
-8.  tlv2Repo.UniqBatches(ctx, tx, orderID, item.ID, now, now) → activeCount
-9.  effectiveLimit = locked.MaxActiveBatchesTLV2CredsOrDefault()
-10. locked.NumSelfExtensions >= selfExtensionCap → ErrExtensionCapReached
-11. locked.LastSelfExtensionAt != nil &&
+3.  len(order.Items) == 0                       → ErrInvalidOrderNoItems
+4.  Find itemID in order items                  → ErrOrderItemNotFound
+5.  item.IsCredTLV2()                           → ErrUnsupportedCredType
+6.  Begin transaction (RawDB().BeginTxx)
+7.  orderItemRepo.LockForUpdate(ctx, tx, item.ID)   ← re-fetch under row lock
+8.  orderRepo.Get(ctx, tx, orderID).IsPaid()    ← TOCTOU re-check inside tx
+9.  tlv2Repo.UniqBatches(ctx, tx, orderID, item.ID, now, now) → activeCount
+10. effectiveLimit = locked.MaxActiveBatchesTLV2CredsOrDefault()
+11. locked.NumSelfExtensions >= selfExtensionCap → ErrExtensionCapReached
+12. locked.LastSelfExtensionAt != nil &&
     now.Sub(*locked.LastSelfExtensionAt) < ExtensionMinInterval
                                                 → ErrExtensionRateLimited
-12. available = effectiveLimit − activeCount
+13. available = effectiveLimit − activeCount
       available >= ExtensionSlots               → ErrExtensionSlotsAvailable
-13. orderItemRepo.ApplyExtension(ctx, tx, item.ID, effectiveLimit + ExtensionSlots)
-14. Commit
+14. orderItemRepo.ApplyExtension(ctx, tx, locked.ID, effectiveLimit + ExtensionSlots)
+15. Commit
 ```
 
-The `FOR UPDATE` lock in step 6 serializes concurrent self-service requests — the second
+The `FOR UPDATE` lock in step 7 serializes concurrent self-service requests — the second
 request blocks until the first commits and then sees the updated limit and extension count.
 
 ---
