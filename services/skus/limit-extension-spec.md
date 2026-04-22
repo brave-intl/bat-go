@@ -1,5 +1,38 @@
 # Self-Service Linking Limit Extension — Specification
 
+## Motivation
+
+Users who subscribe to Brave products with TLV2 credentials (e.g. Brave VPN, Leo) encounter a
+hard default cap of 10 simultaneously linked devices. When they hit that cap, the only recourse
+today is a support ticket.
+
+The core user ask is **full autonomy over their own activations**: a subscriber should be able to
+add device slots on their own schedule without waiting on support, up to a product-defined
+ceiling. The ceiling exists to bound abuse (one subscription funding a shared pool), not to
+gate legitimate multi-device use.
+
+## Goals
+
+- Let a paying subscriber increase their own device limit in the browser, without a support ticket.
+- Make the extension self-contained: no operator action, no manual DB change, no new purchase.
+- Keep the ceiling meaningful: cap both the number of extensions and the cadence so a single
+  subscription cannot be scaled arbitrarily.
+- Preserve operator authority: support can still set the limit directly via `SetLinkingLimit` at
+  any value, independent of the self-service counter.
+
+## Non-goals
+
+- **Browser UI** — detecting the limit, surfacing the extension prompt, and retrying credential
+  fetch after extension are a separate client-side workstream.
+- **Purchasing additional activations** — a paid upgrade flow (vector 3) is a separate product
+  decision; this feature deliberately leaves room for it without blocking on it.
+- **Unlimited activations** — the 40-device ceiling (10 default + 10 extensions × 3 slots) is
+  intentional. Subscribers who need more can contact support.
+- **Per-user configurability of the cap** — the cap is a service constant; changing it requires a
+  deploy, not a per-account setting.
+
+---
+
 ## Overview
 
 TLV2 orders have a default limit of 10 simultaneously linked
