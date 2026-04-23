@@ -17,10 +17,10 @@ import (
 )
 
 type tlv2Svc interface {
-	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
+	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
-	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID) error
+	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error
 }
 
 type Cred struct {
@@ -41,7 +41,7 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 	}
 
-	lim, nact, err := h.tlv2.UniqBatches(ctx, orderID, uuid.Nil)
+	status, err := h.tlv2.UniqBatches(ctx, orderID, uuid.Nil)
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -61,12 +61,7 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 		}
 	}
 
-	result := &struct {
-		Limit  int `json:"limit"`
-		Active int `json:"active"`
-	}{Limit: lim, Active: nact}
-
-	return handlers.RenderContent(ctx, result, w, http.StatusOK)
+	return handlers.RenderContent(ctx, status, w, http.StatusOK)
 }
 
 // ListActiveBatches returns the active credential batches (linked devices) for an order.
@@ -190,9 +185,10 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
-// ExtendLinkingLimit grants model.ExtensionSlots additional device linking slots for a TLV2
-// order item. Rate-limited to once per model.ExtensionMinInterval; rejected if slots already
-// available or the lifetime cap has been reached.
+// ExtendLinkingLimit is the transactional primitive for a self-service device-linking
+// slot extension. The caller supplies policy (slots per grant, min cadence, lifetime cap)
+// in the request body; the caller is also responsible for ownership/auth. Guards that
+// must see the row under SELECT ... FOR UPDATE stay here.
 //
 // POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
 func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -208,8 +204,34 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
 	}
 
-	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID); err != nil {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to read request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	var policy model.ExtensionPolicy
+	if err := json.Unmarshal(body, &policy); err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID, policy); err != nil {
 		lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimit").Logger()
+
+		var rateLimited *model.ExtensionRateLimitedError
+		if errors.As(err, &rateLimited) {
+			retryAfterSecs := int64(rateLimited.RetryAfter.Seconds())
+			if retryAfterSecs < 1 {
+				retryAfterSecs = 1
+			}
+
+			w.Header().Set("Retry-After", strconv.FormatInt(retryAfterSecs, 10))
+
+			appErr := handlers.WrapError(err, "extension rate limited", http.StatusTooManyRequests)
+			appErr.ErrorCode = model.ExtensionCodeRateLimited
+			appErr.Data = map[string]interface{}{"retry_after_seconds": retryAfterSecs}
+
+			return appErr
+		}
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -218,27 +240,23 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 		case errors.Is(err, context.DeadlineExceeded):
 			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
 
-		case errors.Is(err, model.ErrOrderForbidden):
-			return handlers.WrapError(err, "order access forbidden", http.StatusForbidden)
+		case errors.Is(err, model.ErrInvalidExtensionPolicy):
+			return withErrorCode(handlers.WrapError(err, "invalid extension policy", http.StatusBadRequest), model.ExtensionCodeInvalidPolicy)
 
 		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
-			return handlers.WrapError(err, "order not found", http.StatusNotFound)
+			return withErrorCode(handlers.WrapError(err, "order not found", http.StatusNotFound), model.ExtensionCodeOrderNotFound)
 
 		case errors.Is(err, model.ErrOrderNotPaid):
-			return handlers.WrapError(err, "order not paid", http.StatusPaymentRequired)
+			return withErrorCode(handlers.WrapError(err, "order not paid", http.StatusPaymentRequired), model.ExtensionCodeOrderNotPaid)
 
 		case errors.Is(err, model.ErrUnsupportedCredType):
-			return handlers.WrapError(err, "credential type not supported", http.StatusBadRequest)
+			return withErrorCode(handlers.WrapError(err, "credential type not supported", http.StatusBadRequest), model.ExtensionCodeUnsupportedCredType)
 
 		case errors.Is(err, model.ErrExtensionCapReached):
-			return handlers.WrapError(err, "extension cap reached", http.StatusForbidden)
+			return withErrorCode(handlers.WrapError(err, "extension cap reached", http.StatusForbidden), model.ExtensionCodeCapReached)
 
-		case errors.Is(err, model.ErrExtensionRateLimited):
-			w.Header().Set("Retry-After", strconv.FormatInt(int64(model.ExtensionMinInterval.Seconds()), 10))
-			return handlers.WrapError(err, "extension rate limited", http.StatusTooManyRequests)
-
-		case errors.Is(err, model.ErrExtensionSlotsAvailable):
-			return handlers.WrapError(err, "slots already available", http.StatusBadRequest)
+		case errors.Is(err, model.ErrExtensionNotNeeded):
+			return withErrorCode(handlers.WrapError(err, "extension not needed", http.StatusBadRequest), model.ExtensionCodeNotNeeded)
 
 		default:
 			lg.Error().Err(err).Msg("failed to extend linking limit")
@@ -247,4 +265,9 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 	}
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+func withErrorCode(appErr *handlers.AppError, code string) *handlers.AppError {
+	appErr.ErrorCode = code
+	return appErr
 }

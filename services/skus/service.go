@@ -81,12 +81,6 @@ const (
 	timeLimited   = "time-limited"
 	timeLimitedV2 = "time-limited-v2"
 
-	// selfExtensionCap is the lifetime maximum number of self-service linking limit extensions
-	// per order item, giving a maximum total of
-	// MaxActiveBatchesTLV2CredsDefault + selfExtensionCap*ExtensionSlots activations
-	// (currently 10 + 10*3 = 40). Raise by changing this constant.
-	selfExtensionCap = 10
-
 	errSetRetryAfter             = model.Error("set retry-after")
 	errClosingResource           = model.Error("error closing resource")
 	errGeminiClientNotConfigured = model.Error("service: gemini client not configured")
@@ -1237,25 +1231,27 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	return sum.GreaterThanOrEqual(order.TotalPrice), nil
 }
 
-// UniqBatches returns the limit for active batches and the current number of active batches.
-func (s *Service) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
+// UniqBatches returns the active-batch count and limit for an order's TLV2 item,
+// along with the self-service extension fields the UI needs to decide whether to
+// surface the "request more activations" button.
+func (s *Service) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error) {
 	now := time.Now()
 
 	return s.uniqBatchesTxTime(ctx, s.Datastore.RawDB(), orderID, itemID, now, now)
 }
 
-func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, int, error) {
+func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (*model.BatchesStatus, error) {
 	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
 
 	if !ord.IsPaid() {
-		return 0, 0, model.ErrOrderNotPaid
+		return nil, model.ErrOrderNotPaid
 	}
 
 	if len(ord.Items) == 0 {
-		return 0, 0, model.ErrInvalidOrderNoItems
+		return nil, model.ErrInvalidOrderNoItems
 	}
 
 	// Legacy: the method can be called with no itemID.
@@ -1264,25 +1260,30 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 		var ok bool
 		item, ok = ord.HasItem(itemID)
 		if !ok {
-			return 0, 0, model.ErrOrderItemNotFound
+			return nil, model.ErrOrderItemNotFound
 		}
 	}
 
 	if !item.IsCredTLV2() {
-		return 0, 0, model.ErrUnsupportedCredType
+		return nil, model.ErrUnsupportedCredType
 	}
 
 	nact, err := s.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, from, to)
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
 
 	mc, err := item.MaxActiveBatchesTLV2CredsOrDefault()
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
 
-	return mc, nact, nil
+	return &model.BatchesStatus{
+		Limit:               mc,
+		Active:              nact,
+		NumSelfExtensions:   item.NumSelfExtensions,
+		LastSelfExtensionAt: item.LastSelfExtensionAt,
+	}, nil
 }
 
 // ListActiveBatches returns the currently active credential batches for an order, ordered oldest-first.
@@ -1380,23 +1381,16 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
-// ExtendLinkingLimit grants model.ExtensionSlots additional device linking slots for a TLV2
-// order item. It is rate-limited to once per model.ExtensionMinInterval and rejected when
-// the item already has enough free slots or the lifetime cap has been reached.
-func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID) error {
-	// Verify the caller owns this order before any read or mutation.
-	if err := s.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
-		switch {
-		case errors.Is(err, model.ErrOrderNotFound):
-			return err
-		case errors.Is(err, errMerchantMismatch),
-			errors.Is(err, errLocationMismatch),
-			errors.Is(err, errUnexpectedSKUCvt),
-			errors.Is(err, errInvalidMerchant):
-			return model.ErrOrderForbidden
-		default:
-			return err
-		}
+// ExtendLinkingLimit grants policy.SlotsPerExtension additional device linking slots for
+// a TLV2 order item under the policy-defined cadence and lifetime cap. It is the
+// transactional primitive behind the self-service extension flow; the caller owns
+// ownership/auth, policy values, and error-to-HTTP mapping.
+//
+// When the rate-limit guard fires, the returned error is an *model.ExtensionRateLimitedError
+// carrying the remaining wait; it still matches model.ErrExtensionRateLimited via errors.Is.
+func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error {
+	if err := policy.Validate(); err != nil {
+		return err
 	}
 
 	now := time.Now()
@@ -1460,19 +1454,21 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 		return err
 	}
 
-	if locked.NumSelfExtensions >= selfExtensionCap {
+	if locked.NumSelfExtensions >= policy.MaxExtensions {
 		return model.ErrExtensionCapReached
 	}
 
-	if locked.LastSelfExtensionAt != nil && now.Sub(*locked.LastSelfExtensionAt) < model.ExtensionMinInterval {
-		return model.ErrExtensionRateLimited
+	if locked.LastSelfExtensionAt != nil {
+		if elapsed := now.Sub(*locked.LastSelfExtensionAt); elapsed < policy.MinInterval() {
+			return &model.ExtensionRateLimitedError{RetryAfter: policy.MinInterval() - elapsed}
+		}
 	}
 
-	if effectiveLimit-nact >= model.ExtensionSlots {
-		return model.ErrExtensionSlotsAvailable
+	if effectiveLimit-nact >= policy.SlotsPerExtension {
+		return model.ErrExtensionNotNeeded
 	}
 
-	if err := s.orderItemRepo.ApplyExtension(ctx, tx, locked.ID, effectiveLimit+model.ExtensionSlots); err != nil {
+	if err := s.orderItemRepo.ApplyExtension(ctx, tx, locked.ID, effectiveLimit+policy.SlotsPerExtension); err != nil {
 		return err
 	}
 
