@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -759,9 +761,10 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 	rateLimitedErr := &model.ExtensionRateLimitedError{RetryAfter: 42 * time.Second}
 
 	type tcGiven struct {
-		ctx  context.Context
-		body string
-		svc  *mockTLV2Svc
+		ctx        context.Context
+		body       string
+		bodyReader io.Reader
+		svc        *mockTLV2Svc
 	}
 
 	type tcExpected struct {
@@ -815,6 +818,21 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: "not-json",
 				svc:  &mockTLV2Svc{},
+			},
+		},
+
+		{
+			// Distinct from malformed_body: this exercises the io.ReadAll failure
+			// path (e.g. client disconnect mid-body) rather than the json.Unmarshal
+			// failure path. Both must surface the same wire errorCode.
+			name: "io_read_failure",
+			given: tcGiven{
+				ctx:        routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
+				bodyReader: iotest.ErrReader(io.ErrUnexpectedEOF),
+				svc:        &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: withCode(handlers.WrapError(io.ErrUnexpectedEOF, "failed to read request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody),
 			},
 		},
 
@@ -1004,7 +1022,12 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h := handler.NewCred(tc.given.svc)
 
-			req := httptest.NewRequest(http.MethodPost, "http://localhost", strings.NewReader(tc.given.body))
+			var body io.Reader = strings.NewReader(tc.given.body)
+			if tc.given.bodyReader != nil {
+				body = tc.given.bodyReader
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
 			req = req.WithContext(tc.given.ctx)
 
 			rw := httptest.NewRecorder()
