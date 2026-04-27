@@ -157,20 +157,20 @@ func (x *appStoreSrvNotification) pkg() string {
 }
 
 func parseAppStoreSrvNotification(vrf *assnCertVerifier, spayload string) (*appStoreSrvNotification, error) {
-	certs, err := extractASSNCerts(spayload)
+	chain, err := extractASSNCerts(spayload)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(certs) != 3 {
+	if len(chain) != 3 {
 		return nil, errInvalidASSNCertNum
 	}
 
-	if err := vrf.verify(certs[2], certs[1]); err != nil {
+	if err := vrf.verifyChain(chain, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 
-	pubKey, err := extractPubKey(certs[0])
+	pubKey, err := extractPubKey(chain[0])
 	if err != nil {
 		return nil, err
 	}
@@ -252,25 +252,30 @@ func newASSNCertVerifier() (*assnCertVerifier, error) {
 	return result, nil
 }
 
-func (x *assnCertVerifier) verify(rcert, icert *x509.Certificate) error {
+func (x *assnCertVerifier) verifyChain(certs []*x509.Certificate, now time.Time) error {
+	// The leaf certificate is the first in certs so start adding intimidates from 1.
 	interm := x509.NewCertPool()
-	interm.AddCert(icert)
+	for _, c := range certs[1:] {
+		interm.AddCert(c)
+	}
 
 	opts := x509.VerifyOptions{
 		Roots:         x.root,
 		Intermediates: interm,
+		CurrentTime:   now,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 	}
 
-	if _, err := rcert.Verify(opts); err != nil {
+	// Verify the leaf certificate (first in certs) against the chain.
+	if _, err := certs[0].Verify(opts); err != nil {
 		return err
 	}
-
-	// Consider also verifying the public key.
 
 	return nil
 }
 
 func extractASSNCerts(token string) ([]*x509.Certificate, error) {
+	// Split the JWS which has the form header.payload.signature.
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return nil, errInvalidASSNPayload
@@ -286,25 +291,21 @@ func extractASSNCerts(token string) ([]*x509.Certificate, error) {
 		return nil, err
 	}
 
-	// 0 - public key
-	// 1 - intermediate cert
-	// 2 - root cert
-
 	if len(hdr.X5c) != 3 {
 		return nil, errInvalidASSNHeader
 	}
 
-	result := make([]*x509.Certificate, 3)
+	certChain := make([]*x509.Certificate, 3)
 	for i := range hdr.X5c {
 		cert, err := extractASSNCert(hdr.X5c[i])
 		if err != nil {
 			return nil, err
 		}
 
-		result[i] = cert
+		certChain[i] = cert
 	}
 
-	return result, nil
+	return certChain, nil
 }
 
 func extractASSNCert(raw string) (*x509.Certificate, error) {
