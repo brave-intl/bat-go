@@ -54,16 +54,9 @@ const (
 	// ErrBatchSeatsExceeded is returned when the requested seats exceeds the number of active batches.
 	ErrBatchSeatsExceeded Error = "model: seats exceeds active batch count"
 
-	// ErrExtensionRateLimited is returned when a self-service extension is attempted too soon.
-	ErrExtensionRateLimited Error = "model: extension rate limited"
-
-	// ErrExtensionNotNeeded is returned when there are already enough free slots.
-	ErrExtensionNotNeeded Error = "model: extension not needed"
-
-	// ErrExtensionCapReached is returned when the lifetime self-service extension cap is hit.
-	ErrExtensionCapReached Error = "model: extension cap reached"
-
-	// ErrInvalidExtensionPolicy is returned when the caller supplies a policy with out-of-bounds values.
+	ErrExtensionRateLimited   Error = "model: extension rate limited"
+	ErrExtensionNotNeeded     Error = "model: extension not needed"
+	ErrExtensionCapReached    Error = "model: extension cap reached"
 	ErrInvalidExtensionPolicy Error = "model: invalid extension policy"
 
 	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
@@ -94,16 +87,14 @@ const (
 	MaxActiveBatchesTLV2CredsDefault = 10
 )
 
-// Upper bounds on caller-supplied ExtensionPolicy values, enforced by Validate.
-// These exist to protect skus from buggy callers, not to express policy.
+// Defensive bounds enforced by ExtensionPolicy.Validate — not product policy.
 const (
 	extensionPolicyMaxSlots        = 100
 	extensionPolicyMaxExtensions   = 1000
 	extensionPolicyMaxIntervalSecs = 365 * 24 * 60 * 60
 )
 
-// Extension endpoint error codes. Emitted as `errorCode` on the JSON error response
-// so callers can discriminate 400/403 sub-cases without matching on message strings.
+// Wire `errorCode` strings — let callers discriminate 400/403 sub-cases without parsing messages.
 const (
 	ExtensionCodeMalformedBody       = "malformed_body"
 	ExtensionCodeInvalidPolicy       = "invalid_extension_policy"
@@ -123,10 +114,6 @@ const (
 
 var emptyOrderTimeBounds OrderTimeBounds
 
-// BatchesStatus is the response for the batches-count / status endpoint. In addition
-// to the current limit and active-batch count, it exposes the self-service extension
-// fields (NumSelfExtensions, LastSelfExtensionAt) so the client UI can decide whether
-// to show the "request more activations" button and when it is eligible to reappear.
 type BatchesStatus struct {
 	Limit               int        `json:"limit"`
 	Active              int        `json:"active"`
@@ -134,23 +121,18 @@ type BatchesStatus struct {
 	LastSelfExtensionAt *time.Time `json:"last_self_extension_at"`
 }
 
-// ExtensionPolicy carries the caller-supplied tunables that govern a self-service
-// linking-limit extension. The skus service is policy-agnostic: every guard is evaluated
-// against the values in this struct, so callers (typically the subscriptions service)
-// own the source of truth for slot sizes, cadence, and lifetime caps.
+// Caller-supplied policy. skus is policy-agnostic — never default these values.
 type ExtensionPolicy struct {
 	SlotsPerExtension           int `json:"slots_per_extension"`
 	MinSecondsBetweenExtensions int `json:"min_seconds_between_extensions"`
 	MaxExtensions               int `json:"max_extensions"`
 }
 
-// MinInterval returns MinSecondsBetweenExtensions as a time.Duration.
 func (p ExtensionPolicy) MinInterval() time.Duration {
 	return time.Duration(p.MinSecondsBetweenExtensions) * time.Second
 }
 
-// Validate enforces defensive bounds on caller-supplied policy values. It exists to
-// catch buggy callers, not to express policy — the real policy lives in the caller.
+// Guards skus from buggy callers, not product policy.
 func (p ExtensionPolicy) Validate() error {
 	if p.SlotsPerExtension <= 0 || p.SlotsPerExtension > extensionPolicyMaxSlots {
 		return ErrInvalidExtensionPolicy
@@ -167,9 +149,7 @@ func (p ExtensionPolicy) Validate() error {
 	return nil
 }
 
-// ExtensionRateLimitedError wraps ErrExtensionRateLimited with the remaining retry
-// duration observed under the transaction lock. It matches ErrExtensionRateLimited
-// under errors.Is so existing switch-cases continue to work.
+// Carries the retry duration. Matches ErrExtensionRateLimited via errors.Is.
 type ExtensionRateLimitedError struct {
 	RetryAfter time.Duration
 }

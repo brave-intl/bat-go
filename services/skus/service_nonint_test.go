@@ -8066,7 +8066,7 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		ordRepo  *repository.MockOrder
 		itemRepo *repository.MockOrderItem
 		tlv2Repo *repository.MockTLV2
-		// needsTx signals the test reaches BeginTxx (post-lock path).
+		// True when the test reaches BeginTxx (post-lock path).
 		needsTx bool
 	}
 
@@ -8082,13 +8082,12 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		exp   tcExpected
 	}
 
-	recent := time.Now().Add(-24 * time.Hour) // 1 day ago — within 30-day rate limit window
+	recent := time.Now().Add(-24 * time.Hour) // within rate-limit window
 
 	errDBSentinel := model.Error("service_nonint_test: db sentinel")
 
 	tests := []testCase{
 		{
-			// Pre-lock: caller supplied an invalid policy (zero slots).
 			name: "invalid_policy",
 			given: tcGiven{
 				policy:   &model.ExtensionPolicy{SlotsPerExtension: 0, MinSecondsBetweenExtensions: 60, MaxExtensions: 10},
@@ -8100,7 +8099,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Pre-lock: order not found — bubbles through as ErrOrderNotFound.
 			name: "order_not_found",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{
@@ -8115,7 +8113,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Pre-lock: unexpected DB error bubbles through unchanged.
 			name: "db_error_bubbles_through",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{
@@ -8130,7 +8127,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Pre-lock: order is unpaid, method returns before BeginTxx.
 			name: "order_not_paid",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{
@@ -8145,7 +8141,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Pre-lock: order has no items.
 			name: "no_items",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
@@ -8160,7 +8155,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Pre-lock: order has items but none match the requested itemID.
 			name: "item_not_found",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
@@ -8177,7 +8171,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Pre-lock: item is not TLV2.
 			name: "unsupported_cred_type",
 			given: tcGiven{
 				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
@@ -8194,18 +8187,15 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Post-lock TOCTOU: order was paid at the pre-lock snapshot but was cancelled
-			// before the row lock was acquired. The re-check inside the transaction catches it.
 			name: "toctou_order_unpaid_after_lock",
 			given: tcGiven{
 				needsTx: true,
 				ordRepo: &repository.MockOrder{
+					// 1st call: paid (pre-lock). 2nd call: cancelled (post-lock recheck).
 					FnGet: func() func(context.Context, sqlx.QueryerContext, uuid.UUID) (*model.Order, error) {
 						calls := 0
 						return func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
 							calls++
-							// Call 1 (getOrderFullTx) sees a paid order. Call 2 (TOCTOU re-check
-							// inside tx after the row lock) sees it as cancelled.
 							if calls == 1 {
 								return &model.Order{ID: id, Status: "paid"}, nil
 							}
@@ -8225,8 +8215,7 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Guard 1 (cap): NumSelfExtensions at policy cap — fires before rate-limit check.
-			// Also proves cap guard fires even when LastSelfExtensionAt is recent.
+			// Cap fires before rate-limit even with recent LastSelfExtensionAt.
 			name: "extension_cap_reached",
 			given: tcGiven{
 				needsTx: true,
@@ -8237,8 +8226,8 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 						return &model.OrderItem{
 							ID:                  id,
 							CredentialType:      "time-limited-v2",
-							NumSelfExtensions:   testCap, // at cap
-							LastSelfExtensionAt: &recent, // would trigger rate limit if cap didn't fire first
+							NumSelfExtensions:   testCap,
+							LastSelfExtensionAt: &recent,
 						}, nil
 					},
 				},
@@ -8248,9 +8237,7 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Guard 2 (rate limit): cap not reached but within rate-limit window —
-			// fires before slots-available check. Also proves rate fires even when
-			// slots would be available (nact=0, limit=10).
+			// Rate-limit fires before slots-available even when slots are free.
 			name: "rate_limited",
 			given: tcGiven{
 				needsTx: true,
@@ -8276,7 +8263,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Guard 3 (slots): cap not reached, not rate-limited, but slots already available.
 			name: "slots_available",
 			given: tcGiven{
 				needsTx: true,
@@ -8284,10 +8270,10 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 				itemRepo: &repository.MockOrderItem{
 					FnFindByOrderID: tlv2Items,
 					FnLockForUpdate: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						// default limit 10, nact 0 → 10 free ≥ 3
 						return &model.OrderItem{
 							ID:             id,
 							CredentialType: "time-limited-v2",
-							// default limit = 10, nact = 0 → 10 free slots >= SlotsPerExtension(3)
 						}, nil
 					},
 				},
@@ -8301,7 +8287,6 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Success: all guards pass, ApplyExtension called with effectiveLimit+SlotsPerExtension.
 			name: "success",
 			given: tcGiven{
 				needsTx: true,
@@ -8309,10 +8294,10 @@ func TestService_ExtendLinkingLimit(t *testing.T) {
 				itemRepo: &repository.MockOrderItem{
 					FnFindByOrderID: tlv2Items,
 					FnLockForUpdate: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						// default limit 10, nact 9 → 1 free < 3
 						return &model.OrderItem{
 							ID:             id,
 							CredentialType: "time-limited-v2",
-							// default limit = 10, nact = 9 → 1 free slot < SlotsPerExtension(3)
 						}, nil
 					},
 				},

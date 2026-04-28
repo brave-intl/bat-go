@@ -185,11 +185,6 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
-// ExtendLinkingLimit is the transactional primitive for a self-service device-linking
-// slot extension. The caller supplies policy (slots per grant, min cadence, lifetime cap)
-// in the request body; the caller is also responsible for ownership/auth. Guards that
-// must see the row under SELECT ... FOR UPDATE stay here.
-//
 // POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
 func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()

@@ -82,8 +82,7 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 	return result, nil
 }
 
-// LockForUpdate fetches the order item by id under a SELECT … FOR UPDATE row lock.
-// Must be called within a transaction.
+// Caller must pass a tx — FOR UPDATE outside one releases at statement end.
 func (r *OrderItem) LockForUpdate(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
 	const q = `
 	SELECT
@@ -105,8 +104,7 @@ func (r *OrderItem) LockForUpdate(ctx context.Context, dbi sqlx.QueryerContext, 
 	return result, nil
 }
 
-// ApplyExtension sets the new device limit, increments the self-extension counter, and
-// records the timestamp. Must be called within a transaction after LockForUpdate.
+// Must be called after LockForUpdate within the same tx.
 func (r *OrderItem) ApplyExtension(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, newLimit int) error {
 	const q = `
 	UPDATE order_items

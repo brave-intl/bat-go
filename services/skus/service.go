@@ -1231,9 +1231,6 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	return sum.GreaterThanOrEqual(order.TotalPrice), nil
 }
 
-// UniqBatches returns the active-batch count and limit for an order's TLV2 item,
-// along with the self-service extension fields the UI needs to decide whether to
-// surface the "request more activations" button.
 func (s *Service) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error) {
 	now := time.Now()
 
@@ -1381,13 +1378,8 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
-// ExtendLinkingLimit grants policy.SlotsPerExtension additional device linking slots for
-// a TLV2 order item under the policy-defined cadence and lifetime cap. It is the
-// transactional primitive behind the self-service extension flow; the caller owns
-// ownership/auth, policy values, and error-to-HTTP mapping.
-//
-// When the rate-limit guard fires, the returned error is an *model.ExtensionRateLimitedError
-// carrying the remaining wait; it still matches model.ErrExtensionRateLimited via errors.Is.
+// Caller owns ownership/auth and policy. Rate-limit returns *ExtensionRateLimitedError;
+// matches ErrExtensionRateLimited via errors.Is.
 func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error {
 	if err := policy.Validate(); err != nil {
 		return err
@@ -1428,9 +1420,7 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 		return err
 	}
 
-	// Re-verify payment status inside the transaction after acquiring the row lock.
-	// The pre-lock IsPaid() check above used a non-locking snapshot; re-checking here
-	// closes the TOCTOU window between that snapshot and the mutation.
+	// TOCTOU recheck — pre-lock IsPaid() was a non-locking snapshot.
 	ord2, err := s.orderRepo.Get(ctx, tx, orderID)
 	if err != nil {
 		return err
@@ -1440,10 +1430,7 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 		return model.ErrOrderNotPaid
 	}
 
-	// nact is read without a lock on time_limited_v2_order_creds. A concurrent
-	// device-linking could insert a new batch between here and ApplyExtension, making the
-	// free-slots check overly permissive (granting an extension when slots become available
-	// concurrently). This is acceptable: the race makes the extension generous, not under-protective.
+	// Unlocked read — concurrent linking can over-permit, but the race is generous, not under-protective.
 	nact, err := s.tlv2Repo.UniqBatches(ctx, tx, orderID, itemID, now, now)
 	if err != nil {
 		return err

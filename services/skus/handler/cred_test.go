@@ -822,9 +822,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Distinct from malformed_body: this exercises the io.ReadAll failure
-			// path (e.g. client disconnect mid-body) rather than the json.Unmarshal
-			// failure path. Both must surface the same wire errorCode.
+			// Tests the io.ReadAll error path (vs malformed_body which tests json.Unmarshal).
 			name: "io_read_failure",
 			given: tcGiven{
 				ctx:        routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
