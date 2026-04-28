@@ -1385,8 +1385,6 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 		return err
 	}
 
-	now := time.Now()
-
 	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
 	if err != nil {
 		return err
@@ -1419,6 +1417,10 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 	if err != nil {
 		return err
 	}
+
+	// Captured after the lock so the rate-limit check uses the same time domain
+	// as the freshly-read LastSelfExtensionAt (set inside the previous holder's tx).
+	now := time.Now()
 
 	// TOCTOU recheck — pre-lock IsPaid() was a non-locking snapshot.
 	ord2, err := s.orderRepo.Get(ctx, tx, orderID)

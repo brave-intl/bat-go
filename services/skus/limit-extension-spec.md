@@ -113,7 +113,7 @@ Because vectors 1 and 3 use arbitrary increments, `num_self_extensions` cannot b
 
 ---
 
-## Database migration (0077)
+## Database migration (0076)
 
 ```sql
 -- up
