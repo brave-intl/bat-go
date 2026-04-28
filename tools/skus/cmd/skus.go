@@ -30,6 +30,16 @@ var SkusCmd = &cobra.Command{
 	Short: "provides skus service support tooling",
 }
 
+var resetRecoveryLockCmd = &cobra.Command{
+	Use:   "reset-recovery-lock",
+	Short: "Reset the 24-hour credential recovery lock for a subscription",
+	Long: `Resets the recovery_threshold counter that enforces the 24-hour recovery limit.
+
+Use this when a user has hit the recovery limit (HTTP 423) and needs to recover
+their credentials before the 24-hour window expires.`,
+	RunE: runResetRecoveryLock,
+}
+
 var resetLinkingLimitCmd = &cobra.Command{
 	Use:   "reset-linking-limit",
 	Short: "Free device linking slots for a premium order",
@@ -50,8 +60,19 @@ and cannot be looked up by email.`,
 }
 
 func init() {
+	SkusCmd.AddCommand(resetRecoveryLockCmd)
 	SkusCmd.AddCommand(resetLinkingLimitCmd)
 	rootcmd.RootCmd.AddCommand(SkusCmd)
+
+	{
+		rl := resetRecoveryLockCmd.Flags()
+		rl.String("subscriptions-base-url", "", "base URL of the subscriptions service (e.g. https://subscriptions.brave.com)")
+		rl.String("subscription-id", "", "the subscription ID to reset the recovery lock for")
+		rl.String("token", "", "support API bearer token for the subscriptions service")
+		rootcmd.Must(resetRecoveryLockCmd.MarkFlagRequired("subscriptions-base-url"))
+		rootcmd.Must(resetRecoveryLockCmd.MarkFlagRequired("subscription-id"))
+		rootcmd.Must(resetRecoveryLockCmd.MarkFlagRequired("token"))
+	}
 
 	fb := rootcmd.NewFlagBuilder(resetLinkingLimitCmd)
 
@@ -373,6 +394,45 @@ func loadED25519PrivateKey(path string) (ed25519.PrivateKey, error) {
 	}
 
 	return *key, nil
+}
+
+func runResetRecoveryLock(cmd *cobra.Command, args []string) error {
+	baseURL, _ := cmd.Flags().GetString("subscriptions-base-url")
+	baseURL = strings.TrimRight(baseURL, "/")
+	subID, _ := cmd.Flags().GetString("subscription-id")
+	token, _ := cmd.Flags().GetString("token")
+
+	if !confirm(fmt.Sprintf("Reset recovery lock for subscription %s?", subID)) {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	endpoint := fmt.Sprintf("%s/v1/support/subscriptions/%s/recovery-lock", baseURL, subID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, http.NoBody)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, respBody)
+	}
+
+	fmt.Printf("Done. Recovery lock reset for subscription %s.\n", subID)
+
+	return nil
 }
 
 func confirm(prompt string) bool {
