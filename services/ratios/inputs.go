@@ -18,7 +18,7 @@ type CoingeckoCoin struct {
 	coin  string
 }
 
-// String - stringer implmentation
+// String - stringer implementation
 func (cc *CoingeckoCoin) String() string {
 	return string(cc.coin)
 }
@@ -79,7 +79,7 @@ var (
 // CoingeckoCoinList - type for coingecko coin list input
 type CoingeckoCoinList []CoingeckoCoin
 
-// String - stringer implmentation
+// String - stringer implementation
 func (ccl *CoingeckoCoinList) String() string {
 	var s []string
 	for _, coin := range *ccl {
@@ -127,7 +127,7 @@ func (ccl *CoingeckoCoinList) Validate(ctx context.Context) error {
 // CoingeckoVsCurrency - type for coingecko vs currency input
 type CoingeckoVsCurrency string
 
-// String - stringer implmentation
+// String - stringer implementation
 func (cvc *CoingeckoVsCurrency) String() string {
 	return string(*cvc)
 }
@@ -168,7 +168,7 @@ var (
 // CoingeckoVsCurrencyList - type for coingecko vs currency list input
 type CoingeckoVsCurrencyList []CoingeckoVsCurrency
 
-// String - stringer implmentation
+// String - stringer implementation
 func (cvcl *CoingeckoVsCurrencyList) String() string {
 	var s []string
 	for _, vc := range *cvcl {
@@ -211,7 +211,7 @@ func (cvcl *CoingeckoVsCurrencyList) Validate(ctx context.Context) error {
 // CoingeckoDuration - type for coingecko duration input
 type CoingeckoDuration string
 
-// String - stringer implmentation
+// String - stringer implementation
 func (cd *CoingeckoDuration) String() string {
 	return string(*cd)
 }
@@ -289,12 +289,12 @@ func (cd *CoingeckoDuration) Validate(ctx context.Context) error {
 // Note: we only will request the first page
 type CoingeckoLimit int
 
-// String - stringer implmentation
+// String - stringer implementation
 func (cl *CoingeckoLimit) String() string {
 	return strconv.Itoa(int(*cl))
 }
 
-// Int - int conversion implmentation
+// Int - int conversion implementation
 func (cl *CoingeckoLimit) Int() int {
 	return int(*cl)
 }

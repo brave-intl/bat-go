@@ -10,7 +10,7 @@ import (
 // BaseCurrency - type for base currency input
 type BaseCurrency string
 
-// String - stringer implmentation
+// String - stringer implementation
 func (rbc *BaseCurrency) String() string {
 	return string(*rbc)
 }
