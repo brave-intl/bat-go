@@ -123,8 +123,9 @@ func Router(
 		// So until Bundles came along we can benefit from the fact that there is one item per order.
 		// By the time Bundles arrive, the caller would either have to fetch order anyway, or this can be communicated in another way.
 		cr.Method(http.MethodGet, "/batches/count", metricsMwr("CountBatches", authMwr(handlers.AppHandler(credh.CountBatches))))
-		cr.Method(http.MethodGet, "/batches", metricsMwr("ListBatches", supportMwr(handlers.AppHandler(credh.ListBatches))))
+		cr.Method(http.MethodGet, "/batches", metricsMwr("ListActiveBatches", supportMwr(handlers.AppHandler(credh.ListActiveBatches))))
 		cr.Method(http.MethodDelete, "/batches", metricsMwr("DeleteBatches", supportMwr(handlers.AppHandler(credh.DeleteBatches))))
+		cr.Method(http.MethodPost, "/items/{itemID}/batches/extend", metricsMwr("ExtendLinkingLimit", authMwr(handlers.AppHandler(credh.ExtendLinkingLimit))))
 
 		// Handle the old endpoint while the new is being rolled out:
 		// - true: the handler uses itemID as the request id, which is the old mode;

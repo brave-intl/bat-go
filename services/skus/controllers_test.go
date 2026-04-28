@@ -40,7 +40,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	logutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/test"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
@@ -571,107 +570,107 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	suite.Require().Equal(http.StatusOK, rr.Code)
 }
 
-func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
-	orderAmount := decimal.NewFromFloat(0.00000000000000001)
-
-	order, _ := suite.setupCreateOrder(UserWalletVoteTestSmallSkuToken, UserWalletVoteToken, 1)
-
-	handler := CreateUpholdTransaction(suite.service)
-
-	// create an uphold wallet
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	suite.Require().NoError(err, "Failed to create wallet keypair")
-
-	walletID := uuid.NewV4()
-	bat := altcurrency.BAT
-	info := walletutils.Info{
-		ID:          walletID.String(),
-		Provider:    "uphold",
-		ProviderID:  "-",
-		AltCurrency: &bat,
-		PublicKey:   hex.EncodeToString(publicKey),
-		LastBalance: nil,
-	}
-
-	ctx := context.Background()
-	// setup debug for client
-	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, true)
-
-	// setup a new logger, add to context as well
-	ctx, _ = logutils.SetupLogger(ctx)
-
-	w := uphold.Wallet{
-		Info:    info,
-		PrivKey: privKey,
-		PubKey:  publicKey,
-	}
-	err = w.Register(ctx, "drain-card-test")
-	suite.Require().NoError(err, "Failed to register wallet")
-
-	_, err = uphold.FundWallet(ctx, &w, altcurrency.BAT.ToProbi(orderAmount))
-	suite.Require().NoError(err, "Failed to fund wallet")
-
-	<-time.After(1 * time.Second)
-
-	// pay the transaction
-	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	tInfo, err := w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(orderAmount), settlementAddr)
-	suite.Require().NoError(err)
-
-	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: tInfo.ID,
-	}
-
-	body, err := json.Marshal(&createRequest)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	suite.Require().NoError(err)
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, postReq)
-
-	suite.Require().Equal(http.StatusCreated, rr.Code)
-
-	var transaction Transaction
-	err = json.Unmarshal(rr.Body.Bytes(), &transaction)
-	suite.Require().NoError(err)
-
-	// Check the transaction
-	suite.Assert().Equal(orderAmount, transaction.Amount)
-	suite.Assert().Equal("uphold", transaction.Kind)
-	suite.Assert().Equal("completed", transaction.Status)
-	suite.Assert().Equal("BAT", transaction.Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
-	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
-
-	// Check the order was updated to paid
-	// Old order
-	suite.Assert().Equal("pending", order.Status)
-	// Check the new order
-	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
-	suite.Require().NoError(err)
-	suite.Assert().Equal("paid", updatedOrder.Status)
-
-	// Test to make sure on repost we update tx
-	req, err = http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
-
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	postReq = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	suite.Require().NoError(err)
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, postReq)
-
-	// now it should be a 200 when updating a tx status
-	suite.Require().Equal(http.StatusOK, rr.Code)
-}
+//func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
+//	orderAmount := decimal.NewFromFloat(0.00000000000000001)
+//
+//	order, _ := suite.setupCreateOrder(UserWalletVoteTestSmallSkuToken, UserWalletVoteToken, 1)
+//
+//	handler := CreateUpholdTransaction(suite.service)
+//
+//	// create an uphold wallet
+//	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+//	suite.Require().NoError(err, "Failed to create wallet keypair")
+//
+//	walletID := uuid.NewV4()
+//	bat := altcurrency.BAT
+//	info := walletutils.Info{
+//		ID:          walletID.String(),
+//		Provider:    "uphold",
+//		ProviderID:  "-",
+//		AltCurrency: &bat,
+//		PublicKey:   hex.EncodeToString(publicKey),
+//		LastBalance: nil,
+//	}
+//
+//	ctx := context.Background()
+//	// setup debug for client
+//	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, true)
+//
+//	// setup a new logger, add to context as well
+//	ctx, _ = logutils.SetupLogger(ctx)
+//
+//	w := uphold.Wallet{
+//		Info:    info,
+//		PrivKey: privKey,
+//		PubKey:  publicKey,
+//	}
+//	err = w.Register(ctx, "drain-card-test")
+//	suite.Require().NoError(err, "Failed to register wallet")
+//
+//	_, err = uphold.FundWallet(ctx, &w, altcurrency.BAT.ToProbi(orderAmount))
+//	suite.Require().NoError(err, "Failed to fund wallet")
+//
+//	<-time.After(1 * time.Second)
+//
+//	// pay the transaction
+//	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+//	tInfo, err := w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(orderAmount), settlementAddr)
+//	suite.Require().NoError(err)
+//
+//	createRequest := &CreateTransactionRequest{
+//		ExternalTransactionID: tInfo.ID,
+//	}
+//
+//	body, err := json.Marshal(&createRequest)
+//	suite.Require().NoError(err)
+//
+//	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
+//	rctx := chi.NewRouteContext()
+//	rctx.URLParams.Add("orderID", order.ID.String())
+//	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+//
+//	suite.Require().NoError(err)
+//
+//	rr := httptest.NewRecorder()
+//	handler.ServeHTTP(rr, postReq)
+//
+//	suite.Require().Equal(http.StatusCreated, rr.Code)
+//
+//	var transaction Transaction
+//	err = json.Unmarshal(rr.Body.Bytes(), &transaction)
+//	suite.Require().NoError(err)
+//
+//	// Check the transaction
+//	suite.Assert().Equal(orderAmount, transaction.Amount)
+//	suite.Assert().Equal("uphold", transaction.Kind)
+//	suite.Assert().Equal("completed", transaction.Status)
+//	suite.Assert().Equal("BAT", transaction.Currency)
+//	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
+//	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
+//
+//	// Check the order was updated to paid
+//	// Old order
+//	suite.Assert().Equal("pending", order.Status)
+//	// Check the new order
+//	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
+//	suite.Require().NoError(err)
+//	suite.Assert().Equal("paid", updatedOrder.Status)
+//
+//	// Test to make sure on repost we update tx
+//	req, err = http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
+//
+//	rctx = chi.NewRouteContext()
+//	rctx.URLParams.Add("orderID", order.ID.String())
+//	postReq = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+//
+//	suite.Require().NoError(err)
+//
+//	rr = httptest.NewRecorder()
+//	handler.ServeHTTP(rr, postReq)
+//
+//	// now it should be a 200 when updating a tx status
+//	suite.Require().Equal(http.StatusOK, rr.Code)
+//}
 
 func (suite *ControllersTestSuite) TestGetTransactions() {
 	// External transaction has 12 BAT

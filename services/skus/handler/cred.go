@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -16,9 +17,10 @@ import (
 )
 
 type tlv2Svc interface {
-	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
+	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error
 }
 
 type Cred struct {
@@ -39,7 +41,7 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 	}
 
-	lim, nact, err := h.tlv2.UniqBatches(ctx, orderID, uuid.Nil)
+	status, err := h.tlv2.UniqBatches(ctx, orderID, uuid.Nil)
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -59,19 +61,14 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 		}
 	}
 
-	result := &struct {
-		Limit  int `json:"limit"`
-		Active int `json:"active"`
-	}{Limit: lim, Active: nact}
-
-	return handlers.RenderContent(ctx, result, w, http.StatusOK)
+	return handlers.RenderContent(ctx, status, w, http.StatusOK)
 }
 
-// ListBatches returns the active credential batches (linked devices) for an order.
+// ListActiveBatches returns the active credential batches (linked devices) for an order.
 // An optional item_id query parameter scopes the results to a specific order item.
 //
 // GET /v1/orders/{orderID}/credentials/batches
-func (h *Cred) ListBatches(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+func (h *Cred) ListActiveBatches(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
@@ -89,7 +86,7 @@ func (h *Cred) ListBatches(w http.ResponseWriter, r *http.Request) *handlers.App
 
 	batches, err := h.tlv2.ListActiveBatches(ctx, orderID, itemID)
 	if err != nil {
-		lg := logging.Logger(ctx, "skus").With().Str("func", "ListBatches").Logger()
+		lg := logging.Logger(ctx, "skus").With().Str("func", "ListActiveBatches").Logger()
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -186,4 +183,86 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 	}
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+// POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
+func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to read request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	var policy model.ExtensionPolicy
+	if err := json.Unmarshal(body, &policy); err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID, policy); err != nil {
+		lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimit").Logger()
+
+		var rateLimited *model.ExtensionRateLimitedError
+		if errors.As(err, &rateLimited) {
+			retryAfterSecs := int64(rateLimited.RetryAfter.Seconds())
+			if retryAfterSecs < 1 {
+				retryAfterSecs = 1
+			}
+
+			w.Header().Set("Retry-After", strconv.FormatInt(retryAfterSecs, 10))
+
+			appErr := handlers.WrapError(err, "extension rate limited", http.StatusTooManyRequests)
+			appErr.ErrorCode = model.ExtensionCodeRateLimited
+			appErr.Data = map[string]interface{}{"retry_after_seconds": retryAfterSecs}
+
+			return appErr
+		}
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
+
+		case errors.Is(err, model.ErrInvalidExtensionPolicy):
+			return withErrorCode(handlers.WrapError(err, "invalid extension policy", http.StatusBadRequest), model.ExtensionCodeInvalidPolicy)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
+			return withErrorCode(handlers.WrapError(err, "order not found", http.StatusNotFound), model.ExtensionCodeOrderNotFound)
+
+		case errors.Is(err, model.ErrOrderNotPaid):
+			return withErrorCode(handlers.WrapError(err, "order not paid", http.StatusPaymentRequired), model.ExtensionCodeOrderNotPaid)
+
+		case errors.Is(err, model.ErrUnsupportedCredType):
+			return withErrorCode(handlers.WrapError(err, "credential type not supported", http.StatusBadRequest), model.ExtensionCodeUnsupportedCredType)
+
+		case errors.Is(err, model.ErrExtensionCapReached):
+			return withErrorCode(handlers.WrapError(err, "extension cap reached", http.StatusForbidden), model.ExtensionCodeCapReached)
+
+		case errors.Is(err, model.ErrExtensionNotNeeded):
+			return withErrorCode(handlers.WrapError(err, "extension not needed", http.StatusBadRequest), model.ExtensionCodeNotNeeded)
+
+		default:
+			lg.Error().Err(err).Msg("failed to extend linking limit")
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+func withErrorCode(appErr *handlers.AppError, code string) *handlers.AppError {
+	appErr.ErrorCode = code
+	return appErr
 }
