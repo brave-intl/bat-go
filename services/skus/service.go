@@ -132,6 +132,7 @@ type stripeClient interface {
 	Subscription(ctx context.Context, id string, params *stripe.SubscriptionParams) (*stripe.Subscription, error)
 	CancelSub(_ context.Context, id string, params *stripe.SubscriptionCancelParams) error
 	FindCustomer(ctx context.Context, email string) (*stripe.Customer, bool)
+	UpdateCustomer(ctx context.Context, id string, params *stripe.CustomerParams) (*stripe.Customer, error)
 }
 
 // Service contains datastore
@@ -909,6 +910,33 @@ func (s *Service) setOrderTrialDaysTx(ctx context.Context, dbi sqlx.ExtContext, 
 	_, err = s.recreateStripeSession(ctx, dbi, ord, oldSessID, req.Email)
 
 	return err
+}
+
+func (s *Service) updateOrderEmail(ctx context.Context, orderID uuid.UUID, email string) error {
+	ord, err := s.orderRepo.Get(ctx, s.Datastore.RawDB(), orderID)
+	if err != nil {
+		return err
+	}
+
+	subID, ok := ord.StripeSubID()
+	if !ok {
+		return model.ErrNoStripeSubscriptionID
+	}
+
+	sub, err := s.stripeCl.Subscription(ctx, subID, nil)
+	if err != nil {
+		return fmt.Errorf("failed to fetch stripe subscription: %w", err)
+	}
+
+	if sub.Customer == nil {
+		return model.ErrNoStripeCustomer
+	}
+
+	if _, err := s.stripeCl.UpdateCustomer(ctx, sub.Customer.ID, &stripe.CustomerParams{Email: stripe.String(email)}); err != nil {
+		return fmt.Errorf("failed to update stripe customer email: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
