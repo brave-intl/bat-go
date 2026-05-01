@@ -114,8 +114,7 @@ type orderItemStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
 	FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
 	InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
-	LockForUpdate(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
-	ApplyExtension(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, newLimit int) error
+	ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error
 }
 
 type orderPayHistoryStore interface {

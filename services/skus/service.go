@@ -1378,11 +1378,12 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
-// Caller owns ownership/auth and policy. Rate-limit returns *ExtensionRateLimitedError;
-// matches ErrExtensionRateLimited via errors.Is.
-func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error {
-	if err := policy.Validate(); err != nil {
-		return err
+// Thin storage write. Caller (subs) owns all policy. CAS on last_self_extension_at:
+// returns ErrExtensionConflict if the row's value has changed since the caller read it.
+// DB CHECK ceiling rejection surfaces as ErrExtensionInvalidLimit.
+func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
+	if write.NewLimit <= 0 || write.NewLimit > model.ExtensionMaxLimitCeiling {
+		return model.ErrExtensionInvalidLimit
 	}
 
 	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
@@ -1407,61 +1408,22 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 		return model.ErrUnsupportedCredType
 	}
 
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer s.Datastore.RollbackTx(tx)
-
-	locked, err := s.orderItemRepo.LockForUpdate(ctx, tx, item.ID)
-	if err != nil {
-		return err
-	}
-
-	// Captured after the lock so the rate-limit check uses the same time domain
-	// as the freshly-read LastSelfExtensionAt (set inside the previous holder's tx).
-	now := time.Now()
-
-	// TOCTOU recheck — pre-lock IsPaid() was a non-locking snapshot.
-	ord2, err := s.orderRepo.Get(ctx, tx, orderID)
-	if err != nil {
-		return err
-	}
-
-	if !ord2.IsPaid() {
-		return model.ErrOrderNotPaid
-	}
-
-	// Unlocked read — concurrent linking can over-permit, but the race is generous, not under-protective.
-	nact, err := s.tlv2Repo.UniqBatches(ctx, tx, orderID, itemID, now, now)
-	if err != nil {
-		return err
-	}
-
-	effectiveLimit, err := locked.MaxActiveBatchesTLV2CredsOrDefault()
-	if err != nil {
-		return err
-	}
-
-	if locked.NumSelfExtensions >= policy.MaxExtensions {
-		return model.ErrExtensionCapReached
-	}
-
-	if locked.LastSelfExtensionAt != nil {
-		if elapsed := now.Sub(*locked.LastSelfExtensionAt); elapsed < policy.MinInterval() {
-			return &model.ExtensionRateLimitedError{RetryAfter: policy.MinInterval() - elapsed}
+	if err := s.orderItemRepo.ApplyExtensionCAS(ctx, s.Datastore.RawDB(), item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit); err != nil {
+		if isCheckViolation(err) {
+			return model.ErrExtensionInvalidLimit
 		}
-	}
-
-	if effectiveLimit-nact >= policy.SlotsPerExtension {
-		return model.ErrExtensionNotNeeded
-	}
-
-	if err := s.orderItemRepo.ApplyExtension(ctx, tx, locked.ID, effectiveLimit+policy.SlotsPerExtension); err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	return nil
+}
+
+func isCheckViolation(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pqErr.Code == "23514"
+	}
+	return false
 }
 
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is
