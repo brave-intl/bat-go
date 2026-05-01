@@ -54,10 +54,8 @@ const (
 	// ErrBatchSeatsExceeded is returned when the requested seats exceeds the number of active batches.
 	ErrBatchSeatsExceeded Error = "model: seats exceeds active batch count"
 
-	ErrExtensionRateLimited   Error = "model: extension rate limited"
-	ErrExtensionNotNeeded     Error = "model: extension not needed"
-	ErrExtensionCapReached    Error = "model: extension cap reached"
-	ErrInvalidExtensionPolicy Error = "model: invalid extension policy"
+	ErrExtensionConflict     Error = "model: extension version conflict"
+	ErrExtensionInvalidLimit Error = "model: extension new limit invalid"
 
 	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
 
@@ -87,23 +85,16 @@ const (
 	MaxActiveBatchesTLV2CredsDefault = 10
 )
 
-// Defensive bounds enforced by ExtensionPolicy.Validate — not product policy.
-const (
-	extensionPolicyMaxSlots        = 100
-	extensionPolicyMaxExtensions   = 1000
-	extensionPolicyMaxIntervalSecs = 365 * 24 * 60 * 60
-)
+// Hard sanity ceiling enforced by DB CHECK on max_active_batches_tlv2_creds.
+const ExtensionMaxLimitCeiling = 1000
 
-// Wire `errorCode` strings — let callers discriminate 400/403 sub-cases without parsing messages.
 const (
 	ExtensionCodeMalformedBody       = "malformed_body"
-	ExtensionCodeInvalidPolicy       = "invalid_extension_policy"
 	ExtensionCodeOrderNotFound       = "order_not_found"
 	ExtensionCodeOrderNotPaid        = "order_not_paid"
 	ExtensionCodeUnsupportedCredType = "unsupported_cred_type"
-	ExtensionCodeCapReached          = "extension_cap_reached"
-	ExtensionCodeRateLimited         = "extension_rate_limited"
-	ExtensionCodeNotNeeded           = "extension_not_needed"
+	ExtensionCodeConflict            = "extension_conflict"
+	ExtensionCodeInvalidLimit        = "extension_invalid_limit"
 )
 
 const (
@@ -121,45 +112,19 @@ type BatchesStatus struct {
 	LastSelfExtensionAt *time.Time `json:"last_self_extension_at"`
 }
 
-// Caller-supplied policy. skus is policy-agnostic — never default these values.
-type ExtensionPolicy struct {
-	SlotsPerExtension           int `json:"slots_per_extension"`
-	MinSecondsBetweenExtensions int `json:"min_seconds_between_extensions"`
-	MaxExtensions               int `json:"max_extensions"`
+// Caller-supplied CAS write. ExpectedLastSelfExtensionAt must equal the row's
+// current value — nil means "row has never been extended."
+type ExtensionWrite struct {
+	ExpectedLastSelfExtensionAt *time.Time `json:"expected_last_self_extension_at"`
+	NewLimit                    int        `json:"new_limit"`
 }
 
-func (p ExtensionPolicy) MinInterval() time.Duration {
-	return time.Duration(p.MinSecondsBetweenExtensions) * time.Second
-}
-
-// Guards skus from buggy callers, not product policy.
-func (p ExtensionPolicy) Validate() error {
-	if p.SlotsPerExtension <= 0 || p.SlotsPerExtension > extensionPolicyMaxSlots {
-		return ErrInvalidExtensionPolicy
-	}
-
-	if p.MaxExtensions <= 0 || p.MaxExtensions > extensionPolicyMaxExtensions {
-		return ErrInvalidExtensionPolicy
-	}
-
-	if p.MinSecondsBetweenExtensions <= 0 || p.MinSecondsBetweenExtensions > extensionPolicyMaxIntervalSecs {
-		return ErrInvalidExtensionPolicy
-	}
-
-	return nil
-}
-
-// Carries the retry duration. Matches ErrExtensionRateLimited via errors.Is.
-type ExtensionRateLimitedError struct {
-	RetryAfter time.Duration
-}
-
-func (e *ExtensionRateLimitedError) Error() string {
-	return string(ErrExtensionRateLimited)
-}
-
-func (e *ExtensionRateLimitedError) Is(target error) bool {
-	return target == ErrExtensionRateLimited
+// Returned in the body of a 409 conflict so callers can refresh and retry.
+type ExtensionState struct {
+	Limit               int        `json:"limit"`
+	Active              int        `json:"active"`
+	NumSelfExtensions   int        `json:"num_self_extensions"`
+	LastSelfExtensionAt *time.Time `json:"last_self_extension_at"`
 }
 
 // Vendor represents an app store vendor.
@@ -411,8 +376,8 @@ type OrderItem struct {
 	Description               datastore.NullString `json:"description" db:"description"`
 	CredentialType            string               `json:"credentialType" db:"credential_type"`
 	MaxActiveBatchesTLV2Creds *int                 `json:"max_active_batches_tlv2_creds" db:"max_active_batches_tlv2_creds"`
-	NumSelfExtensions         int                  `json:"-" db:"num_self_extensions"`
-	LastSelfExtensionAt       *time.Time           `json:"-" db:"last_self_extension_at"`
+	NumSelfExtensions         int                  `json:"num_self_extensions" db:"num_self_extensions"`
+	LastSelfExtensionAt       *time.Time           `json:"last_self_extension_at" db:"last_self_extension_at"`
 	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
 	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`

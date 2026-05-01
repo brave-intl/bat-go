@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -20,7 +19,7 @@ type tlv2Svc interface {
 	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
-	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error
+	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
 }
 
 type Cred struct {
@@ -204,29 +203,13 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 		return withErrorCode(handlers.WrapError(err, "failed to read request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
 	}
 
-	var policy model.ExtensionPolicy
-	if err := json.Unmarshal(body, &policy); err != nil {
+	var write model.ExtensionWrite
+	if err := json.Unmarshal(body, &write); err != nil {
 		return withErrorCode(handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
 	}
 
-	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID, policy); err != nil {
+	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID, write); err != nil {
 		lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimit").Logger()
-
-		var rateLimited *model.ExtensionRateLimitedError
-		if errors.As(err, &rateLimited) {
-			retryAfterSecs := int64(rateLimited.RetryAfter.Seconds())
-			if retryAfterSecs < 1 {
-				retryAfterSecs = 1
-			}
-
-			w.Header().Set("Retry-After", strconv.FormatInt(retryAfterSecs, 10))
-
-			appErr := handlers.WrapError(err, "extension rate limited", http.StatusTooManyRequests)
-			appErr.ErrorCode = model.ExtensionCodeRateLimited
-			appErr.Data = map[string]interface{}{"retry_after_seconds": retryAfterSecs}
-
-			return appErr
-		}
 
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -234,9 +217,6 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 
 		case errors.Is(err, context.DeadlineExceeded):
 			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
-
-		case errors.Is(err, model.ErrInvalidExtensionPolicy):
-			return withErrorCode(handlers.WrapError(err, "invalid extension policy", http.StatusBadRequest), model.ExtensionCodeInvalidPolicy)
 
 		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
 			return withErrorCode(handlers.WrapError(err, "order not found", http.StatusNotFound), model.ExtensionCodeOrderNotFound)
@@ -247,11 +227,11 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 		case errors.Is(err, model.ErrUnsupportedCredType):
 			return withErrorCode(handlers.WrapError(err, "credential type not supported", http.StatusBadRequest), model.ExtensionCodeUnsupportedCredType)
 
-		case errors.Is(err, model.ErrExtensionCapReached):
-			return withErrorCode(handlers.WrapError(err, "extension cap reached", http.StatusForbidden), model.ExtensionCodeCapReached)
+		case errors.Is(err, model.ErrExtensionInvalidLimit):
+			return withErrorCode(handlers.WrapError(err, "extension new limit invalid", http.StatusUnprocessableEntity), model.ExtensionCodeInvalidLimit)
 
-		case errors.Is(err, model.ErrExtensionNotNeeded):
-			return withErrorCode(handlers.WrapError(err, "extension not needed", http.StatusBadRequest), model.ExtensionCodeNotNeeded)
+		case errors.Is(err, model.ErrExtensionConflict):
+			return withErrorCode(handlers.WrapError(err, "extension version conflict", http.StatusConflict), model.ExtensionCodeConflict)
 
 		default:
 			lg.Error().Err(err).Msg("failed to extend linking limit")

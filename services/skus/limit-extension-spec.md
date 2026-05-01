@@ -19,8 +19,8 @@ gate legitimate multi-device use.
   subscription cannot be scaled arbitrarily.
 - Preserve operator authority: support can still set the limit directly via `SetLinkingLimit` at
   any value, independent of the self-service counter.
-- Keep policy tunable without a skus deploy: slots/cadence/cap are supplied per-request by the
-  caller, so operations that bump them only need a subscriptions deploy.
+- Keep policy iterable without a skus deploy: slots/cadence/cap/per-product overrides live in
+  subscriptions; skus only enforces a DB sanity ceiling that bounds blast radius.
 
 ## Non-goals
 
@@ -28,10 +28,8 @@ gate legitimate multi-device use.
   fetch after extension are a separate client-side workstream.
 - **Purchasing additional activations** — a paid upgrade flow (vector 3) is a separate product
   decision; this feature deliberately leaves room for it without blocking on it.
-- **Unlimited activations** — the 25-device ceiling (10 default + 5 extensions × 3 slots) is
-  intentional. Subscribers who need more can contact support.
-- **Per-user configurability of the cap** — the cap is a subscriptions-side constant; changing it
-  requires a deploy of subscriptions, not a per-account setting.
+- **Unlimited activations** — the per-product policy ceiling is intentional. Subscribers who
+  need more contact support.
 - **Support revocation of extension ability** — no dedicated mechanism yet. Support can max out
   `num_self_extensions` as a workaround; a proper flag is a follow-up.
 
@@ -39,51 +37,68 @@ gate legitimate multi-device use.
 
 ## Architecture
 
-Responsibility is split across two services:
+The split is intentional: **subs owns all policy**, **skus is thin storage**. skus enforces only
+the row-level DB sanity ceiling (1000) — every subjective rule (rate-limit window, slots per
+grant, max per item, at-limit precondition) is evaluated in subscriptions.
+
+This lets ops iterate policy with a subs deploy and lets skus stay generic.
 
 | Concern | Owned by |
 |---|---|
 | Public HTTP endpoint, subscriber JWT auth, ownership (subxID ↔ subscription match) | **subscriptions** |
 | Product-type gate (TLV2 only), resolve orderID + orderItemID from subscription | **subscriptions** |
-| Policy values (slots per grant, cadence, lifetime cap) | **subscriptions** |
+| Per-product policy values (slots per grant, cadence, lifetime cap), at-limit gate | **subscriptions** |
 | Error → HTTP status mapping for the browser | **subscriptions** |
-| Row-level lock on `order_items`, guards under lock, atomic write | **bat-go/skus** |
+| Optimistic-concurrency CAS write, atomic `num_self_extensions++` and `last_self_extension_at = NOW()` | **bat-go/skus** |
+| DB sanity ceiling (`max_active_batches_tlv2_creds <= 1000`) | **bat-go/skus** (CHECK constraint) |
 | Defensive precondition checks (order paid, item is TLV2, order exists) | **bat-go/skus** |
-| Wire error codes (`errorCode` strings) | **bat-go/skus**, consumed by subscriptions |
 
 Flow:
 
 ```
 Browser ──JWT──▶ subscriptions
                      │  (looks up sub, validates ownership + IsTLV2,
-                     │   fetches order to resolve orderItemID,
-                     │   builds policy)
+                     │   fetches order to resolve itemID,
+                     │   selects per-product policy)
+                     │
+                     │  GET /credentials/batches/count → state {limit, active, num_self_extensions, last_self_extension_at}
+                     │  evaluate policy locally:
+                     │    not at limit         → 422 not_at_limit
+                     │    num_self_ext >= cap  → 422 max_per_item
+                     │    within rate window   → 429 rate_limited
                      │
                      ▼  POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
-                     │  body: { slots_per_extension, min_seconds_between_extensions, max_extensions }
+                     │  body: { expected_last_self_extension_at, new_limit }
                      │  auth: PaymentAPIToken
-                     ▼
-                 bat-go/skus
-                     │  (BeginTx → LockForUpdate → guards under policy → ApplyExtension → Commit)
                      │
-                     └─► typed error (wire: errorCode + Retry-After + retry_after_seconds)
+                     ▼  skus CAS write:
+                     │    UPDATE WHERE last_self_extension_at IS NOT DISTINCT FROM expected
+                     │    rows == 0 → 409 extension_conflict (subs refetches, retries once)
+                     │    new_limit > 1000 → 422 extension_invalid_limit (CHECK violation)
+                     │
+                     └─► success or typed conflict for retry
 ```
 
 ---
 
-## Rules (subscriptions-side policy)
+## Rules (subs-owned policy)
 
-| Rule | Value | Source |
-|------|-------|--------|
-| Slots granted per extension | 3 | `extensionSlotsPerGrant` in `subscription.go` |
-| Rate limit | Once per 30 days | `extensionMinIntervalSeconds` in `subscription.go` |
-| Pre-condition | Available slots (limit − active) must be < 3 | enforced by skus under the lock |
-| Lifetime cap | 5 self-service extensions per order item | `extensionMaxPerItem` in `subscription.go` |
-| Total activations ceiling | 10 base + 5×3 = **25** | |
-| Guard evaluation order | cap → rate limit → slots available | skus service method |
+| Rule | Default | Source |
+|------|---------|--------|
+| Slots granted per extension | 3 | `defaultExtensionPolicy.SlotsPerGrant` |
+| Rate limit | Once per 30 days | `defaultExtensionPolicy.MinIntervalSeconds` |
+| Pre-condition | `active >= limit` (must be at limit; no top-up math) | `evaluateExtensionPolicy` |
+| Lifetime cap | 5 self-service extensions per item | `defaultExtensionPolicy.MaxPerItem` |
+| Per-product overrides | none yet | `extensionPolicies` map keyed on product id |
+| skus DB sanity ceiling | `max_active_batches_tlv2_creds <= 1000` | CHECK constraint (migration 0076) |
+| Guard order in subs | not-at-limit → max-per-item → rate-limit | `evaluateExtensionPolicy` |
 
-These values are hard-coded constants in subscriptions today. Runtime configurability is
-deliberately deferred — raise it in PR review if/when operations needs it.
+The "under 3 free slots" math is intentionally gone. The new contract is binary: a user is
+**at limit** or they are not, and an extension grants exactly `SlotsPerGrant` more — independent
+of how many they happen to be using right now.
+
+Per-product overrides live in subs (`extensionPolicies` map). Adding one is a subs deploy; no
+schema change.
 
 ---
 
@@ -99,14 +114,14 @@ There are four distinct vectors. Only vector 2 touches the new tracking columns.
    immediately. (Runbook implication: if support wants the user to be able to self-extend
    right away, they need to clear `last_self_extension_at` themselves.)
 
-2. **User self-service extension** — +3 slots via the new endpoint, subject to all rules above.
-   Increments `num_self_extensions` and sets `last_self_extension_at`.
+2. **User self-service extension** — `+SlotsPerGrant` via the new endpoint, subject to all
+   subs-owned rules above. Increments `num_self_extensions` and sets `last_self_extension_at`
+   in the same atomic CAS update. Cannot exceed the DB sanity ceiling of 1000.
 
 3. **User purchases additional activations** — future, product-defined increment. Does not touch
    the self-service tracking columns.
 
-4. **Policy-level cap** — 5 extensions × 3 slots over baseline. Policy is supplied per-request by
-   subscriptions; change it by deploying a new constant value in subscriptions.
+4. **Policy-level cap** — defined per-product in subs. Change it by deploying subs.
 
 Because vectors 1 and 3 use arbitrary increments, `num_self_extensions` cannot be derived from
 `max_active_batches_tlv2_creds`. It must be tracked explicitly.
@@ -119,13 +134,19 @@ Because vectors 1 and 3 use arbitrary increments, `num_self_extensions` cannot b
 -- up
 ALTER TABLE order_items
   ADD COLUMN num_self_extensions    INT         NOT NULL DEFAULT 0 CHECK (num_self_extensions >= 0),
-  ADD COLUMN last_self_extension_at TIMESTAMPTZ;
+  ADD COLUMN last_self_extension_at TIMESTAMPTZ,
+  ADD CONSTRAINT order_items_max_active_batches_tlv2_creds_sanity
+    CHECK (max_active_batches_tlv2_creds IS NULL OR max_active_batches_tlv2_creds <= 1000);
 
 -- down
 ALTER TABLE order_items
+  DROP CONSTRAINT IF EXISTS order_items_max_active_batches_tlv2_creds_sanity,
   DROP COLUMN num_self_extensions,
   DROP COLUMN last_self_extension_at;
 ```
+
+The CHECK constraint is the only piece of policy that lives in skus. It bounds the absolute
+maximum a single row can ever hold, independent of any caller bug or compromised caller.
 
 ---
 
@@ -133,60 +154,25 @@ ALTER TABLE order_items
 
 ### Model changes (`model/model.go`)
 
-New fields on `OrderItem` — `json:"-"` (internal, not exposed in the order API response):
+`OrderItem` exposes the new tracking columns over JSON so the order-fetch path can return them:
 
 ```go
-NumSelfExtensions   int        `db:"num_self_extensions"    json:"-"`
-LastSelfExtensionAt *time.Time `db:"last_self_extension_at" json:"-"`
+NumSelfExtensions   int        `db:"num_self_extensions"    json:"num_self_extensions"`
+LastSelfExtensionAt *time.Time `db:"last_self_extension_at" json:"last_self_extension_at"`
 ```
 
-New Go errors:
+CAS write payload (caller supplies the version token + the absolute new limit):
 
 ```go
-ErrExtensionRateLimited    Error = "model: extension rate limited"
-ErrExtensionNotNeeded      Error = "model: extension not needed"
-ErrExtensionCapReached     Error = "model: extension cap reached"
-ErrInvalidExtensionPolicy  Error = "model: invalid extension policy"
-```
-
-Typed error carrying the server-observed retry window (matches `ErrExtensionRateLimited` under
-`errors.Is`):
-
-```go
-type ExtensionRateLimitedError struct {
-    RetryAfter time.Duration
+type ExtensionWrite struct {
+    ExpectedLastSelfExtensionAt *time.Time `json:"expected_last_self_extension_at"`
+    NewLimit                    int        `json:"new_limit"`
 }
 ```
 
-Request body shape (caller supplies policy per-call):
+`ExpectedLastSelfExtensionAt == nil` means "expected the row to have never been extended."
 
-```go
-type ExtensionPolicy struct {
-    SlotsPerExtension           int `json:"slots_per_extension"`
-    MinSecondsBetweenExtensions int `json:"min_seconds_between_extensions"`
-    MaxExtensions               int `json:"max_extensions"`
-}
-```
-
-`ExtensionPolicy.Validate()` enforces defensive upper bounds (`extensionPolicyMaxSlots=100`,
-`extensionPolicyMaxExtensions=1000`, `extensionPolicyMaxIntervalSecs=1 year`) to protect skus
-from buggy callers. It does not express product policy.
-
-Wire error codes — emitted as `errorCode` on every error response so callers can discriminate:
-
-```go
-ExtensionCodeMalformedBody       = "malformed_body"
-ExtensionCodeInvalidPolicy       = "invalid_extension_policy"
-ExtensionCodeOrderNotFound       = "order_not_found"
-ExtensionCodeOrderNotPaid        = "order_not_paid"
-ExtensionCodeUnsupportedCredType = "unsupported_cred_type"
-ExtensionCodeCapReached          = "extension_cap_reached"
-ExtensionCodeRateLimited         = "extension_rate_limited"
-ExtensionCodeNotNeeded           = "extension_not_needed"
-```
-
-Status response shape (for `CountBatches`, extended to expose the extension tracking fields the
-UI needs):
+State exposed by `CountBatches` (additive — existing fields unchanged):
 
 ```go
 type BatchesStatus struct {
@@ -197,17 +183,29 @@ type BatchesStatus struct {
 }
 ```
 
-### Repository changes (`storage/repository/order_item.go`)
+Errors and wire codes — minimal set for thin storage:
 
-`LockForUpdate` — `SELECT ... FOR UPDATE` so concurrent self-service requests serialize at the
-DB row level:
-
-```sql
-SELECT * FROM order_items WHERE id = $1 FOR UPDATE
+```go
+ErrExtensionInvalidLimit Error = "model: extension new limit invalid"
+ErrExtensionConflict     Error = "model: extension version conflict"
 ```
 
-`ApplyExtension` — atomic update that sets the new limit, increments the counter, and records
-the timestamp:
+```go
+ExtensionCodeMalformedBody       = "malformed_body"
+ExtensionCodeOrderNotFound       = "order_not_found"
+ExtensionCodeOrderNotPaid        = "order_not_paid"
+ExtensionCodeUnsupportedCredType = "unsupported_cred_type"
+ExtensionCodeConflict            = "extension_conflict"
+ExtensionCodeInvalidLimit        = "extension_invalid_limit"
+```
+
+No rate-limit / cap / not-needed codes — those judgments are subs's job.
+
+### Repository changes (`storage/repository/order_item.go`)
+
+`LockForUpdate` is gone. Concurrency is now CAS, not row-level locking.
+
+`ApplyExtensionCAS` — single atomic UPDATE that doubles as the optimistic-concurrency check:
 
 ```sql
 UPDATE order_items
@@ -215,7 +213,15 @@ SET max_active_batches_tlv2_creds = $2,
     num_self_extensions           = num_self_extensions + 1,
     last_self_extension_at        = NOW()
 WHERE id = $1
+  AND last_self_extension_at IS NOT DISTINCT FROM $3
 ```
+
+If `RowsAffected() == 0`, the version token has changed under us — return `ErrExtensionConflict`
+so subs can refetch and retry. `IS NOT DISTINCT FROM` is null-safe so the "never extended" case
+(`expected = NULL`, current `IS NULL`) matches correctly.
+
+If the new `max_active_batches_tlv2_creds` violates the CHECK constraint, Postgres returns a
+`pq.Error` with code `23514`; skus maps that to `ErrExtensionInvalidLimit`.
 
 `SetMaxActiveBatches` is unchanged. Support direct limit changes (vector 1) do not touch
 `num_self_extensions` or `last_self_extension_at`.
@@ -223,38 +229,27 @@ WHERE id = $1
 ### Service method (`service.go`)
 
 ```go
-func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error
+func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
 ```
 
-Logic:
+Logic — purely defensive checks plus the CAS write. **No policy.**
 
 ```
-0.  policy.Validate()                                → ErrInvalidExtensionPolicy (caller bug)
-1.  getOrderFullTx(ctx, rawDB, orderID)              → ErrOrderNotFound if missing
-2.  order.IsPaid()                                   → ErrOrderNotPaid (pre-lock snapshot)
-3.  len(order.Items) == 0                            → ErrInvalidOrderNoItems
-4.  Find itemID in order items                       → ErrOrderItemNotFound
-5.  item.IsCredTLV2()                                → ErrUnsupportedCredType
-6.  Begin transaction (RawDB().BeginTxx)
-7.  orderItemRepo.LockForUpdate(ctx, tx, item.ID)    ← row lock
-8.  orderRepo.Get(ctx, tx, orderID).IsPaid()         ← TOCTOU re-check inside tx
-9.  tlv2Repo.UniqBatches(ctx, tx, orderID, itemID, now, now) → activeCount
-10. effectiveLimit = locked.MaxActiveBatchesTLV2CredsOrDefault()
-11. locked.NumSelfExtensions >= policy.MaxExtensions → ErrExtensionCapReached
-12. locked.LastSelfExtensionAt != nil &&
-    now.Sub(*locked.LastSelfExtensionAt) < policy.MinInterval()
-                                                     → &ExtensionRateLimitedError{RetryAfter: remaining}
-13. available = effectiveLimit − activeCount
-    available >= policy.SlotsPerExtension            → ErrExtensionNotNeeded
-14. orderItemRepo.ApplyExtension(ctx, tx, locked.ID, effectiveLimit + policy.SlotsPerExtension)
-15. Commit
+1.  write.NewLimit <= 0 || write.NewLimit > 1000 → ErrExtensionInvalidLimit
+2.  getOrderFullTx(rawDB, orderID)               → ErrOrderNotFound if missing
+3.  order.IsPaid()                               → ErrOrderNotPaid
+4.  Find itemID in order items                   → ErrOrderItemNotFound
+5.  item.IsCredTLV2()                            → ErrUnsupportedCredType
+6.  orderItemRepo.ApplyExtensionCAS(rawDB, item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit)
+       rows == 0       → ErrExtensionConflict
+       CHECK violation → ErrExtensionInvalidLimit
 ```
 
-The `FOR UPDATE` lock in step 7 serializes concurrent requests — the second request blocks
-until the first commits and then sees the updated limit and extension count.
-
-Ownership is **not** checked here. subscriptions is trusted to have validated ownership via the
+Ownership is **not** checked here. subs is trusted to have validated ownership via the
 subscriber JWT before calling.
+
+There is no transaction, no row lock, and no read-then-write. The CAS UPDATE is the entire
+mutation.
 
 ### HTTP endpoint
 
@@ -262,139 +257,178 @@ subscriber JWT before calling.
 POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
 ```
 
-- **Auth**: `authMwr` (shared `PaymentAPIToken`, same as `CountBatches` and other endpoints
-  subscriptions already calls)
-- **Request body**: `{"slots_per_extension": int, "min_seconds_between_extensions": int, "max_extensions": int}`
-- **Success response**: `200 OK`, empty JSON object `{}`
+- **Auth**: `authMwr` (shared `PaymentAPIToken`, same as `CountBatches`)
+- **Request body**: `{"expected_last_self_extension_at": <RFC3339 | null>, "new_limit": int}`
+- **Success**: `200 OK`, empty `{}`
 
-Error responses carry `errorCode` (the wire discriminator) on every error, plus `Retry-After`
-header and `retry_after_seconds` in `data` for the rate-limited case:
+Error responses carry `errorCode` on every error. No `Retry-After` — rate-limiting is subs's
+concern, not skus's.
 
 | Wire `errorCode` | HTTP status | Notes |
 |---|---|---|
 | `malformed_body` | 400 | |
-| `invalid_extension_policy` | 400 | Caller supplied out-of-bounds values |
 | `order_not_found` | 404 | Includes `ErrInvalidOrderNoItems` and `ErrOrderItemNotFound` |
 | `order_not_paid` | 402 | |
 | `unsupported_cred_type` | 400 | Item is not TLV2 |
-| `extension_cap_reached` | 403 | `NumSelfExtensions >= policy.MaxExtensions` |
-| `extension_rate_limited` | 429 | + `Retry-After` header, + `data.retry_after_seconds` |
-| `extension_not_needed` | 400 | Free slots already ≥ `policy.SlotsPerExtension` |
+| `extension_conflict` | 409 | CAS lost — caller must refetch and retry |
+| `extension_invalid_limit` | 422 | `new_limit` ≤ 0 or > 1000, or DB CHECK rejected |
 | (none) | 499 | `context.Canceled` |
 | (none) | 504 | `context.DeadlineExceeded` |
 | (none) | 500 | Unexpected internal error |
-
-### Router registration (`controllers.go`)
-
-```go
-cr.Method(http.MethodPost, "/items/{itemID}/batches/extend",
-    metricsMwr("ExtendLinkingLimit", authMwr(handlers.AppHandler(credh.ExtendLinkingLimit))))
-```
 
 ---
 
 ## subscriptions public API
 
-### Constants (`pkg/api/subscription.go`)
+### Policy values (`pkg/api/subscription.go`)
 
 ```go
-const (
-    extensionSlotsPerGrant      = 3
-    extensionMinIntervalSeconds = 30 * 24 * 60 * 60
-    extensionMaxPerItem         = 5
-)
+type extensionPolicy struct {
+    SlotsPerGrant      int
+    MinIntervalSeconds int
+    MaxPerItem         int
+}
+
+var defaultExtensionPolicy = extensionPolicy{
+    SlotsPerGrant:      3,
+    MinIntervalSeconds: 30 * 24 * 60 * 60,
+    MaxPerItem:         5,
+}
+
+var extensionPolicies = map[string]extensionPolicy{} // per-product overrides
 ```
 
-Yields the 10 + 5×3 = 25-activation ceiling.
+`policyForProduct(p)` returns the per-product override if present, else `defaultExtensionPolicy`.
+The map is empty today — every TLV2 product gets the default ceiling of 10 + 5×3 = 25.
 
-### Service method (`pkg/api/subscription.go`)
+### Service methods (`pkg/api/subscription.go`)
 
 ```go
 func (s *Server) extendLinkingLimit(ctx context.Context, subxID, subID uuid.UUID) error
+func (s *Server) getNextAllowedExtensionAt(ctx context.Context, subxID, subID uuid.UUID) (*nextAllowedExtensionResp, error)
 ```
 
-Logic:
+`extendLinkingLimit` flow:
 
 ```
-1. repositoryModule.getSubBySubxID(ctx, subxID, subID)  ← ownership check (row-level)
-2. sub.OrderID.Valid                                    → errSubNotRecognised if missing
-3. prodSet.ByID(sub.ProductID).IsTLV2()                 → errSKUsUnsupportedCredType
-4. orderModule.FetchOrder(sub.OrderID)                  ← resolve order items
-5. len(order.Items) == 1                                → errSKUsExtensionBundleOrder (defensive)
-6. Build ExtensionPolicy from constants above
-7. orderModule.ExtendLinkingLimit(orderID, Items[0].ID, policy)
+1. repositoryModule.getSubBySubxID(...)     ← ownership check
+2. sub.OrderID.Valid                         → errSubNotRecognised
+3. prodSet.ByID(sub.ProductID).IsTLV2()      → errSKUsUnsupportedCredType
+4. orderModule.FetchOrder(sub.OrderID)
+5. len(order.Items) == 1                     → errSKUsExtensionBundleOrder
+6. pol = policyForProduct(p)
+7. applyExtensionWithRetry(orderID, itemID, pol)
 ```
 
-Step 5 protects against silent mismatch once bundles (multi-item orders) arrive. The assumption
-that TLV2 subscriptions are single-item today is from the existing skus comment in
-`services/skus/controllers.go`.
+`applyExtensionWithRetry` loop (max 2 attempts):
+
+```
+a. orderModule.CountBatches(orderID)               → state {limit, active, num_self_extensions, last_self_extension_at}
+b. evaluateExtensionPolicy(state, pol, now()):
+       active < limit                  → errExtensionNotAtLimit
+       num_self_extensions >= MaxPerItem → errExtensionMaxPerItem
+       last_self_extension_at + MinInterval > now → errExtensionRateLimited
+       otherwise → ExtensionWrite{ExpectedLastSelfExtensionAt: state.LastSelfExtensionAt, NewLimit: state.Limit + SlotsPerGrant}
+c. orderModule.ExtendLinkingLimit(orderID, itemID, write)
+       success                                        → return nil
+       errSKUsExtensionConflict and attempts left     → loop with fresh state
+       errSKUsExtensionConflict and exhausted         → return errSKUsExtensionConflict
+       any other error                                → return as-is
+```
+
+Re-evaluating policy on retry is intentional: if a concurrent write changed state (e.g. the
+user just did extend in another tab), the retry should re-check the rate-limit/max-per-item
+gates against the fresh values rather than blindly trying again.
+
+`getNextAllowedExtensionAt` flow — answers the simple "when can the user extend next?" question
+without doing the expensive `CountBatches` aggregate:
+
+```
+1. repositoryModule.getSubBySubxID(...)     ← ownership check
+2. validate (OrderID present, IsTLV2, single-item order)
+3. pol = policyForProduct(p)
+4. item := order.Items[0]
+   if item.LastSelfExtensionAt == nil → next_allowed_extension_at: null
+   else                                → item.LastSelfExtensionAt + pol.MinIntervalSeconds
+```
+
+The response intentionally omits `active`/`limit` — clients that want those call `CountBatches`
+separately. This keeps the read cheap when all the UI needs is the "next eligible" timestamp.
 
 ### Client (`pkg/api/order.go`)
 
-`orderModule.ExtendLinkingLimit` POSTs to the skus endpoint, parses the response, and maps the
-wire `errorCode` to typed subscriptions-side errors:
+`orderModule.ExtendLinkingLimit` POSTs the CAS write to skus. Wire-code → typed-error mapping:
 
-| skus wire code | subscriptions Go error |
+| skus wire code | subs Go error |
 |---|---|
-| `extension_rate_limited` | `*skusExtensionRateLimitedError{RetryAfter}` |
-| `extension_cap_reached` | `errSKUsExtensionCapReached` |
-| `extension_not_needed` | `errSKUsExtensionNotNeeded` |
+| `extension_conflict` | `errSKUsExtensionConflict` |
+| `extension_invalid_limit` | `errSKUsExtensionInvalidLimit` |
+| `malformed_body` | `errSKUsExtensionInvalidLimit` (caller bug — same surface as invalid limit) |
 | `order_not_found` | `errSKUsOrderNotFound` |
 | `order_not_paid` | `errSKUsOrderNotPaid` |
 | `unsupported_cred_type` | `errSKUsUnsupportedCredType` |
-| `invalid_extension_policy`, `malformed_body` | `errSKUsInvalidExtensionPolicy` (caller bug) |
-| (missing / unrecognised) | fallback by HTTP status |
+| (missing / unrecognised) | fallback by HTTP status (404 / 402 / 409 / 422 / generic) |
 
 Plus, before the wire-code switch:
 
 - HTTP 499 (`StatusClientClosedConn`) → `model.ErrClientClosedConn`
 - HTTP 504 (`StatusGatewayTimeout`) → `errSKUsDeadlineExceeded`
 
-Rate-limit retry is extracted preferring `data.retry_after_seconds`, falling back to the
-`Retry-After` header, defaulting to 1 second.
+There is no `Retry-After` parsing — there is no rate-limit code from skus to parse.
 
-### HTTP endpoint
+### HTTP endpoints
 
 ```
 POST /v1/subscriptions/{subscriptionID}/credentials/batches/extend
+GET  /v1/subscriptions/{subscriptionID}/credentials/batches/extend
 ```
 
 - **Auth**: subscriber JWT (`authContextKey` → `authClaims.SubscriberID`)
-- **Request body**: none (subscriptions owns policy, supplies it to skus internally)
-- **Success response**: `200 OK`, empty JSON object `{}`
+- **POST request body**: none (subs owns policy, evaluates internally before calling skus)
+- **POST success**: `200 OK`, empty `{}`
+- **GET success**: `200 OK`, `{"next_allowed_extension_at": "<RFC3339> | null"}`
 
-Error mapping to HTTP (subscriptions-side, what the browser sees):
+Error mapping for the POST (subs-side, what the browser sees) — distinct codes per failure mode:
 
-| subscriptions Go error | HTTP status | Wire `errorCode` |
+| subs Go error | HTTP status | Wire `errorCode` |
 |---|---|---|
-| `*skusExtensionRateLimitedError` | 429 | `extension_rate_limited` (+ `Retry-After`, + `data.retry_after_seconds`) |
 | `errSubNotRecognised`, `errSubscriptionNotFound`, `errSKUsOrderNotFound` | 404 | (none — collapses "not yours" and "doesn't exist" as a BOLA guard) |
 | `errSKUsOrderNotPaid` | 402 | `order_not_paid` |
 | `errSKUsUnsupportedCredType` | 400 | `unsupported_cred_type` |
-| `errSKUsExtensionCapReached` | 403 | `extension_cap_reached` |
-| `errSKUsExtensionNotNeeded` | 400 | `extension_not_needed` |
-| `errSKUsExtensionBundleOrder` | 400 | (none — internal assertion) |
+| `errExtensionRateLimited` | 429 | `rate_limited` |
+| `errExtensionMaxPerItem` | 422 | `max_per_item` |
+| `errExtensionNotAtLimit` | 422 | `not_at_limit` |
+| `errSKUsExtensionInvalidLimit` | 422 | `invalid_limit` |
+| `errSKUsExtensionConflict` (after retry) | 409 | `conflict` |
+| `errSKUsExtensionBundleOrder` | 422 | `bundle_order` |
 | `ErrClientClosedConn` | 499 | (none) |
 | `context.DeadlineExceeded`, `errSKUsDeadlineExceeded` | 504 | (none) |
 | (default) | 500 | (none — only unexpected errors are logged at error level) |
+
+The plan is to keep distinct codes during rollout and pare overlap (e.g. fold
+`bundle_order` / `not_at_limit` / `invalid_limit` if clients don't differentiate) once we have
+real client telemetry.
 
 ### Router registration (`pkg/api/subscription.go`)
 
 ```go
 r.HandleFunc("/{subscriptionID}/credentials/batches/extend",
     handlers.AppHandler(h.extendLinkingLimit).ServeHTTP).
-    Methods(http.MethodPost).
-    Name("ExtendLinkingLimit")
+    Methods(http.MethodPost).Name("ExtendLinkingLimit")
+
+r.HandleFunc("/{subscriptionID}/credentials/batches/extend",
+    handlers.AppHandler(h.getNextAllowedExtensionAt).ServeHTTP).
+    Methods(http.MethodGet).Name("GetNextAllowedExtensionAt")
 ```
 
-Registered under the existing subscriber-JWT middleware.
+Both registered under the existing subscriber-JWT middleware.
 
 ---
 
 ## Status endpoint changes
 
-`GET /v1/orders/{orderID}/credentials/batches/count` (skus, existing) now returns the extension
-tracking fields so the UI can show/hide the "request more activations" button:
+`GET /v1/orders/{orderID}/credentials/batches/count` (skus, existing) returns the extension
+tracking fields:
 
 ```json
 {
@@ -406,8 +440,20 @@ tracking fields so the UI can show/hide the "request more activations" button:
 ```
 
 `last_self_extension_at` is null when no self-service extension has been applied. The
-corresponding subscriptions-side `batCredBatchesReport` struct has matching fields; existing
+corresponding subs-side `batCredBatchesReport` struct has matching fields; existing
 callers continue to work since the extra fields are additive.
+
+The new `GET .../batches/extend` is a separate endpoint specifically because callers asking
+"when next?" don't need the `active` count (which is an aggregate query) — they only need the
+item's `last_self_extension_at` and the per-product policy.
+
+---
+
+## Compatibility
+
+This is a coordinated breaking change between bat-go (skus) and subscriptions. The skus wire
+contract is incompatible with the prior version (different request body, different error codes,
+no `Retry-After`). The two services must ship together — there is no v1/v2 transition.
 
 ---
 
@@ -416,36 +462,40 @@ callers continue to work since the extra fields are additive.
 ### bat-go primitive
 
 - **Handler** (`handler/cred_test.go`, `TestCred_ExtendLinkingLimit`): table-driven cases for
-  `invalid_orderID`, `invalid_itemID`, `malformed_body`, `invalid_policy`, `context_canceled`,
-  `deadline_exceeded`, `order_not_found`, `order_not_paid`, `unsupported_cred_type`,
-  `extension_not_needed`, `extension_cap_reached`, `rate_limited` (asserts
-  `Retry-After: 42` + `data.retry_after_seconds: 42`), `internal_error`, `success`. Every
-  error case also asserts the wire `errorCode`.
+  `invalid_orderID`, `invalid_itemID`, `malformed_body`, `context_canceled`, `deadline_exceeded`,
+  `order_not_found`, `order_not_paid`, `unsupported_cred_type`, `extension_invalid_limit`,
+  `extension_conflict`, `internal_error`, `success`. Every error case asserts the wire `errorCode`.
 
-- **Service** (`service_nonint_test.go`, `TestService_ExtendLinkingLimit`): one case per guard
-  using `MockOrderItem` + `FnLockForUpdate` + `FnApplyExtension`, verifying each guard fires
-  independently and that `ApplyExtension` is not called when a guard rejects. Policy values
-  are supplied per-test.
+- **Service** (`service_nonint_test.go`, `TestService_ExtendLinkingLimit`): one case per
+  defensive guard plus CAS-success / CAS-conflict / CHECK-violation, using `MockOrderItem`
+  with `FnApplyExtensionCAS`.
 
 ### subscriptions public API
 
-- **Handler** (`handler_subscription_test.go`, `TestSubHandler_extendLinkingLimit`): every
-  row of the error-mapping table above against a mocked `subSvc`. Asserts wire `errorCode`,
-  HTTP status, and — for the rate-limited case — both the `Retry-After` header and
-  `data.retry_after_seconds`. Includes a sub-second-clamps-to-1 case.
+- **Handler** (`handler_subscription_test.go`, `TestSubHandler_extendLinkingLimit`): every row
+  of the error-mapping table above against a mocked `subSvc`. Asserts wire `errorCode`,
+  HTTP status, and cause for each.
 
 - **Service** (`subscription_test.go`, `TestServer_extendLinkingLimit`): each early-exit
-  guard (sub lookup error, `errSubscriptionNotFound`, `errSubNotRecognised`, prod parse
-  error, prod set miss, non-TLV2, order fetch error, multi-item bundle, zero-item order,
-  skus-error pass-through), plus the happy path which freezes the wire contract by asserting
-  the policy values handed to `orderModule.ExtendLinkingLimit` match the constants in
-  `subscription.go` (3 / 30d / 5).
+  guard, plus the new flow: count-batches error bubbles, policy gates fire (not-at-limit /
+  max-per-item / rate-limit-window), happy path freezes the CAS contract by asserting the
+  write's `ExpectedLastSelfExtensionAt` and `NewLimit`, conflict-then-success-on-retry,
+  conflict-persists-after-retry.
+
+- **Policy unit** (`subscription_test.go`, `TestEvaluateExtensionPolicy`): table-driven for
+  each branch (not-at-limit, max-per-item, rate-limit window, first-extension-no-token,
+  subsequent-extension-passes-token).
+
+- **Next-allowed read** (`subscription_test.go`, `TestServer_getNextAllowedExtensionAt`):
+  no prior extension → `null`, prior extension → time computed from `last_self_extension_at +
+  MinInterval`, bundle-order rejection.
 
 - **Client** (`order_test.go`, `TestOrderModule_ExtendLinkingLimit`): every wire `errorCode`
-  → typed-error mapping, plus `Retry-After` extraction (body field, header fallback, 1s
-  default), `504` → `errSKUsDeadlineExceeded`, `499` → `model.ErrClientClosedConn`, unknown
-  errorCode + status fallback paths, and a happy path that asserts the outgoing URL,
-  method, auth header, and serialised request body.
+  → typed-error mapping (`extension_conflict`, `extension_invalid_limit`, `malformed_body`,
+  `order_not_found`, `order_not_paid`, `unsupported_cred_type`), `504` →
+  `errSKUsDeadlineExceeded`, `499` → `model.ErrClientClosedConn`, status fallback paths
+  (404 / 402 / 409 / 422 / generic), and a happy path that asserts URL, method, auth header,
+  and serialised request body shape (`new_limit`, `expected_last_self_extension_at`).
 
 ---
 
@@ -466,3 +516,7 @@ Tracked here so they don't get lost; each needs a separate discussion with produ
   accommodate it when the time comes.
 - **Support CLI** — tooling changes live in `tools/skus/cmd/skus.go` on this branch; coverage
   against the product spec (manual increment / reset) to be verified with support.
+- **Distinct vs collapsed error codes** — current mapping keeps `not_at_limit`,
+  `max_per_item`, `bundle_order`, `invalid_limit` as separate 422s and `rate_limited` /
+  `conflict` as their own statuses. Once we have real client telemetry, fold any that clients
+  don't differentiate.

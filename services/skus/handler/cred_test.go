@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
-	"time"
 
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -27,7 +26,7 @@ type mockTLV2Svc struct {
 	FnUniqBatches        func(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
 	FnListActiveBatches  func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	FnDeleteBatches      func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
-	FnExtendLinkingLimit func(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error
+	FnExtendLinkingLimit func(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error) {
@@ -54,12 +53,12 @@ func (s *mockTLV2Svc) DeleteBatches(ctx context.Context, orderID, itemID uuid.UU
 	return s.FnDeleteBatches(ctx, orderID, itemID, seats)
 }
 
-func (s *mockTLV2Svc) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error {
+func (s *mockTLV2Svc) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
 	if s.FnExtendLinkingLimit == nil {
 		return nil
 	}
 
-	return s.FnExtendLinkingLimit(ctx, orderID, itemID, policy)
+	return s.FnExtendLinkingLimit(ctx, orderID, itemID, write)
 }
 
 func TestCred_CountBatches(t *testing.T) {
@@ -756,9 +755,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		})
 	}
 
-	const validBody = `{"slots_per_extension":3,"min_seconds_between_extensions":2592000,"max_extensions":10}`
-
-	rateLimitedErr := &model.ExtensionRateLimitedError{RetryAfter: 42 * time.Second}
+	const validBody = `{"expected_last_self_extension_at":null,"new_limit":13}`
 
 	type tcGiven struct {
 		ctx        context.Context
@@ -768,8 +765,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		err        *handlers.AppError
-		retryAfter string
+		err *handlers.AppError
 	}
 
 	type testCase struct {
@@ -782,10 +778,6 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		appErr.ErrorCode = code
 		return appErr
 	}
-
-	rateLimitedAppErr := handlers.WrapError(rateLimitedErr, "extension rate limited", http.StatusTooManyRequests)
-	rateLimitedAppErr.ErrorCode = model.ExtensionCodeRateLimited
-	rateLimitedAppErr.Data = map[string]interface{}{"retry_after_seconds": int64(42)}
 
 	tests := []testCase{
 		{
@@ -822,7 +814,6 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			// Tests the io.ReadAll error path (vs malformed_body which tests json.Unmarshal).
 			name: "io_read_failure",
 			given: tcGiven{
 				ctx:        routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
@@ -835,28 +826,12 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			name: "invalid_policy",
-			given: tcGiven{
-				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
-				body: validBody,
-				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
-						return model.ErrInvalidExtensionPolicy
-					},
-				},
-			},
-			exp: tcExpected{
-				err: withCode(handlers.WrapError(model.ErrInvalidExtensionPolicy, "invalid extension policy", http.StatusBadRequest), model.ExtensionCodeInvalidPolicy),
-			},
-		},
-
-		{
 			name: "context_canceled",
 			given: tcGiven{
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
 						return context.Canceled
 					},
 				},
@@ -872,7 +847,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
 						return context.DeadlineExceeded
 					},
 				},
@@ -888,7 +863,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
 						return model.ErrOrderNotFound
 					},
 				},
@@ -904,7 +879,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
 						return model.ErrOrderNotPaid
 					},
 				},
@@ -920,7 +895,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
 						return model.ErrUnsupportedCredType
 					},
 				},
@@ -931,51 +906,34 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		},
 
 		{
-			name: "extension_not_needed",
+			name: "invalid_limit",
 			given: tcGiven{
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
-						return model.ErrExtensionNotNeeded
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
+						return model.ErrExtensionInvalidLimit
 					},
 				},
 			},
 			exp: tcExpected{
-				err: withCode(handlers.WrapError(model.ErrExtensionNotNeeded, "extension not needed", http.StatusBadRequest), model.ExtensionCodeNotNeeded),
+				err: withCode(handlers.WrapError(model.ErrExtensionInvalidLimit, "extension new limit invalid", http.StatusUnprocessableEntity), model.ExtensionCodeInvalidLimit),
 			},
 		},
 
 		{
-			name: "extension_cap_reached",
+			name: "conflict",
 			given: tcGiven{
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
-						return model.ErrExtensionCapReached
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
+						return model.ErrExtensionConflict
 					},
 				},
 			},
 			exp: tcExpected{
-				err: withCode(handlers.WrapError(model.ErrExtensionCapReached, "extension cap reached", http.StatusForbidden), model.ExtensionCodeCapReached),
-			},
-		},
-
-		{
-			name: "rate_limited",
-			given: tcGiven{
-				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
-				body: validBody,
-				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
-						return rateLimitedErr
-					},
-				},
-			},
-			exp: tcExpected{
-				err:        rateLimitedAppErr,
-				retryAfter: "42",
+				err: withCode(handlers.WrapError(model.ErrExtensionConflict, "extension version conflict", http.StatusConflict), model.ExtensionCodeConflict),
 			},
 		},
 
@@ -985,7 +943,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionPolicy) error {
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, _ model.ExtensionWrite) error {
 						return model.Error("unexpected")
 					},
 				},
@@ -1001,12 +959,11 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				ctx:  routeCtx("c0c0a000-0000-4000-a000-000000000000", "ad0be000-0000-4000-a000-000000000000"),
 				body: validBody,
 				svc: &mockTLV2Svc{
-					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, policy model.ExtensionPolicy) error {
+					FnExtendLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
 						must.Equal(t, "c0c0a000-0000-4000-a000-000000000000", orderID.String())
 						must.Equal(t, "ad0be000-0000-4000-a000-000000000000", itemID.String())
-						must.Equal(t, 3, policy.SlotsPerExtension)
-						must.Equal(t, 2592000, policy.MinSecondsBetweenExtensions)
-						must.Equal(t, 10, policy.MaxExtensions)
+						must.Equal(t, 13, write.NewLimit)
+						must.Nil(t, write.ExpectedLastSelfExtensionAt)
 						return nil
 					},
 				},
@@ -1049,10 +1006,6 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				exp, err := json.Marshal(tc.exp.err)
 				must.Equal(t, nil, err)
 				should.Equal(t, exp, bytes.TrimSpace(rw.Body.Bytes()))
-
-				if tc.exp.retryAfter != "" {
-					should.Equal(t, tc.exp.retryAfter, rw.Header().Get("Retry-After"))
-				}
 
 				return
 			}

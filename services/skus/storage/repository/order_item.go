@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
@@ -82,38 +83,18 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 	return result, nil
 }
 
-// Caller must pass a tx — FOR UPDATE outside one releases at statement end.
-func (r *OrderItem) LockForUpdate(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
-	const q = `
-	SELECT
-		id, order_id, sku, sku_variant, created_at, updated_at, currency,
-		quantity, price, (quantity * price) as subtotal, location, description, credential_type, metadata,
-		valid_for_iso, issuance_interval, max_active_batches_tlv2_creds,
-		num_self_extensions, last_self_extension_at
-	FROM order_items WHERE id = $1 FOR UPDATE`
-
-	result := &model.OrderItem{}
-	if err := sqlx.GetContext(ctx, dbi, result, q, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, model.ErrOrderItemNotFound
-		}
-
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// Must be called after LockForUpdate within the same tx.
-func (r *OrderItem) ApplyExtension(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, newLimit int) error {
+// CAS write: applies newLimit only if last_self_extension_at matches expected.
+// Returns ErrExtensionConflict on mismatch (no row changed).
+func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
 	const q = `
 	UPDATE order_items
 	SET max_active_batches_tlv2_creds = $2,
 	    num_self_extensions           = num_self_extensions + 1,
 	    last_self_extension_at        = NOW()
-	WHERE id = $1`
+	WHERE id = $1
+	  AND last_self_extension_at IS NOT DISTINCT FROM $3`
 
-	result, err := dbi.ExecContext(ctx, q, id, newLimit)
+	result, err := dbi.ExecContext(ctx, q, id, newLimit, expected)
 	if err != nil {
 		return err
 	}
@@ -124,7 +105,7 @@ func (r *OrderItem) ApplyExtension(ctx context.Context, dbi sqlx.ExecerContext, 
 	}
 
 	if n == 0 {
-		return model.ErrOrderItemNotFound
+		return model.ErrExtensionConflict
 	}
 
 	return nil
