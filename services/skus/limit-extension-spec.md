@@ -416,17 +416,18 @@ real client telemetry.
 ### Router registration (`pkg/api/subscription.go`)
 
 ```go
-r.HandleFunc("/{subscriptionID}/credentials/batches/count",
-    handlers.AppHandler(h.countBatches).ServeHTTP).
-    Methods(http.MethodOptions, http.MethodGet).Name("CountBatches")
+r.HandleFunc("/{subscriptionID}/credentials/batches/extend",
+    handlers.AppHandler(h.canExtend).ServeHTTP).
+    Methods(http.MethodGet).Name("CanExtend")
 
 r.HandleFunc("/{subscriptionID}/credentials/batches/extend",
     handlers.AppHandler(h.extendLinkingLimit).ServeHTTP).
     Methods(http.MethodOptions, http.MethodPost).Name("ExtendLinkingLimit")
 ```
 
-Both routes register `MethodOptions` so the browser CSRF preflight that runs before each
-state-changing request resolves with the same router entry.
+Two registrations on the same path: GET answers `can_extend`, POST does the extension. The
+POST registration declares `MethodOptions` so gorilla/mux serves the browser's CSRF
+preflight from there — the GET doesn't need it (browsers don't preflight simple GETs).
 
 ---
 
@@ -456,13 +457,17 @@ Auth'd with `PaymentAPIToken`, not browser-callable.
 subs reshapes the response to a single `can_extend` boolean. No counts, no timestamps, no
 raw counters reach the client — every policy decision is collapsed into this one field.
 
-`GET /v1/subscriptions/{subscriptionID}/credentials/batches/count`:
+`GET /v1/subscriptions/{subscriptionID}/credentials/batches/extend`:
 
 ```json
 {
   "can_extend": false
 }
 ```
+
+GET and POST share the same `/credentials/batches/extend` path: GET answers "may I extend
+right now?", POST does the extension. The old `/credentials/batches/count` route was
+dropped — it was a misnamed leftover once `limit`/`active` left the response.
 
 `can_extend` is true iff *all three* policy gates pass right now:
 
@@ -477,13 +482,13 @@ strong signal that the corresponding POST will succeed (modulo concurrent writes
 tab, which the CAS retry handles).
 
 `limit` and `active` were dropped from the response per product feedback — the client
-shouldn't branch on those values directly. The endpoint name still matches the historical
-skus route, but functionally it's now an availability-only check.
+shouldn't branch on those values directly. With those fields gone the route was renamed
+from `.../batches/count` (a now-misleading name) to GET `.../batches/extend` so the read
+and the write share a path: same nouns, different verbs.
 
-The previously-planned standalone `GET .../credentials/batches/extend` endpoint and the
-lightweight skus `extension-state` endpoint were both dropped: with `can_extend` requiring
-the active-batches aggregate (for the at-limit gate), there is no cheaper read worth
-splitting out.
+The lightweight skus `extension-state` endpoint we briefly added was also dropped: with
+`can_extend` requiring the active-batches aggregate (for the at-limit gate), there is no
+cheaper read worth splitting out.
 
 ---
 
