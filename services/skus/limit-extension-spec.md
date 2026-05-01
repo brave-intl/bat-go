@@ -301,11 +301,10 @@ var extensionPolicies = map[string]extensionPolicy{} // per-product overrides
 `policyForProduct(p)` returns the per-product override if present, else `defaultExtensionPolicy`.
 The map is empty today — every TLV2 product gets the default ceiling of 10 + 5×3 = 25.
 
-### Service methods (`pkg/api/subscription.go`)
+### Service method (`pkg/api/subscription.go`)
 
 ```go
 func (s *Server) extendLinkingLimit(ctx context.Context, subxID, subID uuid.UUID) error
-func (s *Server) getNextAllowedExtensionAt(ctx context.Context, subxID, subID uuid.UUID) (*nextAllowedExtensionResp, error)
 ```
 
 `extendLinkingLimit` flow:
@@ -340,20 +339,9 @@ Re-evaluating policy on retry is intentional: if a concurrent write changed stat
 user just did extend in another tab), the retry should re-check the rate-limit/max-per-item
 gates against the fresh values rather than blindly trying again.
 
-`getNextAllowedExtensionAt` flow — answers the simple "when can the user extend next?" question
-without doing the expensive `CountBatches` aggregate:
-
-```
-1. repositoryModule.getSubBySubxID(...)     ← ownership check
-2. validate (OrderID present, IsTLV2, single-item order)
-3. pol = policyForProduct(p)
-4. item := order.Items[0]
-   if item.LastSelfExtensionAt == nil → next_allowed_extension_at: null
-   else                                → item.LastSelfExtensionAt + pol.MinIntervalSeconds
-```
-
-The response intentionally omits `active`/`limit` — clients that want those call `CountBatches`
-separately. This keeps the read cheap when all the UI needs is the "next eligible" timestamp.
+The read path (`GET .../credentials/batches/count`) returns `can_extend` computed by the
+exact same gates — so a client that sees `can_extend: true` and POSTs immediately should
+succeed unless someone else's write landed first (CAS retry handles that case).
 
 ### Client (`pkg/api/order.go`)
 
@@ -380,13 +368,11 @@ There is no `Retry-After` parsing — there is no rate-limit code from skus to p
 
 ```
 POST /v1/subscriptions/{subscriptionID}/credentials/batches/extend
-GET  /v1/subscriptions/{subscriptionID}/credentials/batches/extend
 ```
 
 - **Auth**: subscriber JWT (`authContextKey` → `authClaims.SubscriberID`)
-- **POST request body**: none (subs owns policy, evaluates internally before calling skus)
-- **POST success**: `200 OK`, empty `{}`
-- **GET success**: `200 OK`, `{"next_allowed_extension_at": "<RFC3339> | null"}`
+- **Request body**: none (subs owns policy, evaluates internally before calling skus)
+- **Success**: `200 OK`, empty `{}`
 
 Error mapping for the POST (subs-side, what the browser sees) — distinct codes per failure mode:
 
@@ -405,6 +391,24 @@ Error mapping for the POST (subs-side, what the browser sees) — distinct codes
 | `context.DeadlineExceeded`, `errSKUsDeadlineExceeded` | 504 | (none) |
 | (default) | 500 | (none — only unexpected errors are logged at error level) |
 
+Every gate-rejection is logged at info level (`"extension request rejected"`) with `subx_id` /
+`sub_id` so operations can spot hot-itemID conflict storms or unusual rate-limit trips.
+
+### Metrics
+
+Server emits a single Prometheus counter per request:
+
+```
+linking_limit_extension_outcome{outcome="<label>"}
+```
+
+Labels (one per terminal path): `granted`, `conflict_retried`, `conflict_persisted`,
+`rate_limited`, `max_per_item`, `not_at_limit`, `invalid_limit`, `bundle_order`,
+`order_not_found`, `order_not_paid`, `unsupported_cred_type`, `internal_error`.
+`conflict_retried` is the success-after-CAS-conflict signal: a sustained rise indicates a
+hot itemID under concurrent self-extend pressure. `conflict_persisted` indicates the retry
+also lost — investigate.
+
 The plan is to keep distinct codes during rollout and pare overlap (e.g. fold
 `bundle_order` / `not_at_limit` / `invalid_limit` if clients don't differentiate) once we have
 real client telemetry.
@@ -412,23 +416,29 @@ real client telemetry.
 ### Router registration (`pkg/api/subscription.go`)
 
 ```go
+r.HandleFunc("/{subscriptionID}/credentials/batches/count",
+    handlers.AppHandler(h.countBatches).ServeHTTP).
+    Methods(http.MethodOptions, http.MethodGet).Name("CountBatches")
+
 r.HandleFunc("/{subscriptionID}/credentials/batches/extend",
     handlers.AppHandler(h.extendLinkingLimit).ServeHTTP).
-    Methods(http.MethodPost).Name("ExtendLinkingLimit")
-
-r.HandleFunc("/{subscriptionID}/credentials/batches/extend",
-    handlers.AppHandler(h.getNextAllowedExtensionAt).ServeHTTP).
-    Methods(http.MethodGet).Name("GetNextAllowedExtensionAt")
+    Methods(http.MethodOptions, http.MethodPost).Name("ExtendLinkingLimit")
 ```
 
-Both registered under the existing subscriber-JWT middleware.
+Both routes register `MethodOptions` so the browser CSRF preflight that runs before each
+state-changing request resolves with the same router entry.
 
 ---
 
 ## Status endpoint changes
 
-`GET /v1/orders/{orderID}/credentials/batches/count` (skus, existing) returns the extension
-tracking fields:
+skus exposes the raw tracking fields only on the server-to-server endpoint used by subs.
+The order JSON keeps `num_self_extensions` and `last_self_extension_at` as `json:"-"` —
+those fields no longer leak through `GET /v1/orders/{orderID}`.
+
+### skus internal endpoint
+
+`GET /v1/orders/{orderID}/credentials/batches/count` — full state for the policy decision:
 
 ```json
 {
@@ -439,13 +449,41 @@ tracking fields:
 }
 ```
 
-`last_self_extension_at` is null when no self-service extension has been applied. The
-corresponding subs-side `batCredBatchesReport` struct has matching fields; existing
-callers continue to work since the extra fields are additive.
+Auth'd with `PaymentAPIToken`, not browser-callable.
 
-The new `GET .../batches/extend` is a separate endpoint specifically because callers asking
-"when next?" don't need the `active` count (which is an aggregate query) — they only need the
-item's `last_self_extension_at` and the per-product policy.
+### subs public endpoint
+
+subs reshapes the response to a single `can_extend` boolean. No counts, no timestamps, no
+raw counters reach the client — every policy decision is collapsed into this one field.
+
+`GET /v1/subscriptions/{subscriptionID}/credentials/batches/count`:
+
+```json
+{
+  "can_extend": false
+}
+```
+
+`can_extend` is true iff *all three* policy gates pass right now:
+
+- `active >= limit` (at-limit; no point extending if you have free slots)
+- `num_self_extensions < MaxPerItem` (haven't burned the lifetime cap)
+- `now >= last_self_extension_at + MinIntervalSeconds` (rate-limit window has elapsed, or no
+  prior extension)
+
+Computed by `canExtend(state, pol, now)` in subs — exactly the same gates that
+`evaluateExtensionPolicy` enforces on the write path, so a `can_extend: true` response is a
+strong signal that the corresponding POST will succeed (modulo concurrent writes from another
+tab, which the CAS retry handles).
+
+`limit` and `active` were dropped from the response per product feedback — the client
+shouldn't branch on those values directly. The endpoint name still matches the historical
+skus route, but functionally it's now an availability-only check.
+
+The previously-planned standalone `GET .../credentials/batches/extend` endpoint and the
+lightweight skus `extension-state` endpoint were both dropped: with `can_extend` requiring
+the active-batches aggregate (for the at-limit gate), there is no cheaper read worth
+splitting out.
 
 ---
 
@@ -470,6 +508,12 @@ no `Retry-After`). The two services must ship together — there is no v1/v2 tra
   defensive guard plus CAS-success / CAS-conflict / CHECK-violation, using `MockOrderItem`
   with `FnApplyExtensionCAS`.
 
+- **Repository integration** (`storage/repository/order_item_test.go`,
+  `TestOrderItem_ApplyExtensionCAS`, build-tagged `integration`): hits a real Postgres to
+  verify (a) first extension succeeds with nil token, (b) stale token returns
+  `ErrExtensionConflict`, (c) matching token after a prior extension succeeds, (d) `new_limit
+  > 1000` triggers the CHECK constraint and returns a `pq.Error` code `23514`.
+
 ### subscriptions public API
 
 - **Handler** (`handler_subscription_test.go`, `TestSubHandler_extendLinkingLimit`): every row
@@ -486,9 +530,9 @@ no `Retry-After`). The two services must ship together — there is no v1/v2 tra
   each branch (not-at-limit, max-per-item, rate-limit window, first-extension-no-token,
   subsequent-extension-passes-token).
 
-- **Next-allowed read** (`subscription_test.go`, `TestServer_getNextAllowedExtensionAt`):
-  no prior extension → `null`, prior extension → time computed from `last_self_extension_at +
-  MinInterval`, bundle-order rejection.
+- **canExtend helper** (`subscription_test.go`, `TestCanExtend`): each gate (not-at-limit,
+  max-per-item, rate-limit window) returns false; happy paths (at-limit-and-never-extended,
+  window-elapsed-and-under-cap) return true.
 
 - **Client** (`order_test.go`, `TestOrderModule_ExtendLinkingLimit`): every wire `errorCode`
   → typed-error mapping (`extension_conflict`, `extension_invalid_limit`, `malformed_body`,
@@ -507,9 +551,12 @@ Tracked here so they don't get lost; each needs a separate discussion with produ
   "not yours" and "doesn't exist" as a BOLA guard. Options: keep 404 + set
   `errorCode: "access_forbidden"` on it, or split 403/404. Needs product input.
 - **Support revocation of extension ability**: spec calls for a way to disable self-service
-  extension for a given user without touching `max_active_batches_tlv2_creds`. No mechanism
-  today. Proper fix would be a schema flag (e.g. `self_extensions_revoked_at timestamptz NULL`);
-  the current workaround is bumping `num_self_extensions` to the cap.
+  extension for a given user without touching `max_active_batches_tlv2_creds`. No skus
+  endpoint or CLI today; ops would need direct DB access to clear or bump
+  `num_self_extensions` / `last_self_extension_at`. Proper fix would be either a dedicated
+  skus support endpoint that mutates the tracking columns, or a schema flag
+  (e.g. `self_extensions_revoked_at timestamptz NULL`). Both are product-scope decisions —
+  flagged here so it's not lost.
 - **Client-side UI** — browser detects the limit error on credential fetch, surfaces the
   extension option, calls the subscriptions endpoint, and retries. Separate workstream.
 - **Purchase flow (vector 3)** — separate workstream. The DB columns and endpoint design
