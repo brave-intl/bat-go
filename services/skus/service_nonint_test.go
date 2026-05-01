@@ -344,15 +344,15 @@ func TestService_uniqBatchesTxTime(t *testing.T) {
 
 			ctx := context.Background()
 
-			lim, nact, err := svc.uniqBatchesTxTime(ctx, nil, tc.given.orderID, tc.given.itemID, tc.given.from, tc.given.to)
+			status, err := svc.uniqBatchesTxTime(ctx, nil, tc.given.orderID, tc.given.itemID, tc.given.from, tc.given.to)
 			must.Equal(t, true, errors.Is(err, tc.exp.err))
 
 			if tc.exp.err != nil {
 				return
 			}
 
-			should.Equal(t, tc.exp.lim, lim)
-			should.Equal(t, tc.exp.val, nact)
+			should.Equal(t, tc.exp.lim, status.Limit)
+			should.Equal(t, tc.exp.val, status.Active)
 		})
 	}
 }
@@ -8029,6 +8029,217 @@ func TestService_DeleteBatches(t *testing.T) {
 				should.Equal(t, tc.exp.deletedReqIDs, capturedIDs)
 			} else {
 				should.Nil(t, capturedIDs)
+			}
+		})
+	}
+}
+
+func TestService_ExtendLinkingLimit(t *testing.T) {
+	const (
+		orderIDStr = "c0c0a000-0000-4000-a000-000000000000"
+		itemIDStr  = "ad0be000-0000-4000-a000-000000000000"
+	)
+
+	orderID := uuid.Must(uuid.FromString(orderIDStr))
+	itemID := uuid.Must(uuid.FromString(itemIDStr))
+
+	paidTLV2Order := func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+		return &model.Order{ID: id, Status: "paid"}, nil
+	}
+
+	tlv2Items := func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+		return []model.OrderItem{
+			{ID: itemID, OrderID: oID, CredentialType: "time-limited-v2"},
+		}, nil
+	}
+
+	type tcGiven struct {
+		write    *model.ExtensionWrite
+		ordRepo  *repository.MockOrder
+		itemRepo *repository.MockOrderItem
+	}
+
+	type tcExpected struct {
+		err              error
+		applyExtCalled   bool
+		applyExtNewLimit int
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	errDBSentinel := model.Error("service_nonint_test: db sentinel")
+
+	tests := []testCase{
+		{
+			name: "invalid_new_limit_zero",
+			given: tcGiven{
+				write:    &model.ExtensionWrite{NewLimit: 0},
+				ordRepo:  &repository.MockOrder{},
+				itemRepo: &repository.MockOrderItem{},
+			},
+			exp: tcExpected{err: model.ErrExtensionInvalidLimit},
+		},
+
+		{
+			name: "invalid_new_limit_above_ceiling",
+			given: tcGiven{
+				write:    &model.ExtensionWrite{NewLimit: model.ExtensionMaxLimitCeiling + 1},
+				ordRepo:  &repository.MockOrder{},
+				itemRepo: &repository.MockOrderItem{},
+			},
+			exp: tcExpected{err: model.ErrExtensionInvalidLimit},
+		},
+
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.ErrOrderNotFound
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+			},
+			exp: tcExpected{err: model.ErrOrderNotFound},
+		},
+
+		{
+			name: "db_error_bubbles_through",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, errDBSentinel
+					},
+				},
+				itemRepo: &repository.MockOrderItem{},
+			},
+			exp: tcExpected{err: errDBSentinel},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGet: func(_ context.Context, _ sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return &model.Order{ID: id, Status: "pending"}, nil
+					},
+				},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: tlv2Items},
+			},
+			exp: tcExpected{err: model.ErrOrderNotPaid},
+		},
+
+		{
+			name: "no_items",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{}, nil
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrInvalidOrderNoItems},
+		},
+
+		{
+			name: "item_not_found",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: uuid.Must(uuid.FromString("dead0000-0000-4000-a000-000000000000")), OrderID: oID, CredentialType: "time-limited-v2"},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrOrderItemNotFound},
+		},
+
+		{
+			name: "unsupported_cred_type",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(_ context.Context, _ sqlx.QueryerContext, oID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{
+							{ID: itemID, OrderID: oID, CredentialType: "time-limited"},
+						}, nil
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrUnsupportedCredType},
+		},
+
+		{
+			name: "cas_conflict",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: tlv2Items,
+					FnApplyExtensionCAS: func(_ context.Context, _ sqlx.ExtContext, _ uuid.UUID, _ *time.Time, _ int) error {
+						return model.ErrExtensionConflict
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrExtensionConflict},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ordRepo:  &repository.MockOrder{FnGet: paidTLV2Order},
+				itemRepo: &repository.MockOrderItem{FnFindByOrderID: tlv2Items},
+			},
+			exp: tcExpected{
+				applyExtCalled:   true,
+				applyExtNewLimit: 13,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			var applyExtCalled bool
+			var applyExtNewLimit int
+
+			if tc.given.itemRepo.FnApplyExtensionCAS == nil {
+				tc.given.itemRepo.FnApplyExtensionCAS = func(_ context.Context, _ sqlx.ExtContext, _ uuid.UUID, _ *time.Time, newLimit int) error {
+					applyExtCalled = true
+					applyExtNewLimit = newLimit
+					return nil
+				}
+			}
+
+			ds := NewMockDatastore(ctrl)
+			ds.EXPECT().RawDB().AnyTimes().Return(nil)
+
+			svc := &Service{
+				Datastore:     ds,
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itemRepo,
+			}
+
+			write := model.ExtensionWrite{NewLimit: 13}
+			if tc.given.write != nil {
+				write = *tc.given.write
+			}
+
+			err := svc.ExtendLinkingLimit(context.Background(), orderID, itemID, write)
+			must.ErrorIs(t, err, tc.exp.err)
+
+			should.Equal(t, tc.exp.applyExtCalled, applyExtCalled)
+			if tc.exp.applyExtCalled {
+				should.Equal(t, tc.exp.applyExtNewLimit, applyExtNewLimit)
 			}
 		})
 	}

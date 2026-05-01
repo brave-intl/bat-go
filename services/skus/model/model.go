@@ -54,6 +54,9 @@ const (
 	// ErrBatchSeatsExceeded is returned when the requested seats exceeds the number of active batches.
 	ErrBatchSeatsExceeded Error = "model: seats exceeds active batch count"
 
+	ErrExtensionConflict     Error = "model: extension version conflict"
+	ErrExtensionInvalidLimit Error = "model: extension new limit invalid"
+
 	ErrNoRadomCheckoutSessionID Error = "model: no radom checkout session id"
 
 	ErrRadomInvalidNumAssocSubs Error = "model: invalid number of associated subs"
@@ -82,6 +85,18 @@ const (
 	MaxActiveBatchesTLV2CredsDefault = 10
 )
 
+// Hard sanity ceiling enforced by DB CHECK on max_active_batches_tlv2_creds.
+const ExtensionMaxLimitCeiling = 1000
+
+const (
+	ExtensionCodeMalformedBody       = "malformed_body"
+	ExtensionCodeOrderNotFound       = "order_not_found"
+	ExtensionCodeOrderNotPaid        = "order_not_paid"
+	ExtensionCodeUnsupportedCredType = "unsupported_cred_type"
+	ExtensionCodeConflict            = "extension_conflict"
+	ExtensionCodeInvalidLimit        = "extension_invalid_limit"
+)
+
 const (
 	VendorUnknown Vendor = "unknown"
 	VendorApple   Vendor = "ios"
@@ -89,6 +104,20 @@ const (
 )
 
 var emptyOrderTimeBounds OrderTimeBounds
+
+type BatchesStatus struct {
+	Limit               int        `json:"limit"`
+	Active              int        `json:"active"`
+	NumSelfExtensions   int        `json:"num_self_extensions"`
+	LastSelfExtensionAt *time.Time `json:"last_self_extension_at"`
+}
+
+// Caller-supplied CAS write. ExpectedLastSelfExtensionAt must equal the row's
+// current value — nil means "row has never been extended."
+type ExtensionWrite struct {
+	ExpectedLastSelfExtensionAt *time.Time `json:"expected_last_self_extension_at"`
+	NewLimit                    int        `json:"new_limit"`
+}
 
 // Vendor represents an app store vendor.
 type Vendor string
@@ -339,6 +368,8 @@ type OrderItem struct {
 	Description               datastore.NullString `json:"description" db:"description"`
 	CredentialType            string               `json:"credentialType" db:"credential_type"`
 	MaxActiveBatchesTLV2Creds *int                 `json:"max_active_batches_tlv2_creds" db:"max_active_batches_tlv2_creds"`
+	NumSelfExtensions         int                  `json:"-" db:"num_self_extensions"`
+	LastSelfExtensionAt       *time.Time           `json:"-" db:"last_self_extension_at"`
 	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
 	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
