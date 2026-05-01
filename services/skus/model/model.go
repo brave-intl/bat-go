@@ -119,14 +119,6 @@ type ExtensionWrite struct {
 	NewLimit                    int        `json:"new_limit"`
 }
 
-// Returned in the body of a 409 conflict so callers can refresh and retry.
-type ExtensionState struct {
-	Limit               int        `json:"limit"`
-	Active              int        `json:"active"`
-	NumSelfExtensions   int        `json:"num_self_extensions"`
-	LastSelfExtensionAt *time.Time `json:"last_self_extension_at"`
-}
-
 // Vendor represents an app store vendor.
 type Vendor string
 
@@ -376,8 +368,8 @@ type OrderItem struct {
 	Description               datastore.NullString `json:"description" db:"description"`
 	CredentialType            string               `json:"credentialType" db:"credential_type"`
 	MaxActiveBatchesTLV2Creds *int                 `json:"max_active_batches_tlv2_creds" db:"max_active_batches_tlv2_creds"`
-	NumSelfExtensions         int                  `json:"num_self_extensions" db:"num_self_extensions"`
-	LastSelfExtensionAt       *time.Time           `json:"last_self_extension_at" db:"last_self_extension_at"`
+	NumSelfExtensions         int                  `json:"-" db:"num_self_extensions"`
+	LastSelfExtensionAt       *time.Time           `json:"-" db:"last_self_extension_at"`
 	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
 	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`
