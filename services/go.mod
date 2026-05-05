@@ -39,13 +39,11 @@ require (
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.13.0
-	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.11.1
 	github.com/stripe/stripe-go/v72 v72.122.0
 	golang.org/x/crypto v0.49.0
 	google.golang.org/api v0.247.0
 	gopkg.in/macaroon.v2 v2.1.0
-	gopkg.in/square/go-jose.v2 v2.6.0
 )
 
 require (
