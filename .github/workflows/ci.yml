@@ -58,7 +58,7 @@ jobs:
 
     - name: Login to Challenge-Bypass Amazon ECR Private
       id: grant-login-ecr
-      uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+      uses: aws-actions/amazon-ecr-login@19d944daaa35f0fa1d3f7f8af1d3f2e5de25c5b7 # v2.1.4
 
     - name: Login to Docker Hub
       uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
