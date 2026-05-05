@@ -11,7 +11,7 @@ go build -o bat-go .
 
 This produces a `bat-go` binary in the `main/` directory. Move it somewhere on your `PATH` or invoke it with its full path.
 
-You need Go 1.25 or later. Run `go version` to check.
+You need Go 1.26 or later. Run `go version` to check.
 
 ---
 
