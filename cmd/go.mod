@@ -6,7 +6,7 @@ replace github.com/brave-intl/bat-go/libs => ../libs
 
 require (
 	github.com/brave-intl/bat-go/libs v0.0.0-20220913154833-730f36b772de
-	github.com/rs/zerolog v1.28.0
+	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.13.0
 )
@@ -24,8 +24,8 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.16 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
@@ -35,7 +35,7 @@ require (
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/redis/go-redis/v9 v9.8.0 // indirect
-	github.com/rs/xid v1.4.0 // indirect
+	github.com/rs/xid v1.6.0 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/spf13/afero v1.8.2 // indirect
