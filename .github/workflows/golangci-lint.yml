@@ -30,7 +30,7 @@ jobs:
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           working-directory: ${{ matrix.work-dir }}
-          version: v2.6.2
+          version: v2.11.4
           args: --timeout 3m
 
   # GHA doesn't implement aggregated matrix status checks natively: https://github.com/orgs/community/discussions/26822
