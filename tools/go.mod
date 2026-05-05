@@ -23,7 +23,7 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.49.0
-	golang.org/x/term v0.41.0
+	golang.org/x/term v0.42.0
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools v2.2.0+incompatible
@@ -192,7 +192,7 @@ require (
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/api v0.247.0 // indirect
