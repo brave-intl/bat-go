@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/awa/go-iap/appstore"
-	"github.com/square/go-jose"
+	"github.com/go-jose/go-jose/v3"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
