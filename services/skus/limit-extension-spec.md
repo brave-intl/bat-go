@@ -68,15 +68,15 @@ Browser ──JWT──▶ subscriptions
                      │   fetches order to resolve itemID,
                      │   selects per-product policy)
                      │
-                     │  internal: GET skus /v1/orders/{orderID}/credentials/batches/count
-                     │  → state {limit, active, num_self_extensions, last_self_extension_at}
+                     │  internal: read state from skus (orderModule.CountBatches)
+                     │  → {limit, active, num_self_extensions, last_self_extension_at}
                      │
                      │  evaluate policy locally:
                      │    not at limit         → 422 not_at_limit
                      │    num_self_ext >= cap  → 422 max_per_item
                      │    within rate window   → 429 rate_limited
                      │
-                     ▼  internal: POST skus /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
+                     ▼  internal: POST skus extend (orderModule.ExtendLinkingLimit)
                      │  body: { expected_last_self_extension_at, new_limit }
                      │  auth: PaymentAPIToken
                      │
@@ -92,7 +92,7 @@ Read path (GET):
 Browser ──JWT──▶ subscriptions
                      │  (same ownership + IsTLV2 lookup as POST)
                      │
-                     │  internal: GET skus .../batches/count → state
+                     │  internal: read state from skus (orderModule.CountBatches) → state
                      │
                      └─► canExtend(state, policy, now) → 200 {can_extend: bool}
                          (no policy error ever surfaces — "no" is can_extend:false)
