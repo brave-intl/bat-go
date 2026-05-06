@@ -114,6 +114,7 @@ type orderItemStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
 	FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
 	InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+	SetMaxActiveBatches(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, max int) error
 }
 
 type orderPayHistoryStore interface {

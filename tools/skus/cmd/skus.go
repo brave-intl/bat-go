@@ -30,6 +30,25 @@ var SkusCmd = &cobra.Command{
 	Short: "provides skus service support tooling",
 }
 
+var setLinkingLimitCmd = &cobra.Command{
+	Use:   "set-linking-limit",
+	Short: "Set the maximum number of linked devices for a premium order",
+	Long: `Sets the max_active_batches_tlv2_creds limit for a TLV2 order item,
+controlling how many devices can be simultaneously linked to the order.
+
+The order can be identified by --order-id or by --email (which looks up
+the subscriber in the subscriptions service). If multiple orders match an
+email you will be prompted to choose one.
+
+The command shows the current limit and active device count before asking
+for confirmation.
+
+Note: email lookup only works for desktop/browser orders created through
+the subscriptions service. iOS and Android orders use anonymous receipts
+and cannot be looked up by email.`,
+	RunE: runSetLinkingLimit,
+}
+
 var resetLinkingLimitCmd = &cobra.Command{
 	Use:   "reset-linking-limit",
 	Short: "Free device linking slots for a premium order",
@@ -51,7 +70,20 @@ and cannot be looked up by email.`,
 
 func init() {
 	SkusCmd.AddCommand(resetLinkingLimitCmd)
+	SkusCmd.AddCommand(setLinkingLimitCmd)
 	rootcmd.RootCmd.AddCommand(SkusCmd)
+
+	// set-linking-limit flags — use cmd.Flags() directly to avoid viper key collisions
+	// with resetLinkingLimitCmd which shares several flag names.
+	f := setLinkingLimitCmd.Flags()
+	f.String("skus-base-url", "", "base URL of the SKUs service (e.g. https://payment.rewards.brave.com)")
+	f.String("order-id", "", "the order UUID to set the limit for (mutually exclusive with --email)")
+	f.String("email", "", "subscriber email to look up the order ID (mutually exclusive with --order-id)")
+	f.String("subscriptions-base-url", "", "base URL of the subscriptions service, required when using --email")
+	f.String("subscriptions-token", "", "bearer token for the subscriptions support API, required when using --email")
+	f.Int("max", 0, "new maximum number of linked devices (must be a positive integer)")
+	f.String("item-id", "", "optional: scope the change to a specific order item UUID")
+	f.String("private-key", "", "path to the ed25519 private key file in SSH format used to sign requests")
 
 	fb := rootcmd.NewFlagBuilder(resetLinkingLimitCmd)
 
@@ -194,6 +226,115 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runSetLinkingLimit(cmd *cobra.Command, args []string) error {
+	baseURL, _ := cmd.Flags().GetString("skus-base-url")
+	if baseURL == "" {
+		baseURL = os.Getenv("SKUS_BASE_URL")
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	orderID, _ := cmd.Flags().GetString("order-id")
+
+	emailRaw, _ := cmd.Flags().GetString("email")
+	if emailRaw == "" {
+		emailRaw = os.Getenv("SUBSCRIBER_EMAIL")
+	}
+	email := strings.TrimSpace(emailRaw)
+
+	max, _ := cmd.Flags().GetInt("max")
+	itemID, _ := cmd.Flags().GetString("item-id")
+
+	privKeyPath, _ := cmd.Flags().GetString("private-key")
+	if privKeyPath == "" {
+		privKeyPath = os.Getenv("SKUS_SUPPORT_PRIVATE_KEY")
+	}
+
+	if baseURL == "" {
+		return fmt.Errorf("--skus-base-url (or SKUS_BASE_URL) is required")
+	}
+
+	if privKeyPath == "" {
+		return fmt.Errorf("--private-key (or SKUS_SUPPORT_PRIVATE_KEY) is required")
+	}
+
+	if max <= 0 {
+		return fmt.Errorf("--max must be a positive integer")
+	}
+
+	switch {
+	case orderID == "" && email == "":
+		return fmt.Errorf("one of --order-id or --email is required")
+	case orderID != "" && email != "":
+		return fmt.Errorf("--order-id and --email are mutually exclusive")
+	}
+
+	privKey, err := loadED25519PrivateKey(privKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to load private key: %w", err)
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	if email != "" {
+		subsBaseURL, _ := cmd.Flags().GetString("subscriptions-base-url")
+		if subsBaseURL == "" {
+			subsBaseURL = os.Getenv("SUBSCRIPTIONS_BASE_URL")
+		}
+		subsBaseURL = strings.TrimRight(subsBaseURL, "/")
+
+		subsToken, _ := cmd.Flags().GetString("subscriptions-token")
+		if subsToken == "" {
+			subsToken = os.Getenv("SUBSCRIPTIONS_SUPPORT_TOKEN")
+		}
+
+		if subsBaseURL == "" {
+			return fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required when using --email")
+		}
+
+		if subsToken == "" {
+			return fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required when using --email")
+		}
+
+		orderID, err = resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
+		if err != nil {
+			return err
+		}
+	}
+
+	if itemID == "" {
+		itemID, err = resolveItemID(ctx, client, baseURL, orderID)
+		if err != nil {
+			return err
+		}
+	}
+
+	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches?%s", baseURL, orderID,
+		url.Values{"item_id": {itemID}}.Encode())
+
+	batches, err := listBatches(ctx, client, listURL, privKey)
+	if err != nil {
+		return fmt.Errorf("failed to fetch active batches: %w", err)
+	}
+
+	fmt.Printf("Item %s has %d active linked device(s).\n", itemID, len(batches))
+	fmt.Printf("New linking limit: %d\n\n", max)
+
+	if !confirm(fmt.Sprintf("Set linking limit to %d for order %s?", max, orderID)) {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	limitURL := fmt.Sprintf("%s/v1/orders/%s/credentials/items/%s/batches/limit", baseURL, orderID, itemID)
+	if err := setLinkingLimitHTTP(ctx, client, limitURL, privKey, max); err != nil {
+		return fmt.Errorf("failed to set linking limit: %w", err)
+	}
+
+	fmt.Printf("Done. Linking limit set to %d for order %s.\n", max, orderID)
+
+	return nil
+}
+
 type activeSubsResp struct {
 	Email       string `json:"email"`
 	OrderID     string `json:"order_id"`
@@ -275,6 +416,142 @@ func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, em
 
 		return result.Results[n-1].OrderID, nil
 	}
+}
+
+type orderItemEntry struct {
+	ID                        string `json:"id"`
+	SKU                       string `json:"sku"`
+	CredentialType            string `json:"credentialType"`
+	MaxActiveBatchesTLV2Creds *int   `json:"max_active_batches_tlv2_creds"`
+}
+
+type orderEntry struct {
+	Items []orderItemEntry `json:"items"`
+}
+
+func getOrderItems(ctx context.Context, client *http.Client, baseURL, orderID string) ([]orderItemEntry, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/orders/"+orderID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("order %q not found", orderID)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
+	}
+
+	var result orderEntry
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode order: %w", err)
+	}
+
+	return result.Items, nil
+}
+
+func resolveItemID(ctx context.Context, client *http.Client, baseURL, orderID string) (string, error) {
+	items, err := getOrderItems(ctx, client, baseURL, orderID)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch order items: %w", err)
+	}
+
+	var tlv2 []orderItemEntry
+	for _, item := range items {
+		if item.CredentialType == "time-limited-v2" {
+			tlv2 = append(tlv2, item)
+		}
+	}
+
+	if len(tlv2) == 0 {
+		return "", fmt.Errorf("no TLV2 credential items found for order %q", orderID)
+	}
+
+	if len(tlv2) == 1 {
+		item := tlv2[0]
+		fmt.Printf("Using item %s (%s) for order %s\n\n", item.ID, item.SKU, orderID)
+		return item.ID, nil
+	}
+
+	fmt.Printf("Found %d TLV2 items for order %s:\n\n", len(tlv2), orderID)
+	fmt.Printf("  %-3s  %-36s  %-30s  %s\n", "#", "item_id", "sku", "current_limit")
+	fmt.Printf("  %-3s  %-36s  %-30s  %s\n",
+		"---", strings.Repeat("-", 36), strings.Repeat("-", 30), strings.Repeat("-", 13))
+
+	for i, item := range tlv2 {
+		limit := "(default)"
+		if item.MaxActiveBatchesTLV2Creds != nil {
+			limit = strconv.Itoa(*item.MaxActiveBatchesTLV2Creds)
+		}
+		fmt.Printf("  %-3d  %-36s  %-30s  %s\n", i+1, item.ID, item.SKU, limit)
+	}
+	fmt.Println()
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Printf("Select item [1-%d]: ", len(tlv2))
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return "", fmt.Errorf("reading stdin: %w", err)
+			}
+			return "", fmt.Errorf("no selection made")
+		}
+
+		n, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
+		if err != nil || n < 1 || n > len(tlv2) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(tlv2))
+			continue
+		}
+
+		return tlv2[n-1].ID, nil
+	}
+}
+
+func setLinkingLimitHTTP(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey, max int) error {
+	payload := struct {
+		Max int `json:"max_active_batches_tlv2_creds"`
+	}{Max: max}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	if err := skus.SignSupportRequest(key, req); err != nil {
+		return fmt.Errorf("failed to sign request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, respBody)
+	}
+
+	return nil
 }
 
 func listBatches(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey) ([]model.TLV2ActiveBatch, error) {

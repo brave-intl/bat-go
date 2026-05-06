@@ -24,6 +24,7 @@ type mockTLV2Svc struct {
 	FnUniqBatches       func(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
 	FnListActiveBatches func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	FnDeleteBatches     func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	FnSetLinkingLimit   func(ctx context.Context, orderID, itemID uuid.UUID, max int) error
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error) {
@@ -48,6 +49,14 @@ func (s *mockTLV2Svc) DeleteBatches(ctx context.Context, orderID, itemID uuid.UU
 	}
 
 	return s.FnDeleteBatches(ctx, orderID, itemID, seats)
+}
+
+func (s *mockTLV2Svc) SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+	if s.FnSetLinkingLimit == nil {
+		return nil
+	}
+
+	return s.FnSetLinkingLimit(ctx, orderID, itemID, max)
 }
 
 func TestCred_CountBatches(t *testing.T) {
@@ -719,6 +728,262 @@ func TestCred_DeleteBatches(t *testing.T) {
 			rw.Header().Set("content-type", "application/json")
 
 			appErr := h.DeleteBatches(rw, req)
+			must.Equal(t, tc.exp.err, appErr)
+
+			if tc.exp.err != nil {
+				appErr.ServeHTTP(rw, req)
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+				should.Equal(t, exp, bytes.TrimSpace(rw.Body.Bytes()))
+				return
+			}
+
+			should.Equal(t, http.StatusOK, rw.Code)
+		})
+	}
+}
+
+func TestCred_SetLinkingLimit(t *testing.T) {
+	orderItemCtx := func(orderID, itemID string) context.Context {
+		return context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+			URLParams: chi.RouteParams{
+				Keys:   []string{"orderID", "itemID"},
+				Values: []string{orderID, itemID},
+			},
+		})
+	}
+
+	const (
+		validOrderID = "c0c0a000-0000-4000-a000-000000000000"
+		validItemID  = "ad0be000-0000-4000-a000-000000000000"
+	)
+
+	type tcGiven struct {
+		ctx  context.Context
+		body string
+		svc  *mockTLV2Svc
+	}
+
+	type tcExpected struct {
+		err *handlers.AppError
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_orderID",
+			given: tcGiven{
+				ctx:  orderItemCtx("not-a-uuid", validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "invalid_itemID",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, "not-a-uuid"),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"itemID": "uuid: incorrect UUID length: not-a-uuid"}),
+			},
+		},
+
+		{
+			name: "invalid_json_body",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{not json}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(
+					json.NewDecoder(strings.NewReader(`{not json}`)).Decode(&struct{}{}),
+					"failed to parse request body",
+					http.StatusBadRequest,
+				),
+			},
+		},
+
+		{
+			name: "max_zero",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":0}`,
+				svc:  &mockTLV2Svc{},
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"max_active_batches_tlv2_creds": "must be a positive integer"}),
+			},
+		},
+
+		{
+			name: "context_cancelled",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return context.Canceled
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.Canceled, "client ended request", model.StatusClientClosedConn),
+			},
+		},
+
+		{
+			name: "deadline_exceeded",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return context.DeadlineExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(context.DeadlineExceeded, "request timed out", http.StatusGatewayTimeout),
+			},
+		},
+
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_not_found_no_items",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrInvalidOrderNoItems
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrInvalidOrderNoItems, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_item_not_found",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrOrderItemNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderItemNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "order_not_paid",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrOrderNotPaid
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotPaid, "order not paid", http.StatusPaymentRequired),
+			},
+		},
+
+		{
+			name: "cred_type_not_supported",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.ErrUnsupportedCredType
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrUnsupportedCredType, "credential type not supported", http.StatusBadRequest),
+			},
+		},
+
+		{
+			name: "internal_error",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						return model.Error("unexpected")
+					},
+				},
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx:  orderItemCtx(validOrderID, validItemID),
+				body: `{"max_active_batches_tlv2_creds":15}`,
+				svc: &mockTLV2Svc{
+					FnSetLinkingLimit: func(ctx context.Context, orderID, itemID uuid.UUID, max int) error {
+						should.Equal(t, 15, max)
+						should.Equal(t, validItemID, itemID.String())
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewCred(tc.given.svc)
+
+			req := httptest.NewRequest(http.MethodPatch, "http://localhost", strings.NewReader(tc.given.body))
+			req = req.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			appErr := h.SetLinkingLimit(rw, req)
 			must.Equal(t, tc.exp.err, appErr)
 
 			if tc.exp.err != nil {

@@ -779,6 +779,11 @@ type DeleteBatchesReq struct {
 	ItemID string `json:"item_id"`
 }
 
+// SetLinkingLimitReq is the request body for the set linking limit endpoint.
+type SetLinkingLimitReq struct {
+	MaxActiveBatchesTLV2Creds int `json:"max_active_batches_tlv2_creds"`
+}
+
 // ReceiptRequest represents a receipt submitted by a mobile or web client.
 type ReceiptRequest struct {
 	Type           Vendor `json:"type" validate:"required,oneof=ios android"`
