@@ -374,25 +374,36 @@ POST /v1/subscriptions/{subscriptionID}/credentials/batches/extend
 - **Request body**: none (subs owns policy, evaluates internally before calling skus)
 - **Success**: `200 OK`, empty `{}`
 
-Error mapping for the POST (subs-side, what the browser sees) — distinct codes per failure mode:
+Error mapping for the POST (subs-side, what the browser sees) — distinct codes per
+failure mode. Every error response uses the standard `handlers.AppError` envelope
+(`{"message": "...", "code": <http_status>, "data": {}}`) with `errorCode` set on the
+rows that have a wire code. `404 subscription not found` deliberately collapses
+"not yours" and "doesn't exist" as a BOLA guard.
 
-| subs Go error | HTTP status | Wire `errorCode` |
-|---|---|---|
-| `errSubNotRecognised`, `errSubscriptionNotFound`, `errSKUsOrderNotFound` | 404 | (none — collapses "not yours" and "doesn't exist" as a BOLA guard) |
-| `errSKUsOrderNotPaid` | 402 | `order_not_paid` |
-| `errSKUsUnsupportedCredType` | 400 | `unsupported_cred_type` |
-| `errExtensionRateLimited` | 429 | `rate_limited` |
-| `errExtensionMaxPerItem` | 422 | `max_per_item` |
-| `errExtensionNotAtLimit` | 422 | `not_at_limit` |
-| `errSKUsExtensionInvalidLimit` | 422 | `invalid_limit` |
-| `errSKUsExtensionConflict` (after retry) | 409 | `conflict` |
-| `errSKUsExtensionBundleOrder` | 422 | `bundle_order` |
-| `ErrClientClosedConn` | 499 | (none) |
-| `context.DeadlineExceeded`, `errSKUsDeadlineExceeded` | 504 | (none) |
-| (default) | 500 | (none — only unexpected errors are logged at error level) |
+| Trigger | HTTP status | Wire `errorCode` | Response `message` |
+|---|---|---|---|
+| Missing / invalid auth claims (no JWT, malformed claims) | 401 | (none) | `Unauthorized` |
+| `subx_id` claim is not a valid UUID | 400 | (none) | `failed to parse subscriber id` |
+| URL `{subscriptionID}` is not a valid UUID | 400 | (none) | `failed to parse subscription id` |
+| `errSubNotRecognised` / `errSubscriptionNotFound` / `errSKUsOrderNotFound` | 404 | (none) | `subscription not found` |
+| `errSKUsOrderNotPaid` | 402 | `order_not_paid` | `order not paid` |
+| `errSKUsUnsupportedCredType` (item is not TLV2) | 400 | `unsupported_cred_type` | `unsupported credential type` |
+| `errExtensionRateLimited` (within rate-limit window) | 429 | `rate_limited` | `extension rate limited` |
+| `errExtensionMaxPerItem` (lifetime cap reached) | 422 | `max_per_item` | `max extensions per item reached` |
+| `errExtensionNotAtLimit` (`active < limit` — nothing to extend) | 422 | `not_at_limit` | `not at limit; extension not needed` |
+| `errSKUsExtensionInvalidLimit` (caller bug or skus DB CHECK violation) | 422 | `invalid_limit` | `extension new limit invalid` |
+| `errSKUsExtensionConflict` (CAS lost on initial write *and* retry) | 409 | `conflict` | `extension version conflict; retry` |
+| `errExtensionBundleOrder` (order has more than one item) | 422 | `bundle_order` | `extension not supported on bundle orders` |
+| `model.ErrClientClosedConn` (client hung up) | 499 | (none) | `client ended request` |
+| `context.DeadlineExceeded` / `errSKUsDeadlineExceeded` | 504 | (none) | `request timed out` |
+| (default — unmapped / internal) | 500 | (none) | `Contact Tech Support (88)` |
 
-Every gate-rejection is logged at info level (`"extension request rejected"`) with `subx_id` /
-`sub_id` so operations can spot hot-itemID conflict storms or unusual rate-limit trips.
+Success: `200 OK` with body `{}`.
+
+Every gate-rejection is logged at info level (`"extension request rejected"`) with
+`subx_id` / `sub_id` so operations can spot hot-itemID conflict storms or unusual
+rate-limit trips. The default-branch (internal) error is additionally logged at error
+level (`"failed to extend linking limit"`).
 
 ### Metrics
 
@@ -480,6 +491,31 @@ Computed by `canExtend(state, pol, now)` in subs — exactly the same gates that
 `evaluateExtensionPolicy` enforces on the write path, so a `can_extend: true` response is a
 strong signal that the corresponding POST will succeed (modulo concurrent writes from another
 tab, which the CAS retry handles).
+
+Error mapping for the GET (subs-side, what the browser sees). Unlike the POST, the GET
+does **not** populate a wire `errorCode` — clients differentiate purely by HTTP status.
+The GET never surfaces policy-gate errors because policy is folded into the boolean: a
+"no" answer is `200 {"can_extend": false}`, not an error. Errors only happen when the
+upstream lookup itself fails.
+
+| Trigger | HTTP status | Response `message` |
+|---|---|---|
+| Missing / invalid auth claims | 401 | `Unauthorized` |
+| `subx_id` claim is not a valid UUID | 400 | `failed to parse subscriber id` |
+| URL `{subscriptionID}` is not a valid UUID | 400 | `failed to parse subscription id` |
+| `errSubNotRecognised` (sub has no order on file) | 404 | `subscription not found` |
+| `errSKUsOrderNotFound` (skus 404 from `CountBatches`) | 404 | `order not found` |
+| `errSKUsOrderNotPaid` | 402 | `order not paid` |
+| `errSKUsUnsupportedCredType` (product is not TLV2) | 400 | `unsupported credential type` |
+| `model.ErrClientClosedConn` (client hung up) | 499 | `client ended request` |
+| (default — unmapped / internal: lookup failures, product-set misses, parse errors past auth) | 500 | `Contact Tech Support (88)` |
+
+Note the asymmetry vs. POST: GET has no `504` / `errSKUsDeadlineExceeded` row (it never
+reaches that code path because there's no `extendLinkingLimit` SKUs hop with deadline
+semantics here — only the `CountBatches` read), and no policy-gate rows. A bundle-order
+sub (`len(items) != 1`) reaches the POST guard but the GET does *not* check for it; it
+would surface as a generic 500 if `CountBatches` itself fails. That matches today's
+behaviour — the GET just answers "may I extend?" against the single-item assumption.
 
 `limit` and `active` were dropped from the response per product feedback — the client
 shouldn't branch on those values directly. With those fields gone the route was renamed
