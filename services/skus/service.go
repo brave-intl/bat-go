@@ -1378,9 +1378,8 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
-// Thin storage write. Caller (subs) owns all policy. CAS on last_self_extension_at:
-// returns ErrExtensionConflict if the row's value has changed since the caller read it.
-// DB CHECK ceiling rejection surfaces as ErrExtensionInvalidLimit.
+// Storage-only; policy lives in the caller. Returns ErrExtensionConflict on CAS
+// mismatch, ErrExtensionInvalidLimit on DB CHECK violation.
 func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
 	if write.NewLimit <= 0 || write.NewLimit > model.ExtensionMaxLimitCeiling {
 		return model.ErrExtensionInvalidLimit

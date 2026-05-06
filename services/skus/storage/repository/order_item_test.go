@@ -237,7 +237,6 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 	orepo := repository.NewOrder()
 	iorepo := repository.NewOrderItem()
 
-	// Helper: create an order with a single TLV2 item and return the item's id.
 	insertItem := func(ctx context.Context, dbi sqlx.ExtContext) uuid.UUID {
 		ord, err := createOrderForTest(ctx, dbi, orepo)
 		must.NoError(t, err)
@@ -275,7 +274,6 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 		err = iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 13)
 		must.NoError(t, err)
 
-		// Verify side-effects.
 		var got struct {
 			MaxActiveBatchesTLV2Creds *int       `db:"max_active_batches_tlv2_creds"`
 			NumSelfExtensions         int        `db:"num_self_extensions"`
@@ -297,10 +295,8 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 
 		itemID := insertItem(ctx, tx)
 
-		// First extension succeeds.
 		must.NoError(t, iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 13))
 
-		// Second extension with a stale (nil) token fails — row was extended.
 		err = iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 16)
 		must.ErrorIs(t, err, model.ErrExtensionConflict)
 	})

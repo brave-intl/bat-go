@@ -112,8 +112,8 @@ type BatchesStatus struct {
 	LastSelfExtensionAt *time.Time `json:"last_self_extension_at"`
 }
 
-// Caller-supplied CAS write. ExpectedLastSelfExtensionAt must equal the row's
-// current value — nil means "row has never been extended."
+// ExpectedLastSelfExtensionAt is the CAS version token; nil means "row has
+// never been extended" (matched null-safe via IS NOT DISTINCT FROM).
 type ExtensionWrite struct {
 	ExpectedLastSelfExtensionAt *time.Time `json:"expected_last_self_extension_at"`
 	NewLimit                    int        `json:"new_limit"`
