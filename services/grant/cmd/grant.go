@@ -21,6 +21,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"go.opentelemetry.io/contrib/detectors/aws/ec2/v2"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/contrib/propagators/aws/xray"
+	xraySampler "go.opentelemetry.io/contrib/samplers/aws/xray"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/trace"
+
 	"github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
@@ -304,6 +312,12 @@ func init() {
 		"kafka broker list").
 		Bind("kafka-brokers").
 		Env("KAFKA_BROKERS")
+
+	// OTEL Configuration
+	flagBuilder.Flag().String("otel-exporter-endpoint", "localhost:4317",
+		"The gRPC address of the OpenTelemetry Collector").
+		Bind("otel-exporter-endpoint").
+		Env("OTEL_EXPORTER_ENDPOINT")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -490,7 +504,17 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 		r.Mount("/v1/credentials", skus.CredentialRouter(skusService, authMwr))
 		r.Mount("/v2/credentials", skus.CredentialV2Router(skusService, authMwr))
-		r.Mount("/v1/orders", skus.Router(skusService, authMwr, supportMwr, middleware.InstrumentHandler, corsOpts))
+
+		// Mount /v1/orders with OTEL tracing middleware
+		r.Route("/v1/orders", func(r chi.Router) {
+			r.Use(func(next http.Handler) http.Handler {
+				return otelhttp.NewHandler(next, "skus-orders",
+					otelhttp.WithTracerProvider(otel.GetTracerProvider()),
+					otelhttp.WithPropagators(otel.GetTextMapPropagator()),
+				)
+			})
+			r.Mount("/", skus.Router(skusService, authMwr, supportMwr, middleware.InstrumentHandler, corsOpts))
+		})
 
 		subr := chi.NewRouter()
 		orderh := handler.NewOrder(skusService)
@@ -588,6 +612,38 @@ func RunGrantServer(cmd *cobra.Command, args []string) error {
 	)
 }
 
+func setupTracer(ctx context.Context) error {
+	collectorURL := ctx.Value(appctx.OTELCollectorURL).(string)
+
+	traceExporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint(collectorURL))
+	if err != nil {
+		return fmt.Errorf("failed to create OTLP trace exporter: %v", err)
+	}
+
+	remoteSampler, err := xraySampler.NewRemoteSampler(ctx, "grant", "ec2")
+	if err != nil {
+		return fmt.Errorf("failed to create AWS X-Ray Remote Sampler: %v", err)
+	}
+
+	ec2Resource, err := ec2.NewResourceDetector().Detect(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to detect EC2 resource: %v", err)
+	}
+
+	tp := trace.NewTracerProvider(
+		trace.WithSampler(remoteSampler),
+		trace.WithBatcher(traceExporter),
+		trace.WithResource(ec2Resource),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(xray.Propagator{})
+
+	return nil
+}
+
 // GrantServer runs the grant server
 func GrantServer(
 	ctx context.Context,
@@ -617,6 +673,7 @@ func GrantServer(
 
 	// add flags to context
 	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, viper.GetString("kafka-brokers"))
+	ctx = context.WithValue(ctx, appctx.OTELCollectorURL, viper.GetString("otel-exporter-endpoint"))
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
@@ -688,9 +745,14 @@ func GrantServer(
 		logger.Error().Err(err).
 			Msg("failed to decode the playstore json key")
 	}
+
 	ctx = context.WithValue(ctx, appctx.PlaystoreJSONKeyCTXKey, jsonKey)
 
 	ctx = context.WithValue(ctx, appctx.AppleReceiptSharedKeyCTXKey, viper.GetString("apple-receipt-shared-key"))
+
+	if err := setupTracer(ctx); err != nil {
+		logger.Error().Err(err).Msg("unable to initialise OTEL tracer")
+	}
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

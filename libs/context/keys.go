@@ -190,6 +190,9 @@ const (
 	EgressProxyAddrCTXKey CTXKey = "egress_proxy_addr"
 	// EnclaveDecryptKeyTemplateSecretIDCTXKey - the context key for getting the key template for key creation
 	EnclaveDecryptKeyTemplateSecretIDCTXKey CTXKey = "enclave_decrypt_key_template_secret"
+
+	// OTEL config
+	OTELCollectorURL CTXKey = "otel_exporter_endpoint"
 )
 
 var (
