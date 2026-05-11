@@ -63,8 +63,9 @@ const signingOrderRequestSchema = `{
 
 // SigningOrderRequest - the structure of a signing order request
 type SigningOrderRequest struct {
-	RequestID string         `json:"request_id"`
-	Data      []SigningOrder `json:"data"`
+	RequestID   string         `json:"request_id"`
+	Data        []SigningOrder `json:"data"`
+	TraceParent string         `json:"trace_parent,omitempty"`
 }
 
 // SigningOrder - signing order structure

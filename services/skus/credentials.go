@@ -14,6 +14,10 @@ import (
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -285,8 +289,14 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		return fmt.Errorf("error serializing associated data: %w", err)
 	}
 
+	// Extract trace context for distributed tracing across Kafka
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	traceParent := carrier["traceparent"]
+
 	signReq := SigningOrderRequest{
-		RequestID: requestID.String(),
+		RequestID:   requestID.String(),
+		TraceParent: traceParent,
 		Data: []SigningOrder{
 			{
 				IssuerType:     issuerID,
@@ -297,7 +307,17 @@ func (s *Service) CreateOrderItemCredentials(ctx context.Context, orderID, itemI
 		},
 	}
 
+	ctx, span := otel.Tracer("skus").Start(ctx, "insert_signing_request_outbox",
+		trace.WithAttributes(
+			attribute.String("order_id", order.ID.String()),
+			attribute.String("item_id", item.ID.String()),
+			attribute.String("request_id", requestID.String()),
+		),
+	)
+	defer span.End()
+
 	if err := s.Datastore.InsertSigningOrderRequestOutbox(ctx, requestID, order.ID, item.ID, signReq); err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
 	}
 
@@ -447,10 +467,26 @@ func (s *Service) WriteMessages(ctx context.Context, messages []SigningOrderRequ
 			return fmt.Errorf("error converting binary from native: %w", err)
 		}
 
+		// Deserialize the message to extract trace context
+		var signReq SigningOrderRequest
+		if err := json.Unmarshal(messages[i].Message, &signReq); err != nil {
+			return fmt.Errorf("error unmarshalling signing request: %w", err)
+		}
+
+		// Build Kafka headers with trace context for distributed tracing
+		headers := []kafka.Header{}
+		if signReq.TraceParent != "" {
+			headers = append(headers, kafka.Header{
+				Key:   "traceparent",
+				Value: []byte(signReq.TraceParent),
+			})
+		}
+
 		km := kafka.Message{
-			Topic: kafkaUnsignedOrderCredsTopic,
-			Key:   messages[i].RequestID.Bytes(),
-			Value: binary,
+			Topic:   kafkaUnsignedOrderCredsTopic,
+			Key:     messages[i].RequestID.Bytes(),
+			Value:   binary,
+			Headers: headers,
 		}
 
 		msgs[i] = km
