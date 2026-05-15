@@ -16,9 +16,10 @@ import (
 )
 
 type tlv2Svc interface {
-	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (int, int, error)
+	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
 }
 
 type Cred struct {
@@ -39,7 +40,7 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 	}
 
-	lim, nact, err := h.tlv2.UniqBatches(ctx, orderID, uuid.Nil)
+	status, err := h.tlv2.UniqBatches(ctx, orderID, uuid.Nil)
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
@@ -59,12 +60,7 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 		}
 	}
 
-	result := &struct {
-		Limit  int `json:"limit"`
-		Active int `json:"active"`
-	}{Limit: lim, Active: nact}
-
-	return handlers.RenderContent(ctx, result, w, http.StatusOK)
+	return handlers.RenderContent(ctx, status, w, http.StatusOK)
 }
 
 // ListActiveBatches returns the active credential batches (linked devices) for an order.
@@ -186,4 +182,67 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 	}
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+// POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
+func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to read request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	var write model.ExtensionWrite
+	if err := json.Unmarshal(body, &write); err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID, write); err != nil {
+		lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimit").Logger()
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
+			return withErrorCode(handlers.WrapError(err, "order not found", http.StatusNotFound), model.ExtensionCodeOrderNotFound)
+
+		case errors.Is(err, model.ErrOrderNotPaid):
+			return withErrorCode(handlers.WrapError(err, "order not paid", http.StatusPaymentRequired), model.ExtensionCodeOrderNotPaid)
+
+		case errors.Is(err, model.ErrUnsupportedCredType):
+			return withErrorCode(handlers.WrapError(err, "credential type not supported", http.StatusBadRequest), model.ExtensionCodeUnsupportedCredType)
+
+		case errors.Is(err, model.ErrExtensionInvalidLimit):
+			return withErrorCode(handlers.WrapError(err, "extension new limit invalid", http.StatusUnprocessableEntity), model.ExtensionCodeInvalidLimit)
+
+		case errors.Is(err, model.ErrExtensionConflict):
+			return withErrorCode(handlers.WrapError(err, "extension version conflict", http.StatusConflict), model.ExtensionCodeConflict)
+
+		default:
+			lg.Error().Err(err).Msg("failed to extend linking limit")
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+func withErrorCode(appErr *handlers.AppError, code string) *handlers.AppError {
+	appErr.ErrorCode = code
+	return appErr
 }
