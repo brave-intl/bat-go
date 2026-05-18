@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
@@ -83,8 +84,7 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 	return result, nil
 }
 
-// Returns ErrExtensionConflict if expected does not match the row's
-// last_self_extension_at (no row updated).
+// ApplyExtensionCAS Returns ErrExtensionConflict if expected does not match the row's last_self_extension_at (no row updated).
 func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
 	const q = `
 	UPDATE order_items
@@ -96,6 +96,10 @@ func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, 
 
 	result, err := dbi.ExecContext(ctx, q, id, newLimit, expected)
 	if err != nil {
+		if isErrExtensionInvalidLimit(err) {
+			return model.ErrExtensionInvalidLimit
+		}
+
 		return err
 	}
 
@@ -109,4 +113,25 @@ func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, 
 	}
 
 	return nil
+}
+
+func isErrExtensionInvalidLimit(err error) bool {
+	var perr *pq.Error
+	if !errors.As(err, &perr) {
+		return false
+	}
+
+	if perr.Table != "order_items" {
+		return false
+	}
+
+	if perr.Severity != "ERROR" {
+		return false
+	}
+
+	if perr.Code != pq.ErrorCode("23514") {
+		return false
+	}
+
+	return perr.Constraint == "order_items_max_active_batches_tlv2_creds_sanity"
 }
