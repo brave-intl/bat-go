@@ -225,7 +225,7 @@ func mustDecimalFromString(v string) decimal.Decimal {
 	return result
 }
 
-func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
+func TestOrderItem_UpdateMaxActiveBatchesCAS(t *testing.T) {
 	dbi, err := setupDBI()
 	must.Equal(t, nil, err)
 
@@ -270,19 +270,19 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 
 		itemID := insertItem(ctx, tx)
 
-		err = iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 13)
+		err = iorepo.UpdateMaxActiveBatchesCAS(ctx, tx, itemID, nil, 13)
 		must.NoError(t, err)
 
 		var got struct {
 			MaxActiveBatchesTLV2Creds *int       `db:"max_active_batches_tlv2_creds"`
-			NumSelfExtensions         int        `db:"num_self_extensions"`
-			LastSelfExtensionAt       *time.Time `db:"last_self_extension_at"`
+			NumActiveBatchesExtensions         int        `db:"num_active_batches_extensions"`
+			LastActiveBatchesExtensionAt       *time.Time `db:"last_active_batches_extension_at"`
 		}
-		err = tx.QueryRowxContext(ctx, `SELECT max_active_batches_tlv2_creds, num_self_extensions, last_self_extension_at FROM order_items WHERE id = $1`, itemID).StructScan(&got)
+		err = tx.QueryRowxContext(ctx, `SELECT max_active_batches_tlv2_creds, num_active_batches_extensions, last_active_batches_extension_at FROM order_items WHERE id = $1`, itemID).StructScan(&got)
 		must.NoError(t, err)
 		should.Equal(t, 13, *got.MaxActiveBatchesTLV2Creds)
-		should.Equal(t, 1, got.NumSelfExtensions)
-		must.NotNil(t, got.LastSelfExtensionAt)
+		should.Equal(t, 1, got.NumActiveBatchesExtensions)
+		must.NotNil(t, got.LastActiveBatchesExtensionAt)
 	})
 
 	t.Run("conflict_when_token_is_stale", func(t *testing.T) {
@@ -294,9 +294,9 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 
 		itemID := insertItem(ctx, tx)
 
-		must.NoError(t, iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 13))
+		must.NoError(t, iorepo.UpdateMaxActiveBatchesCAS(ctx, tx, itemID, nil, 13))
 
-		err = iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 16)
+		err = iorepo.UpdateMaxActiveBatchesCAS(ctx, tx, itemID, nil, 16)
 		must.ErrorIs(t, err, model.ErrExtensionConflict)
 	})
 
@@ -309,24 +309,24 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 
 		itemID := insertItem(ctx, tx)
 
-		must.NoError(t, iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 13))
+		must.NoError(t, iorepo.UpdateMaxActiveBatchesCAS(ctx, tx, itemID, nil, 13))
 
 		var token *time.Time
-		err = tx.QueryRowxContext(ctx, `SELECT last_self_extension_at FROM order_items WHERE id = $1`, itemID).Scan(&token)
+		err = tx.QueryRowxContext(ctx, `SELECT last_active_batches_extension_at FROM order_items WHERE id = $1`, itemID).Scan(&token)
 		must.NoError(t, err)
 		must.NotNil(t, token)
 
-		err = iorepo.ApplyExtensionCAS(ctx, tx, itemID, token, 16)
+		err = iorepo.UpdateMaxActiveBatchesCAS(ctx, tx, itemID, token, 16)
 		must.NoError(t, err)
 
 		var got struct {
 			MaxActiveBatchesTLV2Creds *int `db:"max_active_batches_tlv2_creds"`
-			NumSelfExtensions         int  `db:"num_self_extensions"`
+			NumActiveBatchesExtensions         int  `db:"num_active_batches_extensions"`
 		}
-		err = tx.QueryRowxContext(ctx, `SELECT max_active_batches_tlv2_creds, num_self_extensions FROM order_items WHERE id = $1`, itemID).StructScan(&got)
+		err = tx.QueryRowxContext(ctx, `SELECT max_active_batches_tlv2_creds, num_active_batches_extensions FROM order_items WHERE id = $1`, itemID).StructScan(&got)
 		must.NoError(t, err)
 		should.Equal(t, 16, *got.MaxActiveBatchesTLV2Creds)
-		should.Equal(t, 2, got.NumSelfExtensions)
+		should.Equal(t, 2, got.NumActiveBatchesExtensions)
 	})
 
 	t.Run("check_violation_above_ceiling", func(t *testing.T) {
@@ -338,7 +338,7 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 
 		itemID := insertItem(ctx, tx)
 
-		err = iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 1001)
+		err = iorepo.UpdateMaxActiveBatchesCAS(ctx, tx, itemID, nil, 1001)
 		should.Equal(t, model.ErrExtensionInvalidLimit, err)
 	})
 }

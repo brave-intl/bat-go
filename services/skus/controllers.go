@@ -125,7 +125,11 @@ func Router(
 		cr.Method(http.MethodGet, "/batches/count", metricsMwr("CountBatches", authMwr(handlers.AppHandler(credh.CountBatches))))
 		cr.Method(http.MethodGet, "/batches", metricsMwr("ListActiveBatches", supportMwr(handlers.AppHandler(credh.ListActiveBatches))))
 		cr.Method(http.MethodDelete, "/batches", metricsMwr("DeleteBatches", supportMwr(handlers.AppHandler(credh.DeleteBatches))))
-		cr.Method(http.MethodPost, "/items/{itemID}/batches/extend", metricsMwr("ExtendLinkingLimit", authMwr(handlers.AppHandler(credh.ExtendLinkingLimit))))
+		// POST is accepted during the rollout of the PATCH-semantic move; remove the POST
+		// registration once all callers have switched over.
+		extendBatchesH := metricsMwr("ExtendBatches", authMwr(handlers.AppHandler(credh.ExtendBatches)))
+		cr.Method(http.MethodPatch, "/items/{itemID}/batches/extend", extendBatchesH)
+		cr.Method(http.MethodPost, "/items/{itemID}/batches/extend", extendBatchesH)
 
 		// Handle the old endpoint while the new is being rolled out:
 		// - true: the handler uses itemID as the request id, which is the old mode;

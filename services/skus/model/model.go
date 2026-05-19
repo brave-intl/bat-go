@@ -108,15 +108,15 @@ var emptyOrderTimeBounds OrderTimeBounds
 type BatchesStatus struct {
 	Limit               int        `json:"limit"`
 	Active              int        `json:"active"`
-	NumSelfExtensions   int        `json:"num_self_extensions"`
-	LastSelfExtensionAt *time.Time `json:"last_self_extension_at"`
+	NumActiveBatchesExtensions   int        `json:"num_active_batches_extensions"`
+	LastActiveBatchesExtensionAt *time.Time `json:"last_active_batches_extension_at"`
 }
 
-// ExpectedLastSelfExtensionAt is the CAS version token; nil means "row has
-// never been extended" (matched null-safe via IS NOT DISTINCT FROM).
+// ExpectedLastActiveBatchesExtensionAt is the CAS version token; nil means
+// "row has never been extended".
 type ExtensionWrite struct {
-	ExpectedLastSelfExtensionAt *time.Time `json:"expected_last_self_extension_at"`
-	NewLimit                    int        `json:"new_limit"`
+	ExpectedLastActiveBatchesExtensionAt *time.Time `json:"expected_last_active_batches_extension_at"`
+	NewLimit                             int        `json:"new_limit"`
 }
 
 // Vendor represents an app store vendor.
@@ -368,8 +368,8 @@ type OrderItem struct {
 	Description               datastore.NullString `json:"description" db:"description"`
 	CredentialType            string               `json:"credentialType" db:"credential_type"`
 	MaxActiveBatchesTLV2Creds *int                 `json:"max_active_batches_tlv2_creds" db:"max_active_batches_tlv2_creds"`
-	NumSelfExtensions         int                  `json:"-" db:"num_self_extensions"`
-	LastSelfExtensionAt       *time.Time           `json:"-" db:"last_self_extension_at"`
+	NumActiveBatchesExtensions   int                  `json:"-" db:"num_active_batches_extensions"`
+	LastActiveBatchesExtensionAt *time.Time           `json:"-" db:"last_active_batches_extension_at"`
 	ValidFor                  *time.Duration       `json:"validFor" db:"valid_for"`
 	ValidForISO               *string              `json:"validForIso" db:"valid_for_iso"`
 	EachCredentialValidForISO *string              `json:"-" db:"each_credential_valid_for_iso"`

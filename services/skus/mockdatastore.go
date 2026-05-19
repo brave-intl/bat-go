@@ -1028,6 +1028,20 @@ func (mr *MockorderItemStoreMockRecorder) Get(ctx, dbi, id interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockorderItemStore)(nil).Get), ctx, dbi, id)
 }
 
+// UpdateMaxActiveBatchesCAS mocks base method.
+func (m *MockorderItemStore) UpdateMaxActiveBatchesCAS(ctx context.Context, dbi sqlx.ExtContext, id go_uuid.UUID, expected *time.Time, newLimit int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMaxActiveBatchesCAS", ctx, dbi, id, expected, newLimit)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateMaxActiveBatchesCAS indicates an expected call of UpdateMaxActiveBatchesCAS.
+func (mr *MockorderItemStoreMockRecorder) UpdateMaxActiveBatchesCAS(ctx, dbi, id, expected, newLimit interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMaxActiveBatchesCAS", reflect.TypeOf((*MockorderItemStore)(nil).UpdateMaxActiveBatchesCAS), ctx, dbi, id, expected, newLimit)
+}
+
 // InsertMany mocks base method.
 func (m *MockorderItemStore) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error) {
 	m.ctrl.T.Helper()

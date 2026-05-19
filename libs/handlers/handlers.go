@@ -43,6 +43,18 @@ func (e *AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// NewAppError builds an AppError with the given status code, error code,
+// cause, and message. It exists so callers can construct an AppError without
+// using a struct literal followed by a separate ErrorCode assignment.
+func NewAppError(statusCode int, errCode string, cause error, msg string) *AppError {
+	return &AppError{
+		Code:      statusCode,
+		ErrorCode: errCode,
+		Cause:     cause,
+		Message:   msg,
+	}
+}
+
 // WrapError with an additional message as an AppError
 func WrapError(err error, msg string, passedCode int) *AppError {
 	// FIXME err should probably be first

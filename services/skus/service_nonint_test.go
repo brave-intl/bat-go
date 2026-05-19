@@ -8034,7 +8034,7 @@ func TestService_DeleteBatches(t *testing.T) {
 	}
 }
 
-func TestService_extendLinkingLimitTx(t *testing.T) {
+func TestService_extendBatchesTx(t *testing.T) {
 	type tcGiven struct {
 		oid    uuid.UUID
 		itemID uuid.UUID
@@ -8211,7 +8211,7 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 						return []model.OrderItem{item}, nil
 					},
 
-					FnApplyExtensionCAS: func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
+					FnUpdateMaxActiveBatchesCAS: func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
 						return model.Error("error_apply_extension_case")
 					},
 				},
@@ -8226,7 +8226,7 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 			given: tcGiven{
 				write: model.ExtensionWrite{
 					NewLimit:                    10,
-					ExpectedLastSelfExtensionAt: ptrTo(time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC)),
+					ExpectedLastActiveBatchesExtensionAt: ptrTo(time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC)),
 				},
 				ordRepo: &repository.MockOrder{
 					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
@@ -8248,7 +8248,7 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 						return []model.OrderItem{item}, nil
 					},
 
-					FnApplyExtensionCAS: func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
+					FnUpdateMaxActiveBatchesCAS: func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
 						if newLimit != 10 {
 							return model.Error("unexpected new limit")
 						}
@@ -8273,7 +8273,7 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 				orderItemRepo: tc.given.itemRepo,
 			}
 
-			actual := svc.extendLinkingLimitTx(context.Background(), nil, tc.given.oid, tc.given.itemID, tc.given.write)
+			actual := svc.extendBatchesTx(context.Background(), nil, tc.given.oid, tc.given.itemID, tc.given.write)
 			should.ErrorIs(t, actual, tc.exp.err)
 		})
 	}
