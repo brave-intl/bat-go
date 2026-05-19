@@ -1378,8 +1378,6 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
-// ExtendLinkingLimit Storage-only; policy lives in the caller. Returns ErrExtensionConflict on CAS
-// mismatch, ErrExtensionInvalidLimit on DB CHECK violation.
 func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
 	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {

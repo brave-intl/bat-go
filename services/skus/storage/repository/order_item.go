@@ -84,7 +84,6 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 	return result, nil
 }
 
-// ApplyExtensionCAS Returns ErrExtensionConflict if expected does not match the row's last_self_extension_at (no row updated).
 func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
 	const q = `
 	UPDATE order_items
