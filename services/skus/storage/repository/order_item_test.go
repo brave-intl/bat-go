@@ -5,7 +5,6 @@ package repository_test
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"testing"
 	"time"
 
@@ -340,10 +339,6 @@ func TestOrderItem_ApplyExtensionCAS(t *testing.T) {
 		itemID := insertItem(ctx, tx)
 
 		err = iorepo.ApplyExtensionCAS(ctx, tx, itemID, nil, 1001)
-		must.Error(t, err)
-
-		var pqErr *pq.Error
-		must.True(t, errors.As(err, &pqErr), "expected *pq.Error, got %T (%v)", err, err)
-		should.Equal(t, pq.ErrorCode("23514"), pqErr.Code)
+		should.Equal(t, model.ErrExtensionInvalidLimit, err)
 	})
 }
