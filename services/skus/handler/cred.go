@@ -184,7 +184,6 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
-// POST /v1/orders/{orderID}/credentials/items/{itemID}/batches/extend
 func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
@@ -211,6 +210,8 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID, write); err != nil {
 		lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimit").Logger()
 
+		lg.Error().Err(err).Msg("failed to extend linking limit")
+
 		switch {
 		case errors.Is(err, context.Canceled):
 			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
@@ -234,7 +235,6 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 			return withErrorCode(handlers.WrapError(err, "extension version conflict", http.StatusConflict), model.ExtensionCodeConflict)
 
 		default:
-			lg.Error().Err(err).Msg("failed to extend linking limit")
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}

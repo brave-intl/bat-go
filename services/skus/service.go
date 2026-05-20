@@ -1378,14 +1378,26 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
-// Storage-only; policy lives in the caller. Returns ErrExtensionConflict on CAS
-// mismatch, ErrExtensionInvalidLimit on DB CHECK violation.
 func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.extendLinkingLimitTx(ctx, tx, orderID, itemID, write); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) extendLinkingLimitTx(ctx context.Context, dbi sqlx.ExtContext, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
 	if write.NewLimit <= 0 || write.NewLimit > model.ExtensionMaxLimitCeiling {
 		return model.ErrExtensionInvalidLimit
 	}
 
-	ord, err := s.getOrderFullTx(ctx, s.Datastore.RawDB(), orderID)
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
 	if err != nil {
 		return err
 	}
@@ -1407,22 +1419,7 @@ func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.U
 		return model.ErrUnsupportedCredType
 	}
 
-	if err := s.orderItemRepo.ApplyExtensionCAS(ctx, s.Datastore.RawDB(), item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit); err != nil {
-		if isCheckViolation(err) {
-			return model.ErrExtensionInvalidLimit
-		}
-		return err
-	}
-
-	return nil
-}
-
-func isCheckViolation(err error) bool {
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pqErr.Code == "23514"
-	}
-	return false
+	return s.orderItemRepo.ApplyExtensionCAS(ctx, dbi, item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit)
 }
 
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is
