@@ -65,6 +65,8 @@ const (
 	ErrOrderNotOneOffPayment = Error("model: order is not perpetual license")
 
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
+
+	ErrStripePaymentIntentMissing Error = "model: stripe payment intent id missing"
 )
 
 const (

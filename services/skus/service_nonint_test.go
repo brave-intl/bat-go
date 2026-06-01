@@ -3807,6 +3807,67 @@ func TestService_updateOrderStripeSession(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "success_handle_paid_one_off",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnGetExpiredStripeCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) (string, error) {
+						return "", nil
+					},
+
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if id.String() != "facade00-0000-4000-a000-000000000000" {
+							return model.Error("unexpected_order_id")
+						}
+
+						if key == "stripePaymentId" && val != "pi_id" {
+							return model.Error("unexpected_pi_id")
+						}
+
+						return nil
+					},
+				},
+				payRepo: &repository.MockOrderPayHistory{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if id == "cs_test_id_existing" {
+							result := &stripe.CheckoutSession{
+								ID:                 "cs_test_id",
+								PaymentStatus:      stripe.CheckoutSessionPaymentStatusPaid,
+								PaymentMethodTypes: []string{"card"},
+								Mode:               stripe.CheckoutSessionModeSubscription,
+								SuccessURL:         "https://example.com/success",
+								CancelURL:          "https://example.com/cancel",
+								ClientReferenceID:  "facade00-0000-4000-a000-000000000000",
+								PaymentIntent: &stripe.PaymentIntent{
+									ID: "pi_id",
+									Metadata: map[string]string{
+										"orderID": "facade00-0000-4000-a000-000000000000",
+									},
+								},
+								AllowPromotionCodes: true,
+							}
+
+							return result, nil
+						}
+
+						return nil, model.Error("unexpected")
+					},
+				},
+				ord: &model.Order{
+					ID: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Items: []OrderItem{
+						{
+							SKUVnt: "brave-origin-premium-perpetual-license",
+						},
+					},
+					Metadata: datastore.Metadata{
+						"stripeCheckoutSessionId": "cs_test_id_existing",
+					},
+				},
+			},
+		},
 	}
 
 	for i := range tests {
@@ -3822,7 +3883,7 @@ func TestService_updateOrderStripeSession(t *testing.T) {
 			ctx := context.Background()
 
 			actual := svc.updateOrderStripeSession(ctx, nil, tc.given.ord)
-			should.Equal(t, true, errors.Is(actual, tc.exp))
+			should.ErrorIs(t, actual, tc.exp)
 		})
 	}
 }
