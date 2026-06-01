@@ -695,17 +695,34 @@ func (s *Service) updateOrderStripeSession(ctx context.Context, dbi sqlx.ExtCont
 		return nil
 	}
 
-	// Need to update the order as paid.
-	// This requires fetching the subscription as the expiry time is needed.
-	sub, err := s.stripeCl.Subscription(ctx, sess.Subscription.ID, nil)
-	if err != nil {
-		return err
+	// Update the order as paid.
+
+	switch {
+	case ord.IsOneOffPayment():
+		if sess.PaymentIntent == nil {
+			return model.ErrStripePaymentIntentMissing
+		}
+
+		pid := sess.PaymentIntent.ID
+
+		paidt := time.Now().UTC()
+
+		expt := paidt.AddDate(100, 0, 0)
+
+		return s.activateStripePL(ctx, dbi, ord, pid, paidt, expt)
+
+	default:
+		// Fetching the subscription so we can get the expiry time.
+		sub, err := s.stripeCl.Subscription(ctx, sess.Subscription.ID, nil)
+		if err != nil {
+			return err
+		}
+
+		expt := time.Unix(sub.CurrentPeriodEnd, 0).UTC()
+		paidt := time.Unix(sub.CurrentPeriodStart, 0).UTC()
+
+		return s.renewOrderStripe(ctx, dbi, ord, sub.ID, expt, paidt)
 	}
-
-	expt := time.Unix(sub.CurrentPeriodEnd, 0).UTC()
-	paidt := time.Unix(sub.CurrentPeriodStart, 0).UTC()
-
-	return s.renewOrderStripe(ctx, dbi, ord, sub.ID, expt, paidt)
 }
 
 func (s *Service) updateOrderRadomSession(ctx context.Context, dbi sqlx.ExtContext, ord *model.Order) error {
