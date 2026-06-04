@@ -71,9 +71,9 @@ one. Alternatively pass --subscription-id to target a subscription directly.
 If the subscriber is not eligible (not at limit, rate-limited, or cap reached)
 the command reports the reason and makes no change.
 
-Note: email lookup only works for desktop/browser subscriptions created through
-the subscriptions service. iOS and Android subscriptions use anonymous receipts
-and cannot be looked up by email.`,
+Note: email lookup requires the subscription to be linked to a Premium account.
+Mobile (iOS/Android) purchases are found by email once linked; an order that has
+only been created anonymously and not yet linked has no associated email.`,
 	RunE: runExtendLinkingLimit,
 }
 
@@ -123,28 +123,24 @@ func init() {
 
 	SkusCmd.AddCommand(extendLinkingLimitCmd)
 
+	// These flags are intentionally not bound to viper. reset-linking-limit
+	// already binds the global viper keys "email", "subscriptions-base-url" and
+	// "subscriptions-token" to its own flags, and viper.BindPFlag is global, so
+	// binding them again here would clobber that command. runExtendLinkingLimit
+	// reads these directly from the command, falling back to the environment.
 	efb := rootcmd.NewFlagBuilder(extendLinkingLimitCmd)
 
 	efb.Flag().String("subscriptions-base-url", "",
-		"base URL of the subscriptions service (e.g. https://subscriptions.brave.com)").
-		Env("SUBSCRIPTIONS_BASE_URL").
-		Bind("subscriptions-base-url").
-		Require()
+		"base URL of the subscriptions service, e.g. https://subscriptions.brave.com [env: SUBSCRIPTIONS_BASE_URL]")
 
 	efb.Flag().String("subscriptions-token", "",
-		"bearer token for the subscriptions support API").
-		Env("SUBSCRIPTIONS_SUPPORT_TOKEN").
-		Bind("subscriptions-token").
-		Require()
+		"bearer token for the subscriptions support API [env: SUBSCRIPTIONS_SUPPORT_TOKEN]")
 
 	efb.Flag().String("email", "",
-		"subscriber email to look up the subscription (mutually exclusive with --subscription-id)").
-		Env("SUBSCRIBER_EMAIL").
-		Bind("email")
+		"subscriber email to look up the subscription, mutually exclusive with --subscription-id [env: SUBSCRIBER_EMAIL]")
 
 	efb.Flag().String("subscription-id", "",
-		"the subscription UUID to extend (mutually exclusive with --email)").
-		Bind("subscription-id")
+		"the subscription UUID to extend (mutually exclusive with --email)")
 }
 
 func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
@@ -247,11 +243,24 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// flagOrEnv returns the command-line flag value, falling back to the environment
+// variable when the flag is unset. extend-linking-limit reads its flags this way
+// rather than through the shared viper bindings used by reset-linking-limit.
+func flagOrEnv(cmd *cobra.Command, flag, env string) string {
+	if v, _ := cmd.Flags().GetString(flag); v != "" {
+		return v
+	}
+
+	return os.Getenv(env)
+}
+
 func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
-	subsBaseURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
-	subsToken := viper.GetString("subscriptions-token")
-	email := strings.TrimSpace(viper.GetString("email"))
-	subID := strings.TrimSpace(viper.GetString("subscription-id"))
+	subsBaseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
+	subsToken := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
+	email := strings.TrimSpace(flagOrEnv(cmd, "email", "SUBSCRIBER_EMAIL"))
+
+	subID, _ := cmd.Flags().GetString("subscription-id")
+	subID = strings.TrimSpace(subID)
 
 	if subsBaseURL == "" {
 		return fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required")
