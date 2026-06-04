@@ -48,6 +48,10 @@ func (c *Client) CancelSub(_ context.Context, id string, params *stripe.Subscrip
 	return err
 }
 
+func (c *Client) UpdateCustomer(_ context.Context, id string, params *stripe.CustomerParams) (*stripe.Customer, error) {
+	return c.cl.Customers.Update(id, params)
+}
+
 func CustomerEmailFromSession(sess *stripe.CheckoutSession) string {
 	// Use the customer email if the customer has completed the payment flow.
 	if sess.Customer != nil && sess.Customer.Email != "" {
