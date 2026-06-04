@@ -49,9 +49,32 @@ and cannot be looked up by email.`,
 	RunE: runResetLinkingLimit,
 }
 
+var relinkSubscriptionCmd = &cobra.Command{
+	Use:   "relink-subscription",
+	Short: "Relink a Premium order to a new active Stripe subscription",
+	Long: `Points a Premium order at a new Stripe subscription and renews it.
+
+Use this when a user has canceled and resubscribed but their account still
+references the old canceled subscription, preventing new credentials from loading.`,
+	RunE: runRelinkSubscription,
+}
+
 func init() {
 	SkusCmd.AddCommand(resetLinkingLimitCmd)
+	SkusCmd.AddCommand(relinkSubscriptionCmd)
 	rootcmd.RootCmd.AddCommand(SkusCmd)
+
+	{
+		rl := relinkSubscriptionCmd.Flags()
+		rl.String("skus-base-url", "", "base URL of the SKUs service (e.g. https://payment.rewards.brave.com)")
+		rl.String("order-id", "", "the order UUID to relink")
+		rl.String("subscription-id", "", "the new active Stripe subscription ID (e.g. sub_...)")
+		rl.String("private-key", "", "path to the ed25519 private key file in SSH format used to sign requests")
+		rootcmd.Must(relinkSubscriptionCmd.MarkFlagRequired("skus-base-url"))
+		rootcmd.Must(relinkSubscriptionCmd.MarkFlagRequired("order-id"))
+		rootcmd.Must(relinkSubscriptionCmd.MarkFlagRequired("subscription-id"))
+		rootcmd.Must(relinkSubscriptionCmd.MarkFlagRequired("private-key"))
+	}
 
 	fb := rootcmd.NewFlagBuilder(resetLinkingLimitCmd)
 
@@ -373,6 +396,64 @@ func loadED25519PrivateKey(path string) (ed25519.PrivateKey, error) {
 	}
 
 	return *key, nil
+}
+
+func runRelinkSubscription(cmd *cobra.Command, args []string) error {
+	baseURL, _ := cmd.Flags().GetString("skus-base-url")
+	baseURL = strings.TrimRight(baseURL, "/")
+	orderID, _ := cmd.Flags().GetString("order-id")
+	subID, _ := cmd.Flags().GetString("subscription-id")
+	privKeyPath, _ := cmd.Flags().GetString("private-key")
+
+	privKey, err := loadED25519PrivateKey(privKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to load private key: %w", err)
+	}
+
+	if !confirm(fmt.Sprintf("Relink order %s to subscription %s?", orderID, subID)) {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	endpoint := fmt.Sprintf("%s/v1/orders/%s/subscription", baseURL, orderID)
+
+	payload := struct {
+		SubscriptionID string `json:"subscriptionId"`
+	}{SubscriptionID: subID}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	if err := skus.SignSupportRequest(privKey, req); err != nil {
+		return fmt.Errorf("failed to sign request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, respBody)
+	}
+
+	fmt.Printf("Done. Order %s relinked to subscription %s.\n", orderID, subID)
+
+	return nil
 }
 
 func confirm(prompt string) bool {
