@@ -17,6 +17,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/spf13/cobra"
+
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 
@@ -293,4 +295,73 @@ func TestListBatchesBodyLimit(t *testing.T) {
 	_, err := listBatches(context.Background(), client, srv.URL, priv)
 	// We expect an error (JSON parse failure), not a panic or timeout.
 	must.Error(t, err)
+}
+
+func TestFlagOrEnv(t *testing.T) {
+	newCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("some-flag", "", "")
+		return cmd
+	}
+
+	t.Run("flag_set_wins", func(t *testing.T) {
+		t.Setenv("SOME_TEST_ENV", "from-env")
+
+		cmd := newCmd()
+		must.NoError(t, cmd.Flags().Set("some-flag", "from-flag"))
+
+		should.Equal(t, "from-flag", flagOrEnv(cmd, "some-flag", "SOME_TEST_ENV"))
+	})
+
+	t.Run("falls_back_to_env", func(t *testing.T) {
+		t.Setenv("SOME_TEST_ENV", "from-env")
+
+		should.Equal(t, "from-env", flagOrEnv(newCmd(), "some-flag", "SOME_TEST_ENV"))
+	})
+
+	t.Run("empty_when_neither_set", func(t *testing.T) {
+		should.Equal(t, "", flagOrEnv(newCmd(), "some-flag", "SOME_TEST_ENV_UNSET"))
+	})
+}
+
+func TestFormatLinkingUsage(t *testing.T) {
+	const orderID = "550e8400-e29b-41d4-a716-446655440000"
+	const itemID = "1f14a340-edfb-4d14-bbdb-06a6c441568b"
+
+	t.Run("no_batches", func(t *testing.T) {
+		got := formatLinkingUsage(orderID, "", nil)
+		should.Equal(t, "No device slots are in use for order "+orderID+".\n", got)
+	})
+
+	t.Run("no_batches_with_item_scope", func(t *testing.T) {
+		got := formatLinkingUsage(orderID, itemID, nil)
+		should.Contains(t, got, "No device slots are in use")
+		should.Contains(t, got, "order "+orderID+" (item "+itemID+")")
+	})
+
+	t.Run("counts_and_lists_batches", func(t *testing.T) {
+		batches := []model.TLV2ActiveBatch{
+			{RequestID: "req-1", OldestValidFrom: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)},
+			{RequestID: "req-2", OldestValidFrom: time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)},
+			{RequestID: "req-3", OldestValidFrom: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)},
+		}
+
+		got := formatLinkingUsage(orderID, "", batches)
+		should.Contains(t, got, "3 device slot(s) in use for order "+orderID+".")
+		should.Contains(t, got, "req-1")
+		should.Contains(t, got, "req-2")
+		should.Contains(t, got, "req-3")
+		should.Contains(t, got, "2026-01-02T03:04:05Z")
+		should.Contains(t, got, "2026-03-04T05:06:07Z")
+	})
+
+	t.Run("formats_timestamps_in_utc", func(t *testing.T) {
+		est := time.FixedZone("EST", -5*60*60)
+		batches := []model.TLV2ActiveBatch{
+			{RequestID: "req-1", OldestValidFrom: time.Date(2026, 1, 2, 3, 4, 5, 0, est)},
+		}
+
+		got := formatLinkingUsage(orderID, "", batches)
+		should.Contains(t, got, "2026-01-02T08:04:05Z")
+	})
 }
