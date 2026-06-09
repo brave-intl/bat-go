@@ -162,11 +162,8 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--seats must be a positive integer")
 	}
 
-	switch {
-	case orderID == "" && email == "":
-		return fmt.Errorf("one of --order-id or --email is required")
-	case orderID != "" && email != "":
-		return fmt.Errorf("--order-id and --email are mutually exclusive")
+	if err := requireOrderRef(orderID, email); err != nil {
+		return err
 	}
 
 	privKey, err := loadED25519PrivateKey(viper.GetString("private-key"))
@@ -177,30 +174,15 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	if email != "" {
-		subsBaseURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
-		subsToken := viper.GetString("subscriptions-token")
+	subsBaseURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
+	subsToken := viper.GetString("subscriptions-token")
 
-		if subsBaseURL == "" {
-			return fmt.Errorf("--subscriptions-base-url is required when using --email")
-		}
-
-		if subsToken == "" {
-			return fmt.Errorf("--subscriptions-token is required when using --email")
-		}
-
-		orderID, err = resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
-		if err != nil {
-			return err
-		}
+	orderID, err = resolveOrderID(ctx, client, orderID, email, subsBaseURL, subsToken)
+	if err != nil {
+		return err
 	}
 
-	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
-	if itemID != "" {
-		listURL += "?" + url.Values{"item_id": {itemID}}.Encode()
-	}
-
-	batches, err := listBatches(ctx, client, listURL, privKey)
+	batches, err := listBatches(ctx, client, batchesURL(baseURL, orderID, itemID), privKey)
 	if err != nil {
 		return fmt.Errorf("failed to list batches: %w", err)
 	}
@@ -218,11 +200,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Oldest %d batch(es) at time of listing:\n\n", seats)
-	fmt.Printf("  %-40s  %s\n", "request_id", "oldest_valid_from (UTC)")
-	fmt.Printf("  %-40s  %s\n", strings.Repeat("-", 40), strings.Repeat("-", 24))
-	for _, b := range batches[:seats] {
-		fmt.Printf("  %-40s  %s\n", b.RequestID, b.OldestValidFrom.UTC().Format(time.RFC3339))
-	}
+	fmt.Print(formatBatchTable(batches[:seats]))
 	fmt.Println()
 	fmt.Println("Note: the server selects the oldest N batches independently at delete time.")
 	fmt.Println("      If the order changes before the request arrives, the result may differ.")
@@ -233,8 +211,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	deleteURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
-	if err := deleteBatchSeats(ctx, client, deleteURL, privKey, seats, itemID); err != nil {
+	if err := deleteBatchSeats(ctx, client, batchesURL(baseURL, orderID, ""), privKey, seats, itemID); err != nil {
 		return fmt.Errorf("failed to delete batch seats: %w", err)
 	}
 
@@ -273,11 +250,8 @@ func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--private-key (or SKUS_SUPPORT_PRIVATE_KEY) is required")
 	}
 
-	switch {
-	case orderID == "" && email == "":
-		return fmt.Errorf("one of --order-id or --email is required")
-	case orderID != "" && email != "":
-		return fmt.Errorf("--order-id and --email are mutually exclusive")
+	if err := requireOrderRef(orderID, email); err != nil {
+		return err
 	}
 
 	privKey, err := loadED25519PrivateKey(privKeyPath)
@@ -288,30 +262,15 @@ func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	if email != "" {
-		subsBaseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
-		subsToken := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
+	subsBaseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
+	subsToken := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
 
-		if subsBaseURL == "" {
-			return fmt.Errorf("--subscriptions-base-url is required when using --email")
-		}
-
-		if subsToken == "" {
-			return fmt.Errorf("--subscriptions-token is required when using --email")
-		}
-
-		orderID, err = resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
-		if err != nil {
-			return err
-		}
+	orderID, err = resolveOrderID(ctx, client, orderID, email, subsBaseURL, subsToken)
+	if err != nil {
+		return err
 	}
 
-	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
-	if itemID != "" {
-		listURL += "?" + url.Values{"item_id": {itemID}}.Encode()
-	}
-
-	batches, err := listBatches(ctx, client, listURL, privKey)
+	batches, err := listBatches(ctx, client, batchesURL(baseURL, orderID, itemID), privKey)
 	if err != nil {
 		return fmt.Errorf("failed to list batches: %w", err)
 	}
@@ -319,6 +278,47 @@ func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
 	fmt.Print(formatLinkingUsage(orderID, itemID, batches))
 
 	return nil
+}
+
+// requireOrderRef validates that exactly one of --order-id and --email was given.
+func requireOrderRef(orderID, email string) error {
+	switch {
+	case orderID == "" && email == "":
+		return fmt.Errorf("one of --order-id or --email is required")
+	case orderID != "" && email != "":
+		return fmt.Errorf("--order-id and --email are mutually exclusive")
+	}
+
+	return nil
+}
+
+// resolveOrderID returns orderID as-is when set, otherwise resolves email to an
+// order ID via the subscriptions support API, validating the flags it needs.
+func resolveOrderID(ctx context.Context, client *http.Client, orderID, email, subsBaseURL, subsToken string) (string, error) {
+	if orderID != "" {
+		return orderID, nil
+	}
+
+	if subsBaseURL == "" {
+		return "", fmt.Errorf("--subscriptions-base-url is required when using --email")
+	}
+
+	if subsToken == "" {
+		return "", fmt.Errorf("--subscriptions-token is required when using --email")
+	}
+
+	return resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
+}
+
+// batchesURL builds the SKUs credential batches endpoint URL for an order,
+// scoped to an order item when itemID is non-empty.
+func batchesURL(baseURL, orderID, itemID string) string {
+	u := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
+	if itemID != "" {
+		u += "?" + url.Values{"item_id": {itemID}}.Encode()
+	}
+
+	return u
 }
 
 // formatLinkingUsage renders the slot usage report for an order. Each active
@@ -338,6 +338,15 @@ func formatLinkingUsage(orderID, itemID string, batches []model.TLV2ActiveBatch)
 	}
 
 	fmt.Fprintf(&b, "%d device slot(s) in use for %s.\n\n", len(batches), scope)
+	b.WriteString(formatBatchTable(batches))
+
+	return b.String()
+}
+
+// formatBatchTable renders the request_id / oldest_valid_from table shared by
+// the usage report and the reset confirmation listing.
+func formatBatchTable(batches []model.TLV2ActiveBatch) string {
+	var b strings.Builder
 
 	fmt.Fprintf(&b, "  %-40s  %s\n", "request_id", "oldest_valid_from (UTC)")
 	fmt.Fprintf(&b, "  %-40s  %s\n", strings.Repeat("-", 40), strings.Repeat("-", 24))

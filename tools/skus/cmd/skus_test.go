@@ -365,3 +365,64 @@ func TestFormatLinkingUsage(t *testing.T) {
 		should.Contains(t, got, "2026-01-02T08:04:05Z")
 	})
 }
+
+func TestRequireOrderRef(t *testing.T) {
+	should.Error(t, requireOrderRef("", ""))
+	should.Error(t, requireOrderRef("some-order", "user@example.com"))
+	should.NoError(t, requireOrderRef("some-order", ""))
+	should.NoError(t, requireOrderRef("", "user@example.com"))
+}
+
+func TestResolveOrderID(t *testing.T) {
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	t.Run("order_id_passes_through", func(t *testing.T) {
+		got, err := resolveOrderID(context.Background(), client, "some-order", "", "", "")
+		must.NoError(t, err)
+		should.Equal(t, "some-order", got)
+	})
+
+	t.Run("email_requires_subs_base_url", func(t *testing.T) {
+		_, err := resolveOrderID(context.Background(), client, "", "user@example.com", "", "tok")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "--subscriptions-base-url")
+	})
+
+	t.Run("email_requires_subs_token", func(t *testing.T) {
+		_, err := resolveOrderID(context.Background(), client, "", "user@example.com", "http://localhost", "")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "--subscriptions-token")
+	})
+
+	t.Run("email_resolves_via_support_api", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.Equal(t, "/v1/support/subscribers/user@example.com", r.URL.Path)
+			json.NewEncoder(w).Encode(activeSubsListResp{Results: []activeSubsResp{
+				{Email: "user@example.com", OrderID: "ord-1", ProductName: "VPN"},
+			}})
+		}))
+		defer srv.Close()
+
+		got, err := resolveOrderID(context.Background(), client, "", "user@example.com", srv.URL, "tok")
+		must.NoError(t, err)
+		should.Equal(t, "ord-1", got)
+	})
+}
+
+func TestBatchesURL(t *testing.T) {
+	const base = "https://payment.example.com"
+	const orderID = "550e8400-e29b-41d4-a716-446655440000"
+
+	t.Run("without_item_id", func(t *testing.T) {
+		should.Equal(t,
+			base+"/v1/orders/"+orderID+"/credentials/batches",
+			batchesURL(base, orderID, ""))
+	})
+
+	t.Run("with_item_id", func(t *testing.T) {
+		should.Equal(t,
+			base+"/v1/orders/"+orderID+"/credentials/batches?item_id=ad0be000-0000-4000-a000-000000000000",
+			batchesURL(base, orderID, "ad0be000-0000-4000-a000-000000000000"))
+	})
+}
