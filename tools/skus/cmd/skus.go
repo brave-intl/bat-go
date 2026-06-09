@@ -43,9 +43,9 @@ email you will be prompted to choose one.
 The command shows which batches will be removed and asks for confirmation
 before making any changes.
 
-Note: email lookup only works for desktop/browser orders created through
-the subscriptions service. iOS and Android orders use anonymous receipts
-and cannot be looked up by email.`,
+Note: email lookup requires the order to be linked to a Premium account.
+Mobile (iOS/Android) purchases are found by email once linked; an order that
+has only been created anonymously and not yet linked has no associated email.`,
 	RunE: runResetLinkingLimit,
 }
 
@@ -221,8 +221,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 }
 
 // flagOrEnv returns the command-line flag value, falling back to the environment
-// variable when the flag is unset. show-linking-usage reads its flags this way
-// rather than through the shared viper bindings used by reset-linking-limit.
+// variable when the flag is unset.
 func flagOrEnv(cmd *cobra.Command, flag, env string) string {
 	if v, _ := cmd.Flags().GetString(flag); v != "" {
 		return v
@@ -280,7 +279,6 @@ func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// requireOrderRef validates that exactly one of --order-id and --email was given.
 func requireOrderRef(orderID, email string) error {
 	switch {
 	case orderID == "" && email == "":
@@ -343,8 +341,7 @@ func formatLinkingUsage(orderID, itemID string, batches []model.TLV2ActiveBatch)
 	return b.String()
 }
 
-// formatBatchTable renders the request_id / oldest_valid_from table shared by
-// the usage report and the reset confirmation listing.
+// formatBatchTable renders active batches as a request_id / oldest_valid_from table.
 func formatBatchTable(batches []model.TLV2ActiveBatch) string {
 	var b strings.Builder
 
