@@ -1,10 +1,17 @@
+// Package cmd implements the skus support CLI.
+//
+// All commands talk exclusively to the subscriptions service support API with
+// a bearer token.
+//
+// The registration onto rootcmd.RootCmd in init is the only coupling to the
+// bat-go repo; everything else is stdlib plus cobra, so the package can be
+// lifted into its own repository.
 package cmd
 
 import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,15 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/libs/handlers"
-	"github.com/brave-intl/bat-go/services/skus"
-	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
 var SkusCmd = &cobra.Command{
@@ -31,42 +32,42 @@ var SkusCmd = &cobra.Command{
 	Short: "provides skus service support tooling",
 }
 
-var resetLinkingLimitCmd = &cobra.Command{
-	Use:   "reset-linking-limit",
-	Short: "Free device linking slots for a premium order",
-	Long: `Frees N device linking slots for a TLV2 order by deleting the oldest active
-credential batches. Each batch corresponds to one linked device.
-
-The order can be identified by --order-id or by --email (which looks up
-the subscriber in the subscriptions service). If multiple orders match an
-email you will be prompted to choose one.
-
-The command shows which batches will be removed and asks for confirmation
-before making any changes.
-
-Note: email lookup requires the order to be linked to a Premium account.
-Mobile (iOS/Android) purchases are found by email once linked; an order that
-has only been created anonymously and not yet linked has no associated email.`,
-	RunE: runResetLinkingLimit,
-}
-
 var showLinkingUsageCmd = &cobra.Command{
 	Use:   "show-linking-usage",
-	Short: "Show device linking slot usage for a premium order",
-	Long: `Shows how many device linking slots are in use for a TLV2 order by listing
-its active credential batches. Each batch corresponds to one linked device.
+	Short: "Show device linking slot usage for a premium subscription",
+	Long: `Shows how many device linking slots are in use for a subscription, out of its
+current limit, with one row per linked device. Read-only; never makes changes.
 
-This is the read-only counterpart of reset-linking-limit: it lists the same
-batches the deletion flow shows, but never makes changes.
+The subscriber is identified by --email (looked up via the subscriptions
+support API). If multiple subscriptions match you will be prompted to choose
+one. Alternatively pass --subscription-id to target a subscription directly.
 
-The order can be identified by --order-id or by --email (which looks up
-the subscriber in the subscriptions service). If multiple orders match an
-email you will be prompted to choose one.
-
-Note: email lookup requires the order to be linked to a Premium account.
+Note: email lookup requires the subscription to be linked to a Premium account.
 Mobile (iOS/Android) purchases are found by email once linked; an order that
 has only been created anonymously and not yet linked has no associated email.`,
 	RunE: runShowLinkingUsage,
+}
+
+var resetLinkingLimitCmd = &cobra.Command{
+	Use:   "reset-linking-limit",
+	Short: "Free device linking slots for a premium subscription",
+	Long: `Frees N device linking slots for a subscription by deleting the oldest active
+credential batches. Each batch corresponds to one linked device.
+
+The command goes through the subscriptions service support API, which owns the
+operation and rejects a reset that exceeds the slots currently in use.
+
+The subscriber is identified by --email (looked up via the subscriptions
+support API). If multiple subscriptions match you will be prompted to choose
+one. Alternatively pass --subscription-id to target a subscription directly.
+
+The command shows the current slot usage and asks for confirmation before
+making any changes.
+
+Note: email lookup requires the subscription to be linked to a Premium account.
+Mobile (iOS/Android) purchases are found by email once linked; an order that
+has only been created anonymously and not yet linked has no associated email.`,
+	RunE: runResetLinkingLimit,
 }
 
 var extendLinkingLimitCmd = &cobra.Command{
@@ -75,9 +76,8 @@ var extendLinkingLimitCmd = &cobra.Command{
 	Long: `Grants a self-service-style linking-limit extension for a TLV2 subscriber,
 adding device slots without first unlinking a device.
 
-Unlike reset-linking-limit, this goes through the subscriptions service support
-API rather than talking to SKUs directly. Subscriptions owns and enforces the
-same policy as the in-browser self-service flow, so the same gates apply:
+Subscriptions owns and enforces the same policy as the in-browser self-service
+flow, so the same gates apply:
 
   - the subscriber must currently be at their device limit,
   - extensions are capped per subscription over its lifetime,
@@ -97,176 +97,33 @@ only been created anonymously and not yet linked has no associated email.`,
 }
 
 func init() {
-	SkusCmd.AddCommand(resetLinkingLimitCmd)
 	rootcmd.RootCmd.AddCommand(SkusCmd)
 
-	fb := rootcmd.NewFlagBuilder(resetLinkingLimitCmd)
-
-	fb.Flag().String("skus-base-url", "",
-		"base URL of the SKUs service (e.g. https://payment.rewards.brave.com)").
-		Env("SKUS_BASE_URL").
-		Bind("skus-base-url")
-
-	fb.Flag().String("order-id", "",
-		"the order UUID to reset linking slots for (mutually exclusive with --email)").
-		Bind("order-id")
-
-	fb.Flag().String("email", "",
-		"subscriber email to look up the order ID (mutually exclusive with --order-id)").
-		Env("SUBSCRIBER_EMAIL").
-		Bind("email")
-
-	fb.Flag().String("subscriptions-base-url", "",
-		"base URL of the subscriptions service, required when using --email").
-		Env("SUBSCRIPTIONS_BASE_URL").
-		Bind("subscriptions-base-url")
-
-	fb.Flag().String("subscriptions-token", "",
-		"bearer token for the subscriptions support API, required when using --email").
-		Env("SUBSCRIPTIONS_SUPPORT_TOKEN").
-		Bind("subscriptions-token")
-
-	fb.Flag().Int("seats", 0,
-		"number of device slots to free (deletes this many oldest batches)").
-		Bind("seats").
-		Require()
-
-	fb.Flag().String("item-id", "",
-		"optional: scope the reset to a specific order item UUID").
-		Bind("item-id")
-
-	fb.Flag().String("private-key", "",
-		"path to the ed25519 private key file in SSH format used to sign requests").
-		Env("SKUS_SUPPORT_PRIVATE_KEY").
-		Bind("private-key")
-
 	SkusCmd.AddCommand(showLinkingUsageCmd)
-
-	// These flags are intentionally not bound to viper. reset-linking-limit
-	// already binds the global viper keys for these names to its own flags,
-	// and viper.BindPFlag is global, so binding them again here would clobber
-	// that command. runShowLinkingUsage reads these directly from the command,
-	// falling back to the environment.
-	sfb := rootcmd.NewFlagBuilder(showLinkingUsageCmd)
-
-	sfb.Flag().String("skus-base-url", "",
-		"base URL of the SKUs service, e.g. https://payment.rewards.brave.com [env: SKUS_BASE_URL]")
-
-	sfb.Flag().String("order-id", "",
-		"the order UUID to show slot usage for (mutually exclusive with --email)")
-
-	sfb.Flag().String("email", "",
-		"subscriber email to look up the order ID (mutually exclusive with --order-id) [env: SUBSCRIBER_EMAIL]")
-
-	sfb.Flag().String("subscriptions-base-url", "",
-		"base URL of the subscriptions service, required when using --email [env: SUBSCRIPTIONS_BASE_URL]")
-
-	sfb.Flag().String("subscriptions-token", "",
-		"bearer token for the subscriptions support API, required when using --email [env: SUBSCRIPTIONS_SUPPORT_TOKEN]")
-
-	sfb.Flag().String("item-id", "",
-		"optional: scope the listing to a specific order item UUID")
-
-	sfb.Flag().String("private-key", "",
-		"path to the ed25519 private key file in SSH format used to sign requests [env: SKUS_SUPPORT_PRIVATE_KEY]")
-
+	SkusCmd.AddCommand(resetLinkingLimitCmd)
 	SkusCmd.AddCommand(extendLinkingLimitCmd)
 
-	// These flags are intentionally not bound to viper. reset-linking-limit
-	// already binds the global viper keys "email", "subscriptions-base-url" and
-	// "subscriptions-token" to its own flags, and viper.BindPFlag is global, so
-	// binding them again here would clobber that command. runExtendLinkingLimit
-	// reads these directly from the command, falling back to the environment.
-	efb := rootcmd.NewFlagBuilder(extendLinkingLimitCmd)
+	addSupportFlags(showLinkingUsageCmd)
+	addSupportFlags(resetLinkingLimitCmd)
+	addSupportFlags(extendLinkingLimitCmd)
 
-	efb.Flag().String("subscriptions-base-url", "",
-		"base URL of the subscriptions service, e.g. https://subscriptions.brave.com [env: SUBSCRIPTIONS_BASE_URL]")
-
-	efb.Flag().String("subscriptions-token", "",
-		"bearer token for the subscriptions support API [env: SUBSCRIPTIONS_SUPPORT_TOKEN]")
-
-	efb.Flag().String("email", "",
-		"subscriber email to look up the subscription, mutually exclusive with --subscription-id [env: SUBSCRIBER_EMAIL]")
-
-	efb.Flag().String("subscription-id", "",
-		"the subscription UUID to extend (mutually exclusive with --email)")
+	resetLinkingLimitCmd.Flags().Int("seats", 0,
+		"number of device slots to free (deletes this many oldest batches)")
 }
 
-func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
-	baseURL := strings.TrimRight(viper.GetString("skus-base-url"), "/")
-	orderID := viper.GetString("order-id")
-	email := strings.TrimSpace(viper.GetString("email"))
-	seats := viper.GetInt("seats")
-	itemID := viper.GetString("item-id")
+// addSupportFlags registers the flags shared by every support command.
+func addSupportFlags(cmd *cobra.Command) {
+	cmd.Flags().String("subscriptions-base-url", "",
+		"base URL of the subscriptions service, e.g. https://subscriptions.brave.com [env: SUBSCRIPTIONS_BASE_URL]")
 
-	if baseURL == "" {
-		return fmt.Errorf("--skus-base-url (or SKUS_BASE_URL) is required")
-	}
+	cmd.Flags().String("subscriptions-token", "",
+		"bearer token for the subscriptions support API [env: SUBSCRIPTIONS_SUPPORT_TOKEN]")
 
-	if viper.GetString("private-key") == "" {
-		return fmt.Errorf("--private-key (or SKUS_SUPPORT_PRIVATE_KEY) is required")
-	}
+	cmd.Flags().String("email", "",
+		"subscriber email to look up the subscription (mutually exclusive with --subscription-id) [env: SUBSCRIBER_EMAIL]")
 
-	if seats <= 0 {
-		return fmt.Errorf("--seats must be a positive integer")
-	}
-
-	if err := requireOrderRef(orderID, email); err != nil {
-		return err
-	}
-
-	privKey, err := loadED25519PrivateKey(viper.GetString("private-key"))
-	if err != nil {
-		return fmt.Errorf("failed to load private key: %w", err)
-	}
-
-	ctx := cmd.Context()
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	subsBaseURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
-	subsToken := viper.GetString("subscriptions-token")
-
-	orderID, err = resolveOrderID(ctx, client, orderID, email, subsBaseURL, subsToken)
-	if err != nil {
-		return err
-	}
-
-	batches, err := listBatches(ctx, client, batchesURL(baseURL, orderID, itemID), privKey)
-	if err != nil {
-		return fmt.Errorf("failed to list batches: %w", err)
-	}
-
-	if len(batches) == 0 {
-		fmt.Println("No active device batches found for this order.")
-		return nil
-	}
-
-	fmt.Printf("Order %s has %d active device batch(es).\n\n", orderID, len(batches))
-
-	if seats > len(batches) {
-		fmt.Printf("Warning: --seats (%d) exceeds active batch count (%d). All batches will be removed.\n\n", seats, len(batches))
-		seats = len(batches)
-	}
-
-	fmt.Printf("Oldest %d batch(es) at time of listing:\n\n", seats)
-	fmt.Print(formatBatchTable(batches[:seats]))
-	fmt.Println()
-	fmt.Println("Note: the server selects the oldest N batches independently at delete time.")
-	fmt.Println("      If the order changes before the request arrives, the result may differ.")
-	fmt.Println()
-
-	if !confirm(fmt.Sprintf("Delete %d seat(s) for order %s?", seats, orderID)) {
-		fmt.Println("Aborted.")
-		return nil
-	}
-
-	if err := deleteBatchSeats(ctx, client, batchesURL(baseURL, orderID, ""), privKey, seats, itemID); err != nil {
-		return fmt.Errorf("failed to delete batch seats: %w", err)
-	}
-
-	fmt.Printf("Done. %d device slot(s) freed for order %s.\n", seats, orderID)
-
-	return nil
+	cmd.Flags().String("subscription-id", "",
+		"the subscription UUID to target (mutually exclusive with --email)")
 }
 
 // flagOrEnv returns the command-line flag value, falling back to the environment
@@ -279,169 +136,164 @@ func flagOrEnv(cmd *cobra.Command, flag, env string) string {
 	return os.Getenv(env)
 }
 
-func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
-	baseURL := strings.TrimRight(flagOrEnv(cmd, "skus-base-url", "SKUS_BASE_URL"), "/")
-	email := strings.TrimSpace(flagOrEnv(cmd, "email", "SUBSCRIBER_EMAIL"))
-	privKeyPath := flagOrEnv(cmd, "private-key", "SKUS_SUPPORT_PRIVATE_KEY")
-
-	orderID, _ := cmd.Flags().GetString("order-id")
-	orderID = strings.TrimSpace(orderID)
-
-	itemID, _ := cmd.Flags().GetString("item-id")
-	itemID = strings.TrimSpace(itemID)
+// subsConn reads and validates the subscriptions support API connection flags,
+// returning the base URL and bearer token.
+func subsConn(cmd *cobra.Command) (string, string, error) {
+	baseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
+	token := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
 
 	if baseURL == "" {
-		return fmt.Errorf("--skus-base-url (or SKUS_BASE_URL) is required")
+		return "", "", fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required")
 	}
 
-	if privKeyPath == "" {
-		return fmt.Errorf("--private-key (or SKUS_SUPPORT_PRIVATE_KEY) is required")
+	if token == "" {
+		return "", "", fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required")
 	}
 
-	if err := requireOrderRef(orderID, email); err != nil {
-		return err
-	}
-
-	privKey, err := loadED25519PrivateKey(privKeyPath)
-	if err != nil {
-		return fmt.Errorf("failed to load private key: %w", err)
-	}
-
-	ctx := cmd.Context()
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	subsBaseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
-	subsToken := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
-
-	orderID, err = resolveOrderID(ctx, client, orderID, email, subsBaseURL, subsToken)
-	if err != nil {
-		return err
-	}
-
-	batches, err := listBatches(ctx, client, batchesURL(baseURL, orderID, itemID), privKey)
-	if err != nil {
-		return fmt.Errorf("failed to list batches: %w", err)
-	}
-
-	fmt.Print(formatLinkingUsage(orderID, itemID, batches))
-
-	return nil
+	return baseURL, token, nil
 }
 
-func requireOrderRef(orderID, email string) error {
-	switch {
-	case orderID == "" && email == "":
-		return fmt.Errorf("one of --order-id or --email is required")
-	case orderID != "" && email != "":
-		return fmt.Errorf("--order-id and --email are mutually exclusive")
-	}
-
-	return nil
-}
-
-// resolveOrderID returns orderID as-is when set, otherwise resolves email to an
-// order ID via the subscriptions support API, validating the flags it needs.
-func resolveOrderID(ctx context.Context, client *http.Client, orderID, email, subsBaseURL, subsToken string) (string, error) {
-	if orderID != "" {
-		return orderID, nil
-	}
-
-	if subsBaseURL == "" {
-		return "", fmt.Errorf("--subscriptions-base-url is required when using --email")
-	}
-
-	if subsToken == "" {
-		return "", fmt.Errorf("--subscriptions-token is required when using --email")
-	}
-
-	return resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
-}
-
-// batchesURL builds the SKUs credential batches endpoint URL for an order,
-// scoped to an order item when itemID is non-empty.
-func batchesURL(baseURL, orderID, itemID string) string {
-	u := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
-	if itemID != "" {
-		u += "?" + url.Values{"item_id": {itemID}}.Encode()
-	}
-
-	return u
-}
-
-// formatLinkingUsage renders the slot usage report for an order. Each active
-// batch corresponds to one linked device, so the batch count is the number of
-// device slots in use.
-func formatLinkingUsage(orderID, itemID string, batches []model.TLV2ActiveBatch) string {
-	var b strings.Builder
-
-	scope := fmt.Sprintf("order %s", orderID)
-	if itemID != "" {
-		scope = fmt.Sprintf("order %s (item %s)", orderID, itemID)
-	}
-
-	if len(batches) == 0 {
-		fmt.Fprintf(&b, "No device slots are in use for %s.\n", scope)
-		return b.String()
-	}
-
-	fmt.Fprintf(&b, "%d device slot(s) in use for %s.\n\n", len(batches), scope)
-	b.WriteString(formatBatchTable(batches))
-
-	return b.String()
-}
-
-// formatBatchTable renders active batches as a request_id / oldest_valid_from table.
-func formatBatchTable(batches []model.TLV2ActiveBatch) string {
-	var b strings.Builder
-
-	fmt.Fprintf(&b, "  %-40s  %s\n", "request_id", "oldest_valid_from (UTC)")
-	fmt.Fprintf(&b, "  %-40s  %s\n", strings.Repeat("-", 40), strings.Repeat("-", 24))
-	for _, batch := range batches {
-		fmt.Fprintf(&b, "  %-40s  %s\n", batch.RequestID, batch.OldestValidFrom.UTC().Format(time.RFC3339))
-	}
-
-	return b.String()
-}
-
-func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
-	subsBaseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
-	subsToken := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
-	email := strings.TrimSpace(flagOrEnv(cmd, "email", "SUBSCRIBER_EMAIL"))
-
+// subRef reads the subscription identification flags.
+func subRef(cmd *cobra.Command) (string, string) {
 	subID, _ := cmd.Flags().GetString("subscription-id")
-	subID = strings.TrimSpace(subID)
+	email := flagOrEnv(cmd, "email", "SUBSCRIBER_EMAIL")
 
-	if subsBaseURL == "" {
-		return fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required")
-	}
+	return strings.TrimSpace(subID), strings.TrimSpace(email)
+}
 
-	if subsToken == "" {
-		return fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required")
-	}
-
+// requireSubRef validates that exactly one of --subscription-id and --email
+// was given.
+func requireSubRef(subID, email string) error {
 	switch {
-	case email == "" && subID == "":
+	case subID == "" && email == "":
 		return fmt.Errorf("one of --email or --subscription-id is required")
-	case email != "" && subID != "":
+	case subID != "" && email != "":
 		return fmt.Errorf("--email and --subscription-id are mutually exclusive")
 	}
 
+	return nil
+}
+
+// resolveSubID returns the target subscription ID, resolving --email via the
+// support API when --subscription-id was not given. The second return value is
+// the product name when known (email path), for display.
+func resolveSubID(ctx context.Context, client *http.Client, baseURL, token, subID, email string) (string, string, error) {
+	if subID != "" {
+		return subID, "", nil
+	}
+
+	sub, err := resolveSubByEmail(ctx, client, baseURL, email, token)
+	if err != nil {
+		return "", "", err
+	}
+
+	if sub.SubscriptionID == "" {
+		return "", "", fmt.Errorf("subscription for %q has no subscription_id", email)
+	}
+
+	return sub.SubscriptionID, sub.ProductName, nil
+}
+
+func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
+	baseURL, token, err := subsConn(cmd)
+	if err != nil {
+		return err
+	}
+
+	subID, email := subRef(cmd)
+	if err := requireSubRef(subID, email); err != nil {
+		return err
+	}
+
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	productName := ""
-	if email != "" {
-		sub, err := resolveSubByEmail(ctx, client, subsBaseURL, email, subsToken)
-		if err != nil {
-			return err
-		}
+	subID, productName, err := resolveSubID(ctx, client, baseURL, token, subID, email)
+	if err != nil {
+		return err
+	}
 
-		if sub.SubscriptionID == "" {
-			return fmt.Errorf("subscription for %q has no subscription_id; cannot extend", email)
-		}
+	usage, err := getLinkingUsage(ctx, client, baseURL, subID, token)
+	if err != nil {
+		return err
+	}
 
-		subID = sub.SubscriptionID
-		productName = sub.ProductName
+	fmt.Print(formatLinkingUsage(subID, productName, usage))
+
+	return nil
+}
+
+func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
+	baseURL, token, err := subsConn(cmd)
+	if err != nil {
+		return err
+	}
+
+	seats, _ := cmd.Flags().GetInt("seats")
+	if seats <= 0 {
+		return fmt.Errorf("--seats must be a positive integer")
+	}
+
+	subID, email := subRef(cmd)
+	if err := requireSubRef(subID, email); err != nil {
+		return err
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	subID, productName, err := resolveSubID(ctx, client, baseURL, token, subID, email)
+	if err != nil {
+		return err
+	}
+
+	usage, err := getLinkingUsage(ctx, client, baseURL, subID, token)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(formatLinkingUsage(subID, productName, usage))
+	fmt.Println()
+
+	if seats > usage.Active {
+		return fmt.Errorf("--seats (%d) exceeds device slots in use (%d)", seats, usage.Active)
+	}
+
+	fmt.Println("Note: the server selects the oldest N batches independently at delete time.")
+	fmt.Println("      If the subscription changes before the request arrives, the result may differ.")
+	fmt.Println()
+
+	if !confirm(fmt.Sprintf("Delete %d seat(s) for subscription %s?", seats, subID)) {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	if err := resetLinkingSlots(ctx, client, baseURL, subID, token, seats); err != nil {
+		return err
+	}
+
+	fmt.Printf("Done. %d device slot(s) freed for subscription %s.\n", seats, subID)
+
+	return nil
+}
+
+func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
+	baseURL, token, err := subsConn(cmd)
+	if err != nil {
+		return err
+	}
+
+	subID, email := subRef(cmd)
+	if err := requireSubRef(subID, email); err != nil {
+		return err
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	subID, productName, err := resolveSubID(ctx, client, baseURL, token, subID, email)
+	if err != nil {
+		return err
 	}
 
 	prompt := fmt.Sprintf("Extend the device linking limit for subscription %s?", subID)
@@ -459,7 +311,7 @@ func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if err := extendLinkingLimit(ctx, client, subsBaseURL, subID, subsToken); err != nil {
+	if err := extendLinkingLimit(ctx, client, baseURL, subID, token); err != nil {
 		return err
 	}
 
@@ -468,11 +320,126 @@ func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// linkingBatch is one active credential batch, corresponding to one linked device.
+type linkingBatch struct {
+	RequestID       string    `json:"request_id"`
+	OldestValidFrom time.Time `json:"oldest_valid_from"`
+}
+
+// linkingUsageResp is the support API's slot usage report for a subscription.
+type linkingUsageResp struct {
+	Limit   int            `json:"limit"`
+	Active  int            `json:"active"`
+	Batches []linkingBatch `json:"batches"`
+}
+
+// respBodyLimit caps reads of success response bodies; errBodyLimit caps
+// reads of error response bodies, which only feed error messages.
+const (
+	respBodyLimit = 1 << 20
+	errBodyLimit  = 4096
+)
+
+// supportBatchesURL builds the support API credential batches endpoint URL
+// for a subscription.
+func supportBatchesURL(baseURL, subID string) string {
+	return fmt.Sprintf("%s/v1/support/subscriptions/%s/credentials/batches", baseURL, url.PathEscape(subID))
+}
+
+// appError mirrors the subscriptions support API error envelope.
+type appError struct {
+	Message   string `json:"message"`
+	ErrorCode string `json:"errorCode"`
+}
+
+// supportAPIError renders a non-200 support API response body as an error,
+// surfacing the envelope's errorCode and message when present.
+func supportAPIError(action string, statusCode int, body []byte) error {
+	var ae appError
+	if err := json.Unmarshal(body, &ae); err != nil || ae.Message == "" {
+		return fmt.Errorf("%s failed: unexpected status %d: %s", action, statusCode, body)
+	}
+
+	if ae.ErrorCode != "" {
+		return fmt.Errorf("%s failed (status %d, %s): %s", action, statusCode, ae.ErrorCode, ae.Message)
+	}
+
+	return fmt.Errorf("%s failed (status %d): %s", action, statusCode, ae.Message)
+}
+
+// getLinkingUsage fetches the slot usage report for a subscription.
+func getLinkingUsage(ctx context.Context, client *http.Client, baseURL, subID, token string) (*linkingUsageResp, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, supportBatchesURL(baseURL, subID), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, respBodyLimit))
+	if err != nil {
+		return nil, fmt.Errorf("usage lookup failed: status %d: failed to read response body: %w", resp.StatusCode, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, supportAPIError("usage lookup", resp.StatusCode, body)
+	}
+
+	result := &linkingUsageResp{}
+	if err := json.Unmarshal(body, result); err != nil {
+		return nil, fmt.Errorf("failed to decode usage response: %w", err)
+	}
+
+	return result, nil
+}
+
+// resetLinkingSlots frees device slots for a subscription by deleting its
+// oldest credential batches.
+func resetLinkingSlots(ctx context.Context, client *http.Client, baseURL, subID, token string, seats int) error {
+	endpoint := supportBatchesURL(baseURL, subID)
+
+	payload, err := json.Marshal(struct {
+		Seats int `json:"seats"`
+	}{Seats: seats})
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, errBodyLimit))
+	if err != nil {
+		return fmt.Errorf("reset failed: unexpected status %d: failed to read response body: %w", resp.StatusCode, err)
+	}
+
+	return supportAPIError("reset", resp.StatusCode, body)
+}
+
 // extendLinkingLimit calls the subscriptions support API to grant an extension.
-// The endpoint returns 200 on success and a handlers.AppError envelope on
-// failure, with errorCode set for the policy-gate cases.
 func extendLinkingLimit(ctx context.Context, client *http.Client, baseURL, subID, token string) error {
-	endpoint := fmt.Sprintf("%s/v1/support/subscriptions/%s/credentials/batches/extend", baseURL, url.PathEscape(subID))
+	endpoint := supportBatchesURL(baseURL, subID) + "/extend"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
@@ -491,21 +458,47 @@ func extendLinkingLimit(ctx context.Context, client *http.Client, baseURL, subID
 		return nil
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, errBodyLimit))
 	if err != nil {
 		return fmt.Errorf("extension failed: unexpected status %d: failed to read response body: %w", resp.StatusCode, err)
 	}
 
-	var ae handlers.AppError
-	if err := json.Unmarshal(body, &ae); err != nil || ae.Message == "" {
-		return fmt.Errorf("extension failed: unexpected status %d: %s", resp.StatusCode, body)
+	return supportAPIError("extension", resp.StatusCode, body)
+}
+
+// formatLinkingUsage renders the slot usage report for a subscription, with
+// one row per linked device.
+func formatLinkingUsage(subID, productName string, usage *linkingUsageResp) string {
+	var b strings.Builder
+
+	scope := fmt.Sprintf("subscription %s", subID)
+	if productName != "" {
+		scope = fmt.Sprintf("subscription %s (%s)", subID, productName)
 	}
 
-	if ae.ErrorCode != "" {
-		return fmt.Errorf("extension failed (status %d, %s): %s", resp.StatusCode, ae.ErrorCode, ae.Message)
+	fmt.Fprintf(&b, "%d of %d device slot(s) in use for %s.\n", usage.Active, usage.Limit, scope)
+
+	if len(usage.Batches) == 0 {
+		return b.String()
 	}
 
-	return fmt.Errorf("extension failed (status %d): %s", resp.StatusCode, ae.Message)
+	b.WriteString("\n")
+	b.WriteString(formatBatchTable(usage.Batches))
+
+	return b.String()
+}
+
+// formatBatchTable renders active batches as a request_id / oldest_valid_from table.
+func formatBatchTable(batches []linkingBatch) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "  %-40s  %s\n", "request_id", "oldest_valid_from (UTC)")
+	fmt.Fprintf(&b, "  %-40s  %s\n", strings.Repeat("-", 40), strings.Repeat("-", 24))
+	for _, batch := range batches {
+		fmt.Fprintf(&b, "  %-40s  %s\n", batch.RequestID, batch.OldestValidFrom.UTC().Format(time.RFC3339))
+	}
+
+	return b.String()
 }
 
 type activeSubsResp struct {
@@ -517,17 +510,6 @@ type activeSubsResp struct {
 
 type activeSubsListResp struct {
 	Results []activeSubsResp `json:"results"`
-}
-
-// resolveOrderIDByEmail looks up the subscriber's order ID via the subscriptions
-// support API, prompting for a choice when the email maps to several subscriptions.
-func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, email, token string) (string, error) {
-	sub, err := resolveSubByEmail(ctx, client, baseURL, email, token)
-	if err != nil {
-		return "", err
-	}
-
-	return sub.OrderID, nil
 }
 
 // resolveSubByEmail fetches the active subscriptions for an email and returns the
@@ -616,104 +598,6 @@ func selectActiveSub(results []activeSubsResp, email string) (activeSubsResp, er
 
 		return results[n-1], nil
 	}
-}
-
-func listBatches(ctx context.Context, client *http.Client, endpoint string, key ed25519.PrivateKey) ([]model.TLV2ActiveBatch, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := skus.SignSupportRequest(key, req); err != nil {
-		return nil, fmt.Errorf("failed to sign request: %w", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
-	}
-
-	var result struct {
-		Batches []model.TLV2ActiveBatch `json:"batches"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-
-	return result.Batches, nil
-}
-
-func deleteBatchSeats(
-	ctx context.Context,
-	client *http.Client,
-	endpoint string,
-	key ed25519.PrivateKey,
-	seats int,
-	itemID string,
-) error {
-	payload := struct {
-		Seats  int    `json:"seats"`
-		ItemID string `json:"item_id,omitempty"`
-	}{Seats: seats, ItemID: itemID}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	if err := skus.SignSupportRequest(key, req); err != nil {
-		return fmt.Errorf("failed to sign request: %w", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, respBody)
-	}
-
-	return nil
-}
-
-func loadED25519PrivateKey(path string) (ed25519.PrivateKey, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read key file: %w", err)
-	}
-
-	raw, err := ssh.ParseRawPrivateKey(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse SSH private key: %w", err)
-	}
-
-	key, ok := raw.(*ed25519.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("key is not an ed25519 private key (got %T)", raw)
-	}
-
-	return *key, nil
 }
 
 func confirm(prompt string) bool {
