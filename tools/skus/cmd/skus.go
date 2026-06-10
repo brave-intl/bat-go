@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/viper"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/services/skus"
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -66,6 +67,33 @@ Note: email lookup requires the order to be linked to a Premium account.
 Mobile (iOS/Android) purchases are found by email once linked; an order that
 has only been created anonymously and not yet linked has no associated email.`,
 	RunE: runShowLinkingUsage,
+}
+
+var extendLinkingLimitCmd = &cobra.Command{
+	Use:   "extend-linking-limit",
+	Short: "Grant a device-linking-limit extension for a premium subscriber",
+	Long: `Grants a self-service-style linking-limit extension for a TLV2 subscriber,
+adding device slots without first unlinking a device.
+
+Unlike reset-linking-limit, this goes through the subscriptions service support
+API rather than talking to SKUs directly. Subscriptions owns and enforces the
+same policy as the in-browser self-service flow, so the same gates apply:
+
+  - the subscriber must currently be at their device limit,
+  - extensions are capped per subscription over its lifetime,
+  - and are rate-limited (one per window).
+
+The subscriber is identified by --email (looked up via the subscriptions
+support API). If multiple subscriptions match you will be prompted to choose
+one. Alternatively pass --subscription-id to target a subscription directly.
+
+If the subscriber is not eligible (not at limit, rate-limited, or cap reached)
+the command reports the reason and makes no change.
+
+Note: email lookup requires the subscription to be linked to a Premium account.
+Mobile (iOS/Android) purchases are found by email once linked; an order that has
+only been created anonymously and not yet linked has no associated email.`,
+	RunE: runExtendLinkingLimit,
 }
 
 func init() {
@@ -141,6 +169,27 @@ func init() {
 
 	sfb.Flag().String("private-key", "",
 		"path to the ed25519 private key file in SSH format used to sign requests [env: SKUS_SUPPORT_PRIVATE_KEY]")
+
+	SkusCmd.AddCommand(extendLinkingLimitCmd)
+
+	// These flags are intentionally not bound to viper. reset-linking-limit
+	// already binds the global viper keys "email", "subscriptions-base-url" and
+	// "subscriptions-token" to its own flags, and viper.BindPFlag is global, so
+	// binding them again here would clobber that command. runExtendLinkingLimit
+	// reads these directly from the command, falling back to the environment.
+	efb := rootcmd.NewFlagBuilder(extendLinkingLimitCmd)
+
+	efb.Flag().String("subscriptions-base-url", "",
+		"base URL of the subscriptions service, e.g. https://subscriptions.brave.com [env: SUBSCRIPTIONS_BASE_URL]")
+
+	efb.Flag().String("subscriptions-token", "",
+		"bearer token for the subscriptions support API [env: SUBSCRIPTIONS_SUPPORT_TOKEN]")
+
+	efb.Flag().String("email", "",
+		"subscriber email to look up the subscription, mutually exclusive with --subscription-id [env: SUBSCRIBER_EMAIL]")
+
+	efb.Flag().String("subscription-id", "",
+		"the subscription UUID to extend (mutually exclusive with --email)")
 }
 
 func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
@@ -354,86 +403,218 @@ func formatBatchTable(batches []model.TLV2ActiveBatch) string {
 	return b.String()
 }
 
-type activeSubsResp struct {
-	Email       string `json:"email"`
-	OrderID     string `json:"order_id"`
-	ProductName string `json:"product_name"`
+func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
+	subsBaseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
+	subsToken := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
+	email := strings.TrimSpace(flagOrEnv(cmd, "email", "SUBSCRIBER_EMAIL"))
+
+	subID, _ := cmd.Flags().GetString("subscription-id")
+	subID = strings.TrimSpace(subID)
+
+	if subsBaseURL == "" {
+		return fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required")
+	}
+
+	if subsToken == "" {
+		return fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required")
+	}
+
+	switch {
+	case email == "" && subID == "":
+		return fmt.Errorf("one of --email or --subscription-id is required")
+	case email != "" && subID != "":
+		return fmt.Errorf("--email and --subscription-id are mutually exclusive")
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	productName := ""
+	if email != "" {
+		sub, err := resolveSubByEmail(ctx, client, subsBaseURL, email, subsToken)
+		if err != nil {
+			return err
+		}
+
+		if sub.SubscriptionID == "" {
+			return fmt.Errorf("subscription for %q has no subscription_id; cannot extend", email)
+		}
+
+		subID = sub.SubscriptionID
+		productName = sub.ProductName
+	}
+
+	prompt := fmt.Sprintf("Extend the device linking limit for subscription %s?", subID)
+	if productName != "" {
+		prompt = fmt.Sprintf("Extend the device linking limit for subscription %s (%s)?", subID, productName)
+	}
+
+	fmt.Println("Subscriptions enforces the self-service policy: the subscriber must be at")
+	fmt.Println("their device limit, under the lifetime extension cap, and outside the rate")
+	fmt.Println("limit window. If they are not eligible, no change is made.")
+	fmt.Println()
+
+	if !confirm(prompt) {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	if err := extendLinkingLimit(ctx, client, subsBaseURL, subID, subsToken); err != nil {
+		return err
+	}
+
+	fmt.Printf("Done. Linking limit extended for subscription %s.\n", subID)
+
+	return nil
 }
 
-type activeSubsListResp struct {
-	Results []activeSubsResp `json:"results"`
-}
+// extendLinkingLimit calls the subscriptions support API to grant an extension.
+// The endpoint returns 200 on success and a handlers.AppError envelope on
+// failure, with errorCode set for the policy-gate cases.
+func extendLinkingLimit(ctx context.Context, client *http.Client, baseURL, subID, token string) error {
+	endpoint := fmt.Sprintf("%s/v1/support/subscriptions/%s/credentials/batches/extend", baseURL, url.PathEscape(subID))
 
-func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, email, token string) (string, error) {
-	u := baseURL + "/v1/support/subscribers/" + url.PathEscape(email)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := client.Do(req)
 	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return fmt.Errorf("extension failed: unexpected status %d: failed to read response body: %w", resp.StatusCode, err)
+	}
+
+	var ae handlers.AppError
+	if err := json.Unmarshal(body, &ae); err != nil || ae.Message == "" {
+		return fmt.Errorf("extension failed: unexpected status %d: %s", resp.StatusCode, body)
+	}
+
+	if ae.ErrorCode != "" {
+		return fmt.Errorf("extension failed (status %d, %s): %s", resp.StatusCode, ae.ErrorCode, ae.Message)
+	}
+
+	return fmt.Errorf("extension failed (status %d): %s", resp.StatusCode, ae.Message)
+}
+
+type activeSubsResp struct {
+	Email          string `json:"email"`
+	SubscriptionID string `json:"subscription_id"`
+	OrderID        string `json:"order_id"`
+	ProductName    string `json:"product_name"`
+}
+
+type activeSubsListResp struct {
+	Results []activeSubsResp `json:"results"`
+}
+
+// resolveOrderIDByEmail looks up the subscriber's order ID via the subscriptions
+// support API, prompting for a choice when the email maps to several subscriptions.
+func resolveOrderIDByEmail(ctx context.Context, client *http.Client, baseURL, email, token string) (string, error) {
+	sub, err := resolveSubByEmail(ctx, client, baseURL, email, token)
+	if err != nil {
 		return "", err
+	}
+
+	return sub.OrderID, nil
+}
+
+// resolveSubByEmail fetches the active subscriptions for an email and returns the
+// chosen one, prompting the operator when more than one matches.
+func resolveSubByEmail(ctx context.Context, client *http.Client, baseURL, email, token string) (activeSubsResp, error) {
+	subs, err := fetchActiveSubs(ctx, client, baseURL, email, token)
+	if err != nil {
+		return activeSubsResp{}, err
+	}
+
+	return selectActiveSub(subs, email)
+}
+
+func fetchActiveSubs(ctx context.Context, client *http.Client, baseURL, email, token string) ([]activeSubsResp, error) {
+	u := baseURL + "/v1/support/subscribers/" + url.PathEscape(email)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", fmt.Errorf("no subscriber found for email %q", email)
+		return nil, fmt.Errorf("no subscriber found for email %q", email)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if err != nil {
-			return "", fmt.Errorf("unexpected status %d: failed to read response body: %w", resp.StatusCode, err)
+			return nil, fmt.Errorf("unexpected status %d: failed to read response body: %w", resp.StatusCode, err)
 		}
-		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
+		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, body)
 	}
 
 	var result activeSubsListResp
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	if len(result.Results) == 0 {
-		return "", fmt.Errorf("no active subscriptions found for email %q", email)
+		return nil, fmt.Errorf("no active subscriptions found for email %q", email)
 	}
 
-	if len(result.Results) == 1 {
-		r := result.Results[0]
+	return result.Results, nil
+}
+
+func selectActiveSub(results []activeSubsResp, email string) (activeSubsResp, error) {
+	if len(results) == 1 {
+		r := results[0]
 		fmt.Printf("Found 1 active subscription for %s (%s)\n\n", r.Email, r.ProductName)
-		return r.OrderID, nil
+		return r, nil
 	}
 
-	fmt.Printf("Found %d active subscriptions matching %q:\n\n", len(result.Results), email)
-	fmt.Printf("  %-3s  %-36s  %-20s  %s\n", "#", "order_id", "product", "email")
-	fmt.Printf("  %-3s  %-36s  %-20s  %s\n",
-		"---", strings.Repeat("-", 36), strings.Repeat("-", 20), strings.Repeat("-", 30))
+	fmt.Printf("Found %d active subscriptions matching %q:\n\n", len(results), email)
+	fmt.Printf("  %-3s  %-36s  %-36s  %-20s  %s\n", "#", "subscription_id", "order_id", "product", "email")
+	fmt.Printf("  %-3s  %-36s  %-36s  %-20s  %s\n",
+		"---", strings.Repeat("-", 36), strings.Repeat("-", 36), strings.Repeat("-", 20), strings.Repeat("-", 30))
 
-	for i, r := range result.Results {
-		fmt.Printf("  %-3d  %-36s  %-20s  %s\n", i+1, r.OrderID, r.ProductName, r.Email)
+	for i, r := range results {
+		fmt.Printf("  %-3d  %-36s  %-36s  %-20s  %s\n", i+1, r.SubscriptionID, r.OrderID, r.ProductName, r.Email)
 	}
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Printf("Select subscription [1-%d]: ", len(result.Results))
+		fmt.Printf("Select subscription [1-%d]: ", len(results))
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
-				return "", fmt.Errorf("reading stdin: %w", err)
+				return activeSubsResp{}, fmt.Errorf("reading stdin: %w", err)
 			}
-			return "", fmt.Errorf("no selection made")
+			return activeSubsResp{}, fmt.Errorf("no selection made")
 		}
 
 		n, err := strconv.Atoi(strings.TrimSpace(scanner.Text()))
-		if err != nil || n < 1 || n > len(result.Results) {
-			fmt.Printf("Please enter a number between 1 and %d.\n", len(result.Results))
+		if err != nil || n < 1 || n > len(results) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(results))
 			continue
 		}
 
-		return result.Results[n-1].OrderID, nil
+		return results[n-1], nil
 	}
 }
 
