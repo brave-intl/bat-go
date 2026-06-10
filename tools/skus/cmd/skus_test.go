@@ -294,3 +294,180 @@ func TestListBatchesBodyLimit(t *testing.T) {
 	// We expect an error (JSON parse failure), not a panic or timeout.
 	must.Error(t, err)
 }
+
+func TestExtendLinkingLimit(t *testing.T) {
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	const subID = "1f14a340-edfb-4d14-bbdb-06a6c441568b"
+
+	t.Run("success_on_200", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			should.Equal(t, http.MethodPost, r.Method)
+			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.Equal(t, "/v1/support/subscriptions/"+subID+"/credentials/batches/extend", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "{}")
+		}))
+		defer srv.Close()
+
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		must.NoError(t, err)
+	})
+
+	t.Run("policy_error_surfaces_errorCode_and_message", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, `{"message":"extension rate limited","code":429,"errorCode":"rate_limited"}`)
+		}))
+		defer srv.Close()
+
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "rate_limited")
+		should.Contains(t, err.Error(), "extension rate limited")
+		should.Contains(t, err.Error(), "429")
+	})
+
+	t.Run("error_without_errorCode_uses_message", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"message":"subscription not found","code":404}`)
+		}))
+		defer srv.Close()
+
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "subscription not found")
+		should.NotContains(t, err.Error(), "errorCode")
+	})
+
+	t.Run("non_json_error_falls_back_to_raw_body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "gateway timeout", http.StatusGatewayTimeout)
+		}))
+		defer srv.Close()
+
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "504")
+		should.Contains(t, err.Error(), "gateway timeout")
+	})
+
+	t.Run("context_cancelled_returns_error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		}))
+		defer srv.Close()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := extendLinkingLimit(ctx, client, srv.URL, subID, "tok")
+		must.Error(t, err)
+	})
+}
+
+func TestFetchActiveSubs(t *testing.T) {
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	t.Run("returns_results_with_subscription_id", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.Equal(t, "/v1/support/subscribers/user@example.com", r.URL.Path)
+			json.NewEncoder(w).Encode(activeSubsListResp{Results: []activeSubsResp{
+				{Email: "user@example.com", SubscriptionID: "sub-1", OrderID: "ord-1", ProductName: "VPN"},
+			}})
+		}))
+		defer srv.Close()
+
+		got, err := fetchActiveSubs(context.Background(), client, srv.URL, "user@example.com", "tok")
+		must.NoError(t, err)
+		must.Len(t, got, 1)
+		should.Equal(t, "sub-1", got[0].SubscriptionID)
+	})
+
+	t.Run("not_found", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		_, err := fetchActiveSubs(context.Background(), client, srv.URL, "nope@example.com", "tok")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "no subscriber found")
+	})
+
+	t.Run("empty_results", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(activeSubsListResp{Results: []activeSubsResp{}})
+		}))
+		defer srv.Close()
+
+		_, err := fetchActiveSubs(context.Background(), client, srv.URL, "user@example.com", "tok")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "no active subscriptions")
+	})
+}
+
+func TestSelectActiveSub_single(t *testing.T) {
+	// A single result is returned without prompting.
+	subs := []activeSubsResp{
+		{Email: "user@example.com", SubscriptionID: "sub-1", OrderID: "ord-1", ProductName: "VPN"},
+	}
+
+	got, err := selectActiveSub(subs, "user@example.com")
+	must.NoError(t, err)
+	should.Equal(t, "sub-1", got.SubscriptionID)
+}
+
+func TestSelectActiveSub_multiple(t *testing.T) {
+	subs := []activeSubsResp{
+		{Email: "user@example.com", SubscriptionID: "sub-1", OrderID: "ord-1", ProductName: "VPN"},
+		{Email: "user@example.com", SubscriptionID: "sub-2", OrderID: "ord-2", ProductName: "Leo"},
+	}
+
+	// selectActiveSub prompts on os.Stdin when there is more than one match;
+	// redirect it to a pipe for each case.
+	withStdin := func(t *testing.T, input string) (activeSubsResp, error) {
+		t.Helper()
+
+		r, w, err := os.Pipe()
+		must.NoError(t, err)
+
+		orig := os.Stdin
+		os.Stdin = r
+		t.Cleanup(func() { os.Stdin = orig })
+
+		_, err = fmt.Fprint(w, input)
+		must.NoError(t, err)
+		w.Close()
+
+		return selectActiveSub(subs, "user@example.com")
+	}
+
+	t.Run("selects_by_number", func(t *testing.T) {
+		got, err := withStdin(t, "2\n")
+		must.NoError(t, err)
+		should.Equal(t, "sub-2", got.SubscriptionID)
+	})
+
+	t.Run("reprompts_on_out_of_range_then_valid", func(t *testing.T) {
+		got, err := withStdin(t, "9\n1\n")
+		must.NoError(t, err)
+		should.Equal(t, "sub-1", got.SubscriptionID)
+	})
+
+	t.Run("reprompts_on_non_numeric_then_valid", func(t *testing.T) {
+		got, err := withStdin(t, "abc\n2\n")
+		must.NoError(t, err)
+		should.Equal(t, "sub-2", got.SubscriptionID)
+	})
+
+	t.Run("no_selection_on_eof", func(t *testing.T) {
+		_, err := withStdin(t, "")
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "no selection made")
+	})
+}
