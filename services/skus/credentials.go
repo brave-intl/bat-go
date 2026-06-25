@@ -858,3 +858,73 @@ func shouldTruncateTLV2Creds(ord *model.Order, item *model.OrderItem, ncreds int
 
 	return target, true
 }
+
+type TLV2CredExtender struct {
+	policies model.CredExtensionPolicies
+	tlv2Repo tlv2Store
+}
+
+func NewTLV2CredExtender(policies model.CredExtensionPolicies, tlv2Repo tlv2Store) *TLV2CredExtender {
+	return &TLV2CredExtender{
+		policies: policies,
+		tlv2Repo: tlv2Repo,
+	}
+}
+
+type NextExtension struct {
+	maxActiveBatches int
+	numSelfExt       int
+}
+
+func (e *TLV2CredExtender) GetNextExtIfValid(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error) {
+	if !item.IsCredTLV2() {
+		return NextExtension{}, model.ErrUnsupportedCredType
+	}
+
+	pol, err := e.policies.GetPolicy(item.SKUVnt)
+	if err != nil {
+		return NextExtension{}, err
+	}
+
+	if item.NumSelfExtensions >= pol.MaxPerItem {
+		return NextExtension{}, model.ErrExtensionMaxPerItem
+	}
+
+	if err := checkNextAllowedExtensionTime(pol, item, now); err != nil {
+		return NextExtension{}, err
+	}
+
+	active, err := e.tlv2Repo.UniqBatches(ctx, dbi, item.OrderID, item.ID, now, now)
+	if err != nil {
+		return NextExtension{}, err
+	}
+
+	limit, err := item.MaxActiveBatchesTLV2CredsOrDefault()
+	if err != nil {
+		return NextExtension{}, err
+	}
+
+	if active < limit {
+		return NextExtension{}, model.ErrExtensionNotAtLimit
+	}
+
+	nxt := NextExtension{
+		maxActiveBatches: limit + pol.SlotsPerGrant,
+		numSelfExt:       item.NumSelfExtensions + 1,
+	}
+
+	return nxt, nil
+}
+
+func checkNextAllowedExtensionTime(pol model.CredExtensionPolicy, item *model.OrderItem, now time.Time) error {
+	if item.LastSelfExtensionAt == nil {
+		return nil
+	}
+
+	nextAllowed := item.LastSelfExtensionAt.Add(time.Duration(pol.MinIntervalSeconds) * time.Second)
+	if now.Before(nextAllowed) {
+		return model.ErrExtensionRateLimited
+	}
+
+	return nil
+}

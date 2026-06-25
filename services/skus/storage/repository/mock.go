@@ -152,10 +152,12 @@ func (r *MockOrder) IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerCo
 }
 
 type MockOrderItem struct {
-	FnGet               func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
-	FnFindByOrderID     func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
-	FnInsertMany        func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
-	FnApplyExtensionCAS func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error
+	FnGet                             func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FnGetForUpdate                    func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FnFindByOrderID                   func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
+	FnInsertMany                      func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+	FnApplyExtensionCAS               func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error
+	FnUpdateMaxActiveBatchesTLV2Creds func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, maxActiveBatches int, numSelfExt int, now time.Time) error
 }
 
 func (r *MockOrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
@@ -164,6 +166,14 @@ func (r *MockOrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uui
 	}
 
 	return r.FnGet(ctx, dbi, id)
+}
+
+func (r *MockOrderItem) GetForUpdate(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+	if r.FnGetForUpdate == nil {
+		return &model.OrderItem{}, nil
+	}
+
+	return r.FnGetForUpdate(ctx, dbi, id)
 }
 
 func (r *MockOrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
@@ -188,6 +198,14 @@ func (r *MockOrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtConte
 	}
 
 	return r.FnApplyExtensionCAS(ctx, dbi, id, expected, newLimit)
+}
+
+func (r *MockOrderItem) UpdateMaxActiveBatchesTLV2Creds(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, maxActiveBatches int, numSelfExt int, now time.Time) error {
+	if r.FnUpdateMaxActiveBatchesTLV2Creds == nil {
+		return nil
+	}
+
+	return r.FnUpdateMaxActiveBatchesTLV2Creds(ctx, dbi, id, maxActiveBatches, numSelfExt, now)
 }
 
 type MockIssuer struct {

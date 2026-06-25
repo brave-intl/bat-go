@@ -24,6 +24,13 @@ type AppError struct {
 	Data      interface{} `json:"data,omitempty"`      // application specific data
 }
 
+func WrapErrorWithErrorCode(err error, message string, code int, errCode string) *AppError {
+	ae := WrapError(err, message, code)
+	ae.ErrorCode = errCode
+
+	return ae
+}
+
 // Error makes app error an error
 func (e *AppError) Error() string {
 	msg := "error: " + e.Message

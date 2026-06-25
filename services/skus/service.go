@@ -145,6 +145,10 @@ type radomMessageAuthenticator interface {
 	Authenticate(ctx context.Context, token string) error
 }
 
+type credExtender interface {
+	GetNextExtIfValid(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error)
+}
+
 type Service struct {
 	orderRepo     orderStoreSvc
 	orderItemRepo orderItemStore
@@ -180,6 +184,8 @@ type Service struct {
 	newItemReqSet map[string]model.OrderItemRequestNew
 
 	stripeLocaleValid xstripe.LocaleValidator
+
+	credExtender credExtender
 }
 
 // PauseWorker - pause worker until time specified
@@ -233,6 +239,7 @@ func InitService(
 	issuerRepo issuerStore,
 	payHistRepo orderPayHistoryStore,
 	tlv2repo tlv2Store,
+	credExtender credExtender,
 ) (*Service, error) {
 	lg := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
@@ -400,6 +407,8 @@ func InitService(
 		newItemReqSet: newOrderItemReqNewMobileSet(env),
 
 		stripeLocaleValid: xstripe.NewLocaleValidator(),
+
+		credExtender: credExtender,
 	}
 
 	service.jobs = []srv.Job{
@@ -1437,6 +1446,102 @@ func (s *Service) extendLinkingLimitTx(ctx context.Context, dbi sqlx.ExtContext,
 	}
 
 	return s.orderItemRepo.ApplyExtensionCAS(ctx, dbi, item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit)
+}
+
+func (s *Service) ExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+	if err := s.checkOrderReceiptTx(ctx, s.Datastore.RawDB(), req, orderID); err != nil {
+		return err
+	}
+
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.extendLinkingLimitByOrderID(ctx, tx, orderID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) extendLinkingLimitByOrderID(ctx context.Context, dbi sqlx.ExtContext, orderID uuid.UUID) error {
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord.IsPaid() {
+		return model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return model.ErrInvalidOrderNoItems
+	}
+
+	return s.increaseMaxActiveBatches(ctx, dbi, ord.Items[0].ID, time.Now())
+}
+
+func (s *Service) increaseMaxActiveBatches(ctx context.Context, dbi sqlx.ExtContext, itemID uuid.UUID, now time.Time) error {
+	item, err := s.orderItemRepo.GetForUpdate(ctx, dbi, itemID)
+	if err != nil {
+		return err
+	}
+
+	nxt, err := s.credExtender.GetNextExtIfValid(ctx, dbi, item, now)
+	if err != nil {
+		return err
+	}
+
+	return s.orderItemRepo.UpdateMaxActiveBatchesTLV2Creds(ctx, dbi, item.ID, nxt.maxActiveBatches, nxt.numSelfExt, now)
+}
+
+func (s *Service) CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+	dbi := s.Datastore.RawDB()
+
+	return s.canExtendLinkingLimitWithReceiptTx(ctx, dbi, orderID, req)
+}
+
+func (s *Service) canExtendLinkingLimitWithReceiptTx(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, req model.ReceiptRequest) error {
+	if err := s.checkOrderReceiptTx(ctx, dbi, req, orderID); err != nil {
+		return err
+	}
+
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return err
+	}
+
+	if !ord.IsPaid() {
+		return model.ErrOrderNotPaid
+	}
+
+	if len(ord.Items) == 0 {
+		return model.ErrInvalidOrderNoItems
+	}
+
+	return s.canIncreaseMaxActiveBatches(ctx, dbi, ord.Items[0].ID, time.Now())
+}
+
+func (s *Service) canIncreaseMaxActiveBatches(ctx context.Context, dbi sqlx.QueryerContext, itemID uuid.UUID, now time.Time) error {
+	item, err := s.orderItemRepo.Get(ctx, dbi, itemID)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.credExtender.GetNextExtIfValid(ctx, dbi, item, now)
+
+	return err
+}
+
+func (s *Service) checkOrderReceiptTx(ctx context.Context, dbi sqlx.QueryerContext, req model.ReceiptRequest, orderID uuid.UUID) error {
+	rcpt, err := s.validateReceipt(ctx, req)
+	if err != nil {
+		return &model.ReceiptValidError{Err: err}
+	}
+
+	return checkOrderReceipt(ctx, dbi, s.orderRepo, orderID, rcpt.ExtID)
 }
 
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is
@@ -2672,6 +2777,8 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
 }
 
+// Deprecated: use checkOrderReceiptTx and model.ReceiptValidError.
+// TODO:(clD11) replace checkOrderReceipt methods.
 func (s *Service) checkOrderReceipt(ctx context.Context, req model.ReceiptRequest, orderID uuid.UUID) error {
 	rcpt, err := s.validateReceipt(ctx, req)
 	if err != nil {

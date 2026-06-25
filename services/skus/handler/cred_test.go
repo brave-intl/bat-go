@@ -23,10 +23,28 @@ import (
 )
 
 type mockTLV2Svc struct {
-	FnUniqBatches        func(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
-	FnListActiveBatches  func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
-	FnDeleteBatches      func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
-	FnExtendLinkingLimit func(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
+	FnUniqBatches                      func(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
+	FnListActiveBatches                func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
+	FnDeleteBatches                    func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
+	FnExtendLinkingLimit               func(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
+	FnExtendLinkingLimitWithReceipt    func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
+	FnCanExtendLinkingLimitWithReceipt func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
+}
+
+func (s *mockTLV2Svc) ExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+	if s.FnExtendLinkingLimitWithReceipt == nil {
+		return nil
+	}
+
+	return s.FnExtendLinkingLimitWithReceipt(ctx, orderID, req)
+}
+
+func (s *mockTLV2Svc) CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+	if s.FnCanExtendLinkingLimitWithReceipt == nil {
+		return nil
+	}
+
+	return s.FnCanExtendLinkingLimitWithReceipt(ctx, orderID, req)
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error) {
@@ -1011,6 +1029,1116 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 			}
 
 			should.Equal(t, http.StatusOK, rw.Code)
+		})
+	}
+}
+
+func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
+	type appErrorExp struct {
+		code      int
+		errCode   string
+		message   string
+		data      interface{}
+		mustCause must.ErrorAssertionFunc
+	}
+
+	type tcGiven struct {
+		ctx  context.Context
+		body string
+		svc  *mockTLV2Svc
+	}
+
+	type tcExpected struct {
+		code int
+		err  *appErrorExp
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_parse_order_id",
+			given: tcGiven{
+				ctx: context.Background(),
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					message: "Error validating request",
+					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"orderID": "uuid: incorrect UUID length: "}},
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.Nil(t, err)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_unmarshal_body",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					errCode: model.ExtensionCodeMalformedBody,
+					message: "failed to parse request body",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.NotNil(t, err)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_client_ended_request",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return context.Canceled
+					},
+				},
+			},
+			exp: tcExpected{
+				code: model.StatusClientClosedConn,
+				err: &appErrorExp{
+					code:    model.StatusClientClosedConn,
+					message: "client ended request",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, context.Canceled)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_request_timed_out",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return context.DeadlineExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusGatewayTimeout,
+				err: &appErrorExp{
+					code:    http.StatusGatewayTimeout,
+					message: "request timed out",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, context.DeadlineExceeded)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_order_not_found",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusNotFound,
+				err: &appErrorExp{
+					code:    http.StatusNotFound,
+					errCode: model.ExtensionCodeOrderNotFound,
+					message: "order not found",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrOrderNotFound)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_invalid_order_no_items",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrInvalidOrderNoItems
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusNotFound,
+				err: &appErrorExp{
+					code:    http.StatusNotFound,
+					errCode: model.ExtensionCodeOrderNotFound,
+					message: "order not found",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrInvalidOrderNoItems)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_order_item_not_found",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrOrderItemNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusNotFound,
+				err: &appErrorExp{
+					code:    http.StatusNotFound,
+					errCode: model.ExtensionCodeOrderNotFound,
+					message: "order not found",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrOrderItemNotFound)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_order_not_paid",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrOrderNotPaid
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusPaymentRequired,
+				err: &appErrorExp{
+					code:    http.StatusPaymentRequired,
+					errCode: model.ExtensionCodeOrderNotPaid,
+					message: "order not paid",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrOrderNotPaid)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_credential_type_not_supported",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrUnsupportedCredType
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					errCode: model.ExtensionCodeUnsupportedCredType,
+					message: "credential type not supported",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrUnsupportedCredType)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_invalid_limit",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionInvalidLimit
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionCodeInvalidLimitX,
+					message: "extension new limit invalid",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionInvalidLimit)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_not_supported",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrNoExtensionPolicy
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionNotSupported,
+					message: "item does not support extension",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrNoExtensionPolicy)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_rate_limited",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionRateLimited
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusTooManyRequests,
+				err: &appErrorExp{
+					code:    http.StatusTooManyRequests,
+					errCode: model.ExtensionCodeRateLimited,
+					message: "extension rate limited",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionRateLimited)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_max_extension_per_item_reached",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionMaxPerItem
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionCodeMaxPerItem,
+					message: "max extensions per item reached",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionMaxPerItem)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_not_at_limit",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionNotAtLimit
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionCodeNotAtLimit,
+					message: "not at limit; extension not needed",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionNotAtLimit)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_receipt_valid_error",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return &model.ReceiptValidError{Err: model.Error("some_error")}
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					errCode: "validation_failed",
+					message: "Error some_error",
+					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"receiptErrors": "some_error"}},
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.Nil(t, err)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_internal_server_error",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrSomethingWentWrong
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusInternalServerError,
+				err: &appErrorExp{
+					code:    http.StatusInternalServerError,
+					message: "something went wrong",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrSomethingWentWrong)
+					},
+				},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: `{ "type": "some_type", "raw_receipt": "blob", "package": "package", "subscription_id": "subscription_id" }`,
+				svc: &mockTLV2Svc{
+					FnExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						if orderID.String() != "facade00-0000-4000-a000-000000000000" {
+							return model.Error("unexpected_order_id")
+						}
+
+						if req.Type != "some_type" {
+							return model.Error("unexpected_type")
+						}
+
+						if req.Blob != "blob" {
+							return model.Error("unexpected_blob")
+						}
+
+						if req.Package != "package" {
+							return model.Error("unexpected_package")
+						}
+
+						if req.SubscriptionID != "subscription_id" {
+							return model.Error("unexpected_subscription_id")
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusOK,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ch := handler.NewCred(tc.given.svc)
+
+			r := httptest.NewRequest(http.MethodPost, "http://localhost", bytes.NewBufferString(tc.given.body))
+			r = r.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+
+			aerr := ch.ExtendLinkingLimitWithReceipt(rw, r)
+
+			if aerr != nil {
+				aerr.ServeHTTP(rw, r)
+				must.Equal(t, tc.exp.err.code, aerr.Code)
+				must.Equal(t, tc.exp.err.errCode, aerr.ErrorCode)
+				must.Contains(t, tc.exp.err.message, aerr.Message)
+				must.Equal(t, tc.exp.err.data, aerr.Data)
+				tc.exp.err.mustCause(t, aerr.Cause)
+			}
+
+			should.Equal(t, tc.exp.code, rw.Code)
+		})
+	}
+}
+
+func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
+	type appErrorExp struct {
+		code      int
+		errCode   string
+		message   string
+		data      interface{}
+		mustCause must.ErrorAssertionFunc
+	}
+
+	type tcGiven struct {
+		ctx  context.Context
+		body string
+		svc  *mockTLV2Svc
+	}
+
+	type tcExpected struct {
+		code int
+		err  *appErrorExp
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_parse_order_id",
+			given: tcGiven{
+				ctx: context.Background(),
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					message: "Error validating request",
+					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"orderID": "uuid: incorrect UUID length: "}},
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.Nil(t, err)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_unmarshal_body",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					errCode: model.ExtensionCodeMalformedBody,
+					message: "failed to parse request body",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.NotNil(t, err)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_client_ended_request",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return context.Canceled
+					},
+				},
+			},
+			exp: tcExpected{
+				code: model.StatusClientClosedConn,
+				err: &appErrorExp{
+					code:    model.StatusClientClosedConn,
+					message: "client ended request",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, context.Canceled)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_request_timed_out",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return context.DeadlineExceeded
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusGatewayTimeout,
+				err: &appErrorExp{
+					code:    http.StatusGatewayTimeout,
+					message: "request timed out",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, context.DeadlineExceeded)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_order_id_does_not_match_receipt_order",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrNoMatchOrderReceipt
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusConflict,
+				err: &appErrorExp{
+					code:    http.StatusConflict,
+					message: "order_id does not match receipt order",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrNoMatchOrderReceipt)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_order_not_found",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrOrderNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusNotFound,
+				err: &appErrorExp{
+					code:    http.StatusNotFound,
+					errCode: model.ExtensionCodeOrderNotFound,
+					message: "order not found",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrOrderNotFound)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_invalid_order_no_items",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrInvalidOrderNoItems
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusNotFound,
+				err: &appErrorExp{
+					code:    http.StatusNotFound,
+					errCode: model.ExtensionCodeOrderNotFound,
+					message: "order not found",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrInvalidOrderNoItems)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_order_item_not_found",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrOrderItemNotFound
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusNotFound,
+				err: &appErrorExp{
+					code:    http.StatusNotFound,
+					errCode: model.ExtensionCodeOrderNotFound,
+					message: "order not found",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrOrderItemNotFound)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_order_not_paid",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrOrderNotPaid
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusPaymentRequired,
+				err: &appErrorExp{
+					code:    http.StatusPaymentRequired,
+					errCode: model.ExtensionCodeOrderNotPaid,
+					message: "order not paid",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrOrderNotPaid)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_credential_type_not_supported",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrUnsupportedCredType
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					errCode: model.ExtensionCodeUnsupportedCredType,
+					message: "credential type not supported",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrUnsupportedCredType)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_invalid_limit",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionInvalidLimit
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionCodeInvalidLimitX,
+					message: "extension new limit invalid",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionInvalidLimit)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_not_supported",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrNoExtensionPolicy
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionNotSupported,
+					message: "item does not support extension",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrNoExtensionPolicy)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_rate_limited",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionRateLimited
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusTooManyRequests,
+				err: &appErrorExp{
+					code:    http.StatusTooManyRequests,
+					errCode: model.ExtensionCodeRateLimited,
+					message: "extension rate limited",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionRateLimited)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_max_extension_per_item_reached",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionMaxPerItem
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionCodeMaxPerItem,
+					message: "max extensions per item reached",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionMaxPerItem)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_extension_not_at_limit",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrExtensionNotAtLimit
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusUnprocessableEntity,
+				err: &appErrorExp{
+					code:    http.StatusUnprocessableEntity,
+					errCode: model.ExtensionCodeNotAtLimit,
+					message: "not at limit; extension not needed",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrExtensionNotAtLimit)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_receipt_valid_error",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return &model.ReceiptValidError{Err: model.Error("some_error")}
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusBadRequest,
+				err: &appErrorExp{
+					code:    http.StatusBadRequest,
+					errCode: "validation_failed",
+					message: "Error some_error",
+					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"receiptErrors": "some_error"}},
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.Nil(t, err)
+					},
+				},
+			},
+		},
+
+		{
+			name: "error_internal_server_error",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: "{}",
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						return model.ErrSomethingWentWrong
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusInternalServerError,
+				err: &appErrorExp{
+					code:    http.StatusInternalServerError,
+					message: "something went wrong",
+					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+						must.ErrorIs(t, err, model.ErrSomethingWentWrong)
+					},
+				},
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				body: `{ "type": "some_type", "raw_receipt": "blob", "package": "package", "subscription_id": "subscription_id" }`,
+				svc: &mockTLV2Svc{
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+						if orderID.String() != "facade00-0000-4000-a000-000000000000" {
+							return model.Error("unexpected_order_id")
+						}
+
+						if req.Type != "some_type" {
+							return model.Error("unexpected_type")
+						}
+
+						if req.Blob != "blob" {
+							return model.Error("unexpected_blob")
+						}
+
+						if req.Package != "package" {
+							return model.Error("unexpected_package")
+						}
+
+						if req.SubscriptionID != "subscription_id" {
+							return model.Error("unexpected_subscription_id")
+						}
+
+						return nil
+					},
+				},
+			},
+			exp: tcExpected{
+				code: http.StatusOK,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ch := handler.NewCred(tc.given.svc)
+
+			r := httptest.NewRequest(http.MethodGet, "http://localhost", bytes.NewBufferString(tc.given.body))
+			r = r.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+
+			aerr := ch.CanExtendLinkingLimitWithReceipt(rw, r)
+
+			if aerr != nil {
+				aerr.ServeHTTP(rw, r)
+				must.Equal(t, tc.exp.err.code, aerr.Code)
+				must.Equal(t, tc.exp.err.errCode, aerr.ErrorCode)
+				must.Contains(t, tc.exp.err.message, aerr.Message)
+				must.Equal(t, tc.exp.err.data, aerr.Data)
+				tc.exp.err.mustCause(t, aerr.Cause)
+			}
+
+			should.Equal(t, tc.exp.code, rw.Code)
 		})
 	}
 }

@@ -125,14 +125,16 @@ func Router(
 		cr.Method(http.MethodGet, "/batches/count", metricsMwr("CountBatches", authMwr(handlers.AppHandler(credh.CountBatches))))
 		cr.Method(http.MethodGet, "/batches", metricsMwr("ListActiveBatches", supportMwr(handlers.AppHandler(credh.ListActiveBatches))))
 		cr.Method(http.MethodDelete, "/batches", metricsMwr("DeleteBatches", supportMwr(handlers.AppHandler(credh.DeleteBatches))))
+
 		cr.Method(http.MethodPost, "/items/{itemID}/batches/extend", metricsMwr("ExtendLinkingLimit", authMwr(handlers.AppHandler(credh.ExtendLinkingLimit))))
+		cr.Method(http.MethodPost, "/batches/extend-with-receipt", metricsMwr("ExtendLinkingLimitWithReceipt", authMwr(handlers.AppHandler(credh.ExtendLinkingLimitWithReceipt))))
+		cr.Method(http.MethodGet, "/batches/extend-with-receipt", metricsMwr("CanExtendLinkingLimitWithReceipt", authMwr(handlers.AppHandler(credh.CanExtendLinkingLimitWithReceipt))))
 
 		// Handle the old endpoint while the new is being rolled out:
 		// - true: the handler uses itemID as the request id, which is the old mode;
 		// - false: the handler uses the requestID from the URI.
 		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, true)))
 		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, false)))
-
 		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", createItemCreds(svc)))
 	})
 

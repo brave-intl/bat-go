@@ -39,6 +39,28 @@ func (r *OrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UU
 	return result, nil
 }
 
+// GetForUpdate retrieves the order item by the given id and locks the row for update.
+func (r *OrderItem) GetForUpdate(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+	const q = `
+	SELECT
+		id, order_id, sku, sku_variant, created_at, updated_at, currency,
+		quantity, price, (quantity * price) as subtotal, location, description, credential_type, metadata,
+		valid_for_iso, issuance_interval, max_active_batches_tlv2_creds,
+		num_self_extensions, last_self_extension_at
+	FROM order_items WHERE id = $1 FOR UPDATE`
+
+	result := &model.OrderItem{}
+	if err := sqlx.GetContext(ctx, dbi, result, q, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, model.ErrOrderItemNotFound
+		}
+
+		return nil, err
+	}
+
+	return result, nil
+}
+
 // FindByOrderID returns order items for the given orderID.
 func (r *OrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
 	const q = `
@@ -109,6 +131,25 @@ func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, 
 
 	if n == 0 {
 		return model.ErrExtensionConflict
+	}
+
+	return nil
+}
+
+func (r *OrderItem) UpdateMaxActiveBatchesTLV2Creds(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, maxActiveBatches int, numSelfExt int, now time.Time) error {
+	const q = `
+	UPDATE order_items
+	SET max_active_batches_tlv2_creds = $2,
+	    num_self_extensions           = $3,
+	    last_self_extension_at        = $4
+	WHERE id = $1`
+
+	if _, err := dbi.ExecContext(ctx, q, id, maxActiveBatches, numSelfExt, now); err != nil {
+		if isErrExtensionInvalidLimit(err) {
+			return model.ErrExtensionInvalidLimit
+		}
+
+		return err
 	}
 
 	return nil

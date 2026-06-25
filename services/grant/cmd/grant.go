@@ -34,6 +34,7 @@ import (
 	"github.com/brave-intl/bat-go/services/promotion"
 	"github.com/brave-intl/bat-go/services/skus"
 	"github.com/brave-intl/bat-go/services/skus/handler"
+	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/wallet"
 	_ "github.com/brave-intl/bat-go/services/wallet/cmd" // Reuse Wallet env variables bound by Viper bind-env.
@@ -464,7 +465,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	skuTLV2Repo := repository.NewTLV2()
 
-	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuOrderItemRepo, skuIssuerRepo, skuOrderPayHistRepo, skuTLV2Repo)
+	p := model.NewPoliciesBySKUVnt()
+	credExt := skus.NewTLV2CredExtender(p, skuTLV2Repo)
+
+	skusService, err := skus.InitService(skuCtx, skusPG, walletService, skuOrderRepo, skuOrderItemRepo, skuIssuerRepo, skuOrderPayHistRepo, skuTLV2Repo, credExt)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("SKUs service initialization failed")

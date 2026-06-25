@@ -3,6 +3,8 @@ package model
 
 import (
 	"database/sql"
+	"errors"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -13,6 +15,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/handlers"
 )
 
 const (
@@ -67,6 +70,11 @@ const (
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 
 	ErrStripePaymentIntentMissing Error = "model: stripe payment intent id missing"
+
+	ErrNoExtensionPolicy    Error = "model: extension: no policy"
+	ErrExtensionRateLimited Error = "model: extension: rate limited"
+	ErrExtensionMaxPerItem  Error = "model: extension: max per item reached"
+	ErrExtensionNotAtLimit  Error = "model: extension: not at limit"
 )
 
 const (
@@ -96,7 +104,15 @@ const (
 	ExtensionCodeOrderNotPaid        = "order_not_paid"
 	ExtensionCodeUnsupportedCredType = "unsupported_cred_type"
 	ExtensionCodeConflict            = "extension_conflict"
-	ExtensionCodeInvalidLimit        = "extension_invalid_limit"
+
+	// Deprecated: will be replaced by ExtensionCodeInvalidLimitX
+	ExtensionCodeInvalidLimit = "extension_invalid_limit"
+
+	ExtensionCodeInvalidLimitX = "invalid_limit"
+	ExtensionCodeRateLimited   = "rate_limited"
+	ExtensionCodeMaxPerItem    = "max_per_item"
+	ExtensionCodeNotAtLimit    = "not_at_limit"
+	ExtensionNotSupported      = "extension_not_supported"
 )
 
 const (
@@ -897,6 +913,35 @@ type SetTrialDaysRequest struct {
 	TrialDays int64  `json:"trialDays"`
 }
 
+type CredExtensionPolicy struct {
+	SlotsPerGrant      int
+	MinIntervalSeconds int
+	MaxPerItem         int
+}
+
+type CredExtensionPolicies map[string]CredExtensionPolicy
+
+func NewPoliciesBySKUVnt() CredExtensionPolicies {
+	origin := CredExtensionPolicy{
+		SlotsPerGrant:      3,
+		MinIntervalSeconds: 30 * 24 * 60 * 60, // 30 Days.
+		MaxPerItem:         5,
+	}
+
+	return CredExtensionPolicies{
+		"brave-origin-premium-perpetual-license": origin,
+	}
+}
+
+func (s CredExtensionPolicies) GetPolicy(id string) (CredExtensionPolicy, error) {
+	p, ok := s[id]
+	if !ok {
+		return CredExtensionPolicy{}, ErrNoExtensionPolicy
+	}
+
+	return p, nil
+}
+
 func addURLParam(src, name, val string) (string, error) {
 	raw, err := url.Parse(src)
 	if err != nil {
@@ -928,4 +973,57 @@ func numFromAny(raw any) (int, error) {
 	default:
 		return 0, errInvalidNumConversion
 	}
+}
+
+type ReceiptValidError struct {
+	Err error
+}
+
+func (x *ReceiptValidError) Error() string {
+	if x == nil || x.Err == nil {
+		return "nil"
+	}
+
+	return x.Err.Error()
+}
+
+const (
+	ErrIOSPurchaseNotFound   Error = "ios: purchase not found"
+	ErrGPSSubPurchaseExpired Error = "playstore: subscription purchase expired"
+	ErrGPSSubPurchasePending Error = "playstore: subscription purchase pending"
+)
+
+func HandleReceiptErr(err error) *handlers.AppError {
+	if err == nil {
+		return &handlers.AppError{
+			Message: "Unexpected error",
+			Code:    http.StatusInternalServerError,
+			Data:    map[string]interface{}{},
+		}
+	}
+
+	errStr := err.Error()
+	result := &handlers.AppError{
+		Message: "Error " + errStr,
+		Code:    http.StatusBadRequest,
+		Data: map[string]interface{}{
+			"validationErrors": map[string]interface{}{"receiptErrors": errStr},
+		},
+	}
+
+	switch {
+	case errors.Is(err, ErrIOSPurchaseNotFound):
+		result.ErrorCode = "purchase_not_found"
+
+	case errors.Is(err, ErrGPSSubPurchaseExpired):
+		result.ErrorCode = "purchase_expired"
+
+	case errors.Is(err, ErrGPSSubPurchasePending):
+		result.ErrorCode = "purchase_pending"
+
+	default:
+		result.ErrorCode = "validation_failed"
+	}
+
+	return result
 }
