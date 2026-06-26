@@ -44,10 +44,29 @@ email you will be prompted to choose one.
 The command shows which batches will be removed and asks for confirmation
 before making any changes.
 
-Note: email lookup only works for desktop/browser orders created through
-the subscriptions service. iOS and Android orders use anonymous receipts
-and cannot be looked up by email.`,
+Note: email lookup requires the order to be linked to a Premium account.
+Mobile (iOS/Android) purchases are found by email once linked; an order that
+has only been created anonymously and not yet linked has no associated email.`,
 	RunE: runResetLinkingLimit,
+}
+
+var showLinkingUsageCmd = &cobra.Command{
+	Use:   "show-linking-usage",
+	Short: "Show device linking slot usage for a premium order",
+	Long: `Shows how many device linking slots are in use for a TLV2 order by listing
+its active credential batches. Each batch corresponds to one linked device.
+
+This is the read-only counterpart of reset-linking-limit: it lists the same
+batches the deletion flow shows, but never makes changes.
+
+The order can be identified by --order-id or by --email (which looks up
+the subscriber in the subscriptions service). If multiple orders match an
+email you will be prompted to choose one.
+
+Note: email lookup requires the order to be linked to a Premium account.
+Mobile (iOS/Android) purchases are found by email once linked; an order that
+has only been created anonymously and not yet linked has no associated email.`,
+	RunE: runShowLinkingUsage,
 }
 
 var extendLinkingLimitCmd = &cobra.Command{
@@ -121,6 +140,36 @@ func init() {
 		Env("SKUS_SUPPORT_PRIVATE_KEY").
 		Bind("private-key")
 
+	SkusCmd.AddCommand(showLinkingUsageCmd)
+
+	// These flags are intentionally not bound to viper. reset-linking-limit
+	// already binds the global viper keys for these names to its own flags,
+	// and viper.BindPFlag is global, so binding them again here would clobber
+	// that command. runShowLinkingUsage reads these directly from the command,
+	// falling back to the environment.
+	sfb := rootcmd.NewFlagBuilder(showLinkingUsageCmd)
+
+	sfb.Flag().String("skus-base-url", "",
+		"base URL of the SKUs service, e.g. https://payment.rewards.brave.com [env: SKUS_BASE_URL]")
+
+	sfb.Flag().String("order-id", "",
+		"the order UUID to show slot usage for (mutually exclusive with --email)")
+
+	sfb.Flag().String("email", "",
+		"subscriber email to look up the order ID (mutually exclusive with --order-id) [env: SUBSCRIBER_EMAIL]")
+
+	sfb.Flag().String("subscriptions-base-url", "",
+		"base URL of the subscriptions service, required when using --email [env: SUBSCRIPTIONS_BASE_URL]")
+
+	sfb.Flag().String("subscriptions-token", "",
+		"bearer token for the subscriptions support API, required when using --email [env: SUBSCRIPTIONS_SUPPORT_TOKEN]")
+
+	sfb.Flag().String("item-id", "",
+		"optional: scope the listing to a specific order item UUID")
+
+	sfb.Flag().String("private-key", "",
+		"path to the ed25519 private key file in SSH format used to sign requests [env: SKUS_SUPPORT_PRIVATE_KEY]")
+
 	SkusCmd.AddCommand(extendLinkingLimitCmd)
 
 	// These flags are intentionally not bound to viper. reset-linking-limit
@@ -162,11 +211,8 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--seats must be a positive integer")
 	}
 
-	switch {
-	case orderID == "" && email == "":
-		return fmt.Errorf("one of --order-id or --email is required")
-	case orderID != "" && email != "":
-		return fmt.Errorf("--order-id and --email are mutually exclusive")
+	if err := requireOrderRef(orderID, email); err != nil {
+		return err
 	}
 
 	privKey, err := loadED25519PrivateKey(viper.GetString("private-key"))
@@ -177,30 +223,15 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	if email != "" {
-		subsBaseURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
-		subsToken := viper.GetString("subscriptions-token")
+	subsBaseURL := strings.TrimRight(viper.GetString("subscriptions-base-url"), "/")
+	subsToken := viper.GetString("subscriptions-token")
 
-		if subsBaseURL == "" {
-			return fmt.Errorf("--subscriptions-base-url is required when using --email")
-		}
-
-		if subsToken == "" {
-			return fmt.Errorf("--subscriptions-token is required when using --email")
-		}
-
-		orderID, err = resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
-		if err != nil {
-			return err
-		}
+	orderID, err = resolveOrderID(ctx, client, orderID, email, subsBaseURL, subsToken)
+	if err != nil {
+		return err
 	}
 
-	listURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
-	if itemID != "" {
-		listURL += "?" + url.Values{"item_id": {itemID}}.Encode()
-	}
-
-	batches, err := listBatches(ctx, client, listURL, privKey)
+	batches, err := listBatches(ctx, client, batchesURL(baseURL, orderID, itemID), privKey)
 	if err != nil {
 		return fmt.Errorf("failed to list batches: %w", err)
 	}
@@ -218,11 +249,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Oldest %d batch(es) at time of listing:\n\n", seats)
-	fmt.Printf("  %-40s  %s\n", "request_id", "oldest_valid_from (UTC)")
-	fmt.Printf("  %-40s  %s\n", strings.Repeat("-", 40), strings.Repeat("-", 24))
-	for _, b := range batches[:seats] {
-		fmt.Printf("  %-40s  %s\n", b.RequestID, b.OldestValidFrom.UTC().Format(time.RFC3339))
-	}
+	fmt.Print(formatBatchTable(batches[:seats]))
 	fmt.Println()
 	fmt.Println("Note: the server selects the oldest N batches independently at delete time.")
 	fmt.Println("      If the order changes before the request arrives, the result may differ.")
@@ -233,8 +260,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	deleteURL := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
-	if err := deleteBatchSeats(ctx, client, deleteURL, privKey, seats, itemID); err != nil {
+	if err := deleteBatchSeats(ctx, client, batchesURL(baseURL, orderID, ""), privKey, seats, itemID); err != nil {
 		return fmt.Errorf("failed to delete batch seats: %w", err)
 	}
 
@@ -244,14 +270,137 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 }
 
 // flagOrEnv returns the command-line flag value, falling back to the environment
-// variable when the flag is unset. extend-linking-limit reads its flags this way
-// rather than through the shared viper bindings used by reset-linking-limit.
+// variable when the flag is unset.
 func flagOrEnv(cmd *cobra.Command, flag, env string) string {
 	if v, _ := cmd.Flags().GetString(flag); v != "" {
 		return v
 	}
 
 	return os.Getenv(env)
+}
+
+func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
+	baseURL := strings.TrimRight(flagOrEnv(cmd, "skus-base-url", "SKUS_BASE_URL"), "/")
+	email := strings.TrimSpace(flagOrEnv(cmd, "email", "SUBSCRIBER_EMAIL"))
+	privKeyPath := flagOrEnv(cmd, "private-key", "SKUS_SUPPORT_PRIVATE_KEY")
+
+	orderID, _ := cmd.Flags().GetString("order-id")
+	orderID = strings.TrimSpace(orderID)
+
+	itemID, _ := cmd.Flags().GetString("item-id")
+	itemID = strings.TrimSpace(itemID)
+
+	if baseURL == "" {
+		return fmt.Errorf("--skus-base-url (or SKUS_BASE_URL) is required")
+	}
+
+	if privKeyPath == "" {
+		return fmt.Errorf("--private-key (or SKUS_SUPPORT_PRIVATE_KEY) is required")
+	}
+
+	if err := requireOrderRef(orderID, email); err != nil {
+		return err
+	}
+
+	privKey, err := loadED25519PrivateKey(privKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to load private key: %w", err)
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	subsBaseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
+	subsToken := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
+
+	orderID, err = resolveOrderID(ctx, client, orderID, email, subsBaseURL, subsToken)
+	if err != nil {
+		return err
+	}
+
+	batches, err := listBatches(ctx, client, batchesURL(baseURL, orderID, itemID), privKey)
+	if err != nil {
+		return fmt.Errorf("failed to list batches: %w", err)
+	}
+
+	fmt.Print(formatLinkingUsage(orderID, itemID, batches))
+
+	return nil
+}
+
+func requireOrderRef(orderID, email string) error {
+	switch {
+	case orderID == "" && email == "":
+		return fmt.Errorf("one of --order-id or --email is required")
+	case orderID != "" && email != "":
+		return fmt.Errorf("--order-id and --email are mutually exclusive")
+	}
+
+	return nil
+}
+
+// resolveOrderID returns orderID as-is when set, otherwise resolves email to an
+// order ID via the subscriptions support API, validating the flags it needs.
+func resolveOrderID(ctx context.Context, client *http.Client, orderID, email, subsBaseURL, subsToken string) (string, error) {
+	if orderID != "" {
+		return orderID, nil
+	}
+
+	if subsBaseURL == "" {
+		return "", fmt.Errorf("--subscriptions-base-url is required when using --email")
+	}
+
+	if subsToken == "" {
+		return "", fmt.Errorf("--subscriptions-token is required when using --email")
+	}
+
+	return resolveOrderIDByEmail(ctx, client, subsBaseURL, email, subsToken)
+}
+
+// batchesURL builds the SKUs credential batches endpoint URL for an order,
+// scoped to an order item when itemID is non-empty.
+func batchesURL(baseURL, orderID, itemID string) string {
+	u := fmt.Sprintf("%s/v1/orders/%s/credentials/batches", baseURL, orderID)
+	if itemID != "" {
+		u += "?" + url.Values{"item_id": {itemID}}.Encode()
+	}
+
+	return u
+}
+
+// formatLinkingUsage renders the slot usage report for an order. Each active
+// batch corresponds to one linked device, so the batch count is the number of
+// device slots in use.
+func formatLinkingUsage(orderID, itemID string, batches []model.TLV2ActiveBatch) string {
+	var b strings.Builder
+
+	scope := fmt.Sprintf("order %s", orderID)
+	if itemID != "" {
+		scope = fmt.Sprintf("order %s (item %s)", orderID, itemID)
+	}
+
+	if len(batches) == 0 {
+		fmt.Fprintf(&b, "No device slots are in use for %s.\n", scope)
+		return b.String()
+	}
+
+	fmt.Fprintf(&b, "%d device slot(s) in use for %s.\n\n", len(batches), scope)
+	b.WriteString(formatBatchTable(batches))
+
+	return b.String()
+}
+
+// formatBatchTable renders active batches as a request_id / oldest_valid_from table.
+func formatBatchTable(batches []model.TLV2ActiveBatch) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "  %-40s  %s\n", "request_id", "oldest_valid_from (UTC)")
+	fmt.Fprintf(&b, "  %-40s  %s\n", strings.Repeat("-", 40), strings.Repeat("-", 24))
+	for _, batch := range batches {
+		fmt.Fprintf(&b, "  %-40s  %s\n", batch.RequestID, batch.OldestValidFrom.UTC().Format(time.RFC3339))
+	}
+
+	return b.String()
 }
 
 func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
