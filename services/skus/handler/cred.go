@@ -19,7 +19,7 @@ type tlv2Svc interface {
 	UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error)
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
-	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
+	ExtendBatches(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
 }
 
 type Cred struct {
@@ -184,65 +184,69 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
-func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+func (h *Cred) ExtendBatches(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
+	lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendBatches").Logger()
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
+		lg.Err(err).Msg("invalid order id")
 		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 	}
 
 	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
 	if err != nil {
+		lg.Err(err).Msg("invalid item id")
 		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
 	if err != nil {
-		return withErrorCode(handlers.WrapError(err, "failed to read request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+		lg.Err(err).Msg("failed to read request body")
+		return handlers.NewAppError(http.StatusBadRequest, model.ExtensionCodeMalformedBody, err, "failed to read request body")
 	}
 
 	var write model.ExtensionWrite
 	if err := json.Unmarshal(body, &write); err != nil {
-		return withErrorCode(handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+		lg.Err(err).Msg("failed to parse request body")
+		return handlers.NewAppError(http.StatusBadRequest, model.ExtensionCodeMalformedBody, err, "failed to parse request body")
 	}
 
-	if err := h.tlv2.ExtendLinkingLimit(ctx, orderID, itemID, write); err != nil {
-		lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimit").Logger()
-
-		lg.Error().Err(err).Msg("failed to extend linking limit")
-
+	if err := h.tlv2.ExtendBatches(ctx, orderID, itemID, write); err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
+			lg.Info().Err(err).Msg("client closed connection")
 			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
 
 		case errors.Is(err, context.DeadlineExceeded):
+			lg.Warn().Err(err).Msg("request timed out")
 			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
 
 		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
-			return withErrorCode(handlers.WrapError(err, "order not found", http.StatusNotFound), model.ExtensionCodeOrderNotFound)
+			lg.Info().Err(err).Msg("order not found")
+			return handlers.NewAppError(http.StatusNotFound, model.ExtensionCodeOrderNotFound, err, "order not found")
 
 		case errors.Is(err, model.ErrOrderNotPaid):
-			return withErrorCode(handlers.WrapError(err, "order not paid", http.StatusPaymentRequired), model.ExtensionCodeOrderNotPaid)
+			lg.Info().Err(err).Msg("order not paid")
+			return handlers.NewAppError(http.StatusPaymentRequired, model.ExtensionCodeOrderNotPaid, err, "order not paid")
 
 		case errors.Is(err, model.ErrUnsupportedCredType):
-			return withErrorCode(handlers.WrapError(err, "credential type not supported", http.StatusBadRequest), model.ExtensionCodeUnsupportedCredType)
+			lg.Info().Err(err).Msg("unsupported credential type")
+			return handlers.NewAppError(http.StatusBadRequest, model.ExtensionCodeUnsupportedCredType, err, "credential type not supported")
 
 		case errors.Is(err, model.ErrExtensionInvalidLimit):
-			return withErrorCode(handlers.WrapError(err, "extension new limit invalid", http.StatusUnprocessableEntity), model.ExtensionCodeInvalidLimit)
+			lg.Info().Err(err).Msg("extension new limit invalid")
+			return handlers.NewAppError(http.StatusUnprocessableEntity, model.ExtensionCodeInvalidLimit, err, "extension new limit invalid")
 
 		case errors.Is(err, model.ErrExtensionConflict):
-			return withErrorCode(handlers.WrapError(err, "extension version conflict", http.StatusConflict), model.ExtensionCodeConflict)
+			lg.Info().Err(err).Msg("extension version conflict")
+			return handlers.NewAppError(http.StatusConflict, model.ExtensionCodeConflict, err, "extension version conflict")
 
 		default:
+			lg.Error().Err(err).Msg("failed to extend batches")
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
 		}
 	}
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
-}
-
-func withErrorCode(appErr *handlers.AppError, code string) *handlers.AppError {
-	appErr.ErrorCode = code
-	return appErr
 }

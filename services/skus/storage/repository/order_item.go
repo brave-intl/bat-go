@@ -24,7 +24,7 @@ func (r *OrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UU
 		id, order_id, sku, sku_variant, created_at, updated_at, currency,
 		quantity, price, (quantity * price) as subtotal, location, description, credential_type, metadata,
 		valid_for_iso, issuance_interval, max_active_batches_tlv2_creds,
-		num_self_extensions, last_self_extension_at
+		num_active_batches_extensions, last_active_batches_extension_at
 	FROM order_items WHERE id = $1`
 
 	result := &model.OrderItem{}
@@ -46,7 +46,7 @@ func (r *OrderItem) FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, 
 		id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price,
 		(quantity * price) as subtotal, location, description, credential_type, metadata, valid_for_iso,
 		issuance_interval, max_active_batches_tlv2_creds,
-		num_self_extensions, last_self_extension_at
+		num_active_batches_extensions, last_active_batches_extension_at
 	FROM order_items WHERE order_id = $1`
 
 	result := make([]model.OrderItem, 0)
@@ -68,7 +68,7 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 		order_id, sku, sku_variant, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval, max_active_batches_tlv2_creds
 	) VALUES (
 		:order_id, :sku, :sku_variant, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type, :metadata, :valid_for, :valid_for_iso, :issuance_interval, :max_active_batches_tlv2_creds
-	) RETURNING id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for, max_active_batches_tlv2_creds, num_self_extensions, last_self_extension_at`
+	) RETURNING id, order_id, sku, sku_variant, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for, max_active_batches_tlv2_creds, num_active_batches_extensions, last_active_batches_extension_at`
 
 	rows, err := sqlx.NamedQueryContext(ctx, dbi, q, items)
 	if err != nil {
@@ -84,14 +84,14 @@ func (r *OrderItem) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items .
 	return result, nil
 }
 
-func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
+func (r *OrderItem) UpdateMaxActiveBatchesCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error {
 	const q = `
 	UPDATE order_items
-	SET max_active_batches_tlv2_creds = $2,
-	    num_self_extensions           = num_self_extensions + 1,
-	    last_self_extension_at        = NOW()
+	SET max_active_batches_tlv2_creds    = $2,
+	    num_active_batches_extensions    = num_active_batches_extensions + 1,
+	    last_active_batches_extension_at = NOW()
 	WHERE id = $1
-	  AND last_self_extension_at IS NOT DISTINCT FROM $3`
+	  AND last_active_batches_extension_at IS NOT DISTINCT FROM $3`
 
 	result, err := dbi.ExecContext(ctx, q, id, newLimit, expected)
 	if err != nil {

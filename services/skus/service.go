@@ -1293,10 +1293,10 @@ func (s *Service) uniqBatchesTxTime(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return &model.BatchesStatus{
-		Limit:               mc,
-		Active:              nact,
-		NumSelfExtensions:   item.NumSelfExtensions,
-		LastSelfExtensionAt: item.LastSelfExtensionAt,
+		Limit:                        mc,
+		Active:                       nact,
+		NumActiveBatchesExtensions:   item.NumActiveBatchesExtensions,
+		LastActiveBatchesExtensionAt: item.LastActiveBatchesExtensionAt,
 	}, nil
 }
 
@@ -1395,21 +1395,21 @@ func (s *Service) deleteBatchesTx(ctx context.Context, dbi sqlx.ExecerContext, o
 	return s.tlv2Repo.DeleteOutboxByRequestIDs(ctx, dbi, orderID, requestIDs)
 }
 
-func (s *Service) ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
+func (s *Service) ExtendBatches(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
 	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.extendLinkingLimitTx(ctx, tx, orderID, itemID, write); err != nil {
+	if err := s.extendBatchesTx(ctx, tx, orderID, itemID, write); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-func (s *Service) extendLinkingLimitTx(ctx context.Context, dbi sqlx.ExtContext, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
+func (s *Service) extendBatchesTx(ctx context.Context, dbi sqlx.ExtContext, orderID, itemID uuid.UUID, write model.ExtensionWrite) error {
 	if write.NewLimit <= 0 || write.NewLimit > model.ExtensionMaxLimitCeiling {
 		return model.ErrExtensionInvalidLimit
 	}
@@ -1436,7 +1436,7 @@ func (s *Service) extendLinkingLimitTx(ctx context.Context, dbi sqlx.ExtContext,
 		return model.ErrUnsupportedCredType
 	}
 
-	return s.orderItemRepo.ApplyExtensionCAS(ctx, dbi, item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit)
+	return s.orderItemRepo.UpdateMaxActiveBatchesCAS(ctx, dbi, item.ID, write.ExpectedLastActiveBatchesExtensionAt, write.NewLimit)
 }
 
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is
