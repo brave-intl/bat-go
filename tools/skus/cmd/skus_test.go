@@ -2,19 +2,48 @@ package cmd
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
 )
+
+// signingKey returns a fresh ed25519 private key for signing test requests.
+func signingKey(t *testing.T) ed25519.PrivateKey {
+	t.Helper()
+
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	must.NoError(t, err)
+
+	return priv
+}
+
+// signingKeyFile writes a fresh ed25519 private key in OpenSSH format to a temp
+// file and returns its path.
+func signingKeyFile(t *testing.T) string {
+	t.Helper()
+
+	blk, err := ssh.MarshalPrivateKey(signingKey(t), "")
+	must.NoError(t, err)
+
+	path := filepath.Join(t.TempDir(), "id_ed25519")
+	must.NoError(t, os.WriteFile(path, pem.EncodeToMemory(blk), 0o600))
+
+	return path
+}
 
 func TestFlagOrEnv(t *testing.T) {
 	newCmd := func() *cobra.Command {
@@ -52,31 +81,31 @@ func TestSubsConn(t *testing.T) {
 
 	t.Run("requires_base_url", func(t *testing.T) {
 		cmd := newCmd()
-		must.NoError(t, cmd.Flags().Set("subscriptions-token", "tok"))
+		must.NoError(t, cmd.Flags().Set("private-key", signingKeyFile(t)))
 
 		_, _, err := subsConn(cmd)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "--subscriptions-base-url")
 	})
 
-	t.Run("requires_token", func(t *testing.T) {
+	t.Run("requires_private_key", func(t *testing.T) {
 		cmd := newCmd()
 		must.NoError(t, cmd.Flags().Set("subscriptions-base-url", "https://subs.example.com"))
 
 		_, _, err := subsConn(cmd)
 		must.Error(t, err)
-		should.Contains(t, err.Error(), "--subscriptions-token")
+		should.Contains(t, err.Error(), "--private-key")
 	})
 
-	t.Run("trims_trailing_slash", func(t *testing.T) {
+	t.Run("trims_trailing_slash_and_loads_key", func(t *testing.T) {
 		cmd := newCmd()
 		must.NoError(t, cmd.Flags().Set("subscriptions-base-url", "https://subs.example.com/"))
-		must.NoError(t, cmd.Flags().Set("subscriptions-token", "tok"))
+		must.NoError(t, cmd.Flags().Set("private-key", signingKeyFile(t)))
 
-		baseURL, token, err := subsConn(cmd)
+		baseURL, key, err := subsConn(cmd)
 		must.NoError(t, err)
 		should.Equal(t, "https://subs.example.com", baseURL)
-		should.Equal(t, "tok", token)
+		should.NotNil(t, key)
 	})
 }
 
@@ -90,8 +119,10 @@ func TestRequireSubRef(t *testing.T) {
 func TestResolveSubID(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
+	key := signingKey(t)
+
 	t.Run("subscription_id_passes_through", func(t *testing.T) {
-		got, productName, err := resolveSubID(context.Background(), client, "http://localhost", "tok", "sub-1", "")
+		got, productName, err := resolveSubID(context.Background(), client, "http://localhost", key, "sub-1", "")
 		must.NoError(t, err)
 		should.Equal(t, "sub-1", got)
 		should.Equal(t, "", productName)
@@ -99,7 +130,7 @@ func TestResolveSubID(t *testing.T) {
 
 	t.Run("email_resolves_via_support_api", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.NotEmpty(t, r.Header.Get("Signature"))
 			should.Equal(t, "/v1/support/subscribers/user@example.com", r.URL.Path)
 			json.NewEncoder(w).Encode(activeSubsListResp{Results: []activeSubsResp{
 				{Email: "user@example.com", SubscriptionID: "sub-1", OrderID: "ord-1", ProductName: "VPN"},
@@ -107,7 +138,7 @@ func TestResolveSubID(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		got, productName, err := resolveSubID(context.Background(), client, srv.URL, "tok", "", "user@example.com")
+		got, productName, err := resolveSubID(context.Background(), client, srv.URL, key, "", "user@example.com")
 		must.NoError(t, err)
 		should.Equal(t, "sub-1", got)
 		should.Equal(t, "VPN", productName)
@@ -121,7 +152,7 @@ func TestResolveSubID(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, _, err := resolveSubID(context.Background(), client, srv.URL, "tok", "", "user@example.com")
+		_, _, err := resolveSubID(context.Background(), client, srv.URL, key, "", "user@example.com")
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "no subscription_id")
 	})
@@ -155,19 +186,21 @@ func TestSupportAPIError(t *testing.T) {
 func TestGetLinkingUsage(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
+	key := signingKey(t)
+
 	const subID = "1f14a340-edfb-4d14-bbdb-06a6c441568b"
 
 	t.Run("success_on_200", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			should.Equal(t, http.MethodGet, r.Method)
-			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.NotEmpty(t, r.Header.Get("Signature"))
 			should.Equal(t, "/v1/support/subscriptions/"+subID+"/credentials/batches", r.URL.Path)
 
 			fmt.Fprint(w, `{"limit":10,"active":2,"batches":[{"request_id":"req-1","oldest_valid_from":"2026-01-02T03:04:05Z"},{"request_id":"req-2","oldest_valid_from":"2026-02-03T04:05:06Z"}]}`)
 		}))
 		defer srv.Close()
 
-		got, err := getLinkingUsage(context.Background(), client, srv.URL, subID, "tok")
+		got, err := getLinkingUsage(context.Background(), client, srv.URL, subID, key)
 		must.NoError(t, err)
 		should.Equal(t, &linkingUsageResp{
 			Limit:  10,
@@ -187,7 +220,7 @@ func TestGetLinkingUsage(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := getLinkingUsage(context.Background(), client, srv.URL, subID, "tok")
+		_, err := getLinkingUsage(context.Background(), client, srv.URL, subID, key)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "usage lookup failed")
 		should.Contains(t, err.Error(), "subscription not found")
@@ -199,7 +232,7 @@ func TestGetLinkingUsage(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := getLinkingUsage(context.Background(), client, srv.URL, subID, "tok")
+		_, err := getLinkingUsage(context.Background(), client, srv.URL, subID, key)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "failed to decode usage response")
 	})
@@ -213,7 +246,7 @@ func TestGetLinkingUsage(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		_, err := getLinkingUsage(ctx, client, srv.URL, subID, "tok")
+		_, err := getLinkingUsage(ctx, client, srv.URL, subID, key)
 		must.Error(t, err)
 	})
 }
@@ -221,12 +254,14 @@ func TestGetLinkingUsage(t *testing.T) {
 func TestResetLinkingSlots(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
+	key := signingKey(t)
+
 	const subID = "1f14a340-edfb-4d14-bbdb-06a6c441568b"
 
 	t.Run("success_on_200", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			should.Equal(t, http.MethodDelete, r.Method)
-			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.NotEmpty(t, r.Header.Get("Signature"))
 			should.Equal(t, "application/json", r.Header.Get("Content-Type"))
 			should.Equal(t, "/v1/support/subscriptions/"+subID+"/credentials/batches", r.URL.Path)
 
@@ -240,7 +275,7 @@ func TestResetLinkingSlots(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := resetLinkingSlots(context.Background(), client, srv.URL, subID, "tok", 2)
+		err := resetLinkingSlots(context.Background(), client, srv.URL, subID, key, 2)
 		must.NoError(t, err)
 	})
 
@@ -252,7 +287,7 @@ func TestResetLinkingSlots(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := resetLinkingSlots(context.Background(), client, srv.URL, subID, "tok", 9)
+		err := resetLinkingSlots(context.Background(), client, srv.URL, subID, key, 9)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "seats_exceeded")
 		should.Contains(t, err.Error(), "seats exceeds active batch count")
@@ -268,7 +303,7 @@ func TestResetLinkingSlots(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		err := resetLinkingSlots(ctx, client, srv.URL, subID, "tok", 1)
+		err := resetLinkingSlots(ctx, client, srv.URL, subID, key, 1)
 		must.Error(t, err)
 	})
 }
@@ -276,19 +311,21 @@ func TestResetLinkingSlots(t *testing.T) {
 func TestExtendLinkingLimit(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
+	key := signingKey(t)
+
 	const subID = "1f14a340-edfb-4d14-bbdb-06a6c441568b"
 
 	t.Run("success_on_200", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			should.Equal(t, http.MethodPost, r.Method)
-			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.NotEmpty(t, r.Header.Get("Signature"))
 			should.Equal(t, "/v1/support/subscriptions/"+subID+"/credentials/batches/extend", r.URL.Path)
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, "{}")
 		}))
 		defer srv.Close()
 
-		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, key)
 		must.NoError(t, err)
 	})
 
@@ -300,7 +337,7 @@ func TestExtendLinkingLimit(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, key)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "rate_limited")
 		should.Contains(t, err.Error(), "extension rate limited")
@@ -315,7 +352,7 @@ func TestExtendLinkingLimit(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, key)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "subscription not found")
 		should.NotContains(t, err.Error(), "errorCode")
@@ -327,7 +364,7 @@ func TestExtendLinkingLimit(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, "tok")
+		err := extendLinkingLimit(context.Background(), client, srv.URL, subID, key)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "504")
 		should.Contains(t, err.Error(), "gateway timeout")
@@ -342,7 +379,7 @@ func TestExtendLinkingLimit(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		err := extendLinkingLimit(ctx, client, srv.URL, subID, "tok")
+		err := extendLinkingLimit(ctx, client, srv.URL, subID, key)
 		must.Error(t, err)
 	})
 }
@@ -397,9 +434,11 @@ func TestFormatLinkingUsage(t *testing.T) {
 func TestFetchActiveSubs(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
+	key := signingKey(t)
+
 	t.Run("returns_results_with_subscription_id", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			should.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+			should.NotEmpty(t, r.Header.Get("Signature"))
 			should.Equal(t, "/v1/support/subscribers/user@example.com", r.URL.Path)
 			json.NewEncoder(w).Encode(activeSubsListResp{Results: []activeSubsResp{
 				{Email: "user@example.com", SubscriptionID: "sub-1", OrderID: "ord-1", ProductName: "VPN"},
@@ -407,7 +446,7 @@ func TestFetchActiveSubs(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		got, err := fetchActiveSubs(context.Background(), client, srv.URL, "user@example.com", "tok")
+		got, err := fetchActiveSubs(context.Background(), client, srv.URL, "user@example.com", key)
 		must.NoError(t, err)
 		must.Len(t, got, 1)
 		should.Equal(t, "sub-1", got[0].SubscriptionID)
@@ -419,7 +458,7 @@ func TestFetchActiveSubs(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := fetchActiveSubs(context.Background(), client, srv.URL, "nope@example.com", "tok")
+		_, err := fetchActiveSubs(context.Background(), client, srv.URL, "nope@example.com", key)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "no subscriber found")
 	})
@@ -430,7 +469,7 @@ func TestFetchActiveSubs(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := fetchActiveSubs(context.Background(), client, srv.URL, "user@example.com", "tok")
+		_, err := fetchActiveSubs(context.Background(), client, srv.URL, "user@example.com", key)
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "no active subscriptions")
 	})

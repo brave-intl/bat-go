@@ -1,17 +1,17 @@
 // Package cmd implements the skus support CLI.
 //
-// All commands talk exclusively to the subscriptions service support API with
-// a bearer token.
-//
-// The registration onto rootcmd.RootCmd in init is the only coupling to the
-// bat-go repo; everything else is stdlib plus cobra, so the package can be
-// lifted into its own repository.
+// All commands talk exclusively to the subscriptions service support API. Each
+// request is signed with an ed25519 key (SSH format) whose public key is in the
+// subscriptions support operator keystore for the target environment.
 package cmd
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,8 +23,10 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 )
 
 var SkusCmd = &cobra.Command{
@@ -116,8 +118,8 @@ func addSupportFlags(cmd *cobra.Command) {
 	cmd.Flags().String("subscriptions-base-url", "",
 		"base URL of the subscriptions service, e.g. https://subscriptions.brave.com [env: SUBSCRIPTIONS_BASE_URL]")
 
-	cmd.Flags().String("subscriptions-token", "",
-		"bearer token for the subscriptions support API [env: SUBSCRIPTIONS_SUPPORT_TOKEN]")
+	cmd.Flags().String("private-key", "",
+		"path to the ed25519 private key file (SSH format) used to sign requests [env: SUBSCRIPTIONS_SUPPORT_PRIVATE_KEY]")
 
 	cmd.Flags().String("email", "",
 		"subscriber email to look up the subscription (mutually exclusive with --subscription-id) [env: SUBSCRIBER_EMAIL]")
@@ -137,20 +139,25 @@ func flagOrEnv(cmd *cobra.Command, flag, env string) string {
 }
 
 // subsConn reads and validates the subscriptions support API connection flags,
-// returning the base URL and bearer token.
-func subsConn(cmd *cobra.Command) (string, string, error) {
+// returning the base URL and the ed25519 key used to sign requests.
+func subsConn(cmd *cobra.Command) (string, ed25519.PrivateKey, error) {
 	baseURL := strings.TrimRight(flagOrEnv(cmd, "subscriptions-base-url", "SUBSCRIPTIONS_BASE_URL"), "/")
-	token := flagOrEnv(cmd, "subscriptions-token", "SUBSCRIPTIONS_SUPPORT_TOKEN")
+	keyPath := flagOrEnv(cmd, "private-key", "SUBSCRIPTIONS_SUPPORT_PRIVATE_KEY")
 
 	if baseURL == "" {
-		return "", "", fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required")
+		return "", nil, fmt.Errorf("--subscriptions-base-url (or SUBSCRIPTIONS_BASE_URL) is required")
 	}
 
-	if token == "" {
-		return "", "", fmt.Errorf("--subscriptions-token (or SUBSCRIPTIONS_SUPPORT_TOKEN) is required")
+	if keyPath == "" {
+		return "", nil, fmt.Errorf("--private-key (or SUBSCRIPTIONS_SUPPORT_PRIVATE_KEY) is required")
 	}
 
-	return baseURL, token, nil
+	key, err := loadED25519PrivateKey(keyPath)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return baseURL, key, nil
 }
 
 // subRef reads the subscription identification flags.
@@ -177,12 +184,12 @@ func requireSubRef(subID, email string) error {
 // resolveSubID returns the target subscription ID, resolving --email via the
 // support API when --subscription-id was not given. The second return value is
 // the product name when known (email path), for display.
-func resolveSubID(ctx context.Context, client *http.Client, baseURL, token, subID, email string) (string, string, error) {
+func resolveSubID(ctx context.Context, client *http.Client, baseURL string, key ed25519.PrivateKey, subID, email string) (string, string, error) {
 	if subID != "" {
 		return subID, "", nil
 	}
 
-	sub, err := resolveSubByEmail(ctx, client, baseURL, email, token)
+	sub, err := resolveSubByEmail(ctx, client, baseURL, email, key)
 	if err != nil {
 		return "", "", err
 	}
@@ -195,7 +202,7 @@ func resolveSubID(ctx context.Context, client *http.Client, baseURL, token, subI
 }
 
 func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
-	baseURL, token, err := subsConn(cmd)
+	baseURL, key, err := subsConn(cmd)
 	if err != nil {
 		return err
 	}
@@ -208,12 +215,12 @@ func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	subID, productName, err := resolveSubID(ctx, client, baseURL, token, subID, email)
+	subID, productName, err := resolveSubID(ctx, client, baseURL, key, subID, email)
 	if err != nil {
 		return err
 	}
 
-	usage, err := getLinkingUsage(ctx, client, baseURL, subID, token)
+	usage, err := getLinkingUsage(ctx, client, baseURL, subID, key)
 	if err != nil {
 		return err
 	}
@@ -224,7 +231,7 @@ func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
 }
 
 func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
-	baseURL, token, err := subsConn(cmd)
+	baseURL, key, err := subsConn(cmd)
 	if err != nil {
 		return err
 	}
@@ -242,12 +249,12 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	subID, productName, err := resolveSubID(ctx, client, baseURL, token, subID, email)
+	subID, productName, err := resolveSubID(ctx, client, baseURL, key, subID, email)
 	if err != nil {
 		return err
 	}
 
-	usage, err := getLinkingUsage(ctx, client, baseURL, subID, token)
+	usage, err := getLinkingUsage(ctx, client, baseURL, subID, key)
 	if err != nil {
 		return err
 	}
@@ -268,7 +275,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if err := resetLinkingSlots(ctx, client, baseURL, subID, token, seats); err != nil {
+	if err := resetLinkingSlots(ctx, client, baseURL, subID, key, seats); err != nil {
 		return err
 	}
 
@@ -278,7 +285,7 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 }
 
 func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
-	baseURL, token, err := subsConn(cmd)
+	baseURL, key, err := subsConn(cmd)
 	if err != nil {
 		return err
 	}
@@ -291,7 +298,7 @@ func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	subID, productName, err := resolveSubID(ctx, client, baseURL, token, subID, email)
+	subID, productName, err := resolveSubID(ctx, client, baseURL, key, subID, email)
 	if err != nil {
 		return err
 	}
@@ -311,7 +318,7 @@ func runExtendLinkingLimit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if err := extendLinkingLimit(ctx, client, baseURL, subID, token); err != nil {
+	if err := extendLinkingLimit(ctx, client, baseURL, subID, key); err != nil {
 		return err
 	}
 
@@ -368,13 +375,15 @@ func supportAPIError(action string, statusCode int, body []byte) error {
 }
 
 // getLinkingUsage fetches the slot usage report for a subscription.
-func getLinkingUsage(ctx context.Context, client *http.Client, baseURL, subID, token string) (*linkingUsageResp, error) {
+func getLinkingUsage(ctx context.Context, client *http.Client, baseURL, subID string, key ed25519.PrivateKey) (*linkingUsageResp, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, supportBatchesURL(baseURL, subID), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	if err := signSupportRequest(key, req); err != nil {
+		return nil, err
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -401,7 +410,7 @@ func getLinkingUsage(ctx context.Context, client *http.Client, baseURL, subID, t
 
 // resetLinkingSlots frees device slots for a subscription by deleting its
 // oldest credential batches.
-func resetLinkingSlots(ctx context.Context, client *http.Client, baseURL, subID, token string, seats int) error {
+func resetLinkingSlots(ctx context.Context, client *http.Client, baseURL, subID string, key ed25519.PrivateKey, seats int) error {
 	endpoint := supportBatchesURL(baseURL, subID)
 
 	payload, err := json.Marshal(struct {
@@ -416,8 +425,11 @@ func resetLinkingSlots(ctx context.Context, client *http.Client, baseURL, subID,
 		return err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
+
+	if err := signSupportRequest(key, req); err != nil {
+		return err
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -438,7 +450,7 @@ func resetLinkingSlots(ctx context.Context, client *http.Client, baseURL, subID,
 }
 
 // extendLinkingLimit calls the subscriptions support API to grant an extension.
-func extendLinkingLimit(ctx context.Context, client *http.Client, baseURL, subID, token string) error {
+func extendLinkingLimit(ctx context.Context, client *http.Client, baseURL, subID string, key ed25519.PrivateKey) error {
 	endpoint := supportBatchesURL(baseURL, subID) + "/extend"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
@@ -446,7 +458,9 @@ func extendLinkingLimit(ctx context.Context, client *http.Client, baseURL, subID
 		return err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	if err := signSupportRequest(key, req); err != nil {
+		return err
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -514,8 +528,8 @@ type activeSubsListResp struct {
 
 // resolveSubByEmail fetches the active subscriptions for an email and returns the
 // chosen one, prompting the operator when more than one matches.
-func resolveSubByEmail(ctx context.Context, client *http.Client, baseURL, email, token string) (activeSubsResp, error) {
-	subs, err := fetchActiveSubs(ctx, client, baseURL, email, token)
+func resolveSubByEmail(ctx context.Context, client *http.Client, baseURL, email string, key ed25519.PrivateKey) (activeSubsResp, error) {
+	subs, err := fetchActiveSubs(ctx, client, baseURL, email, key)
 	if err != nil {
 		return activeSubsResp{}, err
 	}
@@ -523,7 +537,7 @@ func resolveSubByEmail(ctx context.Context, client *http.Client, baseURL, email,
 	return selectActiveSub(subs, email)
 }
 
-func fetchActiveSubs(ctx context.Context, client *http.Client, baseURL, email, token string) ([]activeSubsResp, error) {
+func fetchActiveSubs(ctx context.Context, client *http.Client, baseURL, email string, key ed25519.PrivateKey) ([]activeSubsResp, error) {
 	u := baseURL + "/v1/support/subscribers/" + url.PathEscape(email)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -531,7 +545,9 @@ func fetchActiveSubs(ctx context.Context, client *http.Client, baseURL, email, t
 		return nil, err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	if err := signSupportRequest(key, req); err != nil {
+		return nil, err
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -609,4 +625,53 @@ func confirm(prompt string) bool {
 	}
 
 	return strings.ToLower(strings.TrimSpace(scanner.Text())) == "y"
+}
+
+// signSupportRequest signs r with key using the headers the subscriptions support
+// middleware verifies: date, digest, (request-target). It sets the Date header to
+// now and includes the SHA-256 of the body in the signature.
+func signSupportRequest(key ed25519.PrivateKey, r *http.Request) error {
+	pubKey := key.Public().(ed25519.PublicKey)
+
+	ps := httpsignature.ParameterizedSignator{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.ED25519,
+			KeyID:     hex.EncodeToString(pubKey),
+			Headers:   []string{"date", "digest", "(request-target)"},
+		},
+		Signator: key,
+		Opts:     crypto.Hash(0),
+	}
+
+	r.Header.Set("Date", time.Now().UTC().Format(time.RFC1123))
+
+	// BuildSigningString skips digest computation when r.Body is nil, producing an
+	// empty "SHA-256=" header that won't match the hash the server computes over
+	// zero bytes. Treat a nil body as http.NoBody so the empty-body hash is always
+	// part of the signature.
+	if r.Body == nil {
+		r.Body = http.NoBody
+	}
+
+	return ps.SignRequest(r)
+}
+
+// loadED25519PrivateKey reads an ed25519 private key in SSH format from path.
+func loadED25519PrivateKey(path string) (ed25519.PrivateKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read key file: %w", err)
+	}
+
+	raw, err := ssh.ParseRawPrivateKey(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse SSH private key: %w", err)
+	}
+
+	key, ok := raw.(*ed25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("key is not an ed25519 private key (got %T)", raw)
+	}
+
+	return *key, nil
 }

@@ -17,7 +17,7 @@ You need Go 1.26 or later. Run `go version` to check.
 
 ## Overview
 
-All commands talk to the subscriptions service support API with a bearer token. There are no signing keys and no direct SKUs access.
+All commands talk to the subscriptions service support API. Each request is signed with your ed25519 operator key; the public half must be registered in the subscriptions support keystore for the target environment. There is no direct SKUs access.
 
 | Command | What it does |
 |---------|--------------|
@@ -29,7 +29,7 @@ All commands talk to the subscriptions service support API with a bearer token. 
 
 **Binary**: `bat-go` must be built and in your PATH.
 
-**Support API token**: obtain from the ops team (`SUPPORT_API_TOKEN` from the subscriptions service secrets for the target environment).
+**Operator key**: an ed25519 private key (SSH format) whose public key has been added to the subscriptions support keystore for the target environment. Generate one with `ssh-keygen -t ed25519 -f ~/.ssh/brave_support` and send the `.pub` to the ops team to register.
 
 ### Shared flags
 
@@ -38,7 +38,7 @@ Every command takes the same connection and identification flags:
 | Flag | Env var | Required | Description |
 |------|---------|----------|-------------|
 | `--subscriptions-base-url` | `SUBSCRIPTIONS_BASE_URL` | Yes | Base URL of the subscriptions service |
-| `--subscriptions-token` | `SUBSCRIPTIONS_SUPPORT_TOKEN` | Yes | Bearer token for the support API |
+| `--private-key` | `SUBSCRIPTIONS_SUPPORT_PRIVATE_KEY` | Yes | Path to your ed25519 private key file (SSH format) used to sign requests |
 | `--subscription-id` | — | One of these | Subscription UUID (mutually exclusive with `--email`) |
 | `--email` | `SUBSCRIBER_EMAIL` | One of these | Subscriber email (mutually exclusive with `--subscription-id`) |
 
@@ -55,7 +55,7 @@ Read-only check of a subscriber's device slot usage. Run this first when a user 
 ```bash
 bat-go skus show-linking-usage \
   --subscriptions-base-url https://subscriptions.rewards.brave.com \
-  --subscriptions-token <SUPPORT_API_TOKEN> \
+  --private-key ~/.ssh/brave_support \
   --email <USER_EMAIL>
 ```
 
@@ -83,7 +83,7 @@ Additional flag:
 ```bash
 bat-go skus reset-linking-limit \
   --subscriptions-base-url https://subscriptions.rewards.brave.com \
-  --subscriptions-token <SUPPORT_API_TOKEN> \
+  --private-key ~/.ssh/brave_support \
   --email <USER_EMAIL> \
   --seats <N>
 ```
@@ -123,7 +123,7 @@ Grants a self-service-style linking-limit extension, adding device slots without
 ```bash
 bat-go skus extend-linking-limit \
   --subscriptions-base-url https://subscriptions.rewards.brave.com \
-  --subscriptions-token <SUPPORT_API_TOKEN> \
+  --private-key ~/.ssh/brave_support \
   --email <USER_EMAIL>
 ```
 
@@ -131,7 +131,7 @@ bat-go skus extend-linking-limit \
 
 ## Environment reference
 
-The subscriptions service URL and support token are environment-specific — confirm with the ops team.
+The subscriptions service URL is environment-specific, and your operator public key must be registered in that environment's support keystore — confirm with the ops team.
 
 ## Troubleshooting
 
@@ -147,4 +147,6 @@ The subscriptions service URL and support token are environment-specific — con
 
 **"extension failed (status 429, rate_limited)"** — an extension was granted recently; the per-window rate limit applies to support grants too.
 
-**Unexpected status 401** — your bearer token is wrong for this environment, or has been rotated. Confirm with the ops team.
+**Unexpected status 401** — the request was not signed (missing `--private-key`).
+
+**Unexpected status 403** — your key signed the request but its public key is not in this environment's support keystore (wrong env, or not yet registered). Confirm with the ops team.
