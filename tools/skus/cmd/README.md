@@ -78,14 +78,14 @@ Additional flag:
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--seats` | Yes | Number of device slots to free |
+| `--slots` | Yes | Number of device-linking slots to free |
 
 ```bash
 bat-go skus reset-linking-limit \
   --subscriptions-base-url https://subscriptions.rewards.brave.com \
   --private-key ~/.ssh/brave_support \
   --email <USER_EMAIL> \
-  --seats <N>
+  --slots <N>
 ```
 
 ### Interactive flow
@@ -103,16 +103,16 @@ The command always shows the current usage before making changes:
 Note: the server selects the oldest N batches independently at delete time.
       If the subscription changes before the request arrives, the result may differ.
 
-Delete 1 seat(s) for subscription 1f14a340-...? [y/N]:
+Delete 1 slot(s) for subscription 1f14a340-...? [y/N]:
 ```
 
 Type `y` to confirm. Anything else aborts with no changes made.
 
-### How many seats to free
+### How many slots to free
 
-`--seats` is the number of device slots to release. Each seat = one linked device removed (oldest first). If the user wants to add one new device, free 1 seat. If you're unsure, start with 1 — they can always ask again.
+`--slots` is the number of device-linking slots to release. Each slot = one linked device removed. If the user wants to add one new device, free 1 slot. If you're unsure, start with 1 — they can always ask again.
 
-If `--seats` exceeds the number of slots in use, the command errors and makes no change. You will not accidentally delete more than exists.
+If `--slots` exceeds the number of slots in use, the command errors and makes no change. You will not accidentally delete more than exists.
 
 ---
 
@@ -139,9 +139,9 @@ The subscriptions service URL is environment-specific, and your operator public 
 
 **"no active subscriptions found for email"** — the subscriber exists but has no currently active subscription (expired or never had one).
 
-**"--seats (N) exceeds device slots in use (M)"** — the user has fewer linked devices than you asked to free. Re-run with a smaller `--seats` (or none may need freeing — check the usage output).
+**"--slots (N) exceeds device slots in use (M)"** — the user has fewer linked devices than you asked to free. Re-run with a smaller `--slots` (or none may need freeing — check the usage output).
 
-**"reset failed (status 422, seats_exceeded)"** — a device was unlinked between the usage check and your confirmation. Re-run the command to see fresh usage.
+**"reset failed (status 422, slots_exceeded)"** — a device was unlinked between the usage check and your confirmation. Re-run the command to see fresh usage.
 
 **"extension failed (status 422, not_at_limit)"** — the subscriber has free slots; an extension isn't needed. Use `show-linking-usage` to confirm.
 

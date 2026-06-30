@@ -200,12 +200,12 @@ func TestResolveSubID(t *testing.T) {
 
 func TestSupportAPIError(t *testing.T) {
 	t.Run("error_code_and_message", func(t *testing.T) {
-		err := supportAPIError("reset", http.StatusUnprocessableEntity, []byte(`{"message":"seats exceeds active batch count","code":422,"errorCode":"seats_exceeded"}`))
+		err := supportAPIError("reset", http.StatusUnprocessableEntity, []byte(`{"message":"slots exceeds active batch count","code":422,"errorCode":"slots_exceeded"}`))
 		must.Error(t, err)
 		should.Contains(t, err.Error(), "reset failed")
 		should.Contains(t, err.Error(), "422")
-		should.Contains(t, err.Error(), "seats_exceeded")
-		should.Contains(t, err.Error(), "seats exceeds active batch count")
+		should.Contains(t, err.Error(), "slots_exceeded")
+		should.Contains(t, err.Error(), "slots exceeds active batch count")
 	})
 
 	t.Run("message_only", func(t *testing.T) {
@@ -306,10 +306,10 @@ func TestResetLinkingSlots(t *testing.T) {
 			should.Equal(t, "/v1/support/subscriptions/"+subID+"/credentials/batches", r.URL.Path)
 
 			var body struct {
-				Seats int `json:"seats"`
+				Slots int `json:"slots"`
 			}
 			should.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-			should.Equal(t, 2, body.Seats)
+			should.Equal(t, 2, body.Slots)
 
 			fmt.Fprint(w, "{}")
 		}))
@@ -323,14 +323,14 @@ func TestResetLinkingSlots(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnprocessableEntity)
-			fmt.Fprint(w, `{"message":"seats exceeds active batch count","code":422,"errorCode":"seats_exceeded"}`)
+			fmt.Fprint(w, `{"message":"slots exceeds active batch count","code":422,"errorCode":"slots_exceeded"}`)
 		}))
 		defer srv.Close()
 
 		err := resetLinkingSlots(context.Background(), client, srv.URL, subID, key, 9)
 		must.Error(t, err)
-		should.Contains(t, err.Error(), "seats_exceeded")
-		should.Contains(t, err.Error(), "seats exceeds active batch count")
+		should.Contains(t, err.Error(), "slots_exceeded")
+		should.Contains(t, err.Error(), "slots exceeds active batch count")
 		should.Contains(t, err.Error(), "422")
 	})
 

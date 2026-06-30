@@ -109,8 +109,8 @@ func init() {
 	addSupportFlags(resetLinkingLimitCmd)
 	addSupportFlags(extendLinkingLimitCmd)
 
-	resetLinkingLimitCmd.Flags().Int("seats", 0,
-		"number of device slots to free (deletes this many oldest batches)")
+	resetLinkingLimitCmd.Flags().Int("slots", 0,
+		"number of device-linking slots to free")
 }
 
 // addSupportFlags registers the flags shared by every support command.
@@ -207,9 +207,9 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	seats, _ := cmd.Flags().GetInt("seats")
-	if seats <= 0 {
-		return fmt.Errorf("--seats must be a positive integer")
+	slots, _ := cmd.Flags().GetInt("slots")
+	if slots <= 0 {
+		return fmt.Errorf("--slots must be a positive integer")
 	}
 
 	subID, email := subRef(cmd)
@@ -233,24 +233,24 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	fmt.Print(formatLinkingUsage(subID, productName, usage))
 	fmt.Println()
 
-	if seats > usage.Active {
-		return fmt.Errorf("--seats (%d) exceeds device slots in use (%d)", seats, usage.Active)
+	if slots > usage.Active {
+		return fmt.Errorf("--slots (%d) exceeds device slots in use (%d)", slots, usage.Active)
 	}
 
 	fmt.Println("Note: the server selects the oldest N batches independently at delete time.")
 	fmt.Println("      If the subscription changes before the request arrives, the result may differ.")
 	fmt.Println()
 
-	if !confirm(fmt.Sprintf("Delete %d seat(s) for subscription %s?", seats, subID)) {
+	if !confirm(fmt.Sprintf("Delete %d slot(s) for subscription %s?", slots, subID)) {
 		fmt.Println("Aborted.")
 		return nil
 	}
 
-	if err := resetLinkingSlots(ctx, client, baseURL, subID, key, seats); err != nil {
+	if err := resetLinkingSlots(ctx, client, baseURL, subID, key, slots); err != nil {
 		return err
 	}
 
-	fmt.Printf("Done. %d device slot(s) freed for subscription %s.\n", seats, subID)
+	fmt.Printf("Done. %d device slot(s) freed for subscription %s.\n", slots, subID)
 
 	return nil
 }
@@ -410,12 +410,12 @@ func getLinkingUsage(ctx context.Context, client *http.Client, baseURL, subID st
 
 // resetLinkingSlots frees device slots for a subscription by deleting its
 // oldest credential batches.
-func resetLinkingSlots(ctx context.Context, client *http.Client, baseURL, subID string, key ed25519.PrivateKey, seats int) error {
+func resetLinkingSlots(ctx context.Context, client *http.Client, baseURL, subID string, key ed25519.PrivateKey, slots int) error {
 	endpoint := supportBatchesURL(baseURL, subID)
 
 	payload, err := json.Marshal(struct {
-		Seats int `json:"seats"`
-	}{Seats: seats})
+		Slots int `json:"slots"`
+	}{Slots: slots})
 	if err != nil {
 		return err
 	}
