@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
 	"encoding/pem"
@@ -43,6 +45,44 @@ func signingKeyFile(t *testing.T) string {
 	must.NoError(t, os.WriteFile(path, pem.EncodeToMemory(blk), 0o600))
 
 	return path
+}
+
+func TestLoadED25519PrivateKey(t *testing.T) {
+	t.Run("valid_ed25519_key", func(t *testing.T) {
+		loaded, err := loadED25519PrivateKey(signingKeyFile(t))
+		must.NoError(t, err)
+		should.NotNil(t, loaded)
+	})
+
+	t.Run("non_existent_file", func(t *testing.T) {
+		_, err := loadED25519PrivateKey(filepath.Join(t.TempDir(), "nope"))
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "failed to read key file")
+	})
+
+	t.Run("not_a_key_file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "garbage")
+		must.NoError(t, os.WriteFile(path, []byte("this is not a key"), 0o600))
+
+		_, err := loadED25519PrivateKey(path)
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "failed to parse SSH private key")
+	})
+
+	t.Run("non_ed25519_key_rejected", func(t *testing.T) {
+		ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		must.NoError(t, err)
+
+		blk, err := ssh.MarshalPrivateKey(ecKey, "")
+		must.NoError(t, err)
+
+		path := filepath.Join(t.TempDir(), "id_ecdsa")
+		must.NoError(t, os.WriteFile(path, pem.EncodeToMemory(blk), 0o600))
+
+		_, err = loadED25519PrivateKey(path)
+		must.Error(t, err)
+		should.Contains(t, err.Error(), "not an ed25519 private key")
+	})
 }
 
 func TestFlagOrEnv(t *testing.T) {

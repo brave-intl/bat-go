@@ -34,22 +34,6 @@ var SkusCmd = &cobra.Command{
 	Short: "provides skus service support tooling",
 }
 
-var showLinkingUsageCmd = &cobra.Command{
-	Use:   "show-linking-usage",
-	Short: "Show device linking slot usage for a premium subscription",
-	Long: `Shows how many device linking slots are in use for a subscription, out of its
-current limit, with one row per linked device. Read-only; never makes changes.
-
-The subscriber is identified by --email (looked up via the subscriptions
-support API). If multiple subscriptions match you will be prompted to choose
-one. Alternatively pass --subscription-id to target a subscription directly.
-
-Note: email lookup requires the subscription to be linked to a Premium account.
-Mobile (iOS/Android) purchases are found by email once linked; an order that
-has only been created anonymously and not yet linked has no associated email.`,
-	RunE: runShowLinkingUsage,
-}
-
 var resetLinkingLimitCmd = &cobra.Command{
 	Use:   "reset-linking-limit",
 	Short: "Free device linking slots for a premium subscription",
@@ -70,6 +54,22 @@ Note: email lookup requires the subscription to be linked to a Premium account.
 Mobile (iOS/Android) purchases are found by email once linked; an order that
 has only been created anonymously and not yet linked has no associated email.`,
 	RunE: runResetLinkingLimit,
+}
+
+var showLinkingUsageCmd = &cobra.Command{
+	Use:   "show-linking-usage",
+	Short: "Show device linking slot usage for a premium subscription",
+	Long: `Shows how many device linking slots are in use for a subscription, out of its
+current limit, with one row per linked device. Read-only; never makes changes.
+
+The subscriber is identified by --email (looked up via the subscriptions
+support API). If multiple subscriptions match you will be prompted to choose
+one. Alternatively pass --subscription-id to target a subscription directly.
+
+Note: email lookup requires the subscription to be linked to a Premium account.
+Mobile (iOS/Android) purchases are found by email once linked; an order that
+has only been created anonymously and not yet linked has no associated email.`,
+	RunE: runShowLinkingUsage,
 }
 
 var extendLinkingLimitCmd = &cobra.Command{
@@ -201,35 +201,6 @@ func resolveSubID(ctx context.Context, client *http.Client, baseURL string, key 
 	return sub.SubscriptionID, sub.ProductName, nil
 }
 
-func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
-	baseURL, key, err := subsConn(cmd)
-	if err != nil {
-		return err
-	}
-
-	subID, email := subRef(cmd)
-	if err := requireSubRef(subID, email); err != nil {
-		return err
-	}
-
-	ctx := cmd.Context()
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	subID, productName, err := resolveSubID(ctx, client, baseURL, key, subID, email)
-	if err != nil {
-		return err
-	}
-
-	usage, err := getLinkingUsage(ctx, client, baseURL, subID, key)
-	if err != nil {
-		return err
-	}
-
-	fmt.Print(formatLinkingUsage(subID, productName, usage))
-
-	return nil
-}
-
 func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	baseURL, key, err := subsConn(cmd)
 	if err != nil {
@@ -280,6 +251,35 @@ func runResetLinkingLimit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Done. %d device slot(s) freed for subscription %s.\n", seats, subID)
+
+	return nil
+}
+
+func runShowLinkingUsage(cmd *cobra.Command, args []string) error {
+	baseURL, key, err := subsConn(cmd)
+	if err != nil {
+		return err
+	}
+
+	subID, email := subRef(cmd)
+	if err := requireSubRef(subID, email); err != nil {
+		return err
+	}
+
+	ctx := cmd.Context()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	subID, productName, err := resolveSubID(ctx, client, baseURL, key, subID, email)
+	if err != nil {
+		return err
+	}
+
+	usage, err := getLinkingUsage(ctx, client, baseURL, subID, key)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(formatLinkingUsage(subID, productName, usage))
 
 	return nil
 }
@@ -616,17 +616,6 @@ func selectActiveSub(results []activeSubsResp, email string) (activeSubsResp, er
 	}
 }
 
-func confirm(prompt string) bool {
-	fmt.Printf("%s [y/N]: ", prompt)
-
-	scanner := bufio.NewScanner(os.Stdin)
-	if !scanner.Scan() {
-		return false
-	}
-
-	return strings.ToLower(strings.TrimSpace(scanner.Text())) == "y"
-}
-
 // signSupportRequest signs r with key using the headers the subscriptions support
 // middleware verifies: date, digest, (request-target). It sets the Date header to
 // now and includes the SHA-256 of the body in the signature.
@@ -674,4 +663,15 @@ func loadED25519PrivateKey(path string) (ed25519.PrivateKey, error) {
 	}
 
 	return *key, nil
+}
+
+func confirm(prompt string) bool {
+	fmt.Printf("%s [y/N]: ", prompt)
+
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return false
+	}
+
+	return strings.ToLower(strings.TrimSpace(scanner.Text())) == "y"
 }
