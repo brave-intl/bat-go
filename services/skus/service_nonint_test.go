@@ -8423,3 +8423,119 @@ func TestService_redeemBlindedCred(t *testing.T) {
 		})
 	}
 }
+
+func TestService_handleRedeemFnError(t *testing.T) {
+	type tcGiven struct {
+		kind string
+		err  error
+	}
+
+	type tcExpected struct {
+		code      int
+		duplicate bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "tlv2_duplicate_legacy",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				err:  cbr.ErrDupRedeem,
+			},
+			exp: tcExpected{
+				code:      http.StatusOK,
+				duplicate: true,
+			},
+		},
+
+		{
+			name: "tlv2_duplicate_binding_equivalence",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				err:  cbr.ErrDupRedeemEquivBinding,
+			},
+			exp: tcExpected{
+				code:      http.StatusOK,
+				duplicate: true,
+			},
+		},
+
+		{
+			name: "tlv2_duplicate_id_equivalence",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				err:  cbr.ErrDupRedeemEquivID,
+			},
+			exp: tcExpected{
+				code: http.StatusForbidden,
+			},
+		},
+
+		{
+			name: "single_use_duplicate",
+			given: tcGiven{
+				kind: singleUse,
+				err:  cbr.ErrDupRedeem,
+			},
+			exp: tcExpected{
+				code: http.StatusForbidden,
+			},
+		},
+
+		{
+			name: "single_use_duplicate_id_equivalence",
+			given: tcGiven{
+				kind: singleUse,
+				err:  cbr.ErrDupRedeemEquivID,
+			},
+			exp: tcExpected{
+				code: http.StatusForbidden,
+			},
+		},
+
+		{
+			name: "unknown_error",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				err:  model.Error("something_else"),
+			},
+			exp: tcExpected{
+				code: http.StatusInternalServerError,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			cred := &cbr.CredentialRedemption{TokenPreimage: "token_preimage"}
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			aerr := handleRedeemFnError(context.Background(), rw, tc.given.kind, cred, tc.given.err)
+
+			if tc.exp.code == http.StatusOK {
+				must.Nil(t, aerr)
+				should.Equal(t, http.StatusOK, rw.Code)
+
+				var result blindedCredVrfResult
+				must.NoError(t, json.Unmarshal(rw.Body.Bytes(), &result))
+
+				should.Equal(t, tc.exp.duplicate, result.Duplicate)
+				should.Equal(t, cred.TokenPreimage, result.ID)
+				return
+			}
+
+			must.NotNil(t, aerr)
+			should.Equal(t, tc.exp.code, aerr.Code)
+		})
+	}
+}

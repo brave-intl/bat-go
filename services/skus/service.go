@@ -3374,14 +3374,20 @@ func handleRedeemFnError(ctx context.Context, w http.ResponseWriter, kind string
 	msg := err.Error()
 
 	// Time limited v2: Expose a credential id so the caller can decide whether to allow multiple redemptions.
-	if kind == timeLimitedV2 && msg == cbr.ErrDupRedeem.Error() {
+	// A duplicate with binding equivalence is a replay of the original redemption.
+	if kind == timeLimitedV2 && (msg == cbr.ErrDupRedeem.Error() || msg == cbr.ErrDupRedeemEquivBinding.Error()) {
 		data := &blindedCredVrfResult{ID: cred.TokenPreimage, Duplicate: true}
 
 		return handlers.RenderContent(ctx, data, w, http.StatusOK)
 	}
 
+	// The credential was redeemed with a different payload previously.
+	if msg == cbr.ErrDupRedeemEquivID.Error() {
+		return handlers.WrapError(err, "credentials already redeemed with a different payload", http.StatusForbidden)
+	}
+
 	// Duplicate redemptions are not verified.
-	if msg == cbr.ErrDupRedeem.Error() || msg == cbr.ErrBadRequest.Error() {
+	if msg == cbr.ErrDupRedeem.Error() || msg == cbr.ErrDupRedeemEquivBinding.Error() || msg == cbr.ErrBadRequest.Error() {
 		return handlers.WrapError(err, "invalid credentials", http.StatusForbidden)
 	}
 

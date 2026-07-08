@@ -2,6 +2,7 @@ package cbr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -159,9 +160,38 @@ type CredentialRedeemRequest struct {
 var (
 	// ErrDupRedeem - Error for duplicate redemptions
 	ErrDupRedeem = errors.New("cbr duplicate redemption")
+	// ErrDupRedeemEquivBinding - Error for duplicate redemptions that are a
+	// replay of the original redemption (same token, same payload).
+	ErrDupRedeemEquivBinding = errors.New("cbr duplicate redemption: binding equivalence")
+	// ErrDupRedeemEquivID - Error for duplicate redemptions where the token
+	// was redeemed with a different payload previously.
+	ErrDupRedeemEquivID = errors.New("cbr duplicate redemption: id equivalence")
 	// ErrBadRequest - Error for cbr bad requests
 	ErrBadRequest = errors.New("cbr bad request")
 )
+
+// redeemEquivalence extracts the equivalence field from a duplicate
+// redemption error response, if the server provided one.
+func redeemEquivalence(body interface{}) string {
+	data, ok := body.(clients.RespErrData)
+	if !ok {
+		return ""
+	}
+
+	raw, ok := data.Body.(string)
+	if !ok {
+		return ""
+	}
+
+	var resp struct {
+		Equivalence string `json:"equivalence"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		return ""
+	}
+
+	return resp.Equivalence
+}
 
 func handleRedeemError(err error) error {
 	var eb *errorutils.ErrorBundle
@@ -174,9 +204,17 @@ func handleRedeemError(err error) error {
 			// 429/404 - retry later
 			switch hs.Status {
 			case http.StatusConflict:
-				return errorutils.New(err, ErrDupRedeem.Error(),
+				dupErr, errCode := ErrDupRedeem, "cbr_dup_redeem"
+				switch redeemEquivalence(hs.Body) {
+				case "binding":
+					dupErr, errCode = ErrDupRedeemEquivBinding, "cbr_dup_redeem_equiv_binding"
+				case "id":
+					dupErr, errCode = ErrDupRedeemEquivID, "cbr_dup_redeem_equiv_id"
+				}
+
+				return errorutils.New(err, dupErr.Error(),
 					errorutils.Codified{
-						ErrCode: "cbr_dup_redeem",
+						ErrCode: errCode,
 						Retry:   false,
 					})
 			case http.StatusBadRequest:
