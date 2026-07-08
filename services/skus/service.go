@@ -2499,10 +2499,10 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", kind), "unknown credential type %s", http.StatusBadRequest)
 	}
 
-	// The payload is the message the client signed, and challenge-bypass
-	// compares it on re-redemption to tell idempotent retries from token
-	// reuse. Newer clients sign a unique per-presentation payload; legacy
-	// clients omit it and sign the issuer instead.
+	// The payload is the message the client signed. Newer clients sign a
+	// unique per-presentation payload, which allows for more flexible
+	// idempotent behavior; legacy clients omit it and sign the issuer
+	// instead.
 	payload := cred.Payload
 	if payload == "" {
 		payload = cred.Issuer

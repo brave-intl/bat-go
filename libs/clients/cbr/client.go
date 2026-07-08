@@ -240,10 +240,9 @@ type CredentialRedemption struct {
 	Signature     string `json:"signature"`
 
 	// Payload is the message the client computed Signature over. Newer
-	// clients bind their signature to a unique per-presentation payload so
-	// that challenge-bypass can tell idempotent retries (same payload) from
-	// token reuse (different payload). Legacy clients omit it and sign the
-	// issuer instead.
+	// clients bind their signature to a unique per-presentation payload,
+	// which allows for more flexible idempotent behavior on redemption.
+	// Legacy clients omit it and sign the issuer instead.
 	Payload string `json:"payload,omitempty"`
 }
 
