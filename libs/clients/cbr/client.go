@@ -2,6 +2,7 @@ package cbr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -25,7 +26,7 @@ type Client interface {
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
-	RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error
+	RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) (*RedeemResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -156,12 +157,47 @@ type CredentialRedeemRequest struct {
 	Payload       string `json:"payload"`
 }
 
+const (
+	// EquivalenceBinding indicates the redemption was a replay of the
+	// original request (same token, same payload) and is idempotent.
+	EquivalenceBinding = "binding"
+	// EquivalenceID indicates the token was redeemed with a different
+	// payload previously.
+	EquivalenceID = "id"
+)
+
 var (
 	// ErrDupRedeem - Error for duplicate redemptions
 	ErrDupRedeem = errors.New("cbr duplicate redemption")
+	// ErrDupRedeemEquivID - Error for duplicate redemptions where the token
+	// was redeemed with a different payload previously.
+	ErrDupRedeemEquivID = errors.New("cbr duplicate redemption: id equivalence")
 	// ErrBadRequest - Error for cbr bad requests
 	ErrBadRequest = errors.New("cbr bad request")
 )
+
+// redeemEquivalence extracts the equivalence field from a duplicate
+// redemption error response, if the server provided one.
+func redeemEquivalence(body interface{}) string {
+	data, ok := body.(clients.RespErrData)
+	if !ok {
+		return ""
+	}
+
+	raw, ok := data.Body.(string)
+	if !ok {
+		return ""
+	}
+
+	var resp struct {
+		Equivalence string `json:"equivalence"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		return ""
+	}
+
+	return resp.Equivalence
+}
 
 func handleRedeemError(err error) error {
 	var eb *errorutils.ErrorBundle
@@ -174,9 +210,14 @@ func handleRedeemError(err error) error {
 			// 429/404 - retry later
 			switch hs.Status {
 			case http.StatusConflict:
-				return errorutils.New(err, ErrDupRedeem.Error(),
+				dupErr, errCode := ErrDupRedeem, "cbr_dup_redeem"
+				if redeemEquivalence(hs.Body) == EquivalenceID {
+					dupErr, errCode = ErrDupRedeemEquivID, "cbr_dup_redeem_equiv_id"
+				}
+
+				return errorutils.New(err, dupErr.Error(),
 					errorutils.Codified{
-						ErrCode: "cbr_dup_redeem",
+						ErrCode: errCode,
 						Retry:   false,
 					})
 			case http.StatusBadRequest:
@@ -238,6 +279,12 @@ type CredentialRedemption struct {
 	Issuer        string `json:"issuer"`
 	TokenPreimage string `json:"t"`
 	Signature     string `json:"signature"`
+
+	// Payload is the message the client computed Signature over. Newer
+	// clients bind their signature to a unique per-presentation payload,
+	// which allows for more flexible idempotent behavior on redemption.
+	// Legacy clients omit it and sign the issuer instead.
+	Payload string `json:"payload,omitempty"`
 }
 
 // CredentialsRedeemRequest is a request to redeem one or more tokens toward some payload
@@ -257,14 +304,28 @@ func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []Creden
 	return handleRedeemError(err)
 }
 
+// RedeemResponse is the response to a redemption request.
+type RedeemResponse struct {
+	Cohort int `json:"cohort"`
+
+	// Equivalence is set when the token was already redeemed: "binding"
+	// when the request is a replay of the original redemption and the
+	// redemption is therefore idempotent.
+	Equivalence string `json:"equivalence"`
+}
+
 // RedeemCredentialV3 redeems a version 3 token that was issued by the specified issuer
-func (c *HTTPClient) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error {
+func (c *HTTPClient) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) (*RedeemResponse, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "v3/blindedToken/"+issuer+"/redemption/",
 		&CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload}, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = c.client.Do(ctx, req, nil)
-	return handleRedeemError(err)
+	var resp RedeemResponse
+	if _, err := c.client.Do(ctx, req, &resp); err != nil {
+		return nil, handleRedeemError(err)
+	}
+
+	return &resp, nil
 }

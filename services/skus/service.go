@@ -2488,20 +2488,40 @@ func orderItemsToRadomLineItems(orderItems []model.OrderItem) ([]radom.LineItem,
 }
 
 func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, kind string, cred *cbr.CredentialRedemption) *handlers.AppError {
-	var redeemFn func(ctx context.Context, issuer, preimage, signature, payload string) error
+	// redeemFn returns the equivalence classification of the redemption,
+	// which is empty for new redemptions and for credential types whose
+	// endpoint does not report it.
+	var redeemFn func(ctx context.Context, issuer, preimage, signature, payload string) (string, error)
 
 	switch kind {
 	case singleUse:
-		redeemFn = s.cbClient.RedeemCredential
+		redeemFn = func(ctx context.Context, issuer, preimage, signature, payload string) (string, error) {
+			return "", s.cbClient.RedeemCredential(ctx, issuer, preimage, signature, payload)
+		}
 	case timeLimitedV2:
-		redeemFn = s.cbClient.RedeemCredentialV3
+		redeemFn = func(ctx context.Context, issuer, preimage, signature, payload string) (string, error) {
+			resp, err := s.cbClient.RedeemCredentialV3(ctx, issuer, preimage, signature, payload)
+			if err != nil {
+				return "", err
+			}
+
+			return resp.Equivalence, nil
+		}
 	default:
 		return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", kind), "unknown credential type %s", http.StatusBadRequest)
 	}
 
-	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
-	// to allow for more flexible idempotent behavior.
-	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
+	// The payload is the message the client signed. Newer clients sign a
+	// unique per-presentation payload, which allows for more flexible
+	// idempotent behavior; legacy clients omit it and sign the issuer
+	// instead.
+	payload := cred.Payload
+	if payload == "" {
+		payload = cred.Issuer
+	}
+
+	equiv, err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, payload)
+	if err != nil {
 		if !shouldRetryRedeemFn(kind, cred.Issuer, err) {
 			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
@@ -2510,14 +2530,21 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		//
 		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
 		const leoa = "brave.com?sku=brave-leo-premium-year"
-		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
+		equiv, err = redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, payload)
+		if err != nil {
 			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
 	}
 
 	// TODO(clD11): cleanup after quick fix
 	if kind == timeLimitedV2 {
-		return handlers.RenderContent(ctx, &blindedCredVrfResult{ID: cred.TokenPreimage}, w, http.StatusOK)
+		data := &blindedCredVrfResult{
+			ID:          cred.TokenPreimage,
+			Duplicate:   equiv == cbr.EquivalenceBinding,
+			Equivalence: equiv,
+		}
+
+		return handlers.RenderContent(ctx, data, w, http.StatusOK)
 	}
 
 	return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
@@ -3179,6 +3206,11 @@ func durationFromISO(v string) (time.Duration, error) {
 type blindedCredVrfResult struct {
 	ID        string `json:"id"`
 	Duplicate bool   `json:"duplicate"`
+
+	// Equivalence is set when the credential was already redeemed:
+	// "binding" when the request is a replay of the original redemption
+	// and is therefore idempotent.
+	Equivalence string `json:"equivalence,omitempty"`
 }
 
 type tlv1CredPresentation struct {
@@ -3371,6 +3403,11 @@ func handleRedeemFnError(ctx context.Context, w http.ResponseWriter, kind string
 		data := &blindedCredVrfResult{ID: cred.TokenPreimage, Duplicate: true}
 
 		return handlers.RenderContent(ctx, data, w, http.StatusOK)
+	}
+
+	// The credential was redeemed with a different payload previously.
+	if msg == cbr.ErrDupRedeemEquivID.Error() {
+		return handlers.WrapError(err, "credentials already redeemed with a different payload", http.StatusForbidden)
 	}
 
 	// Duplicate redemptions are not verified.

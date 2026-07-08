@@ -25,6 +25,7 @@ import (
 	"google.golang.org/api/androidpublisher/v3"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	berrs "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -8336,6 +8337,225 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 
 			actual := svc.extendLinkingLimitTx(context.Background(), nil, tc.given.oid, tc.given.itemID, tc.given.write)
 			should.ErrorIs(t, actual, tc.exp.err)
+		})
+	}
+}
+
+func TestService_redeemBlindedCred(t *testing.T) {
+	type tcGiven struct {
+		kind string
+		cred *cbr.CredentialRedemption
+		resp *cbr.RedeemResponse
+	}
+
+	type tcExpected struct {
+		payload   string
+		duplicate bool
+		equiv     string
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "legacy_no_payload_falls_back_to_issuer",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				cred: &cbr.CredentialRedemption{
+					Issuer:        "brave.com?sku=brave-leo-premium",
+					TokenPreimage: "token_preimage",
+					Signature:     "signature",
+				},
+				resp: &cbr.RedeemResponse{},
+			},
+			exp: tcExpected{
+				payload: "brave.com?sku=brave-leo-premium",
+			},
+		},
+
+		{
+			name: "client_payload_used_as_binding",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				cred: &cbr.CredentialRedemption{
+					Issuer:        "brave.com?sku=brave-leo-premium",
+					TokenPreimage: "token_preimage",
+					Signature:     "signature",
+					Payload:       "f3e26fc0-0000-4000-a000-000000000000",
+				},
+				resp: &cbr.RedeemResponse{},
+			},
+			exp: tcExpected{
+				payload: "f3e26fc0-0000-4000-a000-000000000000",
+			},
+		},
+
+		{
+			name: "idempotent_replay_reported_to_caller",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				cred: &cbr.CredentialRedemption{
+					Issuer:        "brave.com?sku=brave-leo-premium",
+					TokenPreimage: "token_preimage",
+					Signature:     "signature",
+					Payload:       "f3e26fc0-0000-4000-a000-000000000000",
+				},
+				resp: &cbr.RedeemResponse{Equivalence: cbr.EquivalenceBinding},
+			},
+			exp: tcExpected{
+				payload:   "f3e26fc0-0000-4000-a000-000000000000",
+				duplicate: true,
+				equiv:     cbr.EquivalenceBinding,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			cbcl := mockcb.NewMockClient(ctrl)
+
+			var payload string
+			cbcl.EXPECT().RedeemCredentialV3(
+				gomock.Any(),
+				tc.given.cred.Issuer,
+				tc.given.cred.TokenPreimage,
+				tc.given.cred.Signature,
+				gomock.Any(),
+			).DoAndReturn(func(_ context.Context, _, _, _, pl string) (*cbr.RedeemResponse, error) {
+				payload = pl
+				return tc.given.resp, nil
+			})
+
+			svc := &Service{cbClient: cbcl}
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			aerr := svc.redeemBlindedCred(context.Background(), rw, tc.given.kind, tc.given.cred)
+			must.Nil(t, aerr)
+
+			should.Equal(t, http.StatusOK, rw.Code)
+			should.Equal(t, tc.exp.payload, payload)
+
+			var result blindedCredVrfResult
+			must.NoError(t, json.Unmarshal(rw.Body.Bytes(), &result))
+
+			should.Equal(t, tc.given.cred.TokenPreimage, result.ID)
+			should.Equal(t, tc.exp.duplicate, result.Duplicate)
+			should.Equal(t, tc.exp.equiv, result.Equivalence)
+		})
+	}
+}
+
+func TestService_handleRedeemFnError(t *testing.T) {
+	type tcGiven struct {
+		kind string
+		err  error
+	}
+
+	type tcExpected struct {
+		code      int
+		duplicate bool
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "tlv2_duplicate_legacy",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				err:  cbr.ErrDupRedeem,
+			},
+			exp: tcExpected{
+				code:      http.StatusOK,
+				duplicate: true,
+			},
+		},
+
+		{
+			name: "tlv2_duplicate_id_equivalence",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				err:  cbr.ErrDupRedeemEquivID,
+			},
+			exp: tcExpected{
+				code: http.StatusForbidden,
+			},
+		},
+
+		{
+			name: "single_use_duplicate",
+			given: tcGiven{
+				kind: singleUse,
+				err:  cbr.ErrDupRedeem,
+			},
+			exp: tcExpected{
+				code: http.StatusForbidden,
+			},
+		},
+
+		{
+			name: "single_use_duplicate_id_equivalence",
+			given: tcGiven{
+				kind: singleUse,
+				err:  cbr.ErrDupRedeemEquivID,
+			},
+			exp: tcExpected{
+				code: http.StatusForbidden,
+			},
+		},
+
+		{
+			name: "unknown_error",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				err:  model.Error("something_else"),
+			},
+			exp: tcExpected{
+				code: http.StatusInternalServerError,
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			cred := &cbr.CredentialRedemption{TokenPreimage: "token_preimage"}
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			aerr := handleRedeemFnError(context.Background(), rw, tc.given.kind, cred, tc.given.err)
+
+			if tc.exp.code == http.StatusOK {
+				must.Nil(t, aerr)
+				should.Equal(t, http.StatusOK, rw.Code)
+
+				var result blindedCredVrfResult
+				must.NoError(t, json.Unmarshal(rw.Body.Bytes(), &result))
+
+				should.Equal(t, tc.exp.duplicate, result.Duplicate)
+				should.Equal(t, cred.TokenPreimage, result.ID)
+				return
+			}
+
+			must.NotNil(t, aerr)
+			should.Equal(t, tc.exp.code, aerr.Code)
 		})
 	}
 }

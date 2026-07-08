@@ -108,11 +108,12 @@ func (mr *MockClientMockRecorder) RedeemCredential(ctx, issuer, preimage, signat
 }
 
 // RedeemCredentialV3 mocks base method.
-func (m *MockClient) RedeemCredentialV3(ctx context.Context, issuer, preimage, signature, payload string) error {
+func (m *MockClient) RedeemCredentialV3(ctx context.Context, issuer, preimage, signature, payload string) (*cbr.RedeemResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RedeemCredentialV3", ctx, issuer, preimage, signature, payload)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*cbr.RedeemResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RedeemCredentialV3 indicates an expected call of RedeemCredentialV3.

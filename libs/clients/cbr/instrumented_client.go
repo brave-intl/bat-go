@@ -109,7 +109,7 @@ func (_d ClientWithPrometheus) RedeemCredential(ctx context.Context, issuer stri
 }
 
 // RedeemCredentialV3 implements Client
-func (_d ClientWithPrometheus) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) (err error) {
+func (_d ClientWithPrometheus) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) (rp1 *RedeemResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
