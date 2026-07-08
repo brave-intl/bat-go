@@ -96,6 +96,8 @@ services:
         condition: service_healthy
       challenge-bypass:
         condition: service_started
+      challenge-bypass-kafka:
+        condition: service_started
       kafka:
         condition: service_healthy
     networks:
@@ -185,6 +187,8 @@ services:
         condition: service_healthy
       challenge-bypass:
         condition: service_started
+      challenge-bypass-kafka:
+        condition: service_started
       kafka:
         condition: service_healthy
     networks:
@@ -227,12 +231,50 @@ services:
       retries: 5
       start_period: 5s
 
+  # The challenge-bypass image runs either the HTTP API (KAFKA_ENABLED=false)
+  # or the Kafka consumers (default), so it takes two containers to provide
+  # both.
   challenge-bypass:
     container_name: challenge-bypass
     image: 078933103932.dkr.ecr.us-west-2.amazonaws.com/challenge-bypass:latest
     restart: always
     ports:
       - "2416:2416"
+    environment:
+      - "ENV=devtest"
+      - KAFKA_ENABLED=false
+      - "SENTRY_DSN"
+      - "DATABASE_URL=postgres://btokens:password@grant-postgres/btokens?sslmode=disable"
+      - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
+      - KAFKA_BROKERS=kafka:19092
+      - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
+      - KAFKA_REQUIRED_ACKS=1
+      - KAFKA_CONSUMERS_PER_NODE=1
+      - REDEEM_CONSUMER_TOPIC=redeem.consumer
+      - REDEEM_PRODUCER_TOPIC=redeem.producer
+      - SIGN_CONSUMER_TOPIC=sign.consumer # unsigned order creds request
+      - SIGN_PRODUCER_TOPIC=sign.producer # signed orders creds result
+      - CONSUMER_GROUP=consumer.group
+      - "DYNAMODB_ENDPOINT=http://dynamodb:8000"
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - AWS_REGION=us-west-2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dynamodb:
+        condition: service_healthy
+    volumes:
+      - ./test/secrets:/etc/kafka/secrets
+    networks:
+      - grant
+
+  challenge-bypass-kafka:
+    container_name: challenge-bypass-kafka
+    image: 078933103932.dkr.ecr.us-west-2.amazonaws.com/challenge-bypass:latest
+    restart: always
     environment:
       - "ENV=devtest"
       - "SENTRY_DSN"
@@ -257,6 +299,8 @@ services:
       postgres:
         condition: service_healthy
       dynamodb:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     volumes:
       - ./test/secrets:/etc/kafka/secrets
