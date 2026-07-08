@@ -25,6 +25,7 @@ import (
 	"google.golang.org/api/androidpublisher/v3"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	berrs "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -8336,6 +8337,89 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 
 			actual := svc.extendLinkingLimitTx(context.Background(), nil, tc.given.oid, tc.given.itemID, tc.given.write)
 			should.ErrorIs(t, actual, tc.exp.err)
+		})
+	}
+}
+
+func TestService_redeemBlindedCred(t *testing.T) {
+	type tcGiven struct {
+		kind string
+		cred *cbr.CredentialRedemption
+	}
+
+	type tcExpected struct {
+		payload string
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "legacy_no_payload_falls_back_to_issuer",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				cred: &cbr.CredentialRedemption{
+					Issuer:        "brave.com?sku=brave-leo-premium",
+					TokenPreimage: "token_preimage",
+					Signature:     "signature",
+				},
+			},
+			exp: tcExpected{
+				payload: "brave.com?sku=brave-leo-premium",
+			},
+		},
+
+		{
+			name: "client_payload_used_as_binding",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				cred: &cbr.CredentialRedemption{
+					Issuer:        "brave.com?sku=brave-leo-premium",
+					TokenPreimage: "token_preimage",
+					Signature:     "signature",
+					Payload:       "f3e26fc0-0000-4000-a000-000000000000",
+				},
+			},
+			exp: tcExpected{
+				payload: "f3e26fc0-0000-4000-a000-000000000000",
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			cbcl := mockcb.NewMockClient(ctrl)
+
+			var payload string
+			cbcl.EXPECT().RedeemCredentialV3(
+				gomock.Any(),
+				tc.given.cred.Issuer,
+				tc.given.cred.TokenPreimage,
+				tc.given.cred.Signature,
+				gomock.Any(),
+			).DoAndReturn(func(_ context.Context, _, _, _, pl string) error {
+				payload = pl
+				return nil
+			})
+
+			svc := &Service{cbClient: cbcl}
+
+			rw := httptest.NewRecorder()
+
+			aerr := svc.redeemBlindedCred(context.Background(), rw, tc.given.kind, tc.given.cred)
+			must.Nil(t, aerr)
+
+			should.Equal(t, http.StatusOK, rw.Code)
+			should.Equal(t, tc.exp.payload, payload)
 		})
 	}
 }

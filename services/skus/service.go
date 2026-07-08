@@ -2499,9 +2499,16 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", kind), "unknown credential type %s", http.StatusBadRequest)
 	}
 
-	// FIXME: we shouldn't be using the issuer as the payload, it ideally would be a unique request identifier
-	// to allow for more flexible idempotent behavior.
-	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
+	// The payload is the message the client signed, and challenge-bypass
+	// compares it on re-redemption to tell idempotent retries from token
+	// reuse. Newer clients sign a unique per-presentation payload; legacy
+	// clients omit it and sign the issuer instead.
+	payload := cred.Payload
+	if payload == "" {
+		payload = cred.Issuer
+	}
+
+	if err := redeemFn(ctx, cred.Issuer, cred.TokenPreimage, cred.Signature, payload); err != nil {
 		if !shouldRetryRedeemFn(kind, cred.Issuer, err) {
 			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
@@ -2510,7 +2517,7 @@ func (s *Service) redeemBlindedCred(ctx context.Context, w http.ResponseWriter, 
 		//
 		// Fix for https://github.com/brave-intl/challenge-bypass-server/pull/371.
 		const leoa = "brave.com?sku=brave-leo-premium-year"
-		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, cred.Issuer); err != nil {
+		if err := redeemFn(ctx, leoa, cred.TokenPreimage, cred.Signature, payload); err != nil {
 			return handleRedeemFnError(ctx, w, kind, cred, err)
 		}
 	}
