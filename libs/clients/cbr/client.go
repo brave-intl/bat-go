@@ -26,7 +26,7 @@ type Client interface {
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
-	RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error
+	RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) (*RedeemResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -157,12 +157,18 @@ type CredentialRedeemRequest struct {
 	Payload       string `json:"payload"`
 }
 
+const (
+	// EquivalenceBinding indicates the redemption was a replay of the
+	// original request (same token, same payload) and is idempotent.
+	EquivalenceBinding = "binding"
+	// EquivalenceID indicates the token was redeemed with a different
+	// payload previously.
+	EquivalenceID = "id"
+)
+
 var (
 	// ErrDupRedeem - Error for duplicate redemptions
 	ErrDupRedeem = errors.New("cbr duplicate redemption")
-	// ErrDupRedeemEquivBinding - Error for duplicate redemptions that are a
-	// replay of the original redemption (same token, same payload).
-	ErrDupRedeemEquivBinding = errors.New("cbr duplicate redemption: binding equivalence")
 	// ErrDupRedeemEquivID - Error for duplicate redemptions where the token
 	// was redeemed with a different payload previously.
 	ErrDupRedeemEquivID = errors.New("cbr duplicate redemption: id equivalence")
@@ -205,10 +211,7 @@ func handleRedeemError(err error) error {
 			switch hs.Status {
 			case http.StatusConflict:
 				dupErr, errCode := ErrDupRedeem, "cbr_dup_redeem"
-				switch redeemEquivalence(hs.Body) {
-				case "binding":
-					dupErr, errCode = ErrDupRedeemEquivBinding, "cbr_dup_redeem_equiv_binding"
-				case "id":
+				if redeemEquivalence(hs.Body) == EquivalenceID {
 					dupErr, errCode = ErrDupRedeemEquivID, "cbr_dup_redeem_equiv_id"
 				}
 
@@ -301,14 +304,28 @@ func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []Creden
 	return handleRedeemError(err)
 }
 
+// RedeemResponse is the response to a redemption request.
+type RedeemResponse struct {
+	Cohort int `json:"cohort"`
+
+	// Equivalence is set when the token was already redeemed: "binding"
+	// when the request is a replay of the original redemption and the
+	// redemption is therefore idempotent.
+	Equivalence string `json:"equivalence"`
+}
+
 // RedeemCredentialV3 redeems a version 3 token that was issued by the specified issuer
-func (c *HTTPClient) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error {
+func (c *HTTPClient) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) (*RedeemResponse, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "v3/blindedToken/"+issuer+"/redemption/",
 		&CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload}, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = c.client.Do(ctx, req, nil)
-	return handleRedeemError(err)
+	var resp RedeemResponse
+	if _, err := c.client.Do(ctx, req, &resp); err != nil {
+		return nil, handleRedeemError(err)
+	}
+
+	return &resp, nil
 }

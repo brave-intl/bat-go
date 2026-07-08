@@ -8345,10 +8345,13 @@ func TestService_redeemBlindedCred(t *testing.T) {
 	type tcGiven struct {
 		kind string
 		cred *cbr.CredentialRedemption
+		resp *cbr.RedeemResponse
 	}
 
 	type tcExpected struct {
-		payload string
+		payload   string
+		duplicate bool
+		equiv     string
 	}
 
 	type testCase struct {
@@ -8367,6 +8370,7 @@ func TestService_redeemBlindedCred(t *testing.T) {
 					TokenPreimage: "token_preimage",
 					Signature:     "signature",
 				},
+				resp: &cbr.RedeemResponse{},
 			},
 			exp: tcExpected{
 				payload: "brave.com?sku=brave-leo-premium",
@@ -8383,9 +8387,29 @@ func TestService_redeemBlindedCred(t *testing.T) {
 					Signature:     "signature",
 					Payload:       "f3e26fc0-0000-4000-a000-000000000000",
 				},
+				resp: &cbr.RedeemResponse{},
 			},
 			exp: tcExpected{
 				payload: "f3e26fc0-0000-4000-a000-000000000000",
+			},
+		},
+
+		{
+			name: "idempotent_replay_reported_to_caller",
+			given: tcGiven{
+				kind: timeLimitedV2,
+				cred: &cbr.CredentialRedemption{
+					Issuer:        "brave.com?sku=brave-leo-premium",
+					TokenPreimage: "token_preimage",
+					Signature:     "signature",
+					Payload:       "f3e26fc0-0000-4000-a000-000000000000",
+				},
+				resp: &cbr.RedeemResponse{Equivalence: cbr.EquivalenceBinding},
+			},
+			exp: tcExpected{
+				payload:   "f3e26fc0-0000-4000-a000-000000000000",
+				duplicate: true,
+				equiv:     cbr.EquivalenceBinding,
 			},
 		},
 	}
@@ -8406,20 +8430,28 @@ func TestService_redeemBlindedCred(t *testing.T) {
 				tc.given.cred.TokenPreimage,
 				tc.given.cred.Signature,
 				gomock.Any(),
-			).DoAndReturn(func(_ context.Context, _, _, _, pl string) error {
+			).DoAndReturn(func(_ context.Context, _, _, _, pl string) (*cbr.RedeemResponse, error) {
 				payload = pl
-				return nil
+				return tc.given.resp, nil
 			})
 
 			svc := &Service{cbClient: cbcl}
 
 			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
 
 			aerr := svc.redeemBlindedCred(context.Background(), rw, tc.given.kind, tc.given.cred)
 			must.Nil(t, aerr)
 
 			should.Equal(t, http.StatusOK, rw.Code)
 			should.Equal(t, tc.exp.payload, payload)
+
+			var result blindedCredVrfResult
+			must.NoError(t, json.Unmarshal(rw.Body.Bytes(), &result))
+
+			should.Equal(t, tc.given.cred.TokenPreimage, result.ID)
+			should.Equal(t, tc.exp.duplicate, result.Duplicate)
+			should.Equal(t, tc.exp.equiv, result.Equivalence)
 		})
 	}
 }
@@ -8447,18 +8479,6 @@ func TestService_handleRedeemFnError(t *testing.T) {
 			given: tcGiven{
 				kind: timeLimitedV2,
 				err:  cbr.ErrDupRedeem,
-			},
-			exp: tcExpected{
-				code:      http.StatusOK,
-				duplicate: true,
-			},
-		},
-
-		{
-			name: "tlv2_duplicate_binding_equivalence",
-			given: tcGiven{
-				kind: timeLimitedV2,
-				err:  cbr.ErrDupRedeemEquivBinding,
 			},
 			exp: tcExpected{
 				code:      http.StatusOK,
