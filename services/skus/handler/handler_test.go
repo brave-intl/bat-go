@@ -890,7 +890,6 @@ func TestOrder_Expire(t *testing.T) {
 				svc: &mockOrderService{},
 				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
 			},
-			exp: tcExpected{},
 		},
 	}
 
