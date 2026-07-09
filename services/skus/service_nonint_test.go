@@ -8340,9 +8340,13 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 	}
 }
 
-func TestService_ExpireOrder(t *testing.T) {
+func TestService_expireOrderTx(t *testing.T) {
+	orderID := uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))
+	expiryTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	type tcGiven struct {
 		id    uuid.UUID
+		when  time.Time
 		orepo *repository.MockOrder
 	}
 
@@ -8356,7 +8360,8 @@ func TestService_ExpireOrder(t *testing.T) {
 		{
 			name: "cancel_failed_set_status",
 			given: tcGiven{
-				id: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				id:   orderID,
+				when: expiryTime,
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return model.Error("something_went_wrong")
@@ -8369,7 +8374,8 @@ func TestService_ExpireOrder(t *testing.T) {
 		{
 			name: "expire_failed_set_expires_at",
 			given: tcGiven{
-				id: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				id:   orderID,
+				when: expiryTime,
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return nil
@@ -8385,7 +8391,8 @@ func TestService_ExpireOrder(t *testing.T) {
 		{
 			name: "order_not_found_in_cancel",
 			given: tcGiven{
-				id: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				id:   orderID,
+				when: expiryTime,
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return model.ErrNoRowsChangedOrder
@@ -8398,7 +8405,8 @@ func TestService_ExpireOrder(t *testing.T) {
 		{
 			name: "order_not_found_in_expire",
 			given: tcGiven{
-				id: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				id:   orderID,
+				when: expiryTime,
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return nil
@@ -8414,10 +8422,11 @@ func TestService_ExpireOrder(t *testing.T) {
 		{
 			name: "success",
 			given: tcGiven{
-				id: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				id:   orderID,
+				when: expiryTime,
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
-						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+						if !uuid.Equal(id, orderID) {
 							return model.Error("unexpected: id")
 						}
 
@@ -8429,12 +8438,12 @@ func TestService_ExpireOrder(t *testing.T) {
 					},
 
 					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
-						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+						if !uuid.Equal(id, orderID) {
 							return model.Error("unexpected: id")
 						}
 
-						if time.Now().Before(when) {
-							return model.Error("unexpected: expiry time in the future")
+						if !when.Equal(expiryTime) {
+							return model.Error("unexpected: when")
 						}
 
 						return nil
@@ -8448,32 +8457,14 @@ func TestService_ExpireOrder(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			ds := NewMockDatastore(ctrl)
-
-			mockDB, sqlMock, err := sqlmock.New()
-			must.Equal(t, nil, err)
-			t.Cleanup(func() { mockDB.Close() })
-
-			sqlMock.ExpectBegin()
-			if tc.exp == nil {
-				sqlMock.ExpectCommit()
-			}
-
-			db := sqlx.NewDb(mockDB, "sqlmock")
-			ds.EXPECT().RawDB().AnyTimes().Return(db)
-
 			svc := &Service{
-				Datastore: ds,
 				orderRepo: tc.given.orepo,
 			}
 
 			ctx := context.Background()
 
-			err = svc.ExpireOrder(ctx, tc.given.id)
-			should.Equal(t, true, errors.Is(err, tc.exp))
+			err := svc.expireOrderTx(ctx, nil, tc.given.id, tc.given.when)
+			should.ErrorIs(t, err, tc.exp)
 		})
 	}
 }

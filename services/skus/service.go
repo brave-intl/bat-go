@@ -897,19 +897,19 @@ func (s *Service) ExpireOrder(ctx context.Context, id uuid.UUID) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.cancelOrderTx(ctx, tx, id); err != nil {
-		return err
-	}
-
-	if err := s.expireOrderTx(ctx, tx, id); err != nil {
+	if err := s.expireOrderTx(ctx, tx, id, time.Now()); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-func (s *Service) expireOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID) error {
-	return s.orderRepo.SetExpiresAt(ctx, dbi, id, time.Now())
+func (s *Service) expireOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, t time.Time) error {
+	if err := s.cancelOrderTx(ctx, dbi, id); err != nil {
+		return err
+	}
+
+	return s.orderRepo.SetExpiresAt(ctx, dbi, id, t)
 }
 
 func (s *Service) setOrderTrialDays(ctx context.Context, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {

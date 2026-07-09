@@ -155,15 +155,15 @@ func (h *Order) Expire(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 	lg := logging.Logger(ctx, "skus").With().Str("func", "ExpireOrder").Logger()
 
 	if err := h.svc.ExpireOrder(ctx, orderID); err != nil {
-		if errors.Is(err, model.ErrNoRowsChangedOrder) {
-			return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
-		}
-
-		if errors.Is(err, context.Canceled) {
-			return handlers.WrapError(model.ErrSomethingWentWrong, "client ended request", model.StatusClientClosedConn)
-		}
-
 		lg.Err(err).Str("order_id", orderID.String()).Msg("failed to expire order")
+
+		switch {
+		case errors.Is(err, model.ErrNoRowsChangedOrder):
+			return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
+
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+		}
 
 		return handlers.WrapError(model.ErrSomethingWentWrong, "could not expire order", http.StatusInternalServerError)
 	}

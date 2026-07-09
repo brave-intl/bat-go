@@ -853,7 +853,7 @@ func TestOrder_Expire(t *testing.T) {
 				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
 			},
 			exp: tcExpected{
-				err: handlers.WrapError(model.ErrSomethingWentWrong, "client ended request", model.StatusClientClosedConn),
+				err: handlers.WrapError(context.Canceled, "client ended request", model.StatusClientClosedConn),
 			},
 		},
 
@@ -900,24 +900,27 @@ func TestOrder_Expire(t *testing.T) {
 			h := handler.NewOrder(tc.given.svc)
 
 			uri := "http://localhost/v1/orders-new/" + tc.given.oid.String() + "/expire"
-			req := httptest.NewRequest(http.MethodPut, uri, nil)
+			req := httptest.NewRequest(http.MethodPatch, uri, nil)
 			req = req.WithContext(tc.given.ctx)
 
 			rw := httptest.NewRecorder()
 			rw.Header().Set("content-type", "application/json")
 
-			actual1 := h.Expire(rw, req)
-			must.Equal(t, tc.exp.err, actual1)
+			actual := h.Expire(rw, req)
+			must.Equal(t, tc.exp.err, actual)
 
 			if tc.exp.err != nil {
-				actual1.ServeHTTP(rw, req)
+				must.Equal(t, tc.exp.err.Code, actual.Code)
+			}
+
+			if tc.exp.err != nil {
+				actual.ServeHTTP(rw, req)
 				resp := rw.Body.Bytes()
 
 				exp, err := json.Marshal(tc.exp.err)
 				must.NoError(t, err)
 
-				should.Equal(t, exp, bytes.TrimSpace(resp))
-				return
+				should.JSONEq(t, string(exp), string(resp))
 			}
 		})
 	}
