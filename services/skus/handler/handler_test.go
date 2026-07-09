@@ -33,6 +33,7 @@ type mockOrderService struct {
 	fnCreateOrderFromRequest func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	fnCreateOrder            func(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
 	fnCancelOrder            func(ctx context.Context, id uuid.UUID) error
+	fnExpireOrder            func(ctx context.Context, id uuid.UUID) error
 }
 
 func (s *mockOrderService) CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error) {
@@ -57,6 +58,14 @@ func (s *mockOrderService) CancelOrder(ctx context.Context, id uuid.UUID) error 
 	}
 
 	return s.fnCancelOrder(ctx, id)
+}
+
+func (s *mockOrderService) ExpireOrder(ctx context.Context, id uuid.UUID) error {
+	if s.fnExpireOrder == nil {
+		return nil
+	}
+
+	return s.fnExpireOrder(ctx, id)
 }
 
 func TestOrder_Create(t *testing.T) {
@@ -755,6 +764,150 @@ func TestOrder_Cancel(t *testing.T) {
 			rw.Header().Set("content-type", "application/json")
 
 			actual1 := h.Cancel(rw, req)
+			must.Equal(t, tc.exp.err, actual1)
+
+			if tc.exp.err != nil {
+				actual1.ServeHTTP(rw, req)
+				resp := rw.Body.Bytes()
+
+				exp, err := json.Marshal(tc.exp.err)
+				must.NoError(t, err)
+
+				should.Equal(t, exp, bytes.TrimSpace(resp))
+				return
+			}
+		})
+	}
+}
+
+func TestOrder_Expire(t *testing.T) {
+	type tcGiven struct {
+		ctx context.Context
+		svc *mockOrderService
+		oid uuid.UUID
+	}
+
+	type tcExpected struct {
+		err *handlers.AppError
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_orderID",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"invalid_id"},
+					},
+				}),
+				svc: &mockOrderService{},
+				oid: uuid.Nil,
+			},
+			exp: tcExpected{
+				err: handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID}),
+			},
+		},
+
+		{
+			name: "order_not_found",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				svc: &mockOrderService{
+					fnExpireOrder: func(ctx context.Context, id uuid.UUID) error {
+						return model.ErrNoRowsChangedOrder
+					},
+				},
+				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound),
+			},
+		},
+
+		{
+			name: "context_cancelled",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				svc: &mockOrderService{
+					fnExpireOrder: func(ctx context.Context, id uuid.UUID) error {
+						return context.Canceled
+					},
+				},
+				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "client ended request", model.StatusClientClosedConn),
+			},
+		},
+
+		{
+			name: "something_went_wrong",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				svc: &mockOrderService{
+					fnExpireOrder: func(ctx context.Context, id uuid.UUID) error {
+						return model.Error("any_error")
+					},
+				},
+				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(model.ErrSomethingWentWrong, "could not expire order", http.StatusInternalServerError),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
+					URLParams: chi.RouteParams{
+						Keys:   []string{"orderID"},
+						Values: []string{"facade00-0000-4000-a000-000000000000"},
+					},
+				}),
+				svc: &mockOrderService{},
+				oid: uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+			},
+			exp: tcExpected{},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewOrder(tc.given.svc)
+
+			uri := "http://localhost/v1/orders-new/" + tc.given.oid.String() + "/expire"
+			req := httptest.NewRequest(http.MethodPut, uri, nil)
+			req = req.WithContext(tc.given.ctx)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			actual1 := h.Expire(rw, req)
 			must.Equal(t, tc.exp.err, actual1)
 
 			if tc.exp.err != nil {

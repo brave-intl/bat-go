@@ -526,6 +526,17 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 			),
 		)
 
+		corsMwrPut := skus.NewCORSMwr(corsOpts, http.MethodPut)
+
+		subr.Method(
+			http.MethodPut,
+			"/{orderID}/expire",
+			middleware.InstrumentHandler(
+				"ExpireOrderNew",
+				corsMwrPut(authMwr(handlers.AppHandler(orderh.Expire))),
+			),
+		)
+
 		r.Mount("/v1/orders-new", subr)
 	}
 
