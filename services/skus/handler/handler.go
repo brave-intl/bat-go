@@ -163,9 +163,10 @@ func (h *Order) Expire(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 
 		case errors.Is(err, context.Canceled):
 			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
-		}
 
-		return handlers.WrapError(model.ErrSomethingWentWrong, "could not expire order", http.StatusInternalServerError)
+		default:
+			return handlers.WrapError(model.ErrSomethingWentWrong, "could not expire order", http.StatusInternalServerError)
+		}
 	}
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)

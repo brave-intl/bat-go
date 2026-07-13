@@ -8341,9 +8341,6 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 }
 
 func TestService_expireOrderTx(t *testing.T) {
-	orderID := uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))
-	expiryTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-
 	type tcGiven struct {
 		id    uuid.UUID
 		when  time.Time
@@ -8360,8 +8357,8 @@ func TestService_expireOrderTx(t *testing.T) {
 		{
 			name: "cancel_failed_set_status",
 			given: tcGiven{
-				id:   orderID,
-				when: expiryTime,
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return model.Error("something_went_wrong")
@@ -8374,8 +8371,8 @@ func TestService_expireOrderTx(t *testing.T) {
 		{
 			name: "expire_failed_set_expires_at",
 			given: tcGiven{
-				id:   orderID,
-				when: expiryTime,
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return nil
@@ -8391,8 +8388,8 @@ func TestService_expireOrderTx(t *testing.T) {
 		{
 			name: "order_not_found_in_cancel",
 			given: tcGiven{
-				id:   orderID,
-				when: expiryTime,
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return model.ErrNoRowsChangedOrder
@@ -8405,8 +8402,8 @@ func TestService_expireOrderTx(t *testing.T) {
 		{
 			name: "order_not_found_in_expire",
 			given: tcGiven{
-				id:   orderID,
-				when: expiryTime,
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
 						return nil
@@ -8422,11 +8419,11 @@ func TestService_expireOrderTx(t *testing.T) {
 		{
 			name: "success",
 			given: tcGiven{
-				id:   orderID,
-				when: expiryTime,
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 				orepo: &repository.MockOrder{
 					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
-						if !uuid.Equal(id, orderID) {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
 							return model.Error("unexpected: id")
 						}
 
@@ -8438,11 +8435,11 @@ func TestService_expireOrderTx(t *testing.T) {
 					},
 
 					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
-						if !uuid.Equal(id, orderID) {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
 							return model.Error("unexpected: id")
 						}
 
-						if !when.Equal(expiryTime) {
+						if !when.Equal(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)) {
 							return model.Error("unexpected: when")
 						}
 

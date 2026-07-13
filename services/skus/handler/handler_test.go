@@ -911,6 +911,8 @@ func TestOrder_Expire(t *testing.T) {
 
 			if tc.exp.err != nil {
 				must.Equal(t, tc.exp.err.Code, actual.Code)
+			} else {
+				must.Equal(t, http.StatusOK, rw.Code)
 			}
 
 			if tc.exp.err != nil {
