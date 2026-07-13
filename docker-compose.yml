@@ -95,7 +95,7 @@ services:
       postgres:
         condition: service_healthy
       challenge-bypass:
-        condition: service_healthy
+        condition: service_started
       kafka:
         condition: service_healthy
     networks:
@@ -184,7 +184,7 @@ services:
       postgres:
         condition: service_healthy
       challenge-bypass:
-        condition: service_healthy
+        condition: service_started
       kafka:
         condition: service_healthy
     networks:
@@ -258,16 +258,12 @@ services:
         condition: service_healthy
       dynamodb:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     volumes:
       - ./test/secrets:/etc/kafka/secrets
     networks:
       - grant
-    healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep -v grep | grep challenge-bypass-server || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
 
   zookeeper:
     container_name: grant-zookeeper
