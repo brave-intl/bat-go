@@ -238,6 +238,7 @@ services:
       - "SENTRY_DSN"
       - "DATABASE_URL=postgres://btokens:password@grant-postgres/btokens?sslmode=disable"
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
+      - KAFKA_ENABLED=false
       - KAFKA_BROKERS=kafka:19092
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
