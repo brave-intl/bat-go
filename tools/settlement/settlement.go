@@ -184,8 +184,9 @@ func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wal
 }
 
 // SubmitPreparedTransaction submits a single settlement transaction to uphold
-//   It is designed to be idempotent across multiple runs, in case of network outage transactions that
-//   were unable to be submitted during an initial run can be submitted in subsequent runs.
+//
+//	It is designed to be idempotent across multiple runs, in case of network outage transactions that
+//	were unable to be submitted during an initial run can be submitted in subsequent runs.
 func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *custodian.Transaction) error {
 	logger := logging.Logger(ctx, "settlement.SubmitPreparedTransaction")
 	if settlement.IsComplete() {
@@ -255,8 +256,9 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 }
 
 // SubmitPreparedTransactions by submitting them to uphold after performing sanity checks
-//   It is designed to be idempotent across multiple runs, in case of network outage transactions that
-//   were unable to be submitted during an initial run can be submitted in subsequent runs.
+//
+//	It is designed to be idempotent across multiple runs, in case of network outage transactions that
+//	were unable to be submitted during an initial run can be submitted in subsequent runs.
 func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []custodian.Transaction) error {
 	err := CheckPreparedTransactions(ctx, settlementWallet, settlements)
 	if err != nil {
@@ -274,8 +276,9 @@ func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wa
 }
 
 // ConfirmPreparedTransaction confirms a single settlement transaction with uphold
-//   It is designed to be idempotent across multiple runs, in case of network outage transactions that
-//   were unable to be confirmed during an initial run can be submitted in subsequent runs.
+//
+//	It is designed to be idempotent across multiple runs, in case of network outage transactions that
+//	were unable to be confirmed during an initial run can be submitted in subsequent runs.
 func ConfirmPreparedTransaction(
 	ctx context.Context,
 	settlementWallet *uphold.Wallet,
@@ -383,8 +386,9 @@ func ConfirmPreparedTransaction(
 }
 
 // ConfirmPreparedTransactions confirms settlement transactions that have already been submitted to uphold
-//   It is designed to be idempotent across multiple runs, in case of network outage transactions that
-//   were unable to be confirmed during an initial run can be confirmed in subsequent runs.
+//
+//	It is designed to be idempotent across multiple runs, in case of network outage transactions that
+//	were unable to be confirmed during an initial run can be confirmed in subsequent runs.
 func ConfirmPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []custodian.Transaction) error {
 	for i := 0; i < len(settlements); i++ {
 		err := ConfirmPreparedTransaction(ctx, settlementWallet, &settlements[i], false)
@@ -404,7 +408,8 @@ type BPTSignedSettlement struct {
 }
 
 // ParseBPTSignedSettlement parses the signed output from brave-payment-tools
-//   It returns an array of base64 encoded "extracted" httpsignatures
+//
+//	It returns an array of base64 encoded "extracted" httpsignatures
 func ParseBPTSignedSettlement(jsonIn []byte) ([]string, error) {
 	var s BPTSignedSettlement
 	err := json.Unmarshal(jsonIn, &s)
