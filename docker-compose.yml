@@ -277,6 +277,7 @@ services:
     image: 078933103932.dkr.ecr.us-west-2.amazonaws.com/challenge-bypass:latest
     restart: always
     security_opt: [no-new-privileges=true]
+    read_only: true
     environment:
       - "ENV=devtest"
       - "SENTRY_DSN"
