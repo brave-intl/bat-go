@@ -890,6 +890,28 @@ func (s *Service) CancelOrderLegacy(orderID uuid.UUID) error {
 	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
+func (s *Service) ExpireOrder(ctx context.Context, id uuid.UUID) error {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.expireOrderTx(ctx, tx, id, time.Now()); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) expireOrderTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, t time.Time) error {
+	if err := s.cancelOrderTx(ctx, dbi, id); err != nil {
+		return err
+	}
+
+	return s.orderRepo.SetExpiresAt(ctx, dbi, id, t)
+}
+
 func (s *Service) setOrderTrialDays(ctx context.Context, orderID uuid.UUID, req *model.SetTrialDaysRequest, now time.Time) error {
 	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
 	if err != nil {

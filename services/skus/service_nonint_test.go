@@ -8339,3 +8339,129 @@ func TestService_extendLinkingLimitTx(t *testing.T) {
 		})
 	}
 }
+
+func TestService_expireOrderTx(t *testing.T) {
+	type tcGiven struct {
+		id    uuid.UUID
+		when  time.Time
+		orepo *repository.MockOrder
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name: "cancel_failed_set_status",
+			given: tcGiven{
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "expire_failed_set_expires_at",
+			given: tcGiven{
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return nil
+					},
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+			},
+			exp: model.Error("something_went_wrong"),
+		},
+
+		{
+			name: "order_not_found_in_cancel",
+			given: tcGiven{
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return model.ErrNoRowsChangedOrder
+					},
+				},
+			},
+			exp: model.ErrNoRowsChangedOrder,
+		},
+
+		{
+			name: "order_not_found_in_expire",
+			given: tcGiven{
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						return nil
+					},
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						return model.ErrNoRowsChangedOrder
+					},
+				},
+			},
+			exp: model.ErrNoRowsChangedOrder,
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				id:   uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				when: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				orepo: &repository.MockOrder{
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if status != model.OrderStatusCanceled {
+							return model.Error("unexpected: status")
+						}
+
+						return nil
+					},
+
+					FnSetExpiresAt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error {
+						if !uuid.Equal(id, uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000"))) {
+							return model.Error("unexpected: id")
+						}
+
+						if !when.Equal(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected: when")
+						}
+
+						return nil
+					},
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{
+				orderRepo: tc.given.orepo,
+			}
+
+			ctx := context.Background()
+
+			err := svc.expireOrderTx(ctx, nil, tc.given.id, tc.given.when)
+			should.ErrorIs(t, err, tc.exp)
+		})
+	}
+}
