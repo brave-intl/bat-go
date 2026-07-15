@@ -196,8 +196,15 @@ func TestSignAndRedeemCredentialsV3(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, resp.SignedTokens[0], signedToken)
 
-	err = client.RedeemCredentialV3(ctx, issuerRequest.Name, preimage, sig, payload)
+	redeemResp, err := client.RedeemCredentialV3(ctx, issuerRequest.Name, preimage, sig, payload)
 	assert.NoError(t, err)
+	assert.Empty(t, redeemResp.Equivalence)
+
+	// A replay of the same redemption is idempotent: challenge-bypass
+	// responds 200 with binding equivalence instead of 409.
+	redeemResp, err = client.RedeemCredentialV3(ctx, issuerRequest.Name, preimage, sig, payload)
+	assert.NoError(t, err)
+	assert.Equal(t, EquivalenceBinding, redeemResp.Equivalence)
 
 	_, err = db.Exec("DELETE from redemptions")
 	assert.NoError(t, err)
