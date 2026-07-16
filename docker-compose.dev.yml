@@ -41,7 +41,7 @@ services:
       redis:
         condition: service_healthy
   migrate:
-    image: migrate/migrate:v4.19.0@sha256:d5c978181e3bfa55cc50e3bd8d7da3d87418a87693453250a8804b81ee6494db
+    image: migrate/migrate:v4.19.1@sha256:cc4ad8e19d66791e3689405d9a028ce6e9614f32032db14acda1469f7201d6e4
     profiles:
       - tools
     volumes:
