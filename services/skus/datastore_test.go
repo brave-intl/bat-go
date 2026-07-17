@@ -250,6 +250,8 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 	// We should only process the max batch size.
 
 	var messagesItemID []uuid.UUID
+	// WriteMessages is called in a goroutine; use a channel to wait for it.
+	writeMessagesDone := make(chan struct{})
 
 	signingRequestWriter := NewMockSigningRequestWriter(ctrl)
 	signingRequestWriter.EXPECT().
@@ -258,6 +260,7 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 			for _, message := range messages {
 				messagesItemID = append(messagesItemID, message.ItemID)
 			}
+			close(writeMessagesDone)
 		}).
 		Times(1).
 		Return(nil)
@@ -265,14 +268,20 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 	err := suite.storage.SendSigningRequest(ctx, signingRequestWriter)
 	suite.Require().NoError(err)
 
+	// Wait for goroutine to call WriteMessages, then for it to commit submitted_at.
+	select {
+	case <-writeMessagesDone:
+	case <-time.After(5 * time.Second):
+		suite.Fail("timeout waiting for WriteMessages to be called")
+		return
+	}
+
 	// Assert kafka mock was called with signing requests
-	suite.Require().NotNil(messagesItemID)
+	suite.Require().NotEmpty(messagesItemID)
 
-	// Assert that all the messages picked up have been marked as processed
-
-	qry, args, err := sqlx.In(`select order_id, submitted_at from signing_order_request_outbox where item_id IN (?)`,
-		messagesItemID)
-	suite.Require().NoError(err)
+	// Assert that all the messages picked up have been marked as processed.
+	// The goroutine updates submitted_at and commits after WriteMessages returns,
+	// so poll until the commit is visible.
 
 	type outboxMessage struct {
 		OrderID     uuid.UUID  `db:"order_id"`
@@ -281,8 +290,24 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_MultipleRow_Success() {
 
 	var actual []outboxMessage
 
-	err = suite.storage.RawDB().SelectContext(ctx, &actual, suite.storage.RawDB().Rebind(qry), args...)
-	suite.Require().NoError(err)
+	suite.Require().Eventually(func() bool {
+		qry, args, qErr := sqlx.In(`select order_id, submitted_at from signing_order_request_outbox where item_id IN (?)`,
+			messagesItemID)
+		if qErr != nil {
+			return false
+		}
+		actual = nil
+		qErr = suite.storage.RawDB().SelectContext(ctx, &actual, suite.storage.RawDB().Rebind(qry), args...)
+		if qErr != nil || len(actual) == 0 {
+			return false
+		}
+		for _, s := range actual {
+			if s.SubmittedAt == nil {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 10*time.Millisecond, "submitted_at should be set after goroutine commits")
 
 	for _, s := range actual {
 		suite.Assert().NotNil(s.SubmittedAt)
