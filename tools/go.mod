@@ -159,7 +159,7 @@ require (
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5 // indirect
 	github.com/throttled/throttled/v2 v2.12.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
-	go.mongodb.org/mongo-driver v1.12.2 // indirect
+	go.mongodb.org/mongo-driver v1.17.7 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
