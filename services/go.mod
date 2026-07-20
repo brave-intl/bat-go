@@ -41,6 +41,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/stripe/stripe-go/v72 v72.122.0
+	github.com/stripe/stripe-go/v76 v76.25.0
 	google.golang.org/api v0.277.0
 	gopkg.in/macaroon.v2 v2.1.0
 )
