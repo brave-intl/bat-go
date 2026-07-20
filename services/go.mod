@@ -29,7 +29,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.9
-	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/linkedin/goavro v2.15.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/redis/go-redis/v9 v9.8.0
