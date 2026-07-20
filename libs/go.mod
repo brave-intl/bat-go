@@ -16,7 +16,7 @@ require (
 	github.com/google/go-querystring v1.1.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.9
-	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/linkedin/goavro v2.15.0+incompatible
 	github.com/mssola/user_agent v0.5.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.16.0
