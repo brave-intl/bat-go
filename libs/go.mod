@@ -13,7 +13,7 @@ require (
 	github.com/go-jose/go-jose/v3 v3.0.5
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/golang/mock v1.6.0
-	github.com/google/go-querystring v1.1.0
+	github.com/google/go-querystring v1.2.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.10.9
 	github.com/linkedin/goavro v2.1.0+incompatible
