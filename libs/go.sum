@@ -222,8 +222,8 @@ github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC4
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
-github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
+github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5 h1:UOKr78K7smMjkKuwZjbOCzIFTUhIUzXc5+tYeaPRirE=
 github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5/go.mod h1:asllDl3XCEQ1lFPD4Y1juAn5p35Zd4ghNGcDKN7U7dU=
 github.com/throttled/throttled/v2 v2.12.0 h1:IezKE1uHlYC/0Al05oZV6Ar+uN/znw3cy9J8banxhEY=
