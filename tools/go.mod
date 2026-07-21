@@ -7,7 +7,7 @@ require (
 	github.com/brave-intl/bat-go v1.0.2
 	github.com/brave-intl/bat-go/libs v1.0.2
 	github.com/brave-intl/bat-go/services v1.0.2
-	github.com/getsentry/sentry-go v0.14.0
+	github.com/getsentry/sentry-go v0.48.0
 	github.com/gocarina/gocsv v0.0.0-20220927221512-ad3251f9fa25
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.6.0
