@@ -27,6 +27,7 @@ type orderService interface {
 	CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
 	CancelOrder(ctx context.Context, id uuid.UUID) error
+	ExpireOrder(ctx context.Context, id uuid.UUID) error
 }
 
 type Order struct {
@@ -138,6 +139,34 @@ func (h *Order) Cancel(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 		}
 
 		return handlers.WrapError(model.ErrSomethingWentWrong, "could not cancel order", http.StatusInternalServerError)
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+func (h *Order) Expire(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID})
+	}
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "ExpireOrder").Logger()
+
+	if err := h.svc.ExpireOrder(ctx, orderID); err != nil {
+		lg.Err(err).Str("order_id", orderID.String()).Msg("failed to expire order")
+
+		switch {
+		case errors.Is(err, model.ErrNoRowsChangedOrder):
+			return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
+
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		default:
+			return handlers.WrapError(model.ErrSomethingWentWrong, "could not expire order", http.StatusInternalServerError)
+		}
 	}
 
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
