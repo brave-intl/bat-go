@@ -310,31 +310,20 @@ services:
     networks:
       - grant
 
-  zookeeper:
-    container_name: grant-zookeeper
-    image: confluentinc/cp-zookeeper:7.9.6
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
-    networks:
-      - grant
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 2181 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
   kafka:
     container_name: grant-kafka
     image: confluentinc/cp-kafka:7.9.6
     ports:
       - "29092:29092"
     environment:
-      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "SSL://0.0.0.0:19092,SSL2://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
       KAFKA_ADVERTISED_LISTENERS: "SSL://kafka:19092,SSL2://localhost:29092"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SSL:SSL,SSL2:SSL
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "SSL:SSL,SSL2:SSL,CONTROLLER:SSL"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_SSL_KEYSTORE_FILENAME: kafka.broker1.keystore.jks
       KAFKA_SSL_KEYSTORE_CREDENTIALS: broker1_keystore_creds
@@ -347,9 +336,6 @@ services:
       KAFKA_RETENTION_MS: 10000
     volumes:
       - ./test/secrets:/etc/kafka/secrets
-    depends_on:
-      zookeeper:
-        condition: service_healthy
     networks:
       - grant
     healthcheck:
