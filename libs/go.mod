@@ -29,7 +29,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.10.0
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
-	github.com/throttled/throttled/v2 v2.12.0
+	github.com/throttled/throttled/v2 v2.15.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
@@ -59,6 +59,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
