@@ -8,7 +8,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 )
 
-// Panic calls Close on the specified closer, panicing on error
+// Panic calls Close on the specified closer, panicking on error
 func Panic(ctx context.Context, c io.Closer) {
 	logger := logging.Logger(ctx, "closers.Panic")
 	if c == nil {
