@@ -374,11 +374,30 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 
 		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrder").Logger()
 
-		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
-		if err != nil {
-			lg.Err(err).Msg("failed to parse order id")
+		orderIDParam := chi.URLParamFromCtx(ctx, "orderID")
+		isExternalID, _ := strconv.ParseBool(r.URL.Query().Get("external"))
+		var orderID uuid.UUID
 
-			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		switch {
+		case isExternalID:
+			orderByExtID, err := svc.Datastore.GetOrderByExternalID(orderIDParam)
+			if err != nil {
+				return handlers.WrapError(err, "error getting order by external id", http.StatusInternalServerError)
+			}
+
+			if orderByExtID == nil {
+				return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
+			}
+			orderID = orderByExtID.ID
+
+		default:
+			var err error
+			orderID, err = uuid.FromString(orderIDParam)
+			if err != nil {
+				lg.Err(err).Msg("failed to parse order id")
+
+				return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+			}
 		}
 
 		order, err := svc.getTransformOrder(ctx, orderID)
