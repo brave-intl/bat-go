@@ -273,7 +273,7 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 	// helpful if you want to read the body as it is
 	bodyBytes, _ := requestutils.Read(ctx, resp.Body)
 	_ = resp.Body.Close() // must close
-	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	if status >= 200 && status <= 299 {
 		if v != nil {
@@ -309,9 +309,9 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		if resp != nil {
 			// if there was an error from the service, read the response body
 			// and inject into error for later
-			b, _ := ioutil.ReadAll(resp.Body)
+			b, _ := io.ReadAll(resp.Body)
 			rb := string(b)
-			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
 
 			// put response body/headers in the err state data
 			errorData := RespErrData{

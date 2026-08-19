@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -342,7 +343,7 @@ func writeQuoteToFile(quote SavedQuote) {
 		fmt.Println("marshal error", err)
 		return
 	}
-	_ = ioutil.WriteFile("./fetch-quote.json", data, 0777)
+	_ = os.WriteFile("./fetch-quote.json", data, 0777)
 }
 
 // SavedQuote stores a quote locally
@@ -352,7 +353,7 @@ type SavedQuote struct {
 }
 
 func readQuoteFromFile() (*SavedQuote, error) {
-	dat, err := ioutil.ReadFile("./fetch-quote.json")
+	dat, err := os.ReadFile("./fetch-quote.json")
 	if err != nil {
 		fmt.Println("read file error", err)
 		return nil, nil
