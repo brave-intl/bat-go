@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -63,7 +62,7 @@ func jsonSchemaRun(command *cobra.Command, args []string) error {
 		parts := strings.Split(t.String(), ".")
 
 		// read old schema file
-		existingSchema, err := ioutil.ReadFile(
+		existingSchema, err := os.ReadFile(
 			fmt.Sprintf("../schema/%s/%s", parts[0], parts[1]))
 		if err != nil {
 			logger.Info().Err(err).Msg("could not find existing schema file, might be a new api")
@@ -79,7 +78,7 @@ func jsonSchemaRun(command *cobra.Command, args []string) error {
 		}
 
 		if overwrite {
-			err = ioutil.WriteFile(
+			err = os.WriteFile(
 				fmt.Sprintf("../schema/%s/%s", parts[0], parts[1]),
 				schema, 0644)
 			if err != nil {

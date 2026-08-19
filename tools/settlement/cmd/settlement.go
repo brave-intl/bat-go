@@ -3,7 +3,7 @@ package settlement
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -59,5 +59,5 @@ func WriteTransactions(ctx context.Context, outPath string, metadata []custodian
 		logger.Error().Err(err).Msg("failed writing outputting files")
 		return err
 	}
-	return ioutil.WriteFile(outPath, data, 0600)
+	return os.WriteFile(outPath, data, 0600)
 }

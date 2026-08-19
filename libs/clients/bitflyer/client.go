@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
