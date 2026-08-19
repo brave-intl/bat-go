@@ -202,9 +202,9 @@ GOLANGCI_LINT_VERSION := $(shell sed -nE 's/.*version: (v[0-9.]+).*/\1/p' .githu
 
 lint: ensure-gomod-volume
 	@if [ -z "$(GOLANGCI_LINT_VERSION)" ]; then echo "error: could not determine golangci-lint version from workflow" >&2; exit 1; fi
-	@for dir in main cmd libs services tools; do \
-		docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/$$dir golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint run -v ./... || exit 1; \
-	done
+	@rc=0; for dir in main cmd libs services tools; do \
+		docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/$$dir golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint run -v ./... || rc=1; \
+	done; exit $$rc
 
 migrate-create:
 	@if [ -z "$(NAME)" ]; then echo "NAME is required. Usage: make migrate-create NAME=migration_name"; exit 1; fi
