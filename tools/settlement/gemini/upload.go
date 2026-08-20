@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
@@ -254,7 +254,7 @@ func IterateRequest(
 	}
 
 	for _, bulkPayoutFile := range bulkPayoutFiles {
-		bytes, err := ioutil.ReadFile(bulkPayoutFile)
+		bytes, err := os.ReadFile(bulkPayoutFile)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read bulk payout file")
 			return submittedTransactions, err
