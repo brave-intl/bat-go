@@ -2091,7 +2091,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 
 		return s.processStripeMtoA(ctx, dbi, ntf)
 
-	case ntf.shouldCancel():
+	case ntf.shouldCancel(), ntf.shouldExpireIncompletePayment():
 		oid, err := ntf.orderID()
 		if err != nil {
 			return err
