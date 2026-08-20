@@ -5,7 +5,7 @@ import (
 	"os/user"
 	"path"
 
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v3"
 )
 
 // Config a space for complex inputs
