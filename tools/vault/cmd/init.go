@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path"
@@ -178,7 +177,7 @@ func Initialize(command *cobra.Command, args []string) error {
 				}
 			}
 
-			err = ioutil.WriteFile(fmt.Sprintf("share-%d.gpg", i), b, 0600)
+			err = os.WriteFile(fmt.Sprintf("share-%d.gpg", i), b, 0600)
 			if err != nil {
 				return err
 			}
@@ -190,7 +189,7 @@ func Initialize(command *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(path.Join(usr.HomeDir, ".vault-token"), []byte(resp.RootToken), 0600)
+	err = os.WriteFile(path.Join(usr.HomeDir, ".vault-token"), []byte(resp.RootToken), 0600)
 	if err != nil {
 		return err
 	}

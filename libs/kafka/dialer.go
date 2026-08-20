@@ -8,7 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
+
 	"os"
 	"strings"
 	"time"
@@ -183,7 +183,7 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 		}
 		return []byte{}, errors.New(env + " must be passed")
 	}
-	buf, err := ioutil.ReadFile(loc)
+	buf, err := os.ReadFile(loc)
 	if err != nil {
 		return []byte{}, err
 	}

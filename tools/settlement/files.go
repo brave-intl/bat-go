@@ -2,7 +2,7 @@ package settlement
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 
 	"github.com/brave-intl/bat-go/libs/custodian"
 )
@@ -12,7 +12,7 @@ func ReadFiles(filesPaths []string) (*[]custodian.Transaction, error) {
 	var allPayouts []custodian.Transaction
 	for _, filePath := range filesPaths {
 		var transactionList []custodian.Transaction
-		bytes, err := ioutil.ReadFile(filePath)
+		bytes, err := os.ReadFile(filePath)
 		if err != nil {
 			return nil, err
 		}

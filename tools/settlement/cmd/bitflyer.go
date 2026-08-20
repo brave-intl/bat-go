@@ -3,7 +3,7 @@ package settlement
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -274,7 +274,7 @@ func BitflyerUploadSettlement(
 		}
 	}
 
-	bytes, err := ioutil.ReadFile(inPath)
+	bytes, err := os.ReadFile(inPath)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to read bulk payout file")
 		return err

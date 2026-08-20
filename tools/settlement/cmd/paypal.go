@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
@@ -72,7 +71,7 @@ func init() {
 // PaypalEmailTemplate performs template replacement of date fields in emails
 func PaypalEmailTemplate(inPath string, outPath string) (err error) {
 	// read in email template
-	data, err := ioutil.ReadFile(inPath)
+	data, err := os.ReadFile(inPath)
 	if err != nil {
 		err = fmt.Errorf("failed to read template: %w", err)
 		return
@@ -252,7 +251,7 @@ func PaypalWriteTransactions(outPath string, metadata *[]custodian.Transaction) 
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(outPath, data, 0600)
+	return os.WriteFile(outPath, data, 0600)
 }
 
 // PaypalWriteMassPayCSV writes a csv for using with Paypal web mass payments

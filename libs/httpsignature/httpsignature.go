@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+
 	"net/http"
 	"regexp"
 	"strings"
@@ -140,7 +140,7 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 				if err != nil {
 					return out, err
 				}
-				req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+				req.Body = io.NopCloser(bytes.NewBuffer(body))
 				d.Update(body)
 			}
 			req.Header.Add("Digest", d.String())
