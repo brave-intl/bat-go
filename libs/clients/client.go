@@ -308,7 +308,7 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		if resp != nil {
 			// if there was an error from the service, read the response body
 			// and inject into error for later
-			b, _ := io.ReadAll(resp.Body)
+			b, _ := requestutils.Read(ctx, resp.Body)
 			rb := string(b)
 			resp.Body = io.NopCloser(bytes.NewBuffer(b))
 
