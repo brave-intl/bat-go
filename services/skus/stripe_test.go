@@ -193,6 +193,15 @@ func TestStripeNotification_shouldProcess(t *testing.T) {
 		},
 
 		{
+			name: "expire_incomplete_payment",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+				sub: &stripe.Subscription{Status: "incomplete_expired"},
+			},
+			exp: true,
+		},
+
+		{
 			name: "skip",
 			given: &stripeNotification{
 				raw:     &stripe.Event{Type: "invoice.updated"},
@@ -404,6 +413,62 @@ func TestStripeNotification_ntfType(t *testing.T) {
 	}
 }
 
+func TestStripeNotification_shouldExpireIncompletePayment(t *testing.T) {
+	tests := []struct {
+		name  string
+		given *stripeNotification
+		exp   bool
+	}{
+		{
+			name: "no_sub_wrong_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "something_else"},
+			},
+		},
+
+		{
+			name: "sub_wrong_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "something_else"},
+				sub: &stripe.Subscription{},
+			},
+		},
+
+		{
+			name: "no_sub_correct_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+			},
+		},
+
+		{
+			name: "sub_status_not_incomplete_expired",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+				sub: &stripe.Subscription{Status: "paid"},
+			},
+		},
+
+		{
+			name: "expire_incomplete_payment",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.deleted"},
+				sub: &stripe.Subscription{Status: "incomplete_expired"},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldCancel()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestStripeNotification_ntfSubType(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -500,6 +565,15 @@ func TestStripeNotification_effect(t *testing.T) {
 				paymentIntent: &stripe.PaymentIntent{},
 			},
 			exp: "activate_perpetual_license",
+		},
+
+		{
+			name: "expire_incomplete_payment",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+				sub: &stripe.Subscription{Status: "incomplete_expired"},
+			},
+			exp: "expire_incomplete_payment",
 		},
 
 		{

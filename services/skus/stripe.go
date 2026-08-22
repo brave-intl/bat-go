@@ -43,7 +43,7 @@ func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
 
 		return result, nil
 
-	case "customer.subscription.deleted":
+	case "customer.subscription.deleted", "customer.subscription.updated":
 		val, err := parseStripeEventData[stripe.Subscription](raw.Data.Raw)
 		if err != nil {
 			return nil, err
@@ -69,7 +69,7 @@ func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
 }
 
 func (x *stripeNotification) shouldProcess() bool {
-	return x.shouldRenew() || x.shouldCancel() || x.shouldRecordPayFailure() || x.shouldActivatePL()
+	return x.shouldRenew() || x.shouldCancel() || x.shouldRecordPayFailure() || x.shouldActivatePL() || x.shouldExpireIncompletePayment()
 }
 
 func (x *stripeNotification) shouldRenew() bool {
@@ -86,6 +86,10 @@ func (x *stripeNotification) shouldActivatePL() bool {
 
 func (x *stripeNotification) shouldRecordPayFailure() bool {
 	return x.invoice != nil && x.raw.Type == "invoice.payment_failed"
+}
+
+func (x *stripeNotification) shouldExpireIncompletePayment() bool {
+	return x.sub != nil && x.raw.Type == "customer.subscription.updated" && x.sub.Status == "incomplete_expired"
 }
 
 func (x *stripeNotification) ntfType() string {
@@ -121,6 +125,9 @@ func (x *stripeNotification) effect() string {
 
 	case x.shouldActivatePL():
 		return "activate_perpetual_license"
+
+	case x.shouldExpireIncompletePayment():
+		return "expire_incomplete_payment"
 
 	default:
 		return "skip"
