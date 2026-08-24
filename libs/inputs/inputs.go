@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 )
@@ -22,7 +21,7 @@ func DecodeAndValidateString(ctx context.Context, v DecodeValidate, input string
 
 // DecodeAndValidateReader - perform decode and validate of input in one swipe
 func DecodeAndValidateReader(ctx context.Context, v DecodeValidate, input io.Reader) error {
-	b, err := ioutil.ReadAll(input)
+	b, err := io.ReadAll(input)
 	if err != nil {
 		return fmt.Errorf("failed to read input: %w", err)
 	}

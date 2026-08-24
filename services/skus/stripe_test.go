@@ -148,6 +148,26 @@ func TestParseStripeNotification(t *testing.T) {
 		should.Equal(t, "ece7f0e8-f13b-4358-871f-2a330fb85fd4", ntf.paymentIntent.Metadata["orderID"])
 		should.Equal(t, time.Date(2026, time.January, 20, 0, 0, 0, 0, time.UTC).Unix(), ntf.paymentIntent.Created)
 	})
+
+	t.Run("customer.subscription.updated", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Join("testdata", "stripe_customer_subscription_updated.json"))
+		must.NoError(t, err)
+
+		event := &stripe.Event{}
+
+		{
+			err := json.Unmarshal(raw, event)
+			must.NoError(t, err)
+		}
+
+		must.Equal(t, "customer.subscription.updated", event.Type)
+
+		ntf, err := parseStripeNotification(event)
+		must.NoError(t, err)
+
+		should.Equal(t, "80171044-45ad-4c47-a222-64f67703b331", ntf.sub.Metadata["orderID"])
+		should.Equal(t, stripe.SubscriptionStatusIncompleteExpired, ntf.sub.Status)
+	})
 }
 
 func TestStripeNotification_shouldProcess(t *testing.T) {
@@ -188,6 +208,15 @@ func TestStripeNotification_shouldProcess(t *testing.T) {
 			given: &stripeNotification{
 				raw:           &stripe.Event{Type: "payment_intent.succeeded"},
 				paymentIntent: &stripe.PaymentIntent{},
+			},
+			exp: true,
+		},
+
+		{
+			name: "expire_incomplete_payment",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+				sub: &stripe.Subscription{Status: stripe.SubscriptionStatusIncompleteExpired},
 			},
 			exp: true,
 		},
@@ -404,6 +433,62 @@ func TestStripeNotification_ntfType(t *testing.T) {
 	}
 }
 
+func TestStripeNotification_shouldExpireIncompletePayment(t *testing.T) {
+	tests := []struct {
+		name  string
+		given *stripeNotification
+		exp   bool
+	}{
+		{
+			name: "no_sub_wrong_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "something_else"},
+			},
+		},
+
+		{
+			name: "sub_wrong_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "something_else"},
+				sub: &stripe.Subscription{},
+			},
+		},
+
+		{
+			name: "no_sub_correct_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+			},
+		},
+
+		{
+			name: "sub_status_not_incomplete_expired",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+				sub: &stripe.Subscription{Status: "paid"},
+			},
+		},
+
+		{
+			name: "expire_incomplete_payment",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+				sub: &stripe.Subscription{Status: stripe.SubscriptionStatusIncompleteExpired},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.shouldExpireIncompletePayment()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestStripeNotification_ntfSubType(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -500,6 +585,15 @@ func TestStripeNotification_effect(t *testing.T) {
 				paymentIntent: &stripe.PaymentIntent{},
 			},
 			exp: "activate_perpetual_license",
+		},
+
+		{
+			name: "expire_incomplete_payment",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "customer.subscription.updated"},
+				sub: &stripe.Subscription{Status: stripe.SubscriptionStatusIncompleteExpired},
+			},
+			exp: "expire_incomplete_payment",
 		},
 
 		{

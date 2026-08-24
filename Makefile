@@ -196,12 +196,15 @@ format:
 format-lint:
 	make format && make lint
 
+# The golangci-lint version is defined once, in .github/workflows/golangci-lint.yml
+# (the `version:` field). Derive it here so `make lint` always matches CI.
+GOLANGCI_LINT_VERSION := $(shell sed -nE 's/.*version: (v[0-9.]+).*/\1/p' .github/workflows/golangci-lint.yml)
+
 lint: ensure-gomod-volume
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/main golangci/golangci-lint:v1.64.8 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/cmd golangci/golangci-lint:v1.64.8 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/libs golangci/golangci-lint:v1.64.8 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/services golangci/golangci-lint:v1.64.8 golangci-lint run -v ./...
-	docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/tools golangci/golangci-lint:v1.64.8 golangci-lint run -v ./...
+	@if [ -z "$(GOLANGCI_LINT_VERSION)" ]; then echo "error: could not determine golangci-lint version from workflow" >&2; exit 1; fi
+	@rc=0; for dir in main cmd libs services tools; do \
+		docker run --rm -v "$$(pwd):/app" -v batgo_lint_gomod:/go/pkg --workdir /app/$$dir golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint run -v ./... || rc=1; \
+	done; exit $$rc
 
 migrate-create:
 	@if [ -z "$(NAME)" ]; then echo "NAME is required. Usage: make migrate-create NAME=migration_name"; exit 1; fi

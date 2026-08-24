@@ -6,7 +6,8 @@ import (
 	"os"
 
 	"gopkg.in/macaroon.v2"
-	"gopkg.in/yaml.v2"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // Caveats - configuration representation of key pair caveats

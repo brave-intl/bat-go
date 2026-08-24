@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,7 +131,7 @@ func UpholdUpload(
 	}
 	logger.Info().Msg("beginning uphold upload")
 
-	settlementJSON, err := ioutil.ReadFile(inputFile)
+	settlementJSON, err := os.ReadFile(inputFile)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to read input file")
 	}
@@ -350,7 +349,7 @@ func UpholdUpload(
 			logger.Panic().Err(err).Msg("failed to marshal settlement transactions to eyeshade input")
 		}
 
-		err = ioutil.WriteFile(outputFile, out, 0600)
+		err = os.WriteFile(outputFile, out, 0600)
 		if err != nil {
 			logger.Panic().Err(err).Msg("failed to write out settlement transactions to eyeshade input")
 		}

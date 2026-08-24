@@ -3,7 +3,7 @@ package vault
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
@@ -52,7 +52,7 @@ func Unseal(command *cobra.Command, args []string) error {
 		b, err = term.ReadPassword(int(os.Stdin.Fd()))
 	} else {
 		reader := bufio.NewReader(os.Stdin)
-		b, err = ioutil.ReadAll(reader)
+		b, err = io.ReadAll(reader)
 	}
 	if err != nil {
 		return err
