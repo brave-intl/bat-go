@@ -2671,6 +2671,40 @@ func TestService_processStripeNotificationTx(t *testing.T) {
 		},
 
 		{
+			name: "expire_incomplete_payment",
+			given: tcGiven{
+				ntf: &stripeNotification{
+					raw: &stripe.Event{Type: "customer.subscription.updated"},
+					sub: &stripe.Subscription{
+						ID:     "sub_id",
+						Status: stripe.SubscriptionStatusIncompleteExpired,
+						Metadata: map[string]string{
+							"orderID": "facade00-0000-4000-a000-000000000000",
+						},
+					},
+				},
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadataInt: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key string, val int) error {
+						if uuid.Equal(id, uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000"))) && val == 0 {
+							return nil
+						}
+
+						return model.Error("unexpected_metadata_int")
+					},
+
+					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
+						if uuid.Equal(id, uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000"))) && status == model.OrderStatusCanceled {
+							return nil
+						}
+
+						return model.Error("unexpected_status")
+					},
+				},
+				phRepo: &repository.MockOrderPayHistory{},
+			},
+		},
+
+		{
 			name: "record_pay_failure_sub_id_error",
 			given: tcGiven{
 				ntf: &stripeNotification{
