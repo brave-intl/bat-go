@@ -115,6 +115,7 @@ type orderItemStore interface {
 	FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
 	InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
 	ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error
+	ApplySupportLimitCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expectedLimit, newLimit int) error
 }
 
 type orderPayHistoryStore interface {

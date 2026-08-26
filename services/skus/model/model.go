@@ -121,6 +121,14 @@ type ExtensionWrite struct {
 	NewLimit                    int        `json:"new_limit"`
 }
 
+// SupportLimitWrite is a limit change that does not count as a self-service
+// extension. ExpectedLimit is the CAS version token: the limit the caller last
+// observed, against which the write is rejected if it no longer holds.
+type SupportLimitWrite struct {
+	ExpectedLimit int `json:"expected_limit"`
+	NewLimit      int `json:"new_limit"`
+}
+
 // Vendor represents an app store vendor.
 type Vendor string
 

@@ -152,10 +152,11 @@ func (r *MockOrder) IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerCo
 }
 
 type MockOrderItem struct {
-	FnGet               func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
-	FnFindByOrderID     func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
-	FnInsertMany        func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
-	FnApplyExtensionCAS func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error
+	FnGet                  func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	FnFindByOrderID        func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
+	FnInsertMany           func(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
+	FnApplyExtensionCAS    func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error
+	FnApplySupportLimitCAS func(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expectedLimit, newLimit int) error
 }
 
 func (r *MockOrderItem) Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
@@ -188,6 +189,14 @@ func (r *MockOrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtConte
 	}
 
 	return r.FnApplyExtensionCAS(ctx, dbi, id, expected, newLimit)
+}
+
+func (r *MockOrderItem) ApplySupportLimitCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expectedLimit, newLimit int) error {
+	if r.FnApplySupportLimitCAS == nil {
+		return nil
+	}
+
+	return r.FnApplySupportLimitCAS(ctx, dbi, id, expectedLimit, newLimit)
 }
 
 type MockIssuer struct {
