@@ -76,6 +76,12 @@ func Router(
 	}
 
 	r.Method(
+		http.MethodGet,
+		"/mobile/{externalID}",
+		metricsMwr("GetOrderByExternalID", NewCORSMwr(copts, http.MethodGet)(authMwr(handleGetOrderByExternalID(svc)))),
+	)
+
+	r.Method(
 		http.MethodDelete,
 		"/{orderID}",
 		metricsMwr("CancelOrder", NewCORSMwr(copts, http.MethodDelete)(authMwr(CancelOrder(svc)))),
@@ -375,29 +381,14 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrder").Logger()
 
 		orderIDParam := chi.URLParamFromCtx(ctx, "orderID")
-		isExternalID, _ := strconv.ParseBool(r.URL.Query().Get("external"))
 		var orderID uuid.UUID
 
-		switch {
-		case isExternalID:
-			orderByExtID, err := svc.Datastore.GetOrderByExternalID(orderIDParam)
-			if err != nil {
-				return handlers.WrapError(err, "error getting order by external id", http.StatusInternalServerError)
-			}
+		var err error
+		orderID, err = uuid.FromString(orderIDParam)
+		if err != nil {
+			lg.Err(err).Msg("failed to parse order id")
 
-			if orderByExtID == nil {
-				return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
-			}
-			orderID = orderByExtID.ID
-
-		default:
-			var err error
-			orderID, err = uuid.FromString(orderIDParam)
-			if err != nil {
-				lg.Err(err).Msg("failed to parse order id")
-
-				return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
-			}
+			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
 		}
 
 		order, err := svc.getTransformOrder(ctx, orderID)
@@ -425,6 +416,29 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 			}
 
 			order.UpdateCheckoutSessionID(sid)
+		}
+
+		return handlers.RenderContent(ctx, order, w, http.StatusOK)
+	}
+}
+
+func handleGetOrderByExternalID(svc *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrderByExternalID").Logger()
+
+		externalIDParam := chi.URLParamFromCtx(ctx, "externalID")
+
+		order, err := svc.Datastore.GetOrderByExternalID(externalIDParam)
+		if err != nil {
+			lg.Err(err).Msg("failed to get order by external ID")
+
+			return handlers.WrapError(err, "error getting order by external id", http.StatusInternalServerError)
+		}
+
+		if order == nil {
+			return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
 		}
 
 		return handlers.RenderContent(ctx, order, w, http.StatusOK)

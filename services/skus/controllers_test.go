@@ -454,12 +454,12 @@ func (suite *ControllersTestSuite) TestGetOrderByExternalID() {
 	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", externalID)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("GET", "/v1/orders/{orderID}?external=true", nil)
+	req, err := http.NewRequest("GET", "/v1/orders/mobile/{externalID}", nil)
 	suite.Require().NoError(err)
 
-	getOrderHandler := handleGetOrder(suite.service)
+	getOrderHandler := handleGetOrderByExternalID(suite.service)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", externalID)
+	rctx.URLParams.Add("externalID", externalID)
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
@@ -482,12 +482,12 @@ func (suite *ControllersTestSuite) TestGetOrderByExternalID() {
 }
 
 func (suite *ControllersTestSuite) TestGetMissingOrderByExternalID() {
-	req, err := http.NewRequest("GET", "/v1/orders/{orderID}?external=true", nil)
+	req, err := http.NewRequest("GET", "/v1/orders/mobile/{externalID}", nil)
 	suite.Require().NoError(err)
 
-	getOrderHandler := handleGetOrder(suite.service)
+	getOrderHandler := handleGetOrderByExternalID(suite.service)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", "test-external-id")
+	rctx.URLParams.Add("externalID", "nonexistent-external-id")
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
