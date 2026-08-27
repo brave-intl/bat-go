@@ -380,11 +380,7 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 
 		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrder").Logger()
 
-		orderIDParam := chi.URLParamFromCtx(ctx, "orderID")
-		var orderID uuid.UUID
-
-		var err error
-		orderID, err = uuid.FromString(orderIDParam)
+		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
 			lg.Err(err).Msg("failed to parse order id")
 
@@ -430,11 +426,17 @@ func handleGetOrderByExternalID(svc *Service) handlers.AppHandler {
 
 		externalIDParam := chi.URLParamFromCtx(ctx, "externalID")
 
-		order, err := svc.Datastore.GetOrderByExternalID(externalIDParam)
+		order, err := svc.Datastore.GetOrderByExternalID(ctx, externalIDParam)
 		if err != nil {
 			lg.Err(err).Msg("failed to get order by external ID")
 
-			return handlers.WrapError(err, "error getting order by external id", http.StatusInternalServerError)
+			switch {
+			case errors.Is(err, context.Canceled):
+				return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+			default:
+				return handlers.WrapError(err, "error retrieving the order", http.StatusInternalServerError)
+			}
 		}
 
 		if order == nil {

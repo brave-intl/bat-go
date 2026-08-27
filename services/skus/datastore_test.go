@@ -146,7 +146,7 @@ func (suite *PostgresTestSuite) TestGetOrderByExternalID() {
 	suite.Require().NoError(err)
 
 	// test out get by external id
-	o2, err := suite.storage.GetOrderByExternalID("my external id")
+	o2, err := suite.storage.GetOrderByExternalID(ctx, "my external id")
 	suite.Require().NoError(err)
 	suite.Assert().NotNil(o2)
 
