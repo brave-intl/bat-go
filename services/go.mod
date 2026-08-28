@@ -35,7 +35,7 @@ require (
 	github.com/redis/go-redis/v9 v9.8.0
 	github.com/rs/zerolog v1.35.1
 	github.com/satori/go.uuid v1.2.0
-	github.com/segmentio/kafka-go v0.4.49
+	github.com/segmentio/kafka-go v0.4.51
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
