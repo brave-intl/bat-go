@@ -1480,6 +1480,8 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
 		}
 
+		lg.Warn().Err(err).Str("receipt_type", req.Type.String()).Msg("failed to validate receipt request fields")
+
 		return handlers.ValidationError("request", verrs)
 	}
 
