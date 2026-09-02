@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-//GetByteSliceFromContext - given a CTXKey return the string value from the context if it exists
+// GetByteSliceFromContext - given a CTXKey return the string value from the context if it exists
 func GetByteSliceFromContext(ctx context.Context, key CTXKey) ([]byte, error) {
 	v := ctx.Value(key)
 	if v == nil {
@@ -22,7 +22,7 @@ func GetByteSliceFromContext(ctx context.Context, key CTXKey) ([]byte, error) {
 	return nil, ErrValueWrongType
 }
 
-//GetBoolFromContext - given a CTXKey return the bool value from the context if it exists
+// GetBoolFromContext - given a CTXKey return the bool value from the context if it exists
 func GetBoolFromContext(ctx context.Context, key CTXKey) (bool, error) {
 	v := ctx.Value(key)
 	if v == nil {
@@ -36,7 +36,7 @@ func GetBoolFromContext(ctx context.Context, key CTXKey) (bool, error) {
 	return false, ErrValueWrongType
 }
 
-//GetStringFromContext - given a CTXKey return the string value from the context if it exists
+// GetStringFromContext - given a CTXKey return the string value from the context if it exists
 func GetStringFromContext(ctx context.Context, key CTXKey) (string, error) {
 	v := ctx.Value(key)
 	if v == nil {
@@ -50,7 +50,7 @@ func GetStringFromContext(ctx context.Context, key CTXKey) (string, error) {
 	return "", ErrValueWrongType
 }
 
-//GetDurationFromContext - given a CTXKey return the duration value from the context if it exists
+// GetDurationFromContext - given a CTXKey return the duration value from the context if it exists
 func GetDurationFromContext(ctx context.Context, key CTXKey) (time.Duration, error) {
 	v := ctx.Value(key)
 	if v == nil {
@@ -64,7 +64,7 @@ func GetDurationFromContext(ctx context.Context, key CTXKey) (time.Duration, err
 	return time.Duration(0), ErrValueWrongType
 }
 
-//GetLogLevelFromContext - given a CTXKey return the duration value from the context if it exists
+// GetLogLevelFromContext - given a CTXKey return the duration value from the context if it exists
 func GetLogLevelFromContext(ctx context.Context, key CTXKey) (zerolog.Level, error) {
 	v := ctx.Value(key)
 	if v == nil {
@@ -78,7 +78,7 @@ func GetLogLevelFromContext(ctx context.Context, key CTXKey) (zerolog.Level, err
 	return zerolog.InfoLevel, ErrValueWrongType
 }
 
-//GetLogger - return the logger value from the context if it exists
+// GetLogger - return the logger value from the context if it exists
 func GetLogger(ctx context.Context) (*zerolog.Logger, error) {
 	// get the logger from the context, if the logger is disabled
 	// return an error to caller
