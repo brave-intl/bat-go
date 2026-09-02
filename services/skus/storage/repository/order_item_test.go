@@ -295,6 +295,8 @@ func TestOrderItem_GetForUpdate(t *testing.T) {
 					OrderID:                   uuid.Must(uuid.FromString("00000000-0000-4000-a000-000000000000")),
 					SKU:                       "brave-vpn-premium",
 					SKUVnt:                    "brave-vpn-premium",
+					CreatedAt:                 ptrTo(time.Date(2026, 1, 1, 0, 0, 1, 0, time.UTC)),
+					UpdatedAt:                 ptrTo(time.Date(2026, 1, 1, 0, 0, 1, 0, time.UTC)),
 					CredentialType:            "time-limited-v2",
 					Currency:                  "USD",
 					Quantity:                  1,
@@ -335,14 +337,14 @@ func TestOrderItem_GetForUpdate(t *testing.T) {
 			should.Equal(t, tc.exp.item.OrderID, actual.OrderID)
 			should.Equal(t, tc.exp.item.SKU, actual.SKU)
 			should.Equal(t, tc.exp.item.SKUVnt, actual.SKUVnt)
+			should.Equal(t, tc.exp.item.CreatedAt, actual.CreatedAt)
+			should.Equal(t, tc.exp.item.UpdatedAt, actual.UpdatedAt)
 			should.Equal(t, tc.exp.item.CredentialType, actual.CredentialType)
 			should.Equal(t, tc.exp.item.Currency, actual.Currency)
 			should.Equal(t, tc.exp.item.Quantity, actual.Quantity)
 			should.Equal(t, tc.exp.item.Price.String(), actual.Price.String())
 			should.Equal(t, tc.exp.item.Subtotal.String(), actual.Subtotal.String())
 			should.Equal(t, tc.exp.item.MaxActiveBatchesTLV2Creds, actual.MaxActiveBatchesTLV2Creds)
-			should.NotNil(t, actual.CreatedAt)
-			should.NotNil(t, actual.UpdatedAt)
 		})
 	}
 }
