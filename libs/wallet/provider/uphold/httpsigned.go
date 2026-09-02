@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
+
 	"net/http"
 	"strings"
 
@@ -27,7 +28,7 @@ func (sr *HTTPSignedRequest) extract(r *http.Request) (*httpsignature.SignatureP
 		return nil, errors.New("r was nil")
 	}
 
-	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
+	r.Body = io.NopCloser(bytes.NewBufferString(sr.Body))
 	if r.Header == nil {
 		r.Header = http.Header{}
 	}

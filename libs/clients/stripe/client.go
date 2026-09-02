@@ -3,7 +3,8 @@ package stripe
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
+
 	"net/http"
 	"net/url"
 	"strings"
@@ -131,7 +132,7 @@ func (c *HTTPClient) CreateOnrampSession(
 	}
 	// Override request body after req has been created since our client
 	// implementation only supports JSON payloads.
-	req.Body = ioutil.NopCloser(strings.NewReader(values.Encode()))
+	req.Body = io.NopCloser(strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	var body OnrampSessionResponse

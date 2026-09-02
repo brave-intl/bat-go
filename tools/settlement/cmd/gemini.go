@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,7 +169,7 @@ func GeminiUploadSettlement(ctx context.Context, action string, inPath string, s
 		return errors.New("unable to upload without a transactions file to check against")
 	}
 
-	bytes, err := ioutil.ReadFile(allTransactionsFile)
+	bytes, err := os.ReadFile(allTransactionsFile)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to read the transactions file")
 		return err

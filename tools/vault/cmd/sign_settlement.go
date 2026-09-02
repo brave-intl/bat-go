@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,7 +178,7 @@ func SignSettlement(command *cobra.Command, args []string) error {
 		outBaseFile := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile)) + "-signed.json"
 
 		// all settlements file
-		settlementJSON, err := ioutil.ReadFile(inputFile)
+		settlementJSON, err := os.ReadFile(inputFile)
 		if err != nil {
 			return err
 		}
@@ -374,7 +373,7 @@ func createUpholdArtifact(
 		return err
 	}
 
-	err = ioutil.WriteFile(outputFile, out, 0400)
+	err = os.WriteFile(outputFile, out, 0400)
 	if err != nil {
 		return err
 	}
@@ -430,7 +429,7 @@ func createBitflyerArtifact(
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(outputFile, out, 0400)
+	err = os.WriteFile(outputFile, out, 0400)
 	if err != nil {
 		return err
 	}
@@ -469,7 +468,7 @@ func createGeminiArtifact(
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(outputFile, out, 0400)
+	err = os.WriteFile(outputFile, out, 0400)
 	if err != nil {
 		return err
 	}

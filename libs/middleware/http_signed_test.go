@@ -5,7 +5,8 @@ import (
 	"context"
 	"crypto"
 	"encoding/json"
-	"io/ioutil"
+	"io"
+
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -93,7 +94,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	assert.NoError(t, err)
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	assert.NoError(t, err)
-	req.Body = ioutil.NopCloser(bytes.NewBuffer([]byte("hello world")))
+	req.Body = io.NopCloser(bytes.NewBuffer([]byte("hello world")))
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusForbidden, rr.Code, "request with signature from right key but wrong digest should fail")

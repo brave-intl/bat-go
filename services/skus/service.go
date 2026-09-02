@@ -2091,7 +2091,7 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 
 		return s.processStripeMtoA(ctx, dbi, ntf)
 
-	case ntf.shouldCancel():
+	case ntf.shouldCancel(), ntf.shouldExpireIncompletePayment():
 		oid, err := ntf.orderID()
 		if err != nil {
 			return err
@@ -3027,7 +3027,7 @@ func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, nt
 }
 
 func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID, email string) (string, error) {
-	oldSess, err := s.stripeCl.Session(ctx, oldSessID, nil)
+	oldSess, err := s.stripeCl.Session(ctx, oldSessID, &stripe.CheckoutSessionParams{Params: stripe.Params{Expand: []*string{stripe.String("customer")}}})
 	if err != nil {
 		return "", err
 	}
