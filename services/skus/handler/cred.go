@@ -346,7 +346,7 @@ func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.R
 	}
 
 	if err := h.tlv2.CanExtendLinkingLimitWithReceipt(ctx, orderID, req); err != nil {
-		lg.Error().Err(err).Msg("failed to extend linking limit")
+		lg.Error().Err(err).Msg("failed to check can extend linking limit")
 
 		switch {
 		case errors.Is(err, context.Canceled):
