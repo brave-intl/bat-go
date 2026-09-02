@@ -41,7 +41,7 @@ type Datastore interface {
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetOrderByExternalID by the external id from the purchase vendor
-	GetOrderByExternalID(externalID string) (*Order, error)
+	GetOrderByExternalID(ctx context.Context, externalID string) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
 	// UpdateOrderMetadata adds a key value pair to an order's metadata
@@ -112,9 +112,11 @@ type orderStore interface {
 
 type orderItemStore interface {
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
+	GetForUpdate(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error)
 	FindByOrderID(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error)
 	InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error)
 	ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expected *time.Time, newLimit int) error
+	UpdateMaxActiveBatchesTLV2Creds(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, maxActiveBatches int, numSelfExt int, now time.Time) error
 }
 
 type orderPayHistoryStore interface {
@@ -290,8 +292,7 @@ func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *
 }
 
 // GetOrderByExternalID returns an order by the external id from the purchase vendor.
-func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
-	ctx := context.TODO()
+func (pg *Postgres) GetOrderByExternalID(ctx context.Context, externalID string) (*Order, error) {
 	dbi := pg.RawDB()
 
 	result, err := pg.orderRepo.GetByExternalID(ctx, dbi, externalID)

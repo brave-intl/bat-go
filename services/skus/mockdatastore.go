@@ -264,18 +264,18 @@ func (mr *MockDatastoreMockRecorder) GetOrder(orderID interface{}) *gomock.Call 
 }
 
 // GetOrderByExternalID mocks base method.
-func (m *MockDatastore) GetOrderByExternalID(externalID string) (*Order, error) {
+func (m *MockDatastore) GetOrderByExternalID(ctx context.Context, externalID string) (*Order, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrderByExternalID", externalID)
+	ret := m.ctrl.Call(m, "GetOrderByExternalID", ctx, externalID)
 	ret0, _ := ret[0].(*Order)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetOrderByExternalID indicates an expected call of GetOrderByExternalID.
-func (mr *MockDatastoreMockRecorder) GetOrderByExternalID(externalID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetOrderByExternalID(ctx, externalID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderByExternalID", reflect.TypeOf((*MockDatastore)(nil).GetOrderByExternalID), externalID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderByExternalID", reflect.TypeOf((*MockDatastore)(nil).GetOrderByExternalID), ctx, externalID)
 }
 
 // GetOrderCreds mocks base method.

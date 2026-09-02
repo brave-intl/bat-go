@@ -76,6 +76,12 @@ func Router(
 	}
 
 	r.Method(
+		http.MethodGet,
+		"/mobile/{externalID}",
+		metricsMwr("GetOrderByExternalID", NewCORSMwr(copts, http.MethodGet)(authMwr(handleGetOrderByExternalID(svc)))),
+	)
+
+	r.Method(
 		http.MethodDelete,
 		"/{orderID}",
 		metricsMwr("CancelOrder", NewCORSMwr(copts, http.MethodDelete)(authMwr(CancelOrder(svc)))),
@@ -125,13 +131,14 @@ func Router(
 		cr.Method(http.MethodGet, "/batches", metricsMwr("ListActiveBatches", authMwr(handlers.AppHandler(credh.ListActiveBatches))))
 		cr.Method(http.MethodDelete, "/batches", metricsMwr("DeleteBatches", authMwr(handlers.AppHandler(credh.DeleteBatches))))
 		cr.Method(http.MethodPost, "/items/{itemID}/batches/extend", metricsMwr("ExtendLinkingLimit", authMwr(handlers.AppHandler(credh.ExtendLinkingLimit))))
+		cr.Method(http.MethodPost, "/batches/extend-with-receipt", metricsMwr("ExtendLinkingLimitWithReceipt", handlers.AppHandler(credh.ExtendLinkingLimitWithReceipt)))
+		cr.Method(http.MethodPost, "/batches/extend-with-receipt/check", metricsMwr("CanExtendLinkingLimitWithReceipt", handlers.AppHandler(credh.CanExtendLinkingLimitWithReceipt)))
 
 		// Handle the old endpoint while the new is being rolled out:
 		// - true: the handler uses itemID as the request id, which is the old mode;
 		// - false: the handler uses the requestID from the URI.
 		cr.Method(http.MethodGet, "/{itemID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, true)))
 		cr.Method(http.MethodGet, "/items/{itemID}/batches/{requestID}", metricsMwr("GetOrderCredsByID", getOrderCredsByID(svc, false)))
-
 		cr.Method(http.MethodPut, "/items/{itemID}/batches/{requestID}", metricsMwr("CreateOrderItemCreds", createItemCreds(svc)))
 	})
 
@@ -406,6 +413,35 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 			}
 
 			order.UpdateCheckoutSessionID(sid)
+		}
+
+		return handlers.RenderContent(ctx, order, w, http.StatusOK)
+	}
+}
+
+func handleGetOrderByExternalID(svc *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrderByExternalID").Logger()
+
+		externalIDParam := chi.URLParamFromCtx(ctx, "externalID")
+
+		order, err := svc.Datastore.GetOrderByExternalID(ctx, externalIDParam)
+		if err != nil {
+			lg.Err(err).Msg("failed to get order by external ID")
+
+			switch {
+			case errors.Is(err, context.Canceled):
+				return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+			default:
+				return handlers.WrapError(err, "error retrieving the order", http.StatusInternalServerError)
+			}
+		}
+
+		if order == nil {
+			return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
 		}
 
 		return handlers.RenderContent(ctx, order, w, http.StatusOK)
