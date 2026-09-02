@@ -447,6 +447,54 @@ func (suite *ControllersTestSuite) TestGetMissingOrder() {
 	suite.Assert().Equal(http.StatusNotFound, rr.Code)
 }
 
+func (suite *ControllersTestSuite) TestGetOrderByExternalID() {
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 20)
+
+	externalID := "test-external-id"
+	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", externalID)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("GET", "/v1/orders/mobile/{externalID}", nil)
+	suite.Require().NoError(err)
+
+	getOrderHandler := handleGetOrderByExternalID(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("externalID", externalID)
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getOrderHandler.ServeHTTP(rr, getReq)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	err = json.Unmarshal(rr.Body.Bytes(), &order)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal("5", order.TotalPrice.String())
+	suite.Assert().Equal("pending", order.Status)
+
+	// Check the order items
+	suite.Assert().Equal(len(order.Items), 1)
+	suite.Assert().Equal("BAT", order.Items[0].Currency)
+	suite.Assert().Equal("0.25", order.Items[0].Price.String())
+	suite.Assert().Equal(20, order.Items[0].Quantity)
+	suite.Assert().Equal(decimal.New(5, 0), order.Items[0].Subtotal)
+	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
+}
+
+func (suite *ControllersTestSuite) TestGetMissingOrderByExternalID() {
+	req, err := http.NewRequest("GET", "/v1/orders/mobile/{externalID}", nil)
+	suite.Require().NoError(err)
+
+	getOrderHandler := handleGetOrderByExternalID(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("externalID", "nonexistent-external-id")
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getOrderHandler.ServeHTTP(rr, getReq)
+	suite.Assert().Equal(http.StatusNotFound, rr.Code)
+}
+
 func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	pg, err := NewPostgres(
 		repository.NewOrder(),

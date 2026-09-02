@@ -76,6 +76,12 @@ func Router(
 	}
 
 	r.Method(
+		http.MethodGet,
+		"/mobile/{externalID}",
+		metricsMwr("GetOrderByExternalID", NewCORSMwr(copts, http.MethodGet)(authMwr(handleGetOrderByExternalID(svc)))),
+	)
+
+	r.Method(
 		http.MethodDelete,
 		"/{orderID}",
 		metricsMwr("CancelOrder", NewCORSMwr(copts, http.MethodDelete)(authMwr(CancelOrder(svc)))),
@@ -406,6 +412,35 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 			}
 
 			order.UpdateCheckoutSessionID(sid)
+		}
+
+		return handlers.RenderContent(ctx, order, w, http.StatusOK)
+	}
+}
+
+func handleGetOrderByExternalID(svc *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+
+		lg := logging.Logger(ctx, "skus").With().Str("func", "handleGetOrderByExternalID").Logger()
+
+		externalIDParam := chi.URLParamFromCtx(ctx, "externalID")
+
+		order, err := svc.Datastore.GetOrderByExternalID(ctx, externalIDParam)
+		if err != nil {
+			lg.Err(err).Msg("failed to get order by external ID")
+
+			switch {
+			case errors.Is(err, context.Canceled):
+				return handlers.WrapError(model.ErrSomethingWentWrong, "request has been cancelled", model.StatusClientClosedConn)
+
+			default:
+				return handlers.WrapError(err, "error retrieving the order", http.StatusInternalServerError)
+			}
+		}
+
+		if order == nil {
+			return handlers.WrapError(model.ErrOrderNotFound, "order not found", http.StatusNotFound)
 		}
 
 		return handlers.RenderContent(ctx, order, w, http.StatusOK)
