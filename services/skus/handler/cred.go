@@ -20,6 +20,8 @@ type tlv2Svc interface {
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
 	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
+	ExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
+	CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
 }
 
 type Cred struct {
@@ -242,6 +244,157 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
+func (h *Cred) ExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "ExtendLinkingLimitWithReceipt").Logger()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		lg.Err(err).Msg("failed to parse orderID")
+
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Err(err).Msg("failed read body")
+
+		return handlers.WrapErrorWithErrorCode(err, "failed to read request body", http.StatusBadRequest, model.ExtensionCodeMalformedBody)
+	}
+
+	var req model.ReceiptRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		lg.Err(err).Msg("failed to unmarshal request")
+
+		return handlers.WrapErrorWithErrorCode(err, "failed to parse request body", http.StatusBadRequest, model.ExtensionCodeMalformedBody)
+	}
+
+	if err := h.tlv2.ExtendLinkingLimitWithReceipt(ctx, orderID, req); err != nil {
+		lg.Error().Err(err).Msg("failed to extend linking limit")
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
+
+		case errors.Is(err, model.ErrNoMatchOrderReceipt):
+			return handlers.WrapError(err, "order_id does not match receipt order", http.StatusConflict)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
+			return handlers.WrapErrorWithErrorCode(err, "order not found", http.StatusNotFound, model.ExtensionCodeOrderNotFound)
+
+		case errors.Is(err, model.ErrOrderNotPaid):
+			return handlers.WrapErrorWithErrorCode(err, "order not paid", http.StatusPaymentRequired, model.ExtensionCodeOrderNotPaid)
+
+		case errors.Is(err, model.ErrUnsupportedCredType):
+			return handlers.WrapErrorWithErrorCode(err, "credential type not supported", http.StatusBadRequest, model.ExtensionCodeUnsupportedCredType)
+
+		case errors.Is(err, model.ErrExtensionInvalidLimit):
+			return handlers.WrapErrorWithErrorCode(err, "extension new limit invalid", http.StatusUnprocessableEntity, model.ExtensionCodeInvalidLimitX)
+
+		case errors.Is(err, model.ErrNoExtensionPolicy):
+			return handlers.WrapErrorWithErrorCode(err, "item does not support extension", http.StatusUnprocessableEntity, model.ExtensionNotSupported)
+
+		case errors.Is(err, model.ErrExtensionRateLimited):
+			return handlers.WrapErrorWithErrorCode(err, "extension rate limited", http.StatusTooManyRequests, model.ExtensionCodeRateLimited)
+
+		case errors.Is(err, model.ErrExtensionMaxPerItem):
+			return handlers.WrapErrorWithErrorCode(err, "max extensions per item reached", http.StatusUnprocessableEntity, model.ExtensionCodeMaxPerItem)
+
+		case errors.Is(err, model.ErrExtensionNotAtLimit):
+			return handlers.WrapErrorWithErrorCode(err, "not at limit; extension not needed", http.StatusUnprocessableEntity, model.ExtensionCodeNotAtLimit)
+
+		default:
+			if rverr := new(model.ReceiptValidError); errors.As(err, &rverr) {
+				return model.HandleReceiptErr(rverr.Err)
+			}
+
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "CanExtendLinkingLimitWithReceipt").Logger()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		lg.Err(err).Msg("failed to parse orderID")
+
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
+	if err != nil {
+		lg.Err(err).Msg("failed read body")
+
+		return handlers.WrapErrorWithErrorCode(err, "failed to read request body", http.StatusBadRequest, model.ExtensionCodeMalformedBody)
+	}
+
+	var req model.ReceiptRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		lg.Err(err).Msg("failed to unmarshal request")
+
+		return handlers.WrapErrorWithErrorCode(err, "failed to parse request body", http.StatusBadRequest, model.ExtensionCodeMalformedBody)
+	}
+
+	if err := h.tlv2.CanExtendLinkingLimitWithReceipt(ctx, orderID, req); err != nil {
+		lg.Error().Err(err).Msg("failed to extend linking limit")
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
+
+		case errors.Is(err, model.ErrNoMatchOrderReceipt):
+			return handlers.WrapError(err, "order_id does not match receipt order", http.StatusConflict)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
+			return handlers.WrapErrorWithErrorCode(err, "order not found", http.StatusNotFound, model.ExtensionCodeOrderNotFound)
+
+		case errors.Is(err, model.ErrOrderNotPaid):
+			return handlers.WrapErrorWithErrorCode(err, "order not paid", http.StatusPaymentRequired, model.ExtensionCodeOrderNotPaid)
+
+		case errors.Is(err, model.ErrUnsupportedCredType):
+			return handlers.WrapErrorWithErrorCode(err, "credential type not supported", http.StatusBadRequest, model.ExtensionCodeUnsupportedCredType)
+
+		case errors.Is(err, model.ErrExtensionInvalidLimit):
+			return handlers.WrapErrorWithErrorCode(err, "extension new limit invalid", http.StatusUnprocessableEntity, model.ExtensionCodeInvalidLimitX)
+
+		case errors.Is(err, model.ErrNoExtensionPolicy):
+			return handlers.WrapErrorWithErrorCode(err, "item does not support extension", http.StatusUnprocessableEntity, model.ExtensionNotSupported)
+
+		case errors.Is(err, model.ErrExtensionRateLimited):
+			return handlers.WrapErrorWithErrorCode(err, "extension rate limited", http.StatusTooManyRequests, model.ExtensionCodeRateLimited)
+
+		case errors.Is(err, model.ErrExtensionMaxPerItem):
+			return handlers.WrapErrorWithErrorCode(err, "max extensions per item reached", http.StatusUnprocessableEntity, model.ExtensionCodeMaxPerItem)
+
+		case errors.Is(err, model.ErrExtensionNotAtLimit):
+			return handlers.WrapErrorWithErrorCode(err, "not at limit; extension not needed", http.StatusUnprocessableEntity, model.ExtensionCodeNotAtLimit)
+
+		default:
+			if rverr := new(model.ReceiptValidError); errors.As(err, &rverr) {
+				return model.HandleReceiptErr(rverr.Err)
+			}
+
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+// Deprecated: use handlers.WrapErrorWithErrorCode
 func withErrorCode(appErr *handlers.AppError, code string) *handlers.AppError {
 	appErr.ErrorCode = code
 	return appErr

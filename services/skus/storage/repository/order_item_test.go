@@ -186,6 +186,382 @@ func setupDBI() (*sqlx.DB, error) {
 	return pg.RawDB(), nil
 }
 
+func TestOrderItem_GetForUpdate(t *testing.T) {
+	dbi, err := setupDBI()
+	must.NoError(t, nil, err)
+
+	defer func() {
+		_, err := dbi.Exec("TRUNCATE TABLE order_items, orders CASCADE;")
+		must.NoError(t, err)
+	}()
+
+	type tcGiven struct {
+		id       uuid.UUID
+		fnBefore func(ctx context.Context, dbi sqlx.ExtContext) error
+	}
+
+	type tcExpected struct {
+		item *model.OrderItem
+		err  error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_order_item_not_found",
+			given: tcGiven{
+				id: uuid.Must(uuid.FromString("81320cf7-5785-4757-bdc0-1e7ec44cee2e")),
+			},
+			exp: tcExpected{
+				item: &model.OrderItem{},
+				err:  model.ErrOrderItemNotFound,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				id: uuid.Must(uuid.FromString("357da58e-025c-424f-b867-33d88cbbc308")),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
+					const o = `
+								INSERT INTO orders (
+									id,
+									merchant_id,
+									status,
+									currency,
+									total_price,
+									trial_days,
+									created_at,
+									updated_at
+								)
+								VALUES (
+									'00000000-0000-4000-a000-000000000000',
+									'brave.com',
+									'paid',
+									'USD',
+									9.99,
+									1,
+									'2026-01-01 00:00:01',
+									'2026-01-01 00:00:01'
+								);`
+
+					if _, err := dbi.ExecContext(ctx, o); err != nil {
+						return err
+					}
+
+					const oi = `
+								INSERT INTO order_items (
+									id, 
+									order_id, 
+									sku, 
+									sku_variant, 
+									credential_type, 
+									currency, 
+									quantity, 
+									price, 
+									subtotal,
+									max_active_batches_tlv2_creds,
+									created_at, 
+									updated_at
+								)
+								VALUES (
+									'357da58e-025c-424f-b867-33d88cbbc308', 
+									'00000000-0000-4000-a000-000000000000', 
+									'brave-vpn-premium', 
+									'brave-vpn-premium', 
+									'time-limited-v2', 
+									'USD', 
+									1, 
+									9.99, 
+									9.99,
+									9,
+									'2026-01-01 00:00:01', 
+									'2026-01-01 00:00:01'
+								);`
+
+					_, err = dbi.ExecContext(ctx, oi)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				item: &model.OrderItem{
+					ID:                        uuid.Must(uuid.FromString("357da58e-025c-424f-b867-33d88cbbc308")),
+					OrderID:                   uuid.Must(uuid.FromString("00000000-0000-4000-a000-000000000000")),
+					SKU:                       "brave-vpn-premium",
+					SKUVnt:                    "brave-vpn-premium",
+					CredentialType:            "time-limited-v2",
+					Currency:                  "USD",
+					Quantity:                  1,
+					Price:                     mustDecimalFromString("9.99"),
+					Subtotal:                  mustDecimalFromString("9.99"),
+					MaxActiveBatchesTLV2Creds: ptrTo(9),
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.TODO()
+
+			tx, err := dbi.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadUncommitted})
+			must.Equal(t, nil, err)
+
+			t.Cleanup(func() { _ = tx.Rollback() })
+
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, tx)
+				must.NoError(t, err)
+			}
+
+			irepo := repository.NewOrderItem()
+
+			actual, err := irepo.GetForUpdate(ctx, tx, tc.given.id)
+
+			if tc.exp.err != nil {
+				must.ErrorIs(t, err, tc.exp.err)
+				return
+			}
+
+			should.Equal(t, tc.exp.item.ID, actual.ID)
+			should.Equal(t, tc.exp.item.OrderID, actual.OrderID)
+			should.Equal(t, tc.exp.item.SKU, actual.SKU)
+			should.Equal(t, tc.exp.item.SKUVnt, actual.SKUVnt)
+			should.Equal(t, tc.exp.item.CredentialType, actual.CredentialType)
+			should.Equal(t, tc.exp.item.Currency, actual.Currency)
+			should.Equal(t, tc.exp.item.Quantity, actual.Quantity)
+			should.Equal(t, tc.exp.item.Price.String(), actual.Price.String())
+			should.Equal(t, tc.exp.item.Subtotal.String(), actual.Subtotal.String())
+			should.Equal(t, tc.exp.item.MaxActiveBatchesTLV2Creds, actual.MaxActiveBatchesTLV2Creds)
+			should.NotNil(t, actual.CreatedAt)
+			should.NotNil(t, actual.UpdatedAt)
+		})
+	}
+}
+
+func TestOrderItem_UpdateMaxActiveBatchesTLV2Creds(t *testing.T) {
+	dbi, err := setupDBI()
+	must.NoError(t, err)
+
+	defer func() {
+		_, err := dbi.Exec("TRUNCATE TABLE order_items, orders CASCADE;")
+		must.NoError(t, err)
+	}()
+
+	type tcGiven struct {
+		id               uuid.UUID
+		maxActiveBatches int
+		numSelfExt       int
+		now              time.Time
+		fnBefore         func(ctx context.Context, dbi sqlx.ExtContext) error
+	}
+
+	type tcExpected struct {
+		maxActiveBatches *int
+		numSelfExt       int
+		LastExtensionAt  *time.Time
+		err              error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "error_extension_invalid_limit",
+			given: tcGiven{
+				id:               uuid.Must(uuid.FromString("81320cf7-5785-4757-bdc0-1e7ec44cee2e")),
+				maxActiveBatches: 1001,
+				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
+					const o = `
+								INSERT INTO orders (
+									id,
+									merchant_id,
+									status,
+									currency,
+									total_price,
+									trial_days,
+									created_at,
+									updated_at
+								)
+								VALUES (
+									'00000000-0000-4000-a000-000000000000',
+									'brave.com',
+									'paid',
+									'USD',
+									9.99,
+									1,
+									'2026-01-01 00:00:01',
+									'2026-01-01 00:00:01'
+								);`
+
+					if _, err := dbi.ExecContext(ctx, o); err != nil {
+						return err
+					}
+
+					const oi = `
+								INSERT INTO order_items (
+									id, 
+									order_id, 
+									sku, 
+									sku_variant, 
+									credential_type, 
+									currency, 
+									quantity, 
+									price, 
+									subtotal,
+									max_active_batches_tlv2_creds,
+									created_at, 
+									updated_at
+								)
+								VALUES (
+									'81320cf7-5785-4757-bdc0-1e7ec44cee2e', 
+									'00000000-0000-4000-a000-000000000000', 
+									'brave-vpn-premium', 
+									'brave-vpn-premium', 
+									'time-limited-v2', 
+									'USD', 
+									1, 
+									9.99, 
+									9.99,
+									9,
+									'2026-01-01 00:00:01', 
+									'2026-01-01 00:00:01'
+								);`
+
+					_, err = dbi.ExecContext(ctx, oi)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrExtensionInvalidLimit,
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				id:               uuid.Must(uuid.FromString("81320cf7-5785-4757-bdc0-1e7ec44cee2e")),
+				maxActiveBatches: 100,
+				numSelfExt:       10,
+				now:              time.Date(2026, 10, 03, 0, 0, 0, 0, time.UTC),
+				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
+					const o = `
+								INSERT INTO orders (
+									id,
+									merchant_id,
+									status,
+									currency,
+									total_price,
+									trial_days,
+									created_at,
+									updated_at
+								)
+								VALUES (
+									'00000000-0000-4000-a000-000000000000',
+									'brave.com',
+									'paid',
+									'USD',
+									9.99,
+									1,
+									'2026-01-01 00:00:01',
+									'2026-01-01 00:00:01'
+								);`
+
+					if _, err := dbi.ExecContext(ctx, o); err != nil {
+						return err
+					}
+
+					const oi = `
+								INSERT INTO order_items (
+									id, 
+									order_id, 
+									sku, 
+									sku_variant, 
+									credential_type, 
+									currency, 
+									quantity, 
+									price, 
+									subtotal,
+									max_active_batches_tlv2_creds,
+									created_at, 
+									updated_at
+								)
+								VALUES (
+									'81320cf7-5785-4757-bdc0-1e7ec44cee2e', 
+									'00000000-0000-4000-a000-000000000000', 
+									'brave-vpn-premium', 
+									'brave-vpn-premium', 
+									'time-limited-v2', 
+									'USD', 
+									1, 
+									9.99, 
+									9.99,
+									9,
+									'2026-01-01 00:00:01', 
+									'2026-01-01 00:00:01'
+								);`
+
+					_, err = dbi.ExecContext(ctx, oi)
+
+					return err
+				},
+			},
+			exp: tcExpected{
+				maxActiveBatches: ptrTo(100),
+				numSelfExt:       10,
+				LastExtensionAt:  ptrTo(time.Date(2026, 10, 03, 0, 0, 0, 0, time.UTC)),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.TODO()
+
+			tx, err := dbi.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelReadUncommitted})
+			must.Equal(t, nil, err)
+
+			t.Cleanup(func() { _ = tx.Rollback() })
+
+			if tc.given.fnBefore != nil {
+				err := tc.given.fnBefore(ctx, tx)
+				must.NoError(t, err)
+			}
+
+			irepo := repository.NewOrderItem()
+
+			actual := irepo.UpdateMaxActiveBatchesTLV2Creds(ctx, tx, tc.given.id, tc.given.maxActiveBatches, tc.given.numSelfExt, tc.given.now)
+
+			if tc.exp.err != nil {
+				should.ErrorIs(t, actual, tc.exp.err)
+				return
+			}
+
+			item, err := irepo.GetForUpdate(ctx, tx, tc.given.id)
+			must.NoError(t, err)
+
+			should.Equal(t, tc.exp.maxActiveBatches, item.MaxActiveBatchesTLV2Creds)
+			should.Equal(t, tc.exp.numSelfExt, item.NumSelfExtensions)
+			should.Equal(t, tc.exp.LastExtensionAt, item.LastSelfExtensionAt)
+		})
+	}
+}
+
 type orderCreator interface {
 	Create(ctx context.Context, dbi sqlx.QueryerContext, req *model.OrderNew) (*model.Order, error)
 }

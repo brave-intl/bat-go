@@ -1509,7 +1509,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), repository.NewTLV2())
+	tlvRepo := repository.NewTLV2()
+
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), tlvRepo, NewTLV2CredExtender(model.NewPoliciesBySKUVnt(), tlvRepo))
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
@@ -1660,7 +1662,9 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	ctx = context.WithValue(ctx, appctx.SkusEnableStoreSignedOrderCredsConsumer, true)
 	ctx = context.WithValue(ctx, appctx.SkusNumberStoreSignedOrderCredsConsumer, 1)
 
-	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), repository.NewTLV2())
+	tlvRepo := repository.NewTLV2()
+
+	skuService, err := InitService(ctx, suite.storage, nil, repository.NewOrder(), repository.NewOrderItem(), repository.NewIssuer(), repository.NewOrderPayHistory(), tlvRepo, NewTLV2CredExtender(model.NewPoliciesBySKUVnt(), tlvRepo))
 	suite.Require().NoError(err)
 
 	authMwr := NewAuthMwr(skuService)
