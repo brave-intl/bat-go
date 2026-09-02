@@ -27,6 +27,7 @@ type mockTLV2Svc struct {
 	FnListActiveBatches  func(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	FnDeleteBatches      func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
 	FnExtendLinkingLimit func(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
+	FnSetLinkingLimit    func(ctx context.Context, orderID, itemID uuid.UUID, write model.SupportLimitWrite) error
 }
 
 func (s *mockTLV2Svc) UniqBatches(ctx context.Context, orderID, itemID uuid.UUID) (*model.BatchesStatus, error) {
@@ -59,6 +60,98 @@ func (s *mockTLV2Svc) ExtendLinkingLimit(ctx context.Context, orderID, itemID uu
 	}
 
 	return s.FnExtendLinkingLimit(ctx, orderID, itemID, write)
+}
+
+func (s *mockTLV2Svc) SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.SupportLimitWrite) error {
+	if s.FnSetLinkingLimit == nil {
+		return nil
+	}
+
+	return s.FnSetLinkingLimit(ctx, orderID, itemID, write)
+}
+
+func TestCred_SetLinkingLimit(t *testing.T) {
+	newReq := func(t *testing.T, orderID, itemID, body string) *http.Request {
+		t.Helper()
+
+		req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(body))
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("orderID", orderID)
+		rctx.URLParams.Add("itemID", itemID)
+
+		return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	}
+
+	const (
+		orderID = "facade00-0000-4000-a000-000000000000"
+		itemID  = "decade00-0000-4000-a000-000000000000"
+	)
+
+	t.Run("passes both limits through to the service", func(t *testing.T) {
+		var got model.SupportLimitWrite
+
+		svc := &mockTLV2Svc{
+			FnSetLinkingLimit: func(ctx context.Context, oid, iid uuid.UUID, write model.SupportLimitWrite) error {
+				got = write
+				return nil
+			},
+		}
+
+		rw := httptest.NewRecorder()
+		h := handler.NewCred(svc)
+
+		resp := h.SetLinkingLimit(rw, newReq(t, orderID, itemID, `{"expected_limit":10,"new_limit":16}`))
+
+		should.Nil(t, resp)
+		should.Equal(t, 10, got.ExpectedLimit)
+		should.Equal(t, 16, got.NewLimit)
+	})
+
+	t.Run("a lost CAS race is a 409, not a silent overwrite", func(t *testing.T) {
+		svc := &mockTLV2Svc{
+			FnSetLinkingLimit: func(ctx context.Context, oid, iid uuid.UUID, write model.SupportLimitWrite) error {
+				return model.ErrExtensionConflict
+			},
+		}
+
+		rw := httptest.NewRecorder()
+		h := handler.NewCred(svc)
+
+		resp := h.SetLinkingLimit(rw, newReq(t, orderID, itemID, `{"expected_limit":10,"new_limit":16}`))
+
+		must.NotNil(t, resp)
+		should.Equal(t, http.StatusConflict, resp.Code)
+		should.Equal(t, model.ExtensionCodeConflict, resp.ErrorCode)
+	})
+
+	t.Run("rejects a limit past the ceiling", func(t *testing.T) {
+		svc := &mockTLV2Svc{
+			FnSetLinkingLimit: func(ctx context.Context, oid, iid uuid.UUID, write model.SupportLimitWrite) error {
+				return model.ErrExtensionInvalidLimit
+			},
+		}
+
+		rw := httptest.NewRecorder()
+		h := handler.NewCred(svc)
+
+		resp := h.SetLinkingLimit(rw, newReq(t, orderID, itemID, `{"expected_limit":10,"new_limit":99999}`))
+
+		must.NotNil(t, resp)
+		should.Equal(t, http.StatusUnprocessableEntity, resp.Code)
+		should.Equal(t, model.ExtensionCodeInvalidLimit, resp.ErrorCode)
+	})
+
+	t.Run("rejects a malformed body", func(t *testing.T) {
+		rw := httptest.NewRecorder()
+		h := handler.NewCred(&mockTLV2Svc{})
+
+		resp := h.SetLinkingLimit(rw, newReq(t, orderID, itemID, `{`))
+
+		must.NotNil(t, resp)
+		should.Equal(t, http.StatusBadRequest, resp.Code)
+		should.Equal(t, model.ExtensionCodeMalformedBody, resp.ErrorCode)
+	})
 }
 
 func TestCred_CountBatches(t *testing.T) {

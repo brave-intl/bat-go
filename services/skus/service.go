@@ -1436,29 +1436,74 @@ func (s *Service) extendLinkingLimitTx(ctx context.Context, dbi sqlx.ExtContext,
 		return model.ErrExtensionInvalidLimit
 	}
 
-	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	item, err := s.tlv2ItemForLimitWriteTx(ctx, dbi, orderID, itemID)
 	if err != nil {
 		return err
 	}
 
+	return s.orderItemRepo.ApplyExtensionCAS(ctx, dbi, item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit)
+}
+
+// tlv2ItemForLimitWriteTx returns the order item a linking-limit write targets,
+// after checking the order is paid and the item carries TLV2 credentials.
+func (s *Service) tlv2ItemForLimitWriteTx(ctx context.Context, dbi sqlx.ExtContext, orderID, itemID uuid.UUID) (*model.OrderItem, error) {
+	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
+	if err != nil {
+		return nil, err
+	}
+
 	if !ord.IsPaid() {
-		return model.ErrOrderNotPaid
+		return nil, model.ErrOrderNotPaid
 	}
 
 	if len(ord.Items) == 0 {
-		return model.ErrInvalidOrderNoItems
+		return nil, model.ErrInvalidOrderNoItems
 	}
 
 	item, ok := ord.HasItem(itemID)
 	if !ok {
-		return model.ErrOrderItemNotFound
+		return nil, model.ErrOrderItemNotFound
 	}
 
 	if !item.IsCredTLV2() {
-		return model.ErrUnsupportedCredType
+		return nil, model.ErrUnsupportedCredType
 	}
 
-	return s.orderItemRepo.ApplyExtensionCAS(ctx, dbi, item.ID, write.ExpectedLastSelfExtensionAt, write.NewLimit)
+	return item, nil
+}
+
+// SetLinkingLimit sets an order item's device linking limit, leaving the
+// self-service extension counters unchanged. It applies no extension policy of
+// its own beyond the ceiling and the CAS check.
+func (s *Service) SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.SupportLimitWrite) error {
+	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.setLinkingLimitTx(ctx, tx, orderID, itemID, write); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) setLinkingLimitTx(ctx context.Context, dbi sqlx.ExtContext, orderID, itemID uuid.UUID, write model.SupportLimitWrite) error {
+	if write.NewLimit <= 0 || write.NewLimit > model.ExtensionMaxLimitCeiling {
+		return model.ErrExtensionInvalidLimit
+	}
+
+	if write.ExpectedLimit <= 0 {
+		return model.ErrExtensionInvalidLimit
+	}
+
+	item, err := s.tlv2ItemForLimitWriteTx(ctx, dbi, orderID, itemID)
+	if err != nil {
+		return err
+	}
+
+	return s.orderItemRepo.ApplySupportLimitCAS(ctx, dbi, item.ID, write.ExpectedLimit, write.NewLimit)
 }
 
 // isValidBatchReq validates that the order contains TLV2 credentials. When itemID is

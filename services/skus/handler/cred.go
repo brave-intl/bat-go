@@ -20,6 +20,7 @@ type tlv2Svc interface {
 	ListActiveBatches(ctx context.Context, orderID, itemID uuid.UUID) ([]model.TLV2ActiveBatch, error)
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
 	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
+	SetLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.SupportLimitWrite) error
 }
 
 type Cred struct {
@@ -233,6 +234,68 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 
 		case errors.Is(err, model.ErrExtensionConflict):
 			return withErrorCode(handlers.WrapError(err, "extension version conflict", http.StatusConflict), model.ExtensionCodeConflict)
+
+		default:
+			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)
+		}
+	}
+
+	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+}
+
+// SetLinkingLimit sets an order item's device linking limit, leaving the
+// self-service extension counters unchanged.
+//
+// PUT /v1/orders/{orderID}/credentials/items/{itemID}/batches/limit
+func (h *Cred) SetLinkingLimit(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	ctx := r.Context()
+
+	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+	}
+
+	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
+	if err != nil {
+		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to read request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	var write model.SupportLimitWrite
+	if err := json.Unmarshal(body, &write); err != nil {
+		return withErrorCode(handlers.WrapError(err, "failed to parse request body", http.StatusBadRequest), model.ExtensionCodeMalformedBody)
+	}
+
+	if err := h.tlv2.SetLinkingLimit(ctx, orderID, itemID, write); err != nil {
+		lg := logging.Logger(ctx, "skus").With().Str("func", "SetLinkingLimit").Logger()
+
+		lg.Error().Err(err).Msg("failed to set linking limit")
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return handlers.WrapError(err, "client ended request", model.StatusClientClosedConn)
+
+		case errors.Is(err, context.DeadlineExceeded):
+			return handlers.WrapError(err, "request timed out", http.StatusGatewayTimeout)
+
+		case errors.Is(err, model.ErrOrderNotFound), errors.Is(err, model.ErrInvalidOrderNoItems), errors.Is(err, model.ErrOrderItemNotFound):
+			return withErrorCode(handlers.WrapError(err, "order not found", http.StatusNotFound), model.ExtensionCodeOrderNotFound)
+
+		case errors.Is(err, model.ErrOrderNotPaid):
+			return withErrorCode(handlers.WrapError(err, "order not paid", http.StatusPaymentRequired), model.ExtensionCodeOrderNotPaid)
+
+		case errors.Is(err, model.ErrUnsupportedCredType):
+			return withErrorCode(handlers.WrapError(err, "credential type not supported", http.StatusBadRequest), model.ExtensionCodeUnsupportedCredType)
+
+		case errors.Is(err, model.ErrExtensionInvalidLimit):
+			return withErrorCode(handlers.WrapError(err, "new limit invalid", http.StatusUnprocessableEntity), model.ExtensionCodeInvalidLimit)
+
+		case errors.Is(err, model.ErrExtensionConflict):
+			return withErrorCode(handlers.WrapError(err, "limit version conflict", http.StatusConflict), model.ExtensionCodeConflict)
 
 		default:
 			return handlers.WrapError(model.ErrSomethingWentWrong, "something went wrong", http.StatusInternalServerError)

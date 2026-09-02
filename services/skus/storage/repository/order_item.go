@@ -114,6 +114,38 @@ func (r *OrderItem) ApplyExtensionCAS(ctx context.Context, dbi sqlx.ExtContext, 
 	return nil
 }
 
+// ApplySupportLimitCAS sets max_active_batches_tlv2_creds, leaving
+// num_self_extensions and last_self_extension_at unchanged. It versions on the
+// limit column rather than the extension timestamp, so concurrent writes
+// conflict instead of overwriting one another.
+func (r *OrderItem) ApplySupportLimitCAS(ctx context.Context, dbi sqlx.ExtContext, id uuid.UUID, expectedLimit, newLimit int) error {
+	const q = `
+	UPDATE order_items
+	SET max_active_batches_tlv2_creds = $2
+	WHERE id = $1
+	  AND max_active_batches_tlv2_creds = $3`
+
+	result, err := dbi.ExecContext(ctx, q, id, newLimit, expectedLimit)
+	if err != nil {
+		if isErrExtensionInvalidLimit(err) {
+			return model.ErrExtensionInvalidLimit
+		}
+
+		return err
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if n == 0 {
+		return model.ErrExtensionConflict
+	}
+
+	return nil
+}
+
 func isErrExtensionInvalidLimit(err error) bool {
 	var perr *pq.Error
 	if !errors.As(err, &perr) {
