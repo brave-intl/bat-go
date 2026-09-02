@@ -784,7 +784,7 @@ func TestOrder_GetExpiresAtAfterISOPeriod(t *testing.T) {
 						Currency:       "USD",
 						Subtotal:       mustDecimalFromString("2"),
 						CredentialType: "something",
-						ValidForISO:    ptrString("P1M"),
+						ValidForISO:    ptrTo("P1M"),
 					},
 				},
 			},
@@ -806,7 +806,7 @@ func TestOrder_GetExpiresAtAfterISOPeriod(t *testing.T) {
 						Currency:       "USD",
 						Subtotal:       mustDecimalFromString("6"),
 						CredentialType: "something",
-						ValidForISO:    ptrString("P1M"),
+						ValidForISO:    ptrTo("P1M"),
 					},
 
 					{
@@ -817,7 +817,7 @@ func TestOrder_GetExpiresAtAfterISOPeriod(t *testing.T) {
 						Currency:       "USD",
 						Subtotal:       mustDecimalFromString("12"),
 						CredentialType: "something",
-						ValidForISO:    ptrString("P2M"),
+						ValidForISO:    ptrTo("P2M"),
 					},
 				},
 			},
@@ -1337,8 +1337,8 @@ func TestOrder_IncrementNumPayFailed(t *testing.T) {
 	}
 }
 
-func ptrString(s string) *string {
-	return &s
+func ptrTo[T any](v T) *T {
+	return &v
 }
 
 func nowPlusIntervalPg(ctx context.Context, dbi sqlx.QueryerContext, v string) (time.Time, error) {
