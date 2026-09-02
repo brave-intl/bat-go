@@ -258,7 +258,7 @@ func (h *Cred) ExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.Requ
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
 	if err != nil {
-		lg.Err(err).Msg("failed read body")
+		lg.Err(err).Msg("failed to read body")
 
 		return handlers.WrapErrorWithErrorCode(err, "failed to read request body", http.StatusBadRequest, model.ExtensionCodeMalformedBody)
 	}
