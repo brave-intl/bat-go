@@ -8623,7 +8623,6 @@ func TestService_extendLinkingLimitByOrderID(t *testing.T) {
 				},
 				credExt: &mockCredExtender{
 					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
-
 						return model.CredExtension{}, model.Error("error_get_extension_for")
 					},
 				},
