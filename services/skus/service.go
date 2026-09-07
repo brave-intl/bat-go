@@ -1548,12 +1548,7 @@ func (s *Service) canExtendLinkingLimitWithReceiptTx(ctx context.Context, dbi sq
 		return model.CredExtension{}, model.ErrInvalidOrderNoItems
 	}
 
-	item, err := s.orderItemRepo.Get(ctx, dbi, ord.Items[0].ID)
-	if err != nil {
-		return model.CredExtension{}, err
-	}
-
-	return s.credExtender.GetExtensionFor(ctx, dbi, item, now)
+	return s.credExtender.GetExtensionFor(ctx, dbi, &ord.Items[0], now)
 }
 
 func (s *Service) checkOrderReceiptTx(ctx context.Context, dbi sqlx.QueryerContext, req model.ReceiptRequest, orderID uuid.UUID) error {
