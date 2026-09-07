@@ -222,8 +222,11 @@ func TestCredExtension_CanExtend(t *testing.T) {
 				st: ExtensionState{
 					Item:          &OrderItem{},
 					ActiveBatches: 1,
-					Limit:         2,
+					Limit:         1,
 				},
+			},
+			exp: tcExpected{
+				canExt: true,
 			},
 		},
 	}

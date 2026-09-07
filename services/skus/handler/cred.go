@@ -373,9 +373,6 @@ func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.R
 		case errors.Is(err, model.ErrUnsupportedCredType):
 			return handlers.WrapErrorWithErrorCode(err, "credential type not supported", http.StatusBadRequest, model.ExtensionCodeUnsupportedCredType)
 
-		case errors.Is(err, model.ErrExtensionInvalidLimit):
-			return handlers.WrapErrorWithErrorCode(err, "extension new limit invalid", http.StatusUnprocessableEntity, model.ExtensionCodeInvalidLimitX)
-
 		case errors.Is(err, model.ErrNoExtensionPolicy):
 			return handlers.WrapErrorWithErrorCode(err, "item does not support extension", http.StatusUnprocessableEntity, model.ExtensionNotSupported)
 
