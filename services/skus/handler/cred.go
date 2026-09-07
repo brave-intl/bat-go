@@ -21,7 +21,7 @@ type tlv2Svc interface {
 	DeleteBatches(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
 	ExtendLinkingLimit(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
 	ExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
-	CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
+	CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error)
 }
 
 type Cred struct {
@@ -319,6 +319,11 @@ func (h *Cred) ExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.Requ
 	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
 }
 
+type canExtendLinkingLimitWithReceiptResp struct {
+	AtLimit   bool `json:"at_limit"`
+	CanExtend bool `json:"can_extend"`
+}
+
 func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
@@ -345,7 +350,8 @@ func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.R
 		return handlers.WrapErrorWithErrorCode(err, "failed to parse request body", http.StatusBadRequest, model.ExtensionCodeMalformedBody)
 	}
 
-	if err := h.tlv2.CanExtendLinkingLimitWithReceipt(ctx, orderID, req); err != nil {
+	credExt, err := h.tlv2.CanExtendLinkingLimitWithReceipt(ctx, orderID, req)
+	if err != nil {
 		lg.Error().Err(err).Msg("failed to check can extend linking limit")
 
 		switch {
@@ -373,15 +379,6 @@ func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.R
 		case errors.Is(err, model.ErrNoExtensionPolicy):
 			return handlers.WrapErrorWithErrorCode(err, "item does not support extension", http.StatusUnprocessableEntity, model.ExtensionNotSupported)
 
-		case errors.Is(err, model.ErrExtensionRateLimited):
-			return handlers.WrapErrorWithErrorCode(err, "extension rate limited", http.StatusTooManyRequests, model.ExtensionCodeRateLimited)
-
-		case errors.Is(err, model.ErrExtensionMaxPerItem):
-			return handlers.WrapErrorWithErrorCode(err, "max extensions per item reached", http.StatusUnprocessableEntity, model.ExtensionCodeMaxPerItem)
-
-		case errors.Is(err, model.ErrExtensionNotAtLimit):
-			return handlers.WrapErrorWithErrorCode(err, "not at limit; extension not needed", http.StatusUnprocessableEntity, model.ExtensionCodeNotAtLimit)
-
 		default:
 			if rverr := new(model.ReceiptValidError); errors.As(err, &rverr) {
 				return model.HandleReceiptErr(rverr.Err)
@@ -391,7 +388,12 @@ func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	return handlers.RenderContent(ctx, struct{}{}, w, http.StatusOK)
+	resp := canExtendLinkingLimitWithReceiptResp{
+		AtLimit:   credExt.AtLimit(),
+		CanExtend: credExt.CanExtend(),
+	}
+
+	return handlers.RenderContent(ctx, resp, w, http.StatusOK)
 }
 
 // Deprecated: use handlers.WrapErrorWithErrorCode

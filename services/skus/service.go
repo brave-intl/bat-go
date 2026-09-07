@@ -146,7 +146,7 @@ type radomMessageAuthenticator interface {
 }
 
 type credExtender interface {
-	GetNextExtIfValid(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error)
+	GetExtensionFor(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error)
 }
 
 type Service struct {
@@ -1511,50 +1511,49 @@ func (s *Service) increaseMaxActiveBatches(ctx context.Context, dbi sqlx.ExtCont
 		return err
 	}
 
-	nxt, err := s.credExtender.GetNextExtIfValid(ctx, dbi, item, now)
+	credExt, err := s.credExtender.GetExtensionFor(ctx, dbi, item, now)
 	if err != nil {
 		return err
 	}
 
-	return s.orderItemRepo.UpdateMaxActiveBatchesTLV2Creds(ctx, dbi, item.ID, nxt.maxActiveBatches, nxt.numSelfExt, now)
+	grant, err := credExt.Grant()
+	if err != nil {
+		return err
+	}
+
+	return s.orderItemRepo.UpdateMaxActiveBatchesTLV2Creds(ctx, dbi, item.ID, grant.NextMaxActiveBatchLimit, grant.NextNumSelfExt, now)
 }
 
-func (s *Service) CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+func (s *Service) CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
 	dbi := s.Datastore.RawDB()
 
-	return s.canExtendLinkingLimitWithReceiptTx(ctx, dbi, orderID, req)
+	return s.canExtendLinkingLimitWithReceiptTx(ctx, dbi, orderID, req, time.Now())
 }
 
-func (s *Service) canExtendLinkingLimitWithReceiptTx(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, req model.ReceiptRequest) error {
+func (s *Service) canExtendLinkingLimitWithReceiptTx(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID, req model.ReceiptRequest, now time.Time) (model.CredExtension, error) {
 	if err := s.checkOrderReceiptTx(ctx, dbi, req, orderID); err != nil {
-		return err
+		return model.CredExtension{}, err
 	}
 
 	ord, err := s.getOrderFullTx(ctx, dbi, orderID)
 	if err != nil {
-		return err
+		return model.CredExtension{}, err
 	}
 
 	if !ord.IsPaid() {
-		return model.ErrOrderNotPaid
+		return model.CredExtension{}, model.ErrOrderNotPaid
 	}
 
 	if len(ord.Items) == 0 {
-		return model.ErrInvalidOrderNoItems
+		return model.CredExtension{}, model.ErrInvalidOrderNoItems
 	}
 
-	return s.canIncreaseMaxActiveBatches(ctx, dbi, ord.Items[0].ID, time.Now())
-}
-
-func (s *Service) canIncreaseMaxActiveBatches(ctx context.Context, dbi sqlx.QueryerContext, itemID uuid.UUID, now time.Time) error {
-	item, err := s.orderItemRepo.Get(ctx, dbi, itemID)
+	item, err := s.orderItemRepo.Get(ctx, dbi, ord.Items[0].ID)
 	if err != nil {
-		return err
+		return model.CredExtension{}, err
 	}
 
-	_, err = s.credExtender.GetNextExtIfValid(ctx, dbi, item, now)
-
-	return err
+	return s.credExtender.GetExtensionFor(ctx, dbi, item, now)
 }
 
 func (s *Service) checkOrderReceiptTx(ctx context.Context, dbi sqlx.QueryerContext, req model.ReceiptRequest, orderID uuid.UUID) error {

@@ -70,11 +70,6 @@ const (
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 
 	ErrStripePaymentIntentMissing Error = "model: stripe payment intent id missing"
-
-	ErrNoExtensionPolicy    Error = "model: extension: no policy"
-	ErrExtensionRateLimited Error = "model: extension: rate limited"
-	ErrExtensionMaxPerItem  Error = "model: extension: max per item reached"
-	ErrExtensionNotAtLimit  Error = "model: extension: not at limit"
 )
 
 const (
@@ -93,26 +88,6 @@ const (
 	issuerBufferDefault              = 30
 	issuerOverlapDefault             = 5
 	MaxActiveBatchesTLV2CredsDefault = 10
-)
-
-// Hard sanity ceiling enforced by DB CHECK on max_active_batches_tlv2_creds.
-const ExtensionMaxLimitCeiling = 1000
-
-const (
-	ExtensionCodeMalformedBody       = "malformed_body"
-	ExtensionCodeOrderNotFound       = "order_not_found"
-	ExtensionCodeOrderNotPaid        = "order_not_paid"
-	ExtensionCodeUnsupportedCredType = "unsupported_cred_type"
-	ExtensionCodeConflict            = "extension_conflict"
-
-	// Deprecated: will be replaced by ExtensionCodeInvalidLimitX
-	ExtensionCodeInvalidLimit = "extension_invalid_limit"
-
-	ExtensionCodeInvalidLimitX = "invalid_limit"
-	ExtensionCodeRateLimited   = "rate_limited"
-	ExtensionCodeMaxPerItem    = "max_per_item"
-	ExtensionCodeNotAtLimit    = "not_at_limit"
-	ExtensionNotSupported      = "extension_not_supported"
 )
 
 const (
@@ -911,35 +886,6 @@ type VerifyCredentialOpaque struct {
 type SetTrialDaysRequest struct {
 	Email     string `json:"email"` // TODO: Make it required.
 	TrialDays int64  `json:"trialDays"`
-}
-
-type CredExtensionPolicy struct {
-	SlotsPerGrant      int
-	MinIntervalSeconds int
-	MaxPerItem         int
-}
-
-type CredExtensionPolicies map[string]CredExtensionPolicy
-
-func NewPoliciesBySKUVnt() CredExtensionPolicies {
-	origin := CredExtensionPolicy{
-		SlotsPerGrant:      3,
-		MinIntervalSeconds: 30 * 24 * 60 * 60, // 30 Days.
-		MaxPerItem:         5,
-	}
-
-	return CredExtensionPolicies{
-		"brave-origin-premium-perpetual-license": origin,
-	}
-}
-
-func (s CredExtensionPolicies) GetPolicy(id string) (CredExtensionPolicy, error) {
-	p, ok := s[id]
-	if !ok {
-		return CredExtensionPolicy{}, ErrNoExtensionPolicy
-	}
-
-	return p, nil
 }
 
 func addURLParam(src, name, val string) (string, error) {

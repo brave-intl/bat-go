@@ -1,4 +1,4 @@
-package handler_test
+package handler
 
 import (
 	"bytes"
@@ -18,7 +18,6 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 
-	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
 
@@ -28,7 +27,7 @@ type mockTLV2Svc struct {
 	FnDeleteBatches                    func(ctx context.Context, orderID, itemID uuid.UUID, seats int) error
 	FnExtendLinkingLimit               func(ctx context.Context, orderID, itemID uuid.UUID, write model.ExtensionWrite) error
 	FnExtendLinkingLimitWithReceipt    func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
-	FnCanExtendLinkingLimitWithReceipt func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error
+	FnCanExtendLinkingLimitWithReceipt func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error)
 }
 
 func (s *mockTLV2Svc) ExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
@@ -39,9 +38,9 @@ func (s *mockTLV2Svc) ExtendLinkingLimitWithReceipt(ctx context.Context, orderID
 	return s.FnExtendLinkingLimitWithReceipt(ctx, orderID, req)
 }
 
-func (s *mockTLV2Svc) CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+func (s *mockTLV2Svc) CanExtendLinkingLimitWithReceipt(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
 	if s.FnCanExtendLinkingLimitWithReceipt == nil {
-		return nil
+		return model.CredExtension{}, nil
 	}
 
 	return s.FnCanExtendLinkingLimitWithReceipt(ctx, orderID, req)
@@ -280,7 +279,7 @@ func TestCred_CountBatches(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			h := handler.NewCred(tc.given.svc)
+			h := NewCred(tc.given.svc)
 
 			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
 			req = req.WithContext(tc.given.ctx)
@@ -511,7 +510,7 @@ func TestCred_ListActiveBatches(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			h := handler.NewCred(tc.given.svc)
+			h := NewCred(tc.given.svc)
 
 			target := "http://localhost"
 			if tc.given.itemID != "" {
@@ -739,7 +738,7 @@ func TestCred_DeleteBatches(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			h := handler.NewCred(tc.given.svc)
+			h := NewCred(tc.given.svc)
 
 			req := httptest.NewRequest(http.MethodDelete, "http://localhost", strings.NewReader(tc.given.body))
 			req = req.WithContext(tc.given.ctx)
@@ -993,7 +992,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			h := handler.NewCred(tc.given.svc)
+			h := NewCred(tc.given.svc)
 
 			var body io.Reader = strings.NewReader(tc.given.body)
 			if tc.given.bodyReader != nil {
@@ -1551,7 +1550,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			ch := handler.NewCred(tc.given.svc)
+			ch := NewCred(tc.given.svc)
 
 			r := httptest.NewRequest(http.MethodPost, "http://localhost", bytes.NewBufferString(tc.given.body))
 			r = r.WithContext(tc.given.ctx)
@@ -1591,6 +1590,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 
 	type tcExpected struct {
 		code int
+		resp canExtendLinkingLimitWithReceiptResp
 		err  *appErrorExp
 	}
 
@@ -1653,8 +1653,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return context.Canceled
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, context.Canceled
 					},
 				},
 			},
@@ -1681,8 +1681,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return context.DeadlineExceeded
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, context.DeadlineExceeded
 					},
 				},
 			},
@@ -1709,8 +1709,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrNoMatchOrderReceipt
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrNoMatchOrderReceipt
 					},
 				},
 			},
@@ -1737,8 +1737,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrOrderNotFound
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrOrderNotFound
 					},
 				},
 			},
@@ -1766,8 +1766,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrInvalidOrderNoItems
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrInvalidOrderNoItems
 					},
 				},
 			},
@@ -1795,8 +1795,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrOrderItemNotFound
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrOrderItemNotFound
 					},
 				},
 			},
@@ -1824,8 +1824,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrOrderNotPaid
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrOrderNotPaid
 					},
 				},
 			},
@@ -1853,8 +1853,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrUnsupportedCredType
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrUnsupportedCredType
 					},
 				},
 			},
@@ -1882,8 +1882,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrExtensionInvalidLimit
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrExtensionInvalidLimit
 					},
 				},
 			},
@@ -1911,8 +1911,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrNoExtensionPolicy
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrNoExtensionPolicy
 					},
 				},
 			},
@@ -1930,93 +1930,6 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "error_extension_rate_limited",
-			given: tcGiven{
-				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
-					URLParams: chi.RouteParams{
-						Keys:   []string{"orderID"},
-						Values: []string{"facade00-0000-4000-a000-000000000000"},
-					},
-				}),
-				body: "{}",
-				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrExtensionRateLimited
-					},
-				},
-			},
-			exp: tcExpected{
-				code: http.StatusTooManyRequests,
-				err: &appErrorExp{
-					code:    http.StatusTooManyRequests,
-					errCode: model.ExtensionCodeRateLimited,
-					message: "extension rate limited",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
-						must.ErrorIs(t, err, model.ErrExtensionRateLimited)
-					},
-				},
-			},
-		},
-
-		{
-			name: "error_max_extension_per_item_reached",
-			given: tcGiven{
-				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
-					URLParams: chi.RouteParams{
-						Keys:   []string{"orderID"},
-						Values: []string{"facade00-0000-4000-a000-000000000000"},
-					},
-				}),
-				body: "{}",
-				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrExtensionMaxPerItem
-					},
-				},
-			},
-			exp: tcExpected{
-				code: http.StatusUnprocessableEntity,
-				err: &appErrorExp{
-					code:    http.StatusUnprocessableEntity,
-					errCode: model.ExtensionCodeMaxPerItem,
-					message: "max extensions per item reached",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
-						must.ErrorIs(t, err, model.ErrExtensionMaxPerItem)
-					},
-				},
-			},
-		},
-
-		{
-			name: "error_extension_not_at_limit",
-			given: tcGiven{
-				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
-					URLParams: chi.RouteParams{
-						Keys:   []string{"orderID"},
-						Values: []string{"facade00-0000-4000-a000-000000000000"},
-					},
-				}),
-				body: "{}",
-				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrExtensionNotAtLimit
-					},
-				},
-			},
-			exp: tcExpected{
-				code: http.StatusUnprocessableEntity,
-				err: &appErrorExp{
-					code:    http.StatusUnprocessableEntity,
-					errCode: model.ExtensionCodeNotAtLimit,
-					message: "not at limit; extension not needed",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
-						must.ErrorIs(t, err, model.ErrExtensionNotAtLimit)
-					},
-				},
-			},
-		},
-
-		{
 			name: "error_receipt_valid_error",
 			given: tcGiven{
 				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
@@ -2027,8 +1940,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return &model.ReceiptValidError{Err: model.Error("some_error")}
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, &model.ReceiptValidError{Err: model.Error("some_error")}
 					},
 				},
 			},
@@ -2057,8 +1970,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: "{}",
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
-						return model.ErrSomethingWentWrong
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
+						return model.CredExtension{}, model.ErrSomethingWentWrong
 					},
 				},
 			},
@@ -2085,33 +1998,37 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				}),
 				body: `{ "type": "some_type", "raw_receipt": "blob", "package": "package", "subscription_id": "subscription_id" }`,
 				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) error {
+					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
 						if orderID.String() != "facade00-0000-4000-a000-000000000000" {
-							return model.Error("unexpected_order_id")
+							return model.CredExtension{}, model.Error("unexpected_order_id")
 						}
 
 						if req.Type != "some_type" {
-							return model.Error("unexpected_type")
+							return model.CredExtension{}, model.Error("unexpected_type")
 						}
 
 						if req.Blob != "blob" {
-							return model.Error("unexpected_blob")
+							return model.CredExtension{}, model.Error("unexpected_blob")
 						}
 
 						if req.Package != "package" {
-							return model.Error("unexpected_package")
+							return model.CredExtension{}, model.Error("unexpected_package")
 						}
 
 						if req.SubscriptionID != "subscription_id" {
-							return model.Error("unexpected_subscription_id")
+							return model.CredExtension{}, model.Error("unexpected_subscription_id")
 						}
 
-						return nil
+						return model.CredExtension{}, nil
 					},
 				},
 			},
 			exp: tcExpected{
 				code: http.StatusOK,
+				resp: canExtendLinkingLimitWithReceiptResp{
+					AtLimit:   false,
+					CanExtend: false,
+				},
 			},
 		},
 	}
@@ -2120,12 +2037,13 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			ch := handler.NewCred(tc.given.svc)
+			ch := NewCred(tc.given.svc)
 
 			r := httptest.NewRequest(http.MethodGet, "http://localhost", bytes.NewBufferString(tc.given.body))
 			r = r.WithContext(tc.given.ctx)
 
 			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
 
 			aerr := ch.CanExtendLinkingLimitWithReceipt(rw, r)
 
@@ -2136,9 +2054,16 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				must.Contains(t, tc.exp.err.message, aerr.Message)
 				must.Equal(t, tc.exp.err.data, aerr.Data)
 				tc.exp.err.mustCause(t, aerr.Cause)
+				return
 			}
 
 			should.Equal(t, tc.exp.code, rw.Code)
+
+			var resp canExtendLinkingLimitWithReceiptResp
+			err := json.Unmarshal(rw.Body.Bytes(), &resp)
+			must.NoError(t, err)
+
+			should.Equal(t, tc.exp.resp, resp)
 		})
 	}
 }
