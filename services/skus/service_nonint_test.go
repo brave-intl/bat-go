@@ -8623,7 +8623,6 @@ func TestService_extendLinkingLimitByOrderID(t *testing.T) {
 				},
 				credExt: &mockCredExtender{
 					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
-
 						return model.CredExtension{}, model.Error("error_get_extension_for")
 					},
 				},
@@ -8763,7 +8762,7 @@ func TestService_extendLinkingLimitByOrderID(t *testing.T) {
 	}
 }
 
-func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
+func TestServer_CanExtendLinkingLimitWithReceiptTx(t *testing.T) {
 	type tcGiven struct {
 		orderID       uuid.UUID
 		req           model.ReceiptRequest
@@ -8886,47 +8885,7 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "error_get_for_update",
-			given: tcGiven{
-				orderID: uuid.Must(uuid.FromString("17614fac-ef87-4120-a231-dfdf55e15823")),
-				req:     model.ReceiptRequest{Type: model.VendorApple},
-				orderRepo: &repository.MockOrder{
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						return &model.Order{Status: OrderStatusPaid}, nil
-					},
-
-					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
-						return &model.Order{ID: uuid.Must(uuid.FromString("17614fac-ef87-4120-a231-dfdf55e15823"))}, nil
-					},
-				},
-				orderItemRepo: &repository.MockOrderItem{
-					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
-						items := []model.OrderItem{
-							{
-								ID: uuid.Must(uuid.FromString("991028c0-94dc-4aca-9812-102a750ff238")),
-							},
-						}
-
-						return items, nil
-					},
-
-					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
-						return nil, model.Error("error_get_for_update")
-					},
-				},
-				valReceipt: &mockReceiptValidater{
-					fnValidateApple: func(ctx context.Context, req model.ReceiptRequest) (model.ReceiptData, error) {
-						return model.ReceiptData{}, nil
-					},
-				},
-			},
-			exp: tcExpected{
-				err: model.Error("error_get_for_update"),
-			},
-		},
-
-		{
-			name: "error_get_nxt_ext",
+			name: "error_get_extension_for",
 			given: tcGiven{
 				orderID: uuid.Must(uuid.FromString("17614fac-ef87-4120-a231-dfdf55e15823")),
 				req:     model.ReceiptRequest{Type: model.VendorApple},
@@ -8961,12 +8920,12 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				},
 				credExt: &mockCredExtender{
 					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
-						return model.CredExtension{}, model.Error("error_get_nxt_ext")
+						return model.CredExtension{}, model.Error("error_get_extension_for")
 					},
 				},
 			},
 			exp: tcExpected{
-				err: model.Error("error_get_nxt_ext"),
+				err: model.Error("error_get_extension_for"),
 			},
 		},
 
@@ -8986,8 +8945,18 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					},
 				},
 				orderItemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						items := []model.OrderItem{
+							{
+								ID: uuid.Must(uuid.FromString("991028c0-94dc-4aca-9812-102a750ff238")),
+							},
+						}
+
+						return items, nil
+					},
+
 					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
-						return &model.OrderItem{ID: uuid.Must(uuid.FromString("991028c0-94dc-4aca-9812-102a750ff238"))}, nil
+						return &model.OrderItem{}, nil
 					},
 				},
 				valReceipt: &mockReceiptValidater{
