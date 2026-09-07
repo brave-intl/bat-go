@@ -8602,7 +8602,7 @@ func TestService_extendLinkingLimitByOrderID(t *testing.T) {
 		},
 
 		{
-			name: "error_get_nxt_if_valid",
+			name: "error_get_extension_for",
 			given: tcGiven{
 				orderID: uuid.Must(uuid.FromString("17614fac-ef87-4120-a231-dfdf55e15823")),
 				orderRepo: &repository.MockOrder{
@@ -8622,13 +8622,45 @@ func TestService_extendLinkingLimitByOrderID(t *testing.T) {
 					},
 				},
 				credExt: &mockCredExtender{
-					fnGetNextExtIfValid: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error) {
-						return NextExtension{}, model.Error("error_get_nxt_if_valid")
+					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
+
+						return model.CredExtension{}, model.Error("error_get_extension_for")
 					},
 				},
 			},
 			exp: tcExpected{
-				err: model.Error("error_get_nxt_if_valid"),
+				err: model.Error("error_get_extension_for"),
+			},
+		},
+
+		{
+			name: "error_cred_extension_grant",
+			given: tcGiven{
+				orderID: uuid.Must(uuid.FromString("17614fac-ef87-4120-a231-dfdf55e15823")),
+				orderRepo: &repository.MockOrder{
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						result := &model.Order{Status: model.OrderStatusPaid}
+
+						return result, nil
+					},
+				},
+				orderItemRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return []model.OrderItem{{}}, nil
+					},
+
+					FnGetForUpdate: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
+						return &model.OrderItem{}, nil
+					},
+				},
+				credExt: &mockCredExtender{
+					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
+						return model.CredExtension{}, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				err: model.ErrExtensionStateItem,
 			},
 		},
 
@@ -8657,8 +8689,14 @@ func TestService_extendLinkingLimitByOrderID(t *testing.T) {
 					},
 				},
 				credExt: &mockCredExtender{
-					fnGetNextExtIfValid: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error) {
-						return NextExtension{}, nil
+					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
+						pol := model.CredExtensionPolicy{MaxPerItem: 1}
+
+						st := model.ExtensionState{Item: &model.OrderItem{}}
+
+						ext := model.NewCredExtension(pol, st, time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC))
+
+						return ext, nil
 					},
 				},
 			},
@@ -8692,8 +8730,14 @@ func TestService_extendLinkingLimitByOrderID(t *testing.T) {
 					},
 				},
 				credExt: &mockCredExtender{
-					fnGetNextExtIfValid: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error) {
-						return NextExtension{}, nil
+					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
+						pol := model.CredExtensionPolicy{MaxPerItem: 1}
+
+						st := model.ExtensionState{Item: &model.OrderItem{}}
+
+						ext := model.NewCredExtension(pol, st, time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC))
+
+						return ext, nil
 					},
 				},
 			},
@@ -8723,6 +8767,7 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 	type tcGiven struct {
 		orderID       uuid.UUID
 		req           model.ReceiptRequest
+		now           time.Time
 		orderRepo     *repository.MockOrder
 		orderItemRepo *repository.MockOrderItem
 		tlv2Repo      *repository.MockTLV2
@@ -8731,7 +8776,8 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		err error
+		credExt model.CredExtension
+		err     error
 	}
 
 	type testCase struct {
@@ -8914,8 +8960,8 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					},
 				},
 				credExt: &mockCredExtender{
-					fnGetNextExtIfValid: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error) {
-						return NextExtension{}, model.Error("error_get_nxt_ext")
+					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
+						return model.CredExtension{}, model.Error("error_get_nxt_ext")
 					},
 				},
 			},
@@ -8929,6 +8975,7 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 			given: tcGiven{
 				orderID: uuid.Must(uuid.FromString("17614fac-ef87-4120-a231-dfdf55e15823")),
 				req:     model.ReceiptRequest{Type: model.VendorApple},
+				now:     time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC),
 				orderRepo: &repository.MockOrder{
 					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
 						return &model.Order{Status: OrderStatusPaid}, nil
@@ -8939,18 +8986,8 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					},
 				},
 				orderItemRepo: &repository.MockOrderItem{
-					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
-						items := []model.OrderItem{
-							{
-								ID: uuid.Must(uuid.FromString("991028c0-94dc-4aca-9812-102a750ff238")),
-							},
-						}
-
-						return items, nil
-					},
-
 					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.OrderItem, error) {
-						return &model.OrderItem{}, nil
+						return &model.OrderItem{ID: uuid.Must(uuid.FromString("991028c0-94dc-4aca-9812-102a750ff238"))}, nil
 					},
 				},
 				valReceipt: &mockReceiptValidater{
@@ -8959,11 +8996,14 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					},
 				},
 				credExt: &mockCredExtender{
-					fnGetNextExtIfValid: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error) {
-						return NextExtension{}, nil
+					fnGetExtensionFor: func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
+						ext := model.NewCredExtension(model.CredExtensionPolicy{}, model.ExtensionState{Item: item}, now)
+
+						return ext, nil
 					},
 				},
 			},
+			exp: tcExpected{credExt: model.NewCredExtension(model.CredExtensionPolicy{}, model.ExtensionState{Item: &model.OrderItem{ID: uuid.Must(uuid.FromString("991028c0-94dc-4aca-9812-102a750ff238"))}}, time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC))},
 		},
 	}
 
@@ -8981,8 +9021,9 @@ func TestServer_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 
 			ctx := context.Background()
 
-			actual := s.canExtendLinkingLimitWithReceiptTx(ctx, nil, tc.given.orderID, tc.given.req)
-			should.Equal(t, tc.exp.err, actual)
+			actual, err := s.canExtendLinkingLimitWithReceiptTx(ctx, nil, tc.given.orderID, tc.given.req, tc.given.now)
+			should.Equal(t, tc.exp.credExt, actual)
+			should.Equal(t, tc.exp.err, err)
 		})
 	}
 }
@@ -9018,13 +9059,13 @@ func (v *mockReceiptValidater) fetchSubPlayStore(ctx context.Context, pkgName, s
 }
 
 type mockCredExtender struct {
-	fnGetNextExtIfValid func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error)
+	fnGetExtensionFor func(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error)
 }
 
-func (e *mockCredExtender) GetNextExtIfValid(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (NextExtension, error) {
-	if e.fnGetNextExtIfValid == nil {
-		return NextExtension{}, nil
+func (e *mockCredExtender) GetExtensionFor(ctx context.Context, dbi sqlx.QueryerContext, item *model.OrderItem, now time.Time) (model.CredExtension, error) {
+	if e.fnGetExtensionFor == nil {
+		return model.CredExtension{}, nil
 	}
 
-	return e.fnGetNextExtIfValid(ctx, dbi, item, now)
+	return e.fnGetExtensionFor(ctx, dbi, item, now)
 }

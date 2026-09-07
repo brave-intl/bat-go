@@ -248,16 +248,16 @@ func TestShouldTruncateTLV2Creds(t *testing.T) {
 	}
 }
 
-func TestTlV2CredExtender_GetNextExtIfValid(t *testing.T) {
+func TestTlV2CredExtender_GetExtensionFor(t *testing.T) {
 	type tcGiven struct {
 		item     *model.OrderItem
 		now      time.Time
-		policies model.CredExtensionPolicies
+		policies policyStore
 		tlv2Repo tlv2Store
 	}
 
 	type tcExpected struct {
-		nxt NextExtension
+		ext model.CredExtension
 		err error
 	}
 
@@ -269,64 +269,16 @@ func TestTlV2CredExtender_GetNextExtIfValid(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "error_unsupported_cred_type",
-			given: tcGiven{
-				item: &model.OrderItem{},
-			},
-			exp: tcExpected{
-				err: model.ErrUnsupportedCredType,
-			},
-		},
-
-		{
 			name: "error_get_policy",
 			given: tcGiven{
-				item: &model.OrderItem{
-					CredentialType: timeLimitedV2,
-				},
-			},
-			exp: tcExpected{
-				err: model.ErrNoExtensionPolicy,
-			},
-		},
-
-		{
-			name: "error_extension_max_per_item",
-			given: tcGiven{
-				item: &model.OrderItem{
-					NumSelfExtensions: 1,
-					SKUVnt:            "some_sku",
-					CredentialType:    timeLimitedV2,
-				},
-				policies: model.CredExtensionPolicies{
-					"some_sku": model.CredExtensionPolicy{
-						MaxPerItem: 1,
+				policies: &mockPolicyStore{
+					fnGetPolicy: func(item *OrderItem) (model.CredExtensionPolicy, error) {
+						return model.CredExtensionPolicy{}, model.Error("error_get_policy")
 					},
 				},
 			},
 			exp: tcExpected{
-				err: model.ErrExtensionMaxPerItem,
-			},
-		},
-
-		{
-			name: "error_check_next_allowed_extension_time",
-			given: tcGiven{
-				item: &model.OrderItem{
-					NumSelfExtensions:   1,
-					LastSelfExtensionAt: ptrTo(time.Date(2026, 06, 06, 0, 0, 0, 0, time.UTC)),
-					SKUVnt:              "some_sku",
-					CredentialType:      timeLimitedV2,
-				},
-				policies: model.CredExtensionPolicies{
-					"some_sku": model.CredExtensionPolicy{
-						MaxPerItem:         2,
-						MinIntervalSeconds: 1,
-					},
-				},
-			},
-			exp: tcExpected{
-				err: model.ErrExtensionRateLimited,
+				err: model.Error("error_get_policy"),
 			},
 		},
 
@@ -355,42 +307,12 @@ func TestTlV2CredExtender_GetNextExtIfValid(t *testing.T) {
 		},
 
 		{
-			name: "error_active_not_at_limit",
-			given: tcGiven{
-				item: &model.OrderItem{
-					NumSelfExtensions: 1,
-					SKUVnt:            "some_sku",
-					CredentialType:    timeLimitedV2,
-				},
-				policies: model.CredExtensionPolicies{
-					"some_sku": model.CredExtensionPolicy{
-						MaxPerItem: 2,
-					},
-				},
-				tlv2Repo: &repository.MockTLV2{
-					FnUniqBatches: func(ctx context.Context, dbi sqlx.QueryerContext, orderID, itemID uuid.UUID, from, to time.Time) (int, error) {
-						return 0, nil
-					},
-				},
-			},
-			exp: tcExpected{
-				err: model.ErrExtensionNotAtLimit,
-			},
-		},
-
-		{
 			name: "success",
 			given: tcGiven{
-				item: &model.OrderItem{
-					MaxActiveBatchesTLV2Creds: ptrTo(13),
-					NumSelfExtensions:         1,
-					SKUVnt:                    "some_sku",
-					CredentialType:            timeLimitedV2,
-				},
-				policies: model.CredExtensionPolicies{
-					"some_sku": model.CredExtensionPolicy{
-						SlotsPerGrant: 3,
-						MaxPerItem:    2,
+				item: &model.OrderItem{CredentialType: "time-limited-v2", MaxActiveBatchesTLV2Creds: ptrTo(100)},
+				policies: &mockPolicyStore{
+					fnGetPolicy: func(item *OrderItem) (model.CredExtensionPolicy, error) {
+						return model.CredExtensionPolicy{SlotsPerGrant: 1}, nil
 					},
 				},
 				tlv2Repo: &repository.MockTLV2{
@@ -400,10 +322,7 @@ func TestTlV2CredExtender_GetNextExtIfValid(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				nxt: NextExtension{
-					maxActiveBatches: 16,
-					numSelfExt:       2,
-				},
+				ext: model.NewCredExtension(model.CredExtensionPolicy{SlotsPerGrant: 1}, model.ExtensionState{Item: &model.OrderItem{CredentialType: "time-limited-v2", MaxActiveBatchesTLV2Creds: ptrTo(100)}, ActiveBatches: 13, Limit: 100}, time.Time{}),
 			},
 		},
 	}
@@ -419,93 +338,24 @@ func TestTlV2CredExtender_GetNextExtIfValid(t *testing.T) {
 
 			ctx := context.Background()
 
-			actual, err := ext.GetNextExtIfValid(ctx, nil, tc.given.item, tc.given.now)
+			actual, err := ext.GetExtensionFor(ctx, nil, tc.given.item, tc.given.now)
 			must.ErrorIs(t, err, tc.exp.err)
 
-			should.Equal(t, tc.exp.nxt, actual)
+			should.Equal(t, tc.exp.ext, actual)
 		})
 	}
 }
 
-func TestCheckNextAllowedExtensionTime(t *testing.T) {
-	type tcGiven struct {
-		pol  model.CredExtensionPolicy
-		item *model.OrderItem
-		now  time.Time
+type mockPolicyStore struct {
+	fnGetPolicy func(item *OrderItem) (model.CredExtensionPolicy, error)
+}
+
+func (s *mockPolicyStore) GetPolicy(item *OrderItem) (model.CredExtensionPolicy, error) {
+	if s.fnGetPolicy == nil {
+		return model.CredExtensionPolicy{}, nil
 	}
 
-	type tcExpected struct {
-		err error
-	}
-
-	type testCase struct {
-		name  string
-		given tcGiven
-		exp   tcExpected
-	}
-
-	tests := []testCase{
-		{
-			name: "last_self_extension_at_nil",
-			given: tcGiven{
-				item: &model.OrderItem{},
-			},
-		},
-
-		{
-			name: "now_before_next_allowed",
-			given: tcGiven{
-				pol: model.CredExtensionPolicy{
-					MinIntervalSeconds: 1,
-				},
-				item: &model.OrderItem{
-					LastSelfExtensionAt: ptrTo(time.Date(2026, 1, 1, 1, 1, 10, 0, time.UTC)),
-				},
-				now: time.Date(2026, 1, 1, 1, 1, 1, 0, time.UTC),
-			},
-			exp: tcExpected{
-				err: model.ErrExtensionRateLimited,
-			},
-		},
-
-		{
-			name: "now_same_as_next_allowed",
-			given: tcGiven{
-				pol: model.CredExtensionPolicy{
-					MinIntervalSeconds: 1,
-				},
-				item: &model.OrderItem{
-					LastSelfExtensionAt: ptrTo(time.Date(2026, 1, 1, 1, 1, 10, 0, time.UTC)),
-				},
-				now: time.Date(2026, 1, 1, 1, 1, 10, 0, time.UTC),
-			},
-			exp: tcExpected{
-				err: model.ErrExtensionRateLimited,
-			},
-		},
-
-		{
-			name: "now_after_next_allowed",
-			given: tcGiven{
-				pol: model.CredExtensionPolicy{
-					MinIntervalSeconds: 1,
-				},
-				item: &model.OrderItem{
-					LastSelfExtensionAt: ptrTo(time.Date(2026, 1, 1, 1, 1, 10, 0, time.UTC)),
-				},
-				now: time.Date(2026, 1, 1, 1, 1, 30, 0, time.UTC),
-			},
-		},
-	}
-
-	for i := range tests {
-		tc := tests[i]
-
-		t.Run(tc.name, func(t *testing.T) {
-			actual := checkNextAllowedExtensionTime(tc.given.pol, tc.given.item, tc.given.now)
-			should.Equal(t, tc.exp.err, actual)
-		})
-	}
+	return s.fnGetPolicy(item)
 }
 
 func genNumStrings(n int) []string {
