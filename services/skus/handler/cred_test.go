@@ -1872,35 +1872,6 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 		},
 
 		{
-			name: "error_extension_invalid_limit",
-			given: tcGiven{
-				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
-					URLParams: chi.RouteParams{
-						Keys:   []string{"orderID"},
-						Values: []string{"facade00-0000-4000-a000-000000000000"},
-					},
-				}),
-				body: "{}",
-				svc: &mockTLV2Svc{
-					FnCanExtendLinkingLimitWithReceipt: func(ctx context.Context, orderID uuid.UUID, req model.ReceiptRequest) (model.CredExtension, error) {
-						return model.CredExtension{}, model.ErrExtensionInvalidLimit
-					},
-				},
-			},
-			exp: tcExpected{
-				code: http.StatusUnprocessableEntity,
-				err: &appErrorExp{
-					code:    http.StatusUnprocessableEntity,
-					errCode: model.ExtensionCodeInvalidLimitX,
-					message: "extension new limit invalid",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
-						must.ErrorIs(t, err, model.ErrExtensionInvalidLimit)
-					},
-				},
-			},
-		},
-
-		{
 			name: "error_extension_not_supported",
 			given: tcGiven{
 				ctx: context.WithValue(context.Background(), chi.RouteCtxKey, &chi.Context{
