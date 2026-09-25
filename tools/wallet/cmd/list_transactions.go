@@ -182,7 +182,7 @@ func ListTransactions(
 			return err
 		}
 	} else {
-		for i := 0; i < len(txns); i++ {
+		for i := range txns {
 			fmt.Printf("%s\n", txns[i])
 		}
 	}

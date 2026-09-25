@@ -432,7 +432,7 @@ func InitService(
 
 	if enabled, ok := ctx.Value(appctx.SkusEnableStoreSignedOrderCredsConsumer).(bool); ok && enabled {
 		if consumers, ok := ctx.Value(appctx.SkusNumberStoreSignedOrderCredsConsumer).(int); ok {
-			for i := range consumers {
+			for range consumers {
 				go service.RunStoreSignedOrderCredentials(ctx, 1*time.Second)
 			}
 		}
@@ -1021,7 +1021,7 @@ func getUpholdCustodialTxWithRetries(ctx context.Context, txRef string) (*decima
 
 	// best effort to check that the tx is done processing
 OUTER:
-	for i := range 5 {
+	for range 5 {
 		select {
 		case <-ctx.Done():
 			break OUTER

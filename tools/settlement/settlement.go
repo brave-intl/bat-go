@@ -119,7 +119,7 @@ func CheckForDuplicates(transactions []AntifraudTransaction) error {
 
 // PrepareTransactions by embedding signed transactions into the settlement documents
 func PrepareTransactions(wallet *uphold.Wallet, settlements []custodian.Transaction, purpose string, beneficiary *uphold.Beneficiary) error {
-	for i := 0; i < len(settlements); i++ {
+	for i := range settlements {
 		settlement := &settlements[i]
 
 		// Use the Note field if it exists, otherwise use the settlement ID
@@ -154,7 +154,7 @@ func checkTransactionAgainstSettlement(settlement *custodian.Transaction, txInfo
 // CheckPreparedTransactions performs sanity checks on an array of signed settlements
 func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []custodian.Transaction) error {
 	sumProbi := decimal.Zero
-	for i := 0; i < len(settlements); i++ {
+	for i := range settlements {
 		settlement := &settlements[i]
 
 		// make sure the signed transaction is well formed and the signature is valid
