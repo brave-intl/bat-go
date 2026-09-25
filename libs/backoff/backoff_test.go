@@ -43,8 +43,7 @@ func TestRetry_IsRetriable_False(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx, done := context.WithCancel(context.Background())
-	defer done()
+	ctx := t.Context()
 
 	expected := errors.New(testutils.RandomString())
 
@@ -68,8 +67,7 @@ func TestRetry_CalculateNextDelay_Done(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx, done := context.WithCancel(context.Background())
-	defer done()
+	ctx := t.Context()
 
 	expected := errors.New(testutils.RandomString())
 
@@ -96,8 +94,7 @@ func TestRetry(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx, done := context.WithCancel(context.Background())
-	defer done()
+	ctx := t.Context()
 
 	count := 0
 	attempts := 2

@@ -301,9 +301,9 @@ func (s *Service) GetRelative(
 	for k, v := range *rates {
 		innerOut := map[string]decimal.Decimal{}
 		for kk, vv := range v {
-			if strings.HasSuffix(kk, "_24h_change") {
+			if base, ok := strings.CutSuffix(kk, "_24h_change"); ok {
 				// Copy 24h change to timeframe change
-				innerOut[strings.TrimSuffix(kk, "_24h_change")+"_timeframe_change"] = vv
+				innerOut[base+"_timeframe_change"] = vv
 			}
 			innerOut[kk] = vv
 		}

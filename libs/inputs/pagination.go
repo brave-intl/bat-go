@@ -155,9 +155,9 @@ func NewPagination(ctx context.Context, url string, v interface{}) (context.Cont
 	)
 
 	// for the number of fields the struct v has
-	for i := 0; i < reflect.TypeOf(v).Elem().NumField(); i++ {
+	for field := range reflect.TypeOf(v).Elem().Fields() {
 		// get the struct tags to produce a mapping of json -> db
-		tag := string(reflect.TypeOf(v).Elem().Field(i).Tag)
+		tag := string(field.Tag)
 
 		// if we do have a tag
 		if tag != "" {
