@@ -148,7 +148,7 @@ var (
 )
 
 // NewPagination - create a new Pagination struct and populate from url and order options
-func NewPagination(ctx context.Context, url string, v interface{}) (context.Context, *Pagination, error) {
+func NewPagination(ctx context.Context, url string, v any) (context.Context, *Pagination, error) {
 	var (
 		pagination = new(Pagination)
 		order      = map[string]string{}
