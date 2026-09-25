@@ -28,7 +28,7 @@ const maxConfirmTries = 5
 // AntifraudTransaction is a "v2" transaction, creators only atm
 type AntifraudTransaction struct {
 	custodian.Transaction
-	BAT                decimal.Decimal `json:"bat,omitempty"`
+	BAT                decimal.Decimal `json:"bat,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	PayoutReportID     string          `json:"payout_report_id,omitempty"`
 	WalletProviderInfo string          `json:"wallet_provider_id,omitempty"`
 }
