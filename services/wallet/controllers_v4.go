@@ -72,8 +72,7 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			logger.Error().Err(err).
 				Msg("error creating rewards wallet")
 
-			var errorBundle *errorutils.ErrorBundle
-			if errors.As(err, &errorBundle) {
+			if errorBundle, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 				logger.Error().
 					Str("error_bundle", errorBundle.DataToString()).
 					Msg("error creating rewards wallet")
@@ -145,8 +144,7 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 		_, err = s.retry(r.Context(), upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
 		if err != nil {
 			logger.Error().Err(err).Msg("error updating rewards wallet")
-			var errorBundle *errorutils.ErrorBundle
-			if errors.As(err, &errorBundle) {
+			if errorBundle, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 				logger.Error().
 					Str("error bundle", errorBundle.DataToString()).
 					Msg("error updating rewards wallet")

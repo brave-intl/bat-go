@@ -42,8 +42,7 @@ func must(v interface{}, err error) interface{} {
 
 func registerIgnoreExisting(c prometheus.Collector) (interface{}, error) {
 	if err := prometheus.Register(c); err != nil {
-		var are *prometheus.AlreadyRegisteredError
-		if errors.As(err, &are) {
+		if are, ok := errors.AsType[*prometheus.AlreadyRegisteredError](err); ok {
 			// already registered.
 			switch (c).(type) {
 			case *prometheus.CounterVec:

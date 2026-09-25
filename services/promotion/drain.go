@@ -40,8 +40,7 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 		// this is a legacy claimed claim
 		_, err := service.Datastore.CreateClaim(pID, walletID.String(), total, decimal.Zero, true)
 		if err != nil {
-			var pgErr *pq.Error
-			if errors.As(err, &pgErr) {
+			if pgErr, ok := errors.AsType[*pq.Error](err); ok {
 				// unique constraint error (wallet id and promotion id combo exists)
 				// use one of the other 4 promotions instead
 				if pgErr.Code == "23505" {
