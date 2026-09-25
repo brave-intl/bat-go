@@ -45,7 +45,7 @@ func (m *MockClient) CheckInventory(ctx context.Context) (map[string]bitflyer.In
 }
 
 // CheckInventory indicates an expected call of CheckInventory.
-func (mr *MockClientMockRecorder) CheckInventory(ctx interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CheckInventory(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckInventory", reflect.TypeOf((*MockClient)(nil).CheckInventory), ctx)
 }
@@ -60,7 +60,7 @@ func (m *MockClient) CheckPayoutStatus(ctx context.Context, payload bitflyer.Che
 }
 
 // CheckPayoutStatus indicates an expected call of CheckPayoutStatus.
-func (mr *MockClientMockRecorder) CheckPayoutStatus(ctx, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CheckPayoutStatus(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPayoutStatus", reflect.TypeOf((*MockClient)(nil).CheckPayoutStatus), ctx, payload)
 }
@@ -75,7 +75,7 @@ func (m *MockClient) FetchBalance(ctx context.Context) (*bitflyer.InventoryRespo
 }
 
 // FetchBalance indicates an expected call of FetchBalance.
-func (mr *MockClientMockRecorder) FetchBalance(ctx interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchBalance(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchBalance", reflect.TypeOf((*MockClient)(nil).FetchBalance), ctx)
 }
@@ -90,7 +90,7 @@ func (m *MockClient) FetchQuote(ctx context.Context, productCode string, readFro
 }
 
 // FetchQuote indicates an expected call of FetchQuote.
-func (mr *MockClientMockRecorder) FetchQuote(ctx, productCode, readFromFile interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchQuote(ctx, productCode, readFromFile any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchQuote", reflect.TypeOf((*MockClient)(nil).FetchQuote), ctx, productCode, readFromFile)
 }
@@ -105,7 +105,7 @@ func (m *MockClient) RefreshToken(ctx context.Context, payload bitflyer.TokenPay
 }
 
 // RefreshToken indicates an expected call of RefreshToken.
-func (mr *MockClientMockRecorder) RefreshToken(ctx, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) RefreshToken(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockClient)(nil).RefreshToken), ctx, payload)
 }
@@ -117,7 +117,7 @@ func (m *MockClient) SetAuthToken(authToken string) {
 }
 
 // SetAuthToken indicates an expected call of SetAuthToken.
-func (mr *MockClientMockRecorder) SetAuthToken(authToken interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) SetAuthToken(authToken any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAuthToken", reflect.TypeOf((*MockClient)(nil).SetAuthToken), authToken)
 }
@@ -132,7 +132,7 @@ func (m *MockClient) UploadBulkPayout(ctx context.Context, payload bitflyer.With
 }
 
 // UploadBulkPayout indicates an expected call of UploadBulkPayout.
-func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBulkPayout", reflect.TypeOf((*MockClient)(nil).UploadBulkPayout), ctx, payload)
 }

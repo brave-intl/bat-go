@@ -16,7 +16,7 @@ type HmacSigner struct {
 
 // HMACSha384 the included message using the vault held keypair
 func (vs *HmacSigner) HMACSha384(message []byte) ([]byte, error) {
-	response, err := vs.Client.Logical().Write("transit/hmac/"+vs.KeyName+"/sha2-384", map[string]interface{}{
+	response, err := vs.Client.Logical().Write("transit/hmac/"+vs.KeyName+"/sha2-384", map[string]any{
 		"input": base64.StdEncoding.EncodeToString(message),
 	})
 	if err != nil {

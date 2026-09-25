@@ -96,7 +96,7 @@ func (ucr *UpholdCreationRequest) Decode(ctx context.Context, v []byte) error {
 		return fmt.Errorf("failed to decode signed creation request: %w", err)
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	err = json.Unmarshal([]byte(signedTx.Body), &body)
 	if err != nil {
 		return fmt.Errorf("failed to decode signed creation request: %w", err)
@@ -125,8 +125,7 @@ func (ucr *UpholdCreationRequest) HandleErrors(err error) *handlers.AppError {
 		issues["invalidJSON"] = err.Error()
 	}
 
-	var merr *errorutils.MultiError
-	if errors.As(err, &merr) {
+	if merr, ok := errors.AsType[*errorutils.MultiError](err); ok {
 		for _, e := range merr.Errs {
 			if strings.Contains(e.Error(), "failed decoding") {
 				issues["decoding"] = e.Error()
@@ -162,8 +161,7 @@ func (bcr *BraveCreationRequest) HandleErrors(err error) *handlers.AppError {
 		issues["invalidJSON"] = err.Error()
 	}
 
-	var merr *errorutils.MultiError
-	if errors.As(err, &merr) {
+	if merr, ok := errors.AsType[*errorutils.MultiError](err); ok {
 		for _, e := range merr.Errs {
 			if strings.Contains(e.Error(), "failed decoding") {
 				issues["decoding"] = e.Error()
@@ -212,8 +210,7 @@ func (ludar *LinkUpholdDepositAccountRequest) HandleErrors(err error) *handlers.
 		issues["invalidJSON"] = err.Error()
 	}
 
-	var merr *errorutils.MultiError
-	if errors.As(err, &merr) {
+	if merr, ok := errors.AsType[*errorutils.MultiError](err); ok {
 		for _, e := range merr.Errs {
 			if strings.Contains(e.Error(), "failed decoding") {
 				issues["decoding"] = e.Error()
@@ -258,8 +255,7 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 		issues["invalidJSON"] = err.Error()
 	}
 
-	var merr *errorutils.MultiError
-	if errors.As(err, &merr) {
+	if merr, ok := errors.AsType[*errorutils.MultiError](err); ok {
 		for _, e := range merr.Errs {
 			if strings.Contains(e.Error(), "failed decoding") {
 				issues["decoding"] = e.Error()
@@ -304,8 +300,7 @@ func HandleErrorsZebPay(err error) *handlers.AppError {
 		issues["invalidJSON"] = err.Error()
 	}
 
-	var merr *errorutils.MultiError
-	if errors.As(err, &merr) {
+	if merr, ok := errors.AsType[*errorutils.MultiError](err); ok {
 		for _, e := range merr.Errs {
 			msg := e.Error()
 
@@ -353,8 +348,7 @@ func (glr *GeminiLinkingRequest) HandleErrors(err error) *handlers.AppError {
 		issues["invalidJSON"] = err.Error()
 	}
 
-	var merr *errorutils.MultiError
-	if errors.As(err, &merr) {
+	if merr, ok := errors.AsType[*errorutils.MultiError](err); ok {
 		for _, e := range merr.Errs {
 			if strings.Contains(e.Error(), "failed decoding") {
 				issues["decoding"] = e.Error()
@@ -464,8 +458,7 @@ func (blr *BitFlyerLinkingRequest) HandleErrors(err error) *handlers.AppError {
 		issues["invalidJSON"] = err.Error()
 	}
 
-	var merr *errorutils.MultiError
-	if errors.As(err, &merr) {
+	if merr, ok := errors.AsType[*errorutils.MultiError](err); ok {
 		for _, e := range merr.Errs {
 			if strings.Contains(e.Error(), "failed decoding") {
 				issues["decoding"] = e.Error()

@@ -50,7 +50,7 @@ func (m *MockDatastore) ActivatePromotion(promotion *Promotion) error {
 }
 
 // ActivatePromotion indicates an expected call of ActivatePromotion.
-func (mr *MockDatastoreMockRecorder) ActivatePromotion(promotion interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) ActivatePromotion(promotion any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActivatePromotion", reflect.TypeOf((*MockDatastore)(nil).ActivatePromotion), promotion)
 }
@@ -80,7 +80,7 @@ func (m *MockDatastore) ClaimForWallet(promotion *Promotion, issuer *Issuer, wal
 }
 
 // ClaimForWallet indicates an expected call of ClaimForWallet.
-func (mr *MockDatastoreMockRecorder) ClaimForWallet(promotion, issuer, wallet, blindedCreds interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) ClaimForWallet(promotion, issuer, wallet, blindedCreds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimForWallet", reflect.TypeOf((*MockDatastore)(nil).ClaimForWallet), promotion, issuer, wallet, blindedCreds)
 }
@@ -95,7 +95,7 @@ func (m *MockDatastore) CreateClaim(promotionID go_uuid.UUID, walletID string, v
 }
 
 // CreateClaim indicates an expected call of CreateClaim.
-func (mr *MockDatastoreMockRecorder) CreateClaim(promotionID, walletID, value, bonus, legacy interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreateClaim(promotionID, walletID, value, bonus, legacy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateClaim", reflect.TypeOf((*MockDatastore)(nil).CreateClaim), promotionID, walletID, value, bonus, legacy)
 }
@@ -110,7 +110,7 @@ func (m *MockDatastore) CreatePromotion(promotionType string, numGrants int, val
 }
 
 // CreatePromotion indicates an expected call of CreatePromotion.
-func (mr *MockDatastoreMockRecorder) CreatePromotion(promotionType, numGrants, value, platform interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreatePromotion(promotionType, numGrants, value, platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePromotion", reflect.TypeOf((*MockDatastore)(nil).CreatePromotion), promotionType, numGrants, value, platform)
 }
@@ -125,7 +125,7 @@ func (m *MockDatastore) CreateTransaction(orderID go_uuid.UUID, externalTransact
 }
 
 // CreateTransaction indicates an expected call of CreateTransaction.
-func (mr *MockDatastoreMockRecorder) CreateTransaction(orderID, externalTransactionID, status, currency, kind, amount interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreateTransaction(orderID, externalTransactionID, status, currency, kind, amount any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransaction", reflect.TypeOf((*MockDatastore)(nil).CreateTransaction), orderID, externalTransactionID, status, currency, kind, amount)
 }
@@ -139,7 +139,7 @@ func (m *MockDatastore) DeactivatePromotion(promotion *Promotion) error {
 }
 
 // DeactivatePromotion indicates an expected call of DeactivatePromotion.
-func (mr *MockDatastoreMockRecorder) DeactivatePromotion(promotion interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) DeactivatePromotion(promotion any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivatePromotion", reflect.TypeOf((*MockDatastore)(nil).DeactivatePromotion), promotion)
 }
@@ -154,7 +154,7 @@ func (m *MockDatastore) GetAvailablePromotions(platform string) ([]Promotion, er
 }
 
 // GetAvailablePromotions indicates an expected call of GetAvailablePromotions.
-func (mr *MockDatastoreMockRecorder) GetAvailablePromotions(platform interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetAvailablePromotions(platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotions", reflect.TypeOf((*MockDatastore)(nil).GetAvailablePromotions), platform)
 }
@@ -169,7 +169,7 @@ func (m *MockDatastore) GetAvailablePromotionsForWallet(wallet *wallet.Info, pla
 }
 
 // GetAvailablePromotionsForWallet indicates an expected call of GetAvailablePromotionsForWallet.
-func (mr *MockDatastoreMockRecorder) GetAvailablePromotionsForWallet(wallet, platform interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetAvailablePromotionsForWallet(wallet, platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotionsForWallet", reflect.TypeOf((*MockDatastore)(nil).GetAvailablePromotionsForWallet), wallet, platform)
 }
@@ -184,7 +184,7 @@ func (m *MockDatastore) GetClaimByWalletAndPromotion(wallet *wallet.Info, promot
 }
 
 // GetClaimByWalletAndPromotion indicates an expected call of GetClaimByWalletAndPromotion.
-func (mr *MockDatastoreMockRecorder) GetClaimByWalletAndPromotion(wallet, promotionID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetClaimByWalletAndPromotion(wallet, promotionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimByWalletAndPromotion", reflect.TypeOf((*MockDatastore)(nil).GetClaimByWalletAndPromotion), wallet, promotionID)
 }
@@ -199,7 +199,7 @@ func (m *MockDatastore) GetClaimCreds(claimID go_uuid.UUID) (*ClaimCreds, error)
 }
 
 // GetClaimCreds indicates an expected call of GetClaimCreds.
-func (mr *MockDatastoreMockRecorder) GetClaimCreds(claimID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetClaimCreds(claimID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimCreds", reflect.TypeOf((*MockDatastore)(nil).GetClaimCreds), claimID)
 }
@@ -214,7 +214,7 @@ func (m *MockDatastore) GetClaimSummary(walletID go_uuid.UUID, grantType string)
 }
 
 // GetClaimSummary indicates an expected call of GetClaimSummary.
-func (mr *MockDatastoreMockRecorder) GetClaimSummary(walletID, grantType interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetClaimSummary(walletID, grantType any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimSummary", reflect.TypeOf((*MockDatastore)(nil).GetClaimSummary), walletID, grantType)
 }
@@ -229,7 +229,7 @@ func (m *MockDatastore) GetIssuer(promotionID go_uuid.UUID, cohort string) (*Iss
 }
 
 // GetIssuer indicates an expected call of GetIssuer.
-func (mr *MockDatastoreMockRecorder) GetIssuer(promotionID, cohort interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetIssuer(promotionID, cohort any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuer", reflect.TypeOf((*MockDatastore)(nil).GetIssuer), promotionID, cohort)
 }
@@ -244,7 +244,7 @@ func (m *MockDatastore) GetIssuerByPublicKey(publicKey string) (*Issuer, error) 
 }
 
 // GetIssuerByPublicKey indicates an expected call of GetIssuerByPublicKey.
-func (mr *MockDatastoreMockRecorder) GetIssuerByPublicKey(publicKey interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetIssuerByPublicKey(publicKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuerByPublicKey", reflect.TypeOf((*MockDatastore)(nil).GetIssuerByPublicKey), publicKey)
 }
@@ -259,7 +259,7 @@ func (m *MockDatastore) GetOrder(orderID go_uuid.UUID) (*Order, error) {
 }
 
 // GetOrder indicates an expected call of GetOrder.
-func (mr *MockDatastoreMockRecorder) GetOrder(orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetOrder(orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrder", reflect.TypeOf((*MockDatastore)(nil).GetOrder), orderID)
 }
@@ -274,7 +274,7 @@ func (m *MockDatastore) GetPreClaim(promotionID go_uuid.UUID, walletID string) (
 }
 
 // GetPreClaim indicates an expected call of GetPreClaim.
-func (mr *MockDatastoreMockRecorder) GetPreClaim(promotionID, walletID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetPreClaim(promotionID, walletID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPreClaim", reflect.TypeOf((*MockDatastore)(nil).GetPreClaim), promotionID, walletID)
 }
@@ -289,7 +289,7 @@ func (m *MockDatastore) GetPromotion(promotionID go_uuid.UUID) (*Promotion, erro
 }
 
 // GetPromotion indicates an expected call of GetPromotion.
-func (mr *MockDatastoreMockRecorder) GetPromotion(promotionID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetPromotion(promotionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotion", reflect.TypeOf((*MockDatastore)(nil).GetPromotion), promotionID)
 }
@@ -304,7 +304,7 @@ func (m *MockDatastore) GetPromotionsMissingIssuer(limit int) ([]go_uuid.UUID, e
 }
 
 // GetPromotionsMissingIssuer indicates an expected call of GetPromotionsMissingIssuer.
-func (mr *MockDatastoreMockRecorder) GetPromotionsMissingIssuer(limit interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetPromotionsMissingIssuer(limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotionsMissingIssuer", reflect.TypeOf((*MockDatastore)(nil).GetPromotionsMissingIssuer), limit)
 }
@@ -319,7 +319,7 @@ func (m *MockDatastore) GetSumForTransactions(orderID go_uuid.UUID) (decimal.Dec
 }
 
 // GetSumForTransactions indicates an expected call of GetSumForTransactions.
-func (mr *MockDatastoreMockRecorder) GetSumForTransactions(orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetSumForTransactions(orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSumForTransactions", reflect.TypeOf((*MockDatastore)(nil).GetSumForTransactions), orderID)
 }
@@ -335,7 +335,7 @@ func (m *MockDatastore) GetWithdrawalsAssociated(walletID, claimID *go_uuid.UUID
 }
 
 // GetWithdrawalsAssociated indicates an expected call of GetWithdrawalsAssociated.
-func (mr *MockDatastoreMockRecorder) GetWithdrawalsAssociated(walletID, claimID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetWithdrawalsAssociated(walletID, claimID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWithdrawalsAssociated", reflect.TypeOf((*MockDatastore)(nil).GetWithdrawalsAssociated), walletID, claimID)
 }
@@ -350,7 +350,7 @@ func (m *MockDatastore) InsertBAPReportEvent(ctx context.Context, paymentID go_u
 }
 
 // InsertBAPReportEvent indicates an expected call of InsertBAPReportEvent.
-func (mr *MockDatastoreMockRecorder) InsertBAPReportEvent(ctx, paymentID, amount interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertBAPReportEvent(ctx, paymentID, amount any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertBAPReportEvent", reflect.TypeOf((*MockDatastore)(nil).InsertBAPReportEvent), ctx, paymentID, amount)
 }
@@ -365,7 +365,7 @@ func (m *MockDatastore) InsertBATLossEvent(ctx context.Context, paymentID go_uui
 }
 
 // InsertBATLossEvent indicates an expected call of InsertBATLossEvent.
-func (mr *MockDatastoreMockRecorder) InsertBATLossEvent(ctx, paymentID, reportID, amount, platform interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertBATLossEvent(ctx, paymentID, reportID, amount, platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertBATLossEvent", reflect.TypeOf((*MockDatastore)(nil).InsertBATLossEvent), ctx, paymentID, reportID, amount, platform)
 }
@@ -379,7 +379,7 @@ func (m *MockDatastore) InsertClobberedClaims(ctx context.Context, ids []go_uuid
 }
 
 // InsertClobberedClaims indicates an expected call of InsertClobberedClaims.
-func (mr *MockDatastoreMockRecorder) InsertClobberedClaims(ctx, ids, version interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertClobberedClaims(ctx, ids, version any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertClobberedClaims", reflect.TypeOf((*MockDatastore)(nil).InsertClobberedClaims), ctx, ids, version)
 }
@@ -394,7 +394,7 @@ func (m *MockDatastore) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 }
 
 // InsertIssuer indicates an expected call of InsertIssuer.
-func (mr *MockDatastoreMockRecorder) InsertIssuer(issuer interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertIssuer(issuer any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertIssuer", reflect.TypeOf((*MockDatastore)(nil).InsertIssuer), issuer)
 }
@@ -408,7 +408,7 @@ func (m *MockDatastore) InsertSuggestion(credentials []cbr.CredentialRedemption,
 }
 
 // InsertSuggestion indicates an expected call of InsertSuggestion.
-func (mr *MockDatastoreMockRecorder) InsertSuggestion(credentials, suggestionText, suggestion interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertSuggestion(credentials, suggestionText, suggestion any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSuggestion", reflect.TypeOf((*MockDatastore)(nil).InsertSuggestion), credentials, suggestionText, suggestion)
 }
@@ -416,7 +416,7 @@ func (mr *MockDatastoreMockRecorder) InsertSuggestion(credentials, suggestionTex
 // Migrate mocks base method.
 func (m *MockDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{}
+	varargs := []any{}
 	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
@@ -426,7 +426,7 @@ func (m *MockDatastore) Migrate(arg0 ...uint) error {
 }
 
 // Migrate indicates an expected call of Migrate.
-func (mr *MockDatastoreMockRecorder) Migrate(arg0 ...interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) Migrate(arg0 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockDatastore)(nil).Migrate), arg0...)
 }
@@ -467,7 +467,7 @@ func (m *MockDatastore) RollbackTx(tx *sqlx.Tx) {
 }
 
 // RollbackTx indicates an expected call of RollbackTx.
-func (mr *MockDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RollbackTx(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockDatastore)(nil).RollbackTx), tx)
 }
@@ -481,7 +481,7 @@ func (m *MockDatastore) RollbackTxAndHandle(tx *sqlx.Tx) error {
 }
 
 // RollbackTxAndHandle indicates an expected call of RollbackTxAndHandle.
-func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockDatastore)(nil).RollbackTxAndHandle), tx)
 }
@@ -496,7 +496,7 @@ func (m *MockDatastore) RunNextClaimJob(ctx context.Context, worker ClaimWorker)
 }
 
 // RunNextClaimJob indicates an expected call of RunNextClaimJob.
-func (mr *MockDatastoreMockRecorder) RunNextClaimJob(ctx, worker interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RunNextClaimJob(ctx, worker any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextClaimJob", reflect.TypeOf((*MockDatastore)(nil).RunNextClaimJob), ctx, worker)
 }
@@ -511,7 +511,7 @@ func (m *MockDatastore) RunNextSuggestionJob(ctx context.Context, worker Suggest
 }
 
 // RunNextSuggestionJob indicates an expected call of RunNextSuggestionJob.
-func (mr *MockDatastoreMockRecorder) RunNextSuggestionJob(ctx, worker interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RunNextSuggestionJob(ctx, worker any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextSuggestionJob", reflect.TypeOf((*MockDatastore)(nil).RunNextSuggestionJob), ctx, worker)
 }
@@ -525,7 +525,7 @@ func (m *MockDatastore) SaveClaimCreds(claimCreds *ClaimCreds) error {
 }
 
 // SaveClaimCreds indicates an expected call of SaveClaimCreds.
-func (mr *MockDatastoreMockRecorder) SaveClaimCreds(claimCreds interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) SaveClaimCreds(claimCreds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClaimCreds", reflect.TypeOf((*MockDatastore)(nil).SaveClaimCreds), claimCreds)
 }
@@ -539,7 +539,7 @@ func (m *MockDatastore) UpdateOrder(orderID go_uuid.UUID, status string) error {
 }
 
 // UpdateOrder indicates an expected call of UpdateOrder.
-func (mr *MockDatastoreMockRecorder) UpdateOrder(orderID, status interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) UpdateOrder(orderID, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrder", reflect.TypeOf((*MockDatastore)(nil).UpdateOrder), orderID, status)
 }
@@ -592,7 +592,7 @@ func (m *MockReadOnlyDatastore) GetAvailablePromotions(platform string) ([]Promo
 }
 
 // GetAvailablePromotions indicates an expected call of GetAvailablePromotions.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetAvailablePromotions(platform interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetAvailablePromotions(platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotions", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetAvailablePromotions), platform)
 }
@@ -607,7 +607,7 @@ func (m *MockReadOnlyDatastore) GetAvailablePromotionsForWallet(wallet *wallet.I
 }
 
 // GetAvailablePromotionsForWallet indicates an expected call of GetAvailablePromotionsForWallet.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetAvailablePromotionsForWallet(wallet, platform interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetAvailablePromotionsForWallet(wallet, platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotionsForWallet", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetAvailablePromotionsForWallet), wallet, platform)
 }
@@ -622,7 +622,7 @@ func (m *MockReadOnlyDatastore) GetClaimByWalletAndPromotion(wallet *wallet.Info
 }
 
 // GetClaimByWalletAndPromotion indicates an expected call of GetClaimByWalletAndPromotion.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimByWalletAndPromotion(wallet, promotionID interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimByWalletAndPromotion(wallet, promotionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimByWalletAndPromotion", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetClaimByWalletAndPromotion), wallet, promotionID)
 }
@@ -637,7 +637,7 @@ func (m *MockReadOnlyDatastore) GetClaimCreds(claimID go_uuid.UUID) (*ClaimCreds
 }
 
 // GetClaimCreds indicates an expected call of GetClaimCreds.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimCreds(claimID interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimCreds(claimID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimCreds", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetClaimCreds), claimID)
 }
@@ -652,7 +652,7 @@ func (m *MockReadOnlyDatastore) GetClaimSummary(walletID go_uuid.UUID, grantType
 }
 
 // GetClaimSummary indicates an expected call of GetClaimSummary.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimSummary(walletID, grantType interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimSummary(walletID, grantType any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimSummary", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetClaimSummary), walletID, grantType)
 }
@@ -667,7 +667,7 @@ func (m *MockReadOnlyDatastore) GetIssuer(promotionID go_uuid.UUID, cohort strin
 }
 
 // GetIssuer indicates an expected call of GetIssuer.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetIssuer(promotionID, cohort interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetIssuer(promotionID, cohort any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuer", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetIssuer), promotionID, cohort)
 }
@@ -682,7 +682,7 @@ func (m *MockReadOnlyDatastore) GetIssuerByPublicKey(publicKey string) (*Issuer,
 }
 
 // GetIssuerByPublicKey indicates an expected call of GetIssuerByPublicKey.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetIssuerByPublicKey(publicKey interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetIssuerByPublicKey(publicKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuerByPublicKey", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetIssuerByPublicKey), publicKey)
 }
@@ -697,7 +697,7 @@ func (m *MockReadOnlyDatastore) GetPreClaim(promotionID go_uuid.UUID, walletID s
 }
 
 // GetPreClaim indicates an expected call of GetPreClaim.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetPreClaim(promotionID, walletID interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetPreClaim(promotionID, walletID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPreClaim", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetPreClaim), promotionID, walletID)
 }
@@ -712,7 +712,7 @@ func (m *MockReadOnlyDatastore) GetPromotion(promotionID go_uuid.UUID) (*Promoti
 }
 
 // GetPromotion indicates an expected call of GetPromotion.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetPromotion(promotionID interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetPromotion(promotionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotion", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetPromotion), promotionID)
 }
@@ -727,7 +727,7 @@ func (m *MockReadOnlyDatastore) GetPromotionsMissingIssuer(limit int) ([]go_uuid
 }
 
 // GetPromotionsMissingIssuer indicates an expected call of GetPromotionsMissingIssuer.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetPromotionsMissingIssuer(limit interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetPromotionsMissingIssuer(limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotionsMissingIssuer", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetPromotionsMissingIssuer), limit)
 }
@@ -743,7 +743,7 @@ func (m *MockReadOnlyDatastore) GetWithdrawalsAssociated(walletID, claimID *go_u
 }
 
 // GetWithdrawalsAssociated indicates an expected call of GetWithdrawalsAssociated.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetWithdrawalsAssociated(walletID, claimID interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetWithdrawalsAssociated(walletID, claimID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWithdrawalsAssociated", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetWithdrawalsAssociated), walletID, claimID)
 }
@@ -751,7 +751,7 @@ func (mr *MockReadOnlyDatastoreMockRecorder) GetWithdrawalsAssociated(walletID, 
 // Migrate mocks base method.
 func (m *MockReadOnlyDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{}
+	varargs := []any{}
 	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
@@ -761,7 +761,7 @@ func (m *MockReadOnlyDatastore) Migrate(arg0 ...uint) error {
 }
 
 // Migrate indicates an expected call of Migrate.
-func (mr *MockReadOnlyDatastoreMockRecorder) Migrate(arg0 ...interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) Migrate(arg0 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockReadOnlyDatastore)(nil).Migrate), arg0...)
 }
@@ -802,7 +802,7 @@ func (m *MockReadOnlyDatastore) RollbackTx(tx *sqlx.Tx) {
 }
 
 // RollbackTx indicates an expected call of RollbackTx.
-func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTx(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockReadOnlyDatastore)(nil).RollbackTx), tx)
 }
@@ -816,7 +816,7 @@ func (m *MockReadOnlyDatastore) RollbackTxAndHandle(tx *sqlx.Tx) error {
 }
 
 // RollbackTxAndHandle indicates an expected call of RollbackTxAndHandle.
-func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTxAndHandle(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockReadOnlyDatastore)(nil).RollbackTxAndHandle), tx)
 }

@@ -25,7 +25,7 @@ func NewMerchantID(ctx context.Context, v string) (*MerchantID, error) {
 	if err := DecodeAndValidate(ctx, merchantID, []byte(v)); err != nil {
 		return nil, handlers.ValidationError(
 			"Error decoding or validating request merchant id url parameter",
-			map[string]interface{}{
+			map[string]any{
 				"merchantID": "merchantID must be a uuidv4",
 			},
 		)

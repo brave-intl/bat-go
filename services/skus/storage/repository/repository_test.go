@@ -1338,7 +1338,7 @@ func TestOrder_IncrementNumPayFailed(t *testing.T) {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 func nowPlusIntervalPg(ctx context.Context, dbi sqlx.QueryerContext, v string) (time.Time, error) {

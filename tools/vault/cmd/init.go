@@ -67,7 +67,7 @@ func Initialize(command *cobra.Command, args []string) error {
 	var entityList openpgp.EntityList
 	gpgKeys := []string{}
 
-	for i := 0; i < len(gpgKeyFiles); i++ {
+	for i := range gpgKeyFiles {
 		f, err := os.Open(gpgKeyFiles[i])
 		if err != nil {
 			return err

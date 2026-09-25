@@ -747,7 +747,7 @@ func newSrvStatusFromCtx(ctx context.Context) map[string]any {
 	zp, _ := ctx.Value(appctx.DisableZebPayLinkingCTXKey).(bool)
 	s, _ := ctx.Value(appctx.DisableSolanaLinkingCTXKey).(bool)
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"wallet": map[string]bool{
 			"uphold":   !uh,
 			"gemini":   !g,

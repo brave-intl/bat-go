@@ -672,7 +672,7 @@ type createIssuerV3Matcher struct {
 	expected cbr.IssuerRequest
 }
 
-func (c createIssuerV3Matcher) Matches(arg interface{}) bool {
+func (c createIssuerV3Matcher) Matches(arg any) bool {
 	actual := arg.(cbr.IssuerRequest)
 	return c.expected.Name == actual.Name &&
 		c.expected.Cohort == actual.Cohort &&

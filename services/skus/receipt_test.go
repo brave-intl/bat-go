@@ -16,10 +16,10 @@ import (
 )
 
 type mockASClient struct {
-	fnVerify func(ctx context.Context, req appstore.IAPRequest, result interface{}) error
+	fnVerify func(ctx context.Context, req appstore.IAPRequest, result any) error
 }
 
-func (c *mockASClient) Verify(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+func (c *mockASClient) Verify(ctx context.Context, req appstore.IAPRequest, result any) error {
 	if c.fnVerify == nil {
 		resp, ok := result.(*appstore.IAPResponse)
 		if !ok {
@@ -283,7 +283,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 			given: tcGiven{
 				key: "key",
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						if req.Password == "" {
 							return model.Error("unexpected")
 						}
@@ -323,7 +323,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -368,7 +368,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -411,7 +411,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -448,7 +448,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -500,7 +500,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -552,7 +552,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -606,7 +606,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -660,7 +660,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -714,7 +714,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -758,7 +758,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -812,7 +812,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -843,7 +843,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -880,7 +880,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")
@@ -925,7 +925,7 @@ func TestReceiptVerifier_validateAppleTime(t *testing.T) {
 				},
 
 				cl: &mockASClient{
-					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result interface{}) error {
+					fnVerify: func(ctx context.Context, req appstore.IAPRequest, result any) error {
 						resp, ok := result.(*appstore.IAPResponse)
 						if !ok {
 							return model.Error("invalid response type")

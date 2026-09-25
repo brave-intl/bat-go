@@ -182,7 +182,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = wrappedClient.Client.Logical().Write("wallets/"+name, map[string]interface{}{
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+name, map[string]any{
 		"providerId": state.WalletInfo.ProviderID,
 	})
 	if err != nil {

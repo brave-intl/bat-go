@@ -29,8 +29,7 @@ func TestMultiErrorUnwrap(t *testing.T) {
 	merr := &errutil.MultiError{}
 	merr.Append(err1, err2, err3)
 
-	var myCustomErr *customErr
-	if !errors.As(merr, &myCustomErr) {
+	if _, ok := errors.AsType[*customErr](merr); !ok {
 		t.Error("failed to unwrap multierror correctly: not 'as' err3")
 	}
 

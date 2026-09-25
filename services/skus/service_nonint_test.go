@@ -5529,7 +5529,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NotNil(t, err)
 				},
 			},
@@ -5547,7 +5547,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NotNil(t, err)
 				},
 			},
@@ -5567,7 +5567,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, errRadomProductIDNotFound)
 				},
 			},
@@ -5598,7 +5598,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, model.Error("some error"))
 				},
 			},
@@ -5635,7 +5635,7 @@ func TestService_createRadomSessID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sessionID: "session_id",
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.Nil(t, err)
 				},
 			},
@@ -5691,12 +5691,12 @@ func Test_orderItemsToLineItems(t *testing.T) {
 			given: tcGiven{
 				orderItems: []OrderItem{
 					{
-						Metadata: map[string]interface{}{
+						Metadata: map[string]any{
 							"radom_product_id": "product_1",
 						},
 					},
 					{
-						Metadata: map[string]interface{}{
+						Metadata: map[string]any{
 							"radom_product_id": "product_2",
 						},
 					},
@@ -5935,7 +5935,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -5971,7 +5971,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6011,7 +6011,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("reset_payment_failed_error"))
 				},
 			},
@@ -6030,7 +6030,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6053,7 +6053,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("reset_payment_failed_error"))
 				},
 			},
@@ -6072,7 +6072,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6091,7 +6091,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6110,7 +6110,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6122,7 +6122,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				event: &radom.Notification{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, errRadomUnknownAction)
 				},
 			},
@@ -7313,7 +7313,7 @@ func TestService_activateStripePL(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_update_order_with_exp"))
 				},
 			},
@@ -7338,7 +7338,7 @@ func TestService_activateStripePL(t *testing.T) {
 				payRepo: &repository.MockOrderPayHistory{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_append_metadata_payment_processor"))
 				},
 			},
@@ -7363,7 +7363,7 @@ func TestService_activateStripePL(t *testing.T) {
 				payRepo: &repository.MockOrderPayHistory{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_append_metadata_stripe_payment_id"))
 				},
 			},
@@ -7384,7 +7384,7 @@ func TestService_activateStripePL(t *testing.T) {
 				payRepo: &repository.MockOrderPayHistory{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.Nil(t, err)
 				},
 			},
@@ -7442,7 +7442,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_num_intervals"))
 				},
 			},
@@ -7462,7 +7462,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_num_per_intervals"))
 				},
 			},
@@ -7496,7 +7496,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -7535,7 +7535,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -7574,7 +7574,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},

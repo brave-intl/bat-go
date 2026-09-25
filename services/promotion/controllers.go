@@ -165,7 +165,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			if err := inputs.DecodeAndValidateString(context.Background(), walletID, walletIDText); err != nil {
 				return handlers.ValidationError(
 					"Error validating request url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"paymentId": err.Error(),
 					},
 				)
@@ -257,7 +257,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(context.Background(), promotionID, chi.URLParam(r, "promotionId")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"promotionId": err.Error(),
 				},
 			)
@@ -310,7 +310,7 @@ func GetClaim(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(context.Background(), claimID, chi.URLParam(r, "claimId")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"claimId": err.Error(),
 				},
 			)
@@ -325,7 +325,7 @@ func GetClaim(service *Service) handlers.AppHandler {
 			return &handlers.AppError{
 				Message: "Claim does not exist",
 				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
+				Data:    map[string]any{},
 			}
 		}
 
@@ -333,7 +333,7 @@ func GetClaim(service *Service) handlers.AppHandler {
 			return &handlers.AppError{
 				Message: "Claim has been accepted but is not ready",
 				Code:    http.StatusAccepted,
-				Data:    map[string]interface{}{},
+				Data:    map[string]any{},
 			}
 		}
 

@@ -21,7 +21,7 @@ type AppError struct {
 	Message   string      `json:"message"`             // description of failure
 	ErrorCode string      `json:"errorCode,omitempty"` // short error code string
 	Code      int         `json:"code"`                // status code for some reason
-	Data      interface{} `json:"data,omitempty"`      // application specific data
+	Data      any `json:"data,omitempty"`      // application specific data
 }
 
 func WrapErrorWithErrorCode(err error, message string, code int, errCode string) *AppError {
@@ -83,7 +83,7 @@ func WrapError(err error, msg string, passedCode int) *AppError {
 }
 
 // RenderContent based on the header
-func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, status int) *AppError {
+func RenderContent(ctx context.Context, v any, w http.ResponseWriter, status int) *AppError {
 	switch w.Header().Get("content-type") {
 	case "application/json":
 		var b bytes.Buffer
@@ -109,11 +109,11 @@ func WrapValidationError(err error) *AppError {
 }
 
 // ValidationError creates an error to communicate a bad request was formed
-func ValidationError(message string, validationErrors interface{}) *AppError {
+func ValidationError(message string, validationErrors any) *AppError {
 	return &AppError{
 		Message: "Error validating " + message,
 		Code:    http.StatusBadRequest,
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"validationErrors": validationErrors,
 		},
 	}
