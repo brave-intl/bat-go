@@ -1002,8 +1002,7 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 
 	err = service.Datastore.InsertWalletTx(ctx, tx, info)
 	if err != nil {
-		var pgErr *pq.Error
-		if errors.As(err, &pgErr) {
+		if pgErr, ok := errors.AsType[*pq.Error](err); ok {
 			if pgErr.Code == "23505" { // unique constraint violation
 				if info != nil {
 					log.Error().Err(err).Interface("info", info).
