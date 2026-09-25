@@ -1585,7 +1585,7 @@ func isValidBatchReq(ord *model.Order, itemID uuid.UUID) error {
 }
 
 // GetItemCredentials returns credentials based on the order, item and request id.
-func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (any, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -1616,7 +1616,7 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID
 //
 // This is a legacy method.
 // For backward compatibility, similar to creating credentials, it uses item id as request id.
-func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (any, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)

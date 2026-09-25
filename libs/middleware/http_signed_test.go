@@ -47,7 +47,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rr.Code, "request without signature should fail")
 
 	// parse the json response, make sure message matches expected
-	var v map[string]interface{}
+	var v map[string]any
 	err = json.NewDecoder(rr.Body).Decode(&v)
 	assert.NoError(t, err)
 

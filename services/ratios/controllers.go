@@ -39,7 +39,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("coin list limit exceeded")
 				return handlers.ValidationError(
 					"Error validating coin url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":     err.Error(),
 						"coinIDs": "coin list limit exceeded",
 					},
@@ -57,7 +57,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vScurrencies": "invalid vs currency",
 					},
@@ -68,7 +68,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("empty vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vScurrencies": "empty vs currency",
 					},
@@ -79,7 +79,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("vs currency list limit exceeded")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vScurrencies": "vs currency list limit exceeded",
 					},
@@ -97,7 +97,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid duration input from caller")
 				return handlers.ValidationError(
 					"Error validating duration url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":      err.Error(),
 						"duration": "invalid duration",
 					},
@@ -144,7 +144,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid coin input from caller")
 				return handlers.ValidationError(
 					"Error validating coin url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":     err.Error(),
 						"coinIDs": "invalid coin",
 					},
@@ -161,7 +161,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vsCurrencies": "invalid vs currency",
 					},
@@ -172,7 +172,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("empty vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vsCurrencies": "empty vs currency",
 					},
@@ -190,7 +190,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid duration input from caller")
 				return handlers.ValidationError(
 					"Error validating duration url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":      err.Error(),
 						"duration": "invalid duration",
 					},
@@ -256,7 +256,7 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":        err.Error(),
 						"vsCurrency": "invalid vs currency",
 					},
@@ -273,7 +273,7 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid limit input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":   err.Error(),
 						"limit": "invalid limit",
 					},

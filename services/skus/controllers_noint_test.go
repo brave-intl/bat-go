@@ -156,7 +156,7 @@ func TestHandleReceiptErr(t *testing.T) {
 			exp: &handlers.AppError{
 				Message: "Unexpected error",
 				Code:    http.StatusInternalServerError,
-				Data:    map[string]interface{}{},
+				Data:    map[string]any{},
 			},
 		},
 
@@ -167,8 +167,8 @@ func TestHandleReceiptErr(t *testing.T) {
 				Message:   "Error " + errIOSPurchaseNotFound.Error(),
 				Code:      http.StatusBadRequest,
 				ErrorCode: "purchase_not_found",
-				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errIOSPurchaseNotFound.Error()},
+				Data: map[string]any{
+					"validationErrors": map[string]any{"receiptErrors": errIOSPurchaseNotFound.Error()},
 				},
 			},
 		},
@@ -180,8 +180,8 @@ func TestHandleReceiptErr(t *testing.T) {
 				Message:   "Error " + errGPSSubPurchaseExpired.Error(),
 				Code:      http.StatusBadRequest,
 				ErrorCode: "purchase_expired",
-				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errGPSSubPurchaseExpired.Error()},
+				Data: map[string]any{
+					"validationErrors": map[string]any{"receiptErrors": errGPSSubPurchaseExpired.Error()},
 				},
 			},
 		},
@@ -193,8 +193,8 @@ func TestHandleReceiptErr(t *testing.T) {
 				Message:   "Error " + errGPSSubPurchasePending.Error(),
 				Code:      http.StatusBadRequest,
 				ErrorCode: "purchase_pending",
-				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": errGPSSubPurchasePending.Error()},
+				Data: map[string]any{
+					"validationErrors": map[string]any{"receiptErrors": errGPSSubPurchasePending.Error()},
 				},
 			},
 		},
@@ -206,8 +206,8 @@ func TestHandleReceiptErr(t *testing.T) {
 				Message:   "Error something_else",
 				Code:      http.StatusBadRequest,
 				ErrorCode: "validation_failed",
-				Data: map[string]interface{}{
-					"validationErrors": map[string]interface{}{"receiptErrors": "something_else"},
+				Data: map[string]any{
+					"validationErrors": map[string]any{"receiptErrors": "something_else"},
 				},
 			},
 		},
@@ -241,7 +241,7 @@ func TestParseVerifyCredRequestV2(t *testing.T) {
 			name:  "error_malformed_payload",
 			given: []byte(`nonsense`),
 			exp: tcExpected{
-				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
+				mustErr: func(tt must.TestingT, err error, i ...any) {
 					must.Equal(tt, true, err != nil)
 				},
 			},
@@ -251,7 +251,7 @@ func TestParseVerifyCredRequestV2(t *testing.T) {
 			name:  "error_malformed_credential",
 			given: []byte(`{"sku":"sku","merchantId":"merchantId"}`),
 			exp: tcExpected{
-				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
+				mustErr: func(tt must.TestingT, err error, i ...any) {
 					must.Equal(tt, true, err != nil)
 				},
 			},
@@ -270,7 +270,7 @@ func TestParseVerifyCredRequestV2(t *testing.T) {
 						Presentation: "TmF0dXJlIGFiaG9ycyBhIHZhY3V1bS4K",
 					},
 				},
-				mustErr: func(tt must.TestingT, err error, i ...interface{}) {
+				mustErr: func(tt must.TestingT, err error, i ...any) {
 					must.Equal(tt, true, err == nil)
 				},
 			},

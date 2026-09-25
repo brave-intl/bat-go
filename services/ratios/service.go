@@ -230,7 +230,7 @@ func (s *Service) RemoveExpiredRelativeEntries(ctx context.Context) (bool, error
 
 	// Remove coins from the tracking set if needed
 	if len(coinsToRemoveFromSet) > 0 {
-		strs := make([]interface{}, len(coinsToRemoveFromSet))
+		strs := make([]any, len(coinsToRemoveFromSet))
 		for i, v := range coinsToRemoveFromSet {
 			strs[i] = v
 		}

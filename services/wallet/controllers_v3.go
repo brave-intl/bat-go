@@ -184,7 +184,7 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 			l.Warn().Err(err).Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": err.Error(),
 				},
 			)
@@ -195,7 +195,7 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 		if err != nil {
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": err.Error(),
 				},
 			)
@@ -204,7 +204,7 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 		if id.String() != signatureID {
 			return handlers.ValidationError(
 				"paymentId from URL does not match paymentId in http signature",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": "does not match http signature id",
 				},
 			)
@@ -245,19 +245,19 @@ func LinkZebPayDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			l.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
 
 			const msg = "error validating paymentID url parameter"
-			return handlers.ValidationError(msg, map[string]interface{}{"paymentID": err.Error()})
+			return handlers.ValidationError(msg, map[string]any{"paymentID": err.Error()})
 		}
 
 		// Check that payment id matches what was in the http signature.
 		signatureID, err := middleware.GetKeyID(ctx)
 		if err != nil {
 			const msg = "error validating paymentID url parameter"
-			return handlers.ValidationError(msg, map[string]interface{}{"paymentID": err.Error()})
+			return handlers.ValidationError(msg, map[string]any{"paymentID": err.Error()})
 		}
 
 		if id.String() != signatureID {
 			const msg = "paymentId from URL does not match paymentId in http signature"
-			return handlers.ValidationError(msg, map[string]interface{}{
+			return handlers.ValidationError(msg, map[string]any{
 				"paymentID": "does not match http signature id",
 			})
 		}
@@ -313,7 +313,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 				Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": err.Error(),
 				},
 			)
@@ -326,7 +326,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 				Err(err).Msg("could not get http signing key id from context")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": err.Error(),
 				},
 			)
@@ -337,7 +337,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 				Msg("id does not match signature id")
 			return handlers.ValidationError(
 				"paymentId from URL does not match paymentId in http signature",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": "does not match http signature id",
 				},
 			)
@@ -392,7 +392,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			l.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": err.Error(),
 				},
 			)
@@ -559,7 +559,7 @@ func CreateChallenge(s *Service) handlers.AppHandler {
 		}
 
 		if uuid.Equal(chlReq.PaymentID, uuid.Nil) {
-			return handlers.ValidationError("request", map[string]interface{}{
+			return handlers.ValidationError("request", map[string]any{
 				"paymentID": "cannot be nil or empty",
 			})
 		}
@@ -589,7 +589,7 @@ func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var id = new(inputs.ID)
 	if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 		l.Warn().Err(err).Str("paymentID", id.String()).Msg("failed to decode and validate paymentID from url")
-		return handlers.ValidationError("Error validating paymentID url parameter", map[string]interface{}{
+		return handlers.ValidationError("Error validating paymentID url parameter", map[string]any{
 			"paymentId": err.Error(),
 		})
 	}
@@ -626,7 +626,7 @@ func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError 
 		logger.Warn().Str("publicKey", err.Error()).Msg("failed to decode and validate publicKey from url")
 		return handlers.ValidationError(
 			"Error validating publicKey url parameter",
-			map[string]interface{}{
+			map[string]any{
 				"publicKey": err.Error(),
 			},
 		)
@@ -672,7 +672,7 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 		logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate payment id from url")
 		return handlers.ValidationError(
 			"Error validating paymentID url parameter",
-			map[string]interface{}{
+			map[string]any{
 				"paymentID": err.Error(),
 			},
 		)
@@ -746,7 +746,7 @@ func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *
 				logger.Warn().Err(err).Str("paymentID", r.URL.Query().Get("paymentId")).Msg("failed to decode and validate paymentID from url")
 				return handlers.ValidationError(
 					"error validating paymentID url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"paymentID": err.Error(),
 					},
 				)
@@ -791,7 +791,7 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": err.Error(),
 				},
 			)
@@ -802,7 +802,7 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 			logger.Warn().Str("custodian", err.Error()).Msg("failed to decode and validate custodian from url")
 			return handlers.ValidationError(
 				"error validating custodian url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"custodian": err.Error(),
 				},
 			)
@@ -817,7 +817,7 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 		if err != nil {
 			return handlers.ValidationError(
 				"error validating http signature, does not match paymentID url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"signature": err.Error(),
 				},
 			)
@@ -826,7 +826,7 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 		if id.String() != signatureID {
 			return handlers.ValidationError(
 				"paymentId from URL does not match paymentId in http signature",
-				map[string]interface{}{
+				map[string]any{
 					"paymentID": "does not match http signature id",
 				},
 			)
@@ -838,7 +838,7 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 			return handlers.WrapError(err, "failed to disconnect custodian link", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(ctx, map[string]interface{}{}, w, http.StatusOK)
+		return handlers.RenderContent(ctx, map[string]any{}, w, http.StatusOK)
 	}
 }
 

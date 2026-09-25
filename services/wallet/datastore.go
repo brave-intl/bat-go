@@ -601,7 +601,7 @@ func (pg *Postgres) LinkWallet(ctx context.Context, id string, userDepositDestin
 			return ErrNoReputationClient
 		}
 
-		op := func() (interface{}, error) {
+		op := func() (any, error) {
 			return nil, repClient.UpdateReputationSummary(ctx, walletID.String(), true)
 		}
 
@@ -1020,7 +1020,7 @@ func (pg *Postgres) SendVerifiedWalletOutbox(ctx context.Context, client reputat
 		return false, fmt.Errorf("error get verified wallet: %w", err)
 	}
 
-	upsertReputationSummaryOp := func() (interface{}, error) {
+	upsertReputationSummaryOp := func() (any, error) {
 		return nil, client.UpdateReputationSummary(ctx, vw.PaymentID.String(), vw.VerifiedWallet)
 	}
 

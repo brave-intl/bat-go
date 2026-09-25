@@ -72,7 +72,7 @@ func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, mer
 		return fmt.Errorf("error get issuer for issuerID %s: %w", encMerchID, err)
 	}
 
-	reqFn := func() (interface{}, error) {
+	reqFn := func() (any, error) {
 		return nil, s.cbClient.CreateIssuer(ctx, encMerchID, defaultMaxTokensPerIssuer)
 	}
 
@@ -82,7 +82,7 @@ func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, mer
 		return fmt.Errorf("error calling cbr create issuer: %w", err)
 	}
 
-	reqFn = func() (interface{}, error) {
+	reqFn = func() (any, error) {
 		return s.cbClient.GetIssuer(ctx, encMerchID)
 	}
 
@@ -140,7 +140,7 @@ func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, m
 		Overlap:   issuerCfg.Overlap,
 	}
 
-	reqFn := func() (interface{}, error) {
+	reqFn := func() (any, error) {
 		return nil, s.cbClient.CreateIssuerV3(ctx, req)
 	}
 
@@ -150,7 +150,7 @@ func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, m
 		return fmt.Errorf("error calling cbr create issuer v3: %w", err)
 	}
 
-	reqFn = func() (interface{}, error) {
+	reqFn = func() (any, error) {
 		return s.cbClient.GetIssuerV3(ctx, req.Name)
 	}
 

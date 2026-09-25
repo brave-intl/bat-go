@@ -1015,7 +1015,7 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		return nil, fmt.Errorf("error inserting rewards wallet: %w", err)
 	}
 
-	upsertReputationSummary := func() (interface{}, error) {
+	upsertReputationSummary := func() (any, error) {
 		return nil, service.repClient.UpsertReputationSummary(ctx, info.ID, geoCountry)
 	}
 

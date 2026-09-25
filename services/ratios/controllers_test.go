@@ -746,13 +746,13 @@ func (suite *ControllersTestSuite) TestRemoveExpiredRelativeEntries() {
 	pipe := suite.redis.Pipeline()
 
 	// Coins to add to the tracking set
-	coinsToAdd := make([]interface{}, 0, 100)
+	coinsToAdd := make([]any, 0, 100)
 
 	// Add entries to batch - use the new format (relative:$coinname)
 	for i := 0; i < 60; i++ {
 		coinName := fmt.Sprintf("fresh_coin_%d", i)
 		coinKey := fmt.Sprintf("relative:%s", coinName)
-		currencyData := map[string]interface{}{
+		currencyData := map[string]any{
 			"usd": string(mustMarshal(suite.T(), freshUSD)),
 			"eur": string(mustMarshal(suite.T(), freshEUR)),
 		}
@@ -763,7 +763,7 @@ func (suite *ControllersTestSuite) TestRemoveExpiredRelativeEntries() {
 	for i := 0; i < 40; i++ {
 		coinName := fmt.Sprintf("expired_coin_%d", i)
 		coinKey := fmt.Sprintf("relative:%s", coinName)
-		currencyData := map[string]interface{}{
+		currencyData := map[string]any{
 			"usd": string(mustMarshal(suite.T(), expiredUSD)),
 			"eur": string(mustMarshal(suite.T(), expiredEUR)),
 		}
@@ -820,7 +820,7 @@ func (suite *ControllersTestSuite) TestRemoveExpiredRelativeEntries() {
 }
 
 // Helper function to marshal data and handle errors
-func mustMarshal(t *testing.T, data interface{}) []byte {
+func mustMarshal(t *testing.T, data any) []byte {
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		t.Fatal(err)

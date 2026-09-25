@@ -186,7 +186,7 @@ func NewPagination(ctx context.Context, url string, v any) (context.Context, *Pa
 
 	if err := DecodeAndValidate(ctx, pagination, []byte(url)); err != nil {
 		var (
-			veParam = map[string]interface{}{}
+			veParam = map[string]any{}
 			message = err.Error()
 			me      *errorutils.MultiError
 		)

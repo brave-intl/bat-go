@@ -214,11 +214,11 @@ func (s SignedOrderStatus) String() string {
 }
 
 // UnionNullString - type describing
-type UnionNullString map[string]interface{}
+type UnionNullString map[string]any
 
 // UnmarshalJSON - implement unmarshaling for union null string
 func (u *UnionNullString) UnmarshalJSON(data []byte) error {
-	var temp map[string]interface{}
+	var temp map[string]any
 	err := json.Unmarshal(data, &temp)
 	if err != nil {
 		return fmt.Errorf("error deserializing union: %w", err)

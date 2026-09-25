@@ -264,7 +264,7 @@ func TestCreateOrderItem(t *testing.T) {
 						},
 					},
 					Quantity: 2,
-					Metadata: map[string]interface{}{
+					Metadata: map[string]any{
 						"stripe_product_id": "product_id",
 						"stripe_item_id":    "item_id",
 					},

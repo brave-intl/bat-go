@@ -31,7 +31,7 @@ func (m *Metadata) Scan(value any) error {
 	// If there was an integer stored as jsonb on a table,
 	// when fetched, it will appear as float64 in the map.
 	//
-	// This is due to how Go treats JSON numbers when the destination is interface{}.
+	// This is due to how Go treats JSON numbers when the destination is any.
 	// See docs for [Unmarshal]](https://pkg.go.dev/encoding/json#Unmarshal).
 	return json.Unmarshal(b, &m)
 }

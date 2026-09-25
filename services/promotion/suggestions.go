@@ -222,7 +222,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		return err
 	}
 
-	fundings := []map[string]interface{}{}
+	fundings := []map[string]any{}
 	metrics := map[string]decimal.Decimal{}
 	fundingTypes := []string{}
 	for _, v := range fundingSources {
@@ -232,7 +232,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 			val = decimal.Zero
 		}
 		metrics[v.Type] = val.Add(v.Amount)
-		fundings = append(fundings, map[string]interface{}{
+		fundings = append(fundings, map[string]any{
 			"type":      v.Type,
 			"cohort":    v.Cohort,
 			"amount":    v.Amount.String(),
@@ -245,7 +245,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		orderID = suggestion.OrderID.String()
 	}
 
-	eventMap := map[string]interface{}{
+	eventMap := map[string]any{
 		"id":          uuid.NewV4().String(),
 		"createdAt":   string(createdAt),
 		"channel":     suggestion.Channel,
@@ -378,7 +378,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	// https://github.com/brave-intl/bat-go/issues/263
 
 	newInterface, _, err := service.codecs["suggestion"].NativeFromBinary(suggestion)
-	eventMap := newInterface.(map[string]interface{})
+	eventMap := newInterface.(map[string]any)
 	if err != nil {
 		// error should be errorutils.Codified as data
 		return errorutils.New(err, "kafka codec issue", errorutils.Codified{

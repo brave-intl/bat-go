@@ -33,14 +33,14 @@ func init() {
 	prometheus.MustRegister(inFlightGauge, ConcurrentGoRoutines)
 }
 
-func must(v interface{}, err error) interface{} {
+func must(v any, err error) any {
 	if err != nil {
 		panic(err.Error())
 	}
 	return v
 }
 
-func registerIgnoreExisting(c prometheus.Collector) (interface{}, error) {
+func registerIgnoreExisting(c prometheus.Collector) (any, error) {
 	if err := prometheus.Register(c); err != nil {
 		if are, ok := errors.AsType[*prometheus.AlreadyRegisteredError](err); ok {
 			// already registered.

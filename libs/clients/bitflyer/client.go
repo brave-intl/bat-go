@@ -314,7 +314,7 @@ type PriceTokenInfo struct {
 }
 
 func parseExpiry(token string) (*time.Time, error) {
-	var claims map[string]interface{}
+	var claims map[string]any
 	parsed, err := jwt.ParseSigned(token)
 	if err != nil {
 		return nil, err

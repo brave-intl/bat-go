@@ -45,7 +45,7 @@ func (m *MockClient) CreateOnrampSession(ctx context.Context, integrationMode, w
 }
 
 // CreateOnrampSession indicates an expected call of CreateOnrampSession.
-func (mr *MockClientMockRecorder) CreateOnrampSession(ctx, integrationMode, walletAddress, sourceCurrency, sourceExchangeAmount, destinationNetwork, destinationCurrency, supportedDestinationNetworks interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CreateOnrampSession(ctx, integrationMode, walletAddress, sourceCurrency, sourceExchangeAmount, destinationNetwork, destinationCurrency, supportedDestinationNetworks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOnrampSession", reflect.TypeOf((*MockClient)(nil).CreateOnrampSession), ctx, integrationMode, walletAddress, sourceCurrency, sourceExchangeAmount, destinationNetwork, destinationCurrency, supportedDestinationNetworks)
 }

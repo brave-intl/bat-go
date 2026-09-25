@@ -96,7 +96,7 @@ func (ucr *UpholdCreationRequest) Decode(ctx context.Context, v []byte) error {
 		return fmt.Errorf("failed to decode signed creation request: %w", err)
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	err = json.Unmarshal([]byte(signedTx.Body), &body)
 	if err != nil {
 		return fmt.Errorf("failed to decode signed creation request: %w", err)

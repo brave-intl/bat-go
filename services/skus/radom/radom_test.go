@@ -111,7 +111,7 @@ func TestSubscriptionResponse_NextBillingDate(t *testing.T) {
 
 	type tcExpected struct {
 		nxtB    time.Time
-		mustErr func(t must.TestingT, err error, i ...interface{})
+		mustErr func(t must.TestingT, err error, i ...any)
 	}
 
 	type testCase struct {
@@ -130,7 +130,7 @@ func TestSubscriptionResponse_NextBillingDate(t *testing.T) {
 			},
 			exp: tcExpected{
 				nxtB: time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -145,7 +145,7 @@ func TestSubscriptionResponse_NextBillingDate(t *testing.T) {
 			},
 			exp: tcExpected{
 				nxtB: time.Time{},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorContains(t, err, "cannot parse \"invalid_date_format\"")
 				},
 			},
@@ -283,7 +283,7 @@ func TestSubscriptionResponse_LastPaid(t *testing.T) {
 
 	type tcExpected struct {
 		lastPaid time.Time
-		mustErr  func(t must.TestingT, err error, i ...interface{})
+		mustErr  func(t must.TestingT, err error, i ...any)
 	}
 
 	type testCase struct {
@@ -297,7 +297,7 @@ func TestSubscriptionResponse_LastPaid(t *testing.T) {
 			name: "last_paid_empty",
 			exp: tcExpected{
 				lastPaid: time.Time{},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrSubPaymentsEmpty)
 				},
 			},
@@ -315,7 +315,7 @@ func TestSubscriptionResponse_LastPaid(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorContains(t, err, "cannot parse \"invalid_date_format\"")
 				},
 			},
@@ -342,7 +342,7 @@ func TestSubscriptionResponse_LastPaid(t *testing.T) {
 			},
 			exp: tcExpected{
 				lastPaid: time.Date(2024, time.March, 1, 0, 0, 0, 0, time.UTC),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},

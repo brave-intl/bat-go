@@ -285,7 +285,7 @@ func Test_parseZebPayClaims(t *testing.T) {
 		secret       string
 		sigAlgo      string
 		zpLinkingKey string
-		claims       map[string]interface{}
+		claims       map[string]any
 	}
 
 	type tcExpected struct {
@@ -304,7 +304,7 @@ func Test_parseZebPayClaims(t *testing.T) {
 				ctxKey:       appctx.ZebPayLinkingKeyCTXKey,
 				secret:       "test secret",
 				zpLinkingKey: base64.StdEncoding.EncodeToString([]byte("test secret")),
-				claims: map[string]interface{}{
+				claims: map[string]any{
 					"iat":         time.Date(2023, time.August, 16, 1, 1, 0, 0, time.UTC).Unix(),
 					"exp":         time.Date(2023, time.August, 16, 1, 1, 2, 0, time.UTC).Unix(),
 					"depositId":   "deposit_id",
@@ -377,7 +377,7 @@ func Test_parseZebPayClaims(t *testing.T) {
 				secret:       "test secret",
 				sigAlgo:      "HS256",
 				zpLinkingKey: base64.StdEncoding.EncodeToString([]byte("test secret")),
-				claims: map[string]interface{}{
+				claims: map[string]any{
 					"accountId": 1, // invalid account type
 				},
 			},
@@ -568,7 +568,7 @@ func TestDoesSolAddrsHaveATAForMint(t *testing.T) {
 		{
 			name: "solana_address_invalid",
 			exp: tcExpected{
-				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				assertErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NotNil(t, err)
 				},
 			},
@@ -580,7 +580,7 @@ func TestDoesSolAddrsHaveATAForMint(t *testing.T) {
 				solAddrs: "Ei71196o8MpDsVdXyZEewEdxP4A8n3KMZKTFE7KE2xTR",
 			},
 			exp: tcExpected{
-				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				assertErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NotNil(t, err)
 				},
 			},
@@ -598,7 +598,7 @@ func TestDoesSolAddrsHaveATAForMint(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				assertErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("solana_client_error"))
 				},
 			},
@@ -616,7 +616,7 @@ func TestDoesSolAddrsHaveATAForMint(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				assertErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.ErrSolAddrsHasNoATAForMint)
 				},
 			},
@@ -634,7 +634,7 @@ func TestDoesSolAddrsHaveATAForMint(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				assertErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.ErrSolAddrsHasNoATAForMint)
 				},
 			},
@@ -652,7 +652,7 @@ func TestDoesSolAddrsHaveATAForMint(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				assertErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				assertErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.Nil(t, err)
 				},
 			},

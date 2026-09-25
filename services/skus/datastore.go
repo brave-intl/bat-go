@@ -403,7 +403,7 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 		`
 
 	// $ numbered params for query
-	params := []interface{}{
+	params := []any{
 		merchantID,
 	}
 

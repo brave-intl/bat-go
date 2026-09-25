@@ -605,7 +605,7 @@ func (r *OrderItemRequestNew) IsTLV2() bool {
 	return r.CredentialType == "time-limited-v2"
 }
 
-func (r *OrderItemRequestNew) Metadata() map[string]interface{} {
+func (r *OrderItemRequestNew) Metadata() map[string]any {
 	if r == nil {
 		return nil
 	}
@@ -652,12 +652,12 @@ type ItemStripeMetadata struct {
 // Metadata returns the contents of m as a map for datastore.Metadata.
 //
 // It can be called when m is nil.
-func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
+func (m *ItemStripeMetadata) Metadata() map[string]any {
 	if m == nil {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	if m.ProductID != "" {
 		result["stripe_product_id"] = m.ProductID
 	}
@@ -700,12 +700,12 @@ type ItemRadomMetadata struct {
 // Metadata returns the contents of m as a map for datastore.Metadata.
 //
 // It can be called when m is nil.
-func (m *ItemRadomMetadata) Metadata() map[string]interface{} {
+func (m *ItemRadomMetadata) Metadata() map[string]any {
 	if m == nil {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	if m.ProductID != "" {
 		result["radom_product_id"] = m.ProductID
 	}
@@ -939,7 +939,7 @@ func HandleReceiptErr(err error) *handlers.AppError {
 		return &handlers.AppError{
 			Message: "Unexpected error",
 			Code:    http.StatusInternalServerError,
-			Data:    map[string]interface{}{},
+			Data:    map[string]any{},
 		}
 	}
 
@@ -947,8 +947,8 @@ func HandleReceiptErr(err error) *handlers.AppError {
 	result := &handlers.AppError{
 		Message: "Error " + errStr,
 		Code:    http.StatusBadRequest,
-		Data: map[string]interface{}{
-			"validationErrors": map[string]interface{}{"receiptErrors": errStr},
+		Data: map[string]any{
+			"validationErrors": map[string]any{"receiptErrors": errStr},
 		},
 	}
 

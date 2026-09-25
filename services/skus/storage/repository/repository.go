@@ -270,7 +270,7 @@ func (r *Order) IncrementNumPayFailed(ctx context.Context, dbi sqlx.ExecerContex
 	return r.execUpdate(ctx, dbi, q, id)
 }
 
-func (r *Order) execUpdate(ctx context.Context, dbi sqlx.ExecerContext, q string, args ...interface{}) error {
+func (r *Order) execUpdate(ctx context.Context, dbi sqlx.ExecerContext, q string, args ...any) error {
 	result, err := dbi.ExecContext(ctx, q, args...)
 	if err != nil {
 		return err

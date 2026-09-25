@@ -57,7 +57,7 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 	}
 
 	if len(req.Items) == 0 {
-		return handlers.ValidationError("request body", map[string]interface{}{"items": "array must contain at least one item"})
+		return handlers.ValidationError("request body", map[string]any{"items": "array must contain at least one item"})
 	}
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderHandler").Logger()
@@ -101,7 +101,7 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		return &handlers.AppError{
 			Message: "Validation failed",
 			Code:    http.StatusBadRequest,
-			Data:    map[string]interface{}{"validationErrors": verrs},
+			Data:    map[string]any{"validationErrors": verrs},
 		}
 	}
 
@@ -126,7 +126,7 @@ func (h *Order) Cancel(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID})
+		return handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID})
 	}
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "CancelOrderNew").Logger()
@@ -149,7 +149,7 @@ func (h *Order) Expire(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID})
+		return handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID})
 	}
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "ExpireOrder").Logger()
