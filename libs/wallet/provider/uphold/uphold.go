@@ -1026,7 +1026,7 @@ func (w *Wallet) ListTransactions(ctx context.Context, limit int, startDate time
 		req.Header.Set("Range", fmt.Sprintf("items=%d-%d", start, stop))
 		var body []byte
 		var resp *http.Response
-		for i := 0; i < listTransactionsRetries; i++ {
+		for range listTransactionsRetries {
 			body, resp, err = submit(logger, defaultHTTPClient, req)
 			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
 				logger.Debug().

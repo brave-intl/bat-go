@@ -76,7 +76,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		Overlap: defaultOverlap,
 	}
 
-	for i := 0; i < len(caveats); i++ {
+	for i := range caveats {
 		caveat := mac.Caveats()[i]
 		values := strings.Split(string(caveat.Id), "=")
 		key := strings.TrimSpace(values[0])

@@ -436,7 +436,7 @@ func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
 func (s *Service) WriteMessages(ctx context.Context, messages []SigningOrderRequestOutbox) error {
 	msgs := make([]kafka.Message, len(messages))
 
-	for i := 0; i < len(messages); i++ {
+	for i := range messages {
 		native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(messages[i].Message)
 		if err != nil {
 			return fmt.Errorf("error converting native from textual: %w", err)

@@ -1158,7 +1158,7 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	}()
 
 	soroIDs := make([]uuid.UUID, len(soro))
-	for i := 0; i < len(soroIDs); i++ {
+	for i := range soroIDs {
 		soroIDs[i] = soro[i].RequestID
 	}
 
