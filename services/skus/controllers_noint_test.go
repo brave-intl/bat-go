@@ -310,7 +310,7 @@ func TestValidateVerifyCredRequestV2(t *testing.T) {
 					Credential: "eyJ0eXBlIjoic2luZ2xlLXVzZSIsInByZXNlbnRhdGlvbiI6IlRtRjBkWEpsSUdGaWFHOXljeUJoSUhaaFkzVjFiUzRLIn0K",
 				},
 			},
-			exp: &validator.InvalidValidationError{Type: reflect.TypeFor[model.VerifyCredentialOpaque]()},
+			exp: &validator.InvalidValidationError{Type: reflect.TypeFor[*model.VerifyCredentialOpaque]()},
 		},
 
 		{
