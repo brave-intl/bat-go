@@ -22,7 +22,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
-	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -134,8 +133,8 @@ func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, m
 		Name:      encMerchID,
 		Cohort:    defaultCohort,
 		MaxTokens: defaultMaxTokensPerIssuer,
-		ValidFrom: ptr.FromTime(time.Now()),
-		ExpiresAt: ptr.FromTime(defaultExpiresAt),
+		ValidFrom: new(time.Now()),
+		ExpiresAt: new(defaultExpiresAt),
 		Duration:  *item.EachCredentialValidForISO,
 		Buffer:    issuerCfg.Buffer,
 		Overlap:   issuerCfg.Overlap,
@@ -194,8 +193,7 @@ func canRetry(nonRetrySet map[int]struct{}) func(error) bool {
 }
 
 func isConflict(err error) bool {
-	var eb *errorutils.ErrorBundle
-	if errors.As(err, &eb) {
+	if eb, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 		if httpState, ok := eb.Data().(clients.HTTPState); ok {
 			return httpState.Status == http.StatusConflict
 		}

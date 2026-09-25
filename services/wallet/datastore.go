@@ -638,7 +638,7 @@ const depositProviderSolana = "solana"
 func NewSolanaCustodialLink(walletID uuid.UUID, depositDestination string) *CustodianLink {
 	return &CustodianLink{
 		WalletID:  &walletID,
-		LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, depositDestination)),
+		LinkingID: new(uuid.NewV5(ClaimNamespace, depositDestination)),
 		Custodian: depositProviderSolana,
 	}
 }
@@ -1082,8 +1082,4 @@ func waitAndLockTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
 		return fmt.Errorf("failed to acquire tx lock id %s: %w", id.String(), err)
 	}
 	return nil
-}
-
-func ptrFromUUID(u uuid.UUID) *uuid.UUID {
-	return &u
 }

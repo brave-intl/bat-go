@@ -486,7 +486,7 @@ func TestSolanaCanJoinWaitlist(t *testing.T) {
 
 					cxLink := &CustodianLink{
 						WalletID:  &paymentID,
-						LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, "deposit_destination")),
+						LinkingID: new(uuid.NewV5(ClaimNamespace, "deposit_destination")),
 						Custodian: "custodian",
 					}
 
@@ -504,7 +504,7 @@ func TestSolanaCanJoinWaitlist(t *testing.T) {
 
 					cxLink := &CustodianLink{
 						WalletID:  &paymentID,
-						LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, "deposit_destination")),
+						LinkingID: new(uuid.NewV5(ClaimNamespace, "deposit_destination")),
 						Custodian: "custodian",
 						LinkedAt:  time.Date(2025, time.February, 12, 0, 0, 0, 0, time.UTC),
 					}

@@ -938,5 +938,5 @@ func mustDecimalFromString(v string) decimal.Decimal {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }

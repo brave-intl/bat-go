@@ -1226,8 +1226,8 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				IssuerID:     metadata.IssuerID,
 				BlindedCreds: blindedCreds,
 				SignedCreds:  &signedTokens,
-				BatchProof:   ptrTo(soResult.Data[i].Proof),
-				PublicKey:    ptrTo(soResult.Data[i].PublicKey),
+				BatchProof:   new(soResult.Data[i].Proof),
+				PublicKey:    new(soResult.Data[i].PublicKey),
 			}
 
 			if err := pg.InsertOrderCredsTx(ctx, tx, cred); err != nil {

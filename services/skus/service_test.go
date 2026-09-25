@@ -90,7 +90,7 @@ func TestCreateOrderItems(t *testing.T) {
 				Items: []model.OrderItemRequestNew{
 					{
 						CredentialValidDuration:     "P1M",
-						CredentialValidDurationEach: ptr.To("rubbish"),
+						CredentialValidDurationEach: new("rubbish"),
 					},
 				},
 			},
@@ -121,7 +121,7 @@ func TestCreateOrderItems(t *testing.T) {
 				result: []model.OrderItem{
 					{
 						Currency:    "USD",
-						ValidForISO: ptr.To("P1M"),
+						ValidForISO: new("P1M"),
 						Location: datastore.NullString{
 							NullString: sql.NullString{
 								Valid:  true,
@@ -142,7 +142,7 @@ func TestCreateOrderItems(t *testing.T) {
 
 					{
 						Currency:    "USD",
-						ValidForISO: ptr.To("P1M"),
+						ValidForISO: new("P1M"),
 						Location: datastore.NullString{
 							NullString: sql.NullString{
 								Valid:  true,

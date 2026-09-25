@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/libs/ptr"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -232,7 +231,7 @@ func (u *UnionNullString) UnmarshalJSON(data []byte) error {
 func (u UnionNullString) Value() *string {
 	s, ok := u["string"]
 	if ok {
-		return ptr.FromString(s.(string))
+		return new(s.(string))
 	}
 	_, ok = u["null"]
 	if ok {
