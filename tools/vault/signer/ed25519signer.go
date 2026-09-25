@@ -22,7 +22,7 @@ type Ed25519Signer struct {
 
 // Sign the included message using the vault held keypair. rand and opts are not used
 func (vs *Ed25519Signer) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) ([]byte, error) {
-	response, err := vs.Client.Logical().Write("transit/sign/"+vs.KeyName, map[string]interface{}{
+	response, err := vs.Client.Logical().Write("transit/sign/"+vs.KeyName, map[string]any{
 		"input": base64.StdEncoding.EncodeToString(message),
 	})
 	if err != nil {
@@ -36,7 +36,7 @@ func (vs *Ed25519Signer) Sign(rand io.Reader, message []byte, opts crypto.Signer
 
 // Verify the included signature over message using the vault held keypair. opts are not used
 func (vs *Ed25519Signer) Verify(message, signature []byte, opts crypto.SignerOpts) (bool, error) {
-	response, err := vs.Client.Logical().Write("transit/verify/"+vs.KeyName, map[string]interface{}{
+	response, err := vs.Client.Logical().Write("transit/verify/"+vs.KeyName, map[string]any{
 		"input":     base64.StdEncoding.EncodeToString(message),
 		"signature": fmt.Sprintf("vault:v%d:%s", vs.KeyVersion, base64.StdEncoding.EncodeToString(signature)),
 	})
@@ -59,8 +59,8 @@ func (vs *Ed25519Signer) Public() crypto.PublicKey {
 		panic(err)
 	}
 
-	keys := response.Data["keys"].(map[string]interface{})
-	key := keys[strconv.Itoa(int(vs.KeyVersion))].(map[string]interface{})
+	keys := response.Data["keys"].(map[string]any)
+	key := keys[strconv.Itoa(int(vs.KeyVersion))].(map[string]any)
 	b64PublicKey := key["public_key"].(string)
 	publicKey, err := base64.StdEncoding.DecodeString(b64PublicKey)
 	if err != nil {
