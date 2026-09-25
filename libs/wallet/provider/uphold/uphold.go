@@ -535,7 +535,7 @@ type Beneficiary struct {
 		Line1   string `json:"line1,omitempty"`
 		State   string `json:"state,omitempty"`
 		ZipCode string `json:"zipCode,omitempty"`
-	} `json:"address,omitempty"`
+	} `json:"address,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	Name         string `json:"name,omitempty"`
 	Relationship string `json:"relationship"`
 }
@@ -819,7 +819,7 @@ type upholdTransactionResponseDestinationNode struct {
 type upholdTransactionResponseDestination struct {
 	Type        string                                   `json:"type"`
 	CardID      string                                   `json:"CardId,omitempty"`
-	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"`
+	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	Currency    string                                   `json:"currency"`
 	Amount      decimal.Decimal                          `json:"amount"`
 	ExchangeFee decimal.Decimal                          `json:"commission"`
@@ -1026,7 +1026,7 @@ func (w *Wallet) ListTransactions(ctx context.Context, limit int, startDate time
 		req.Header.Set("Range", fmt.Sprintf("items=%d-%d", start, stop))
 		var body []byte
 		var resp *http.Response
-		for i := 0; i < listTransactionsRetries; i++ {
+		for range listTransactionsRetries {
 			body, resp, err = submit(logger, defaultHTTPClient, req)
 			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
 				logger.Debug().

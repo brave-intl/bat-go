@@ -265,7 +265,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "id")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"id": err.Error(),
 				},
 			)
@@ -325,7 +325,7 @@ func handleSetOrderTrialDays(svc *Service) handlers.AppHandler {
 
 		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
-			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 		}
 
 		data, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
@@ -357,7 +357,7 @@ func CancelOrder(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{"orderID": err.Error()},
+				map[string]any{"orderID": err.Error()},
 			)
 		}
 
@@ -385,7 +385,7 @@ func handleGetOrder(svc *Service) handlers.AppHandler {
 		if err != nil {
 			lg.Err(err).Msg("failed to parse order id")
 
-			return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 		}
 
 		order, err := svc.getTransformOrder(ctx, orderID)
@@ -455,7 +455,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"orderID": err.Error(),
 				},
 			)
@@ -488,7 +488,7 @@ func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"orderID": err.Error(),
 				},
 			)
@@ -537,7 +537,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"orderID": err.Error(),
 				},
 			)
@@ -596,7 +596,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"orderID": err.Error(),
 				},
 			)
@@ -640,7 +640,7 @@ func CreateOrderCreds(svc *Service) handlers.AppHandler {
 			lg.Error().Err(err).Msg("failed to validate order id")
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"orderID": err.Error(),
 				},
 			)
@@ -697,7 +697,7 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 		orderID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
 			lg.Error().Err(err).Msg("failed to validate order id")
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+			return handlers.ValidationError("Error validating request url parameter", map[string]any{
 				"orderID": err.Error(),
 			})
 		}
@@ -705,7 +705,7 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 		itemID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
 			lg.Error().Err(err).Msg("failed to validate item id")
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+			return handlers.ValidationError("Error validating request url parameter", map[string]any{
 				"itemID": err.Error(),
 			})
 		}
@@ -713,7 +713,7 @@ func createItemCreds(svc *Service) handlers.AppHandler {
 		reqID := &inputs.ID{}
 		if err := inputs.DecodeAndValidateString(ctx, reqID, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
 			lg.Error().Err(err).Msg("failed to validate request id")
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+			return handlers.ValidationError("Error validating request url parameter", map[string]any{
 				"requestID": err.Error(),
 			})
 		}
@@ -748,7 +748,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
-				map[string]interface{}{
+				map[string]any{
 					"orderID": err.Error(),
 				},
 			)
@@ -781,7 +781,7 @@ func deleteOrderCreds(service *Service) handlers.AppHandler {
 
 		orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 		if err != nil {
-			return handlers.ValidationError("orderID", map[string]interface{}{"orderID": err.Error()})
+			return handlers.ValidationError("orderID", map[string]any{"orderID": err.Error()})
 		}
 
 		if err := service.validateOrderMerchantAndCaveats(ctx, orderID); err != nil {
@@ -830,7 +830,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(ctx, orderID, chi.URLParamFromCtx(ctx, "orderID")); err != nil {
 			l.Err(err).Msg("failed to decode and validate string for orderID")
 
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+			return handlers.ValidationError("Error validating request url parameter", map[string]any{
 				"orderID": err.Error(),
 			})
 		}
@@ -839,7 +839,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 		if err := inputs.DecodeAndValidateString(ctx, itemID, chi.URLParamFromCtx(ctx, "itemID")); err != nil {
 			l.Err(err).Msg("failed to decode and validate string for itemID")
 
-			return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+			return handlers.ValidationError("Error validating request url parameter", map[string]any{
 				"itemID": err.Error(),
 			})
 		}
@@ -852,7 +852,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 			if err := inputs.DecodeAndValidateString(ctx, reqIDRaw, chi.URLParamFromCtx(ctx, "requestID")); err != nil {
 				l.Err(err).Msg("failed to decode and validate string reqIDRaw")
 
-				return handlers.ValidationError("Error validating request url parameter", map[string]interface{}{
+				return handlers.ValidationError("Error validating request url parameter", map[string]any{
 					"requestID": err.Error(),
 				})
 			}
@@ -901,7 +901,7 @@ func getOrderCredsByID(svc *Service, legacyMode bool) handlers.AppHandler {
 		}
 
 		if creds == nil {
-			return handlers.RenderContent(ctx, map[string]interface{}{}, w, status)
+			return handlers.RenderContent(ctx, map[string]any{}, w, status)
 		}
 
 		return handlers.RenderContent(ctx, creds, w, status)
@@ -1129,7 +1129,7 @@ func handleWebhookPlayStoreH(w http.ResponseWriter, r *http.Request, svc *Servic
 	if err != nil {
 		lg.Err(err).Str("payload", string(data)).Msg("failed to parse play store notification")
 
-		return handlers.ValidationError("request", map[string]interface{}{"parse-payload": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"parse-payload": err.Error()})
 	}
 
 	if err := svc.processPlayStoreNotification(ctx, ntf); err != nil {
@@ -1219,7 +1219,7 @@ func handleWebhookAppStoreH(w http.ResponseWriter, r *http.Request, svc *Service
 	if err != nil {
 		lg.Err(err).Str("payload", spayload.SignedPayload).Msg("failed to parse app store notification")
 
-		return handlers.ValidationError("request", map[string]interface{}{"parse-signed-payload": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"parse-signed-payload": err.Error()})
 	}
 
 	if err := svc.processAppStoreNotification(ctx, ntf); err != nil {
@@ -1424,27 +1424,27 @@ func handleSubmitReceipt(svc *Service, valid *validator.Validate) handlers.AppHa
 			l.Warn().Err(err).Msg("failed to decode orderID")
 
 			// Preserve the legacy error in case anything depends on it.
-			return handlers.ValidationError("request", map[string]interface{}{"orderID": inputs.ErrIDDecodeNotUUID})
+			return handlers.ValidationError("request", map[string]any{"orderID": inputs.ErrIDDecodeNotUUID})
 		}
 
 		payload, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 		if err != nil {
 			l.Warn().Err(err).Msg("failed to read body")
 
-			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 		}
 
 		req, err := parseSubmitReceiptRequest(payload)
 		if err != nil {
 			l.Warn().Err(err).Msg("failed to parse request")
 
-			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 		}
 
 		if err := valid.StructCtx(ctx, &req); err != nil {
 			verrs, ok := collectValidationErrors(err)
 			if !ok {
-				return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+				return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 			}
 
 			return handlers.ValidationError("request", verrs)
@@ -1498,14 +1498,14 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 	if err != nil {
 		lg.Warn().Err(err).Msg("failed to read request")
 
-		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 	}
 
 	req, err := parseSubmitReceiptRequest(raw)
 	if err != nil {
 		lg.Warn().Err(err).Msg("failed to parse request")
 
-		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 	}
 
 	if err := valid.StructCtx(ctx, &req); err != nil {
@@ -1513,7 +1513,7 @@ func handleCreateOrderFromReceiptH(w http.ResponseWriter, r *http.Request, svc *
 		if !ok {
 			lg.Err(err).Msg("failed to validate request")
 
-			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 		}
 
 		lg.Warn().Err(err).Str("receipt_type", req.Type.String()).Msg("failed to validate receipt request fields")
@@ -1567,27 +1567,27 @@ func handleCheckOrderReceiptH(w http.ResponseWriter, r *http.Request, svc *Servi
 	if err != nil {
 		lg.Warn().Err(err).Msg("failed to parse orderID")
 
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 	}
 
 	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
 	if err != nil {
 		lg.Warn().Err(err).Msg("failed to read request")
 
-		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 	}
 
 	req, err := parseSubmitReceiptRequest(raw)
 	if err != nil {
 		lg.Warn().Err(err).Msg("failed to parse request")
 
-		return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 	}
 
 	if err := valid.StructCtx(ctx, &req); err != nil {
 		verrs, ok := collectValidationErrors(err)
 		if !ok {
-			return handlers.ValidationError("request", map[string]interface{}{"request-body": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"request-body": err.Error()})
 		}
 
 		return handlers.ValidationError("request", verrs)
@@ -1641,7 +1641,7 @@ func handleReceiptErr(err error) *handlers.AppError {
 		return &handlers.AppError{
 			Message: "Unexpected error",
 			Code:    http.StatusInternalServerError,
-			Data:    map[string]interface{}{},
+			Data:    map[string]any{},
 		}
 	}
 
@@ -1649,8 +1649,8 @@ func handleReceiptErr(err error) *handlers.AppError {
 	result := &handlers.AppError{
 		Message: "Error " + errStr,
 		Code:    http.StatusBadRequest,
-		Data: map[string]interface{}{
-			"validationErrors": map[string]interface{}{"receiptErrors": errStr},
+		Data: map[string]any{
+			"validationErrors": map[string]any{"receiptErrors": errStr},
 		},
 	}
 

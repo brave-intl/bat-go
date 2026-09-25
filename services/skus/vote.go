@@ -119,7 +119,7 @@ func NewVoteEvent(v Vote) (*VoteEvent, error) {
 
 // CodecEncode - encode using avro vote codec
 func (ve *VoteEvent) CodecEncode(codec *goavro.Codec) ([]byte, error) {
-	return codec.BinaryFromNative(nil, map[string]interface{}{
+	return codec.BinaryFromNative(nil, map[string]any{
 		"type":          ve.Type,
 		"channel":       ve.Channel,
 		"id":            ve.ID.String(),

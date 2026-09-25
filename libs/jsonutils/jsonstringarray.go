@@ -11,7 +11,7 @@ import (
 type JSONStringArray []string
 
 // Scan the src sql type into the passed JSONStringArray
-func (arr *JSONStringArray) Scan(src interface{}) error {
+func (arr *JSONStringArray) Scan(src any) error {
 	var jt types.JSONText
 
 	if err := jt.Scan(src); err != nil {

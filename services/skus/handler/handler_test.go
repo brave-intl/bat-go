@@ -98,7 +98,7 @@ func TestOrder_Create(t *testing.T) {
 			exp: tcExpected{
 				err: handlers.ValidationError(
 					"request body",
-					map[string]interface{}{
+					map[string]any{
 						"items": "array must contain at least one item",
 					},
 				),
@@ -333,7 +333,7 @@ func TestOrder_CreateNew(t *testing.T) {
 				err: &handlers.AppError{
 					Message: "Validation failed",
 					Code:    http.StatusBadRequest,
-					Data: map[string]interface{}{"validationErrors": map[string]string{
+					Data: map[string]any{"validationErrors": map[string]string{
 						"Email": "Key: 'CreateOrderRequestNew.Email' Error:Field validation for 'Email' failed on the 'email' tag",
 					}},
 				},
@@ -688,7 +688,7 @@ func TestOrder_Cancel(t *testing.T) {
 				oid: uuid.Nil,
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID}),
 			},
 		},
 
@@ -811,7 +811,7 @@ func TestOrder_Expire(t *testing.T) {
 				oid: uuid.Nil,
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID}),
 			},
 		},
 
@@ -938,5 +938,5 @@ func mustDecimalFromString(v string) decimal.Decimal {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -113,10 +114,8 @@ func (c *HTTPClient) IsLinkingReputable(
 		return false, []int{CohortNil}, err
 	}
 
-	for _, v := range resp.Cohorts {
-		if v == CohortOK {
-			return true, resp.Cohorts, nil
-		}
+	if slices.Contains(resp.Cohorts, CohortOK) {
+		return true, resp.Cohorts, nil
 	}
 	return false, resp.Cohorts, nil
 }
@@ -155,10 +154,8 @@ func (c *HTTPClient) IsDrainReputable(
 	// okay to be too young for drain reputable
 	// must also be ok
 
-	for _, v := range resp.Cohorts {
-		if v == CohortOK {
-			return true, resp.Cohorts, nil
-		}
+	if slices.Contains(resp.Cohorts, CohortOK) {
+		return true, resp.Cohorts, nil
 	}
 	return false, resp.Cohorts, nil
 }

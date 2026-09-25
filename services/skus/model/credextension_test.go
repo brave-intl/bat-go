@@ -453,5 +453,5 @@ func TestCredExtension_rateLimited(t *testing.T) {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }

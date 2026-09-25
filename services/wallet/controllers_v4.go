@@ -72,8 +72,7 @@ func CreateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			logger.Error().Err(err).
 				Msg("error creating rewards wallet")
 
-			var errorBundle *errorutils.ErrorBundle
-			if errors.As(err, &errorBundle) {
+			if errorBundle, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 				logger.Error().
 					Str("error_bundle", errorBundle.DataToString()).
 					Msg("error creating rewards wallet")
@@ -110,14 +109,14 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 		if paymentID == "" {
 			logger.Error().Err(errorutils.ErrBadRequest).Msg("error updating rewards wallet")
 			return handlers.ValidationError("error validating paymentID url parameter",
-				map[string]interface{}{"paymentID": errorutils.ErrBadRequest.Error()})
+				map[string]any{"paymentID": errorutils.ErrBadRequest.Error()})
 		}
 
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
 			logger.Error().Err(err).Msg("error updating rewards wallet")
 			return handlers.ValidationError("error retrieving keyID from signature",
-				map[string]interface{}{"keyID": err.Error()})
+				map[string]any{"keyID": err.Error()})
 		}
 
 		if paymentID != keyID {
@@ -138,15 +137,14 @@ func UpdateWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 		}
 
 		// Currently we do not check for the wallet existence as the middleware LookupVerifier covers this.
-		upsertReputationSummary := func() (interface{}, error) {
+		upsertReputationSummary := func() (any, error) {
 			return nil, s.repClient.UpsertReputationSummary(r.Context(), paymentID, request.GeoCountry)
 		}
 
 		_, err = s.retry(r.Context(), upsertReputationSummary, retryPolicy, canRetry(nonRetriableErrors))
 		if err != nil {
 			logger.Error().Err(err).Msg("error updating rewards wallet")
-			var errorBundle *errorutils.ErrorBundle
-			if errors.As(err, &errorBundle) {
+			if errorBundle, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 				logger.Error().
 					Str("error bundle", errorBundle.DataToString()).
 					Msg("error updating rewards wallet")
@@ -183,7 +181,7 @@ func GetWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handl
 		var id inputs.ID
 		if err := inputs.DecodeAndValidateString(ctx, &id, chi.URLParam(r, "paymentID")); err != nil {
 			l.Warn().Err(err).Str("paymentID", id.String()).Msg("failed to decode and validate paymentID from url")
-			return handlers.ValidationError("Error validating paymentID url parameter", map[string]interface{}{
+			return handlers.ValidationError("Error validating paymentID url parameter", map[string]any{
 				"paymentId": err.Error(),
 			})
 		}

@@ -32,7 +32,7 @@ type Transaction struct {
 	SettlementID     string                   `json:"transactionId" valid:"uuidv4"`
 	TransferFee      decimal.Decimal          `json:"fee"`
 	Type             string                   `json:"type"`
-	ValidUntil       time.Time                `json:"validUntil,omitempty"`
+	ValidUntil       time.Time                `json:"validUntil,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	DocumentID       string                   `json:"documentId,omitempty"`
 	Note             string                   `json:"note"`
 }

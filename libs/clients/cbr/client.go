@@ -164,8 +164,7 @@ var (
 )
 
 func handleRedeemError(err error) error {
-	var eb *errorutils.ErrorBundle
-	if errors.As(err, &eb) {
+	if eb, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 		if hs, ok := eb.Data().(clients.HTTPState); ok {
 			// possible cbr errors:
 			// 409 - never retry (already redeemed)

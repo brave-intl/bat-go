@@ -34,7 +34,7 @@ func SignRequests(
 		signatures := []string{}
 		// store the original nonce
 		originalNonce := base.Nonce
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			// increment the nonce to correspond to each signature
 			base.Nonce = originalNonce + int64(i)
 			marshalled, err := json.Marshal(base)

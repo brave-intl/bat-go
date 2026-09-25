@@ -14,5 +14,5 @@ type DrainInfo struct {
 	CompletedAt   *time.Time      `json:"completed_at,omitempty" db:"completed_at"`
 	State         *string         `json:"state,omitempty" db:"state"`
 	ErrCode       *string         `json:"errcode,omitempty" db:"errcode"`
-	Value         decimal.Decimal `json:"value,omitempty" db:"value"`
+	Value         decimal.Decimal `json:"value,omitempty" db:"value"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 }

@@ -72,7 +72,7 @@ func TestTryUpgradeSuggestionEvent(t *testing.T) {
 	native, _, err := service.codecs["suggestion"].NativeFromBinary(upgraded)
 	assert.NoError(t, err)
 
-	createdAt, err := time.Parse(time.RFC3339, native.(map[string]interface{})["createdAt"].(string))
+	createdAt, err := time.Parse(time.RFC3339, native.(map[string]any)["createdAt"].(string))
 	assert.NoError(t, err)
 
 	assert.True(t, (time.Since(createdAt)) < time.Second)

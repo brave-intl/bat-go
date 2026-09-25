@@ -17,7 +17,7 @@ func Decode(ctx context.Context, d Decodable, input []byte) error {
 }
 
 // DecodeJSON - decode json helper
-func DecodeJSON(ctx context.Context, input []byte, v interface{}) error {
+func DecodeJSON(ctx context.Context, input []byte, v any) error {
 	dec := json.NewDecoder(bytes.NewBuffer(input))
 	return dec.Decode(v)
 }

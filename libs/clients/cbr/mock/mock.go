@@ -44,7 +44,7 @@ func (m *MockClient) CreateIssuer(ctx context.Context, issuer string, maxTokens 
 }
 
 // CreateIssuer indicates an expected call of CreateIssuer.
-func (mr *MockClientMockRecorder) CreateIssuer(ctx, issuer, maxTokens interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CreateIssuer(ctx, issuer, maxTokens any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIssuer", reflect.TypeOf((*MockClient)(nil).CreateIssuer), ctx, issuer, maxTokens)
 }
@@ -58,7 +58,7 @@ func (m *MockClient) CreateIssuerV3(ctx context.Context, createIssuerV3 cbr.Issu
 }
 
 // CreateIssuerV3 indicates an expected call of CreateIssuerV3.
-func (mr *MockClientMockRecorder) CreateIssuerV3(ctx, createIssuerV3 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CreateIssuerV3(ctx, createIssuerV3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIssuerV3", reflect.TypeOf((*MockClient)(nil).CreateIssuerV3), ctx, createIssuerV3)
 }
@@ -73,7 +73,7 @@ func (m *MockClient) GetIssuer(ctx context.Context, issuer string) (*cbr.IssuerR
 }
 
 // GetIssuer indicates an expected call of GetIssuer.
-func (mr *MockClientMockRecorder) GetIssuer(ctx, issuer interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) GetIssuer(ctx, issuer any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuer", reflect.TypeOf((*MockClient)(nil).GetIssuer), ctx, issuer)
 }
@@ -88,7 +88,7 @@ func (m *MockClient) GetIssuerV3(ctx context.Context, issuer string) (*cbr.Issue
 }
 
 // GetIssuerV3 indicates an expected call of GetIssuerV3.
-func (mr *MockClientMockRecorder) GetIssuerV3(ctx, issuer interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) GetIssuerV3(ctx, issuer any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuerV3", reflect.TypeOf((*MockClient)(nil).GetIssuerV3), ctx, issuer)
 }
@@ -102,7 +102,7 @@ func (m *MockClient) RedeemCredential(ctx context.Context, issuer, preimage, sig
 }
 
 // RedeemCredential indicates an expected call of RedeemCredential.
-func (mr *MockClientMockRecorder) RedeemCredential(ctx, issuer, preimage, signature, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) RedeemCredential(ctx, issuer, preimage, signature, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemCredential", reflect.TypeOf((*MockClient)(nil).RedeemCredential), ctx, issuer, preimage, signature, payload)
 }
@@ -116,7 +116,7 @@ func (m *MockClient) RedeemCredentialV3(ctx context.Context, issuer, preimage, s
 }
 
 // RedeemCredentialV3 indicates an expected call of RedeemCredentialV3.
-func (mr *MockClientMockRecorder) RedeemCredentialV3(ctx, issuer, preimage, signature, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) RedeemCredentialV3(ctx, issuer, preimage, signature, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemCredentialV3", reflect.TypeOf((*MockClient)(nil).RedeemCredentialV3), ctx, issuer, preimage, signature, payload)
 }
@@ -130,7 +130,7 @@ func (m *MockClient) RedeemCredentials(ctx context.Context, credentials []cbr.Cr
 }
 
 // RedeemCredentials indicates an expected call of RedeemCredentials.
-func (mr *MockClientMockRecorder) RedeemCredentials(ctx, credentials, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) RedeemCredentials(ctx, credentials, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemCredentials", reflect.TypeOf((*MockClient)(nil).RedeemCredentials), ctx, credentials, payload)
 }
@@ -145,7 +145,7 @@ func (m *MockClient) SignCredentials(ctx context.Context, issuer string, creds [
 }
 
 // SignCredentials indicates an expected call of SignCredentials.
-func (mr *MockClientMockRecorder) SignCredentials(ctx, issuer, creds interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) SignCredentials(ctx, issuer, creds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignCredentials", reflect.TypeOf((*MockClient)(nil).SignCredentials), ctx, issuer, creds)
 }

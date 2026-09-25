@@ -432,7 +432,7 @@ func InitService(
 
 	if enabled, ok := ctx.Value(appctx.SkusEnableStoreSignedOrderCredsConsumer).(bool); ok && enabled {
 		if consumers, ok := ctx.Value(appctx.SkusNumberStoreSignedOrderCredsConsumer).(int); ok {
-			for i := 0; i < consumers; i++ {
+			for range consumers {
 				go service.RunStoreSignedOrderCredentials(ctx, 1*time.Second)
 			}
 		}
@@ -1021,7 +1021,7 @@ func getUpholdCustodialTxWithRetries(ctx context.Context, txRef string) (*decima
 
 	// best effort to check that the tx is done processing
 OUTER:
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		select {
 		case <-ctx.Done():
 			break OUTER
@@ -1585,7 +1585,7 @@ func isValidBatchReq(ord *model.Order, itemID uuid.UUID) error {
 }
 
 // GetItemCredentials returns credentials based on the order, item and request id.
-func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (any, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -1616,7 +1616,7 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID
 //
 // This is a legacy method.
 // For backward compatibility, similar to creating credentials, it uses item id as request id.
-func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (any, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -1912,7 +1912,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 	}
 
 	if item.IssuanceIntervalISO == nil {
-		item.IssuanceIntervalISO = ptrTo("P1D")
+		item.IssuanceIntervalISO = new("P1D")
 	}
 
 	interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
@@ -3128,7 +3128,7 @@ func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, nt
 }
 
 func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID, email string) (string, error) {
-	oldSess, err := s.stripeCl.Session(ctx, oldSessID, &stripe.CheckoutSessionParams{Params: stripe.Params{Expand: []*string{stripe.String("customer")}}})
+	oldSess, err := s.stripeCl.Session(ctx, oldSessID, &stripe.CheckoutSessionParams{Params: stripe.Params{Expand: []*string{new("customer")}}})
 	if err != nil {
 		return "", err
 	}
@@ -3311,7 +3311,7 @@ type tlv1CredPresentation struct {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 func isErrStripeNotFound(err error) bool {

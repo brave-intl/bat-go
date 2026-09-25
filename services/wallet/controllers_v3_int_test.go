@@ -972,5 +972,5 @@ func setupRouter(service *Service) *chi.Mux {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }

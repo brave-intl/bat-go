@@ -180,7 +180,7 @@ func upholdVaultImportKey(
 	if err != nil {
 		return err
 	}
-	_, err = wrappedClient.Client.Logical().Write("wallets/"+importName, map[string]interface{}{
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+importName, map[string]any{
 		"providerId": upholdProviderID,
 	})
 	return err
@@ -212,7 +212,7 @@ func geminiVaultImportValues(
 	if err != nil {
 		return err
 	}
-	_, err = wrappedClient.Client.Logical().Write("wallets/"+importName, map[string]interface{}{
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+importName, map[string]any{
 		"clientid":  geminiClientID,
 		"clientkey": geminiClientKey,
 	})

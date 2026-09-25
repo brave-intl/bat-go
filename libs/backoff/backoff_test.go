@@ -20,7 +20,7 @@ func TestRetry_CxtDone(t *testing.T) {
 
 	ctx, done := context.WithCancel(context.Background())
 
-	operation := func() (interface{}, error) {
+	operation := func() (any, error) {
 		assert.Fail(t, "should not have been executed")
 		return nil, nil
 	}
@@ -43,12 +43,11 @@ func TestRetry_IsRetriable_False(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx, done := context.WithCancel(context.Background())
-	defer done()
+	ctx := t.Context()
 
 	expected := errors.New(testutils.RandomString())
 
-	operation := func() (interface{}, error) {
+	operation := func() (any, error) {
 		return nil, expected
 	}
 
@@ -68,12 +67,11 @@ func TestRetry_CalculateNextDelay_Done(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx, done := context.WithCancel(context.Background())
-	defer done()
+	ctx := t.Context()
 
 	expected := errors.New(testutils.RandomString())
 
-	operation := func() (interface{}, error) {
+	operation := func() (any, error) {
 		return nil, expected
 	}
 
@@ -96,13 +94,12 @@ func TestRetry(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx, done := context.WithCancel(context.Background())
-	defer done()
+	ctx := t.Context()
 
 	count := 0
 	attempts := 2
 
-	operation := func() (interface{}, error) {
+	operation := func() (any, error) {
 		if count < attempts {
 			count++
 			return nil, errors.New(testutils.RandomString())

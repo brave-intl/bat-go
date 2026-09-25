@@ -14,7 +14,7 @@ type wrapper struct {
 // Value returns the value associated with this context for key, or nil
 // if no value is associated with key. Successive calls to Value with
 // the same key returns the same result.
-func (w *wrapper) Value(k interface{}) interface{} {
+func (w *wrapper) Value(k any) any {
 	if v := w.Context.Value(k); v != nil {
 		return v
 	}

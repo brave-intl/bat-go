@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -38,7 +39,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("coin list limit exceeded")
 				return handlers.ValidationError(
 					"Error validating coin url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":     err.Error(),
 						"coinIDs": "coin list limit exceeded",
 					},
@@ -56,7 +57,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vScurrencies": "invalid vs currency",
 					},
@@ -67,7 +68,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("empty vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vScurrencies": "empty vs currency",
 					},
@@ -78,7 +79,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("vs currency list limit exceeded")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vScurrencies": "vs currency list limit exceeded",
 					},
@@ -96,7 +97,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid duration input from caller")
 				return handlers.ValidationError(
 					"Error validating duration url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":      err.Error(),
 						"duration": "invalid duration",
 					},
@@ -143,7 +144,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid coin input from caller")
 				return handlers.ValidationError(
 					"Error validating coin url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":     err.Error(),
 						"coinIDs": "invalid coin",
 					},
@@ -160,7 +161,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vsCurrencies": "invalid vs currency",
 					},
@@ -171,7 +172,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("empty vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":          err.Error(),
 						"vsCurrencies": "empty vs currency",
 					},
@@ -189,7 +190,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid duration input from caller")
 				return handlers.ValidationError(
 					"Error validating duration url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":      err.Error(),
 						"duration": "invalid duration",
 					},
@@ -255,7 +256,7 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid vs currency input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":        err.Error(),
 						"vsCurrency": "invalid vs currency",
 					},
@@ -272,7 +273,7 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 				logger.Error().Err(err).Msg("invalid limit input from caller")
 				return handlers.ValidationError(
 					"Error validating vs currency url parameter",
-					map[string]interface{}{
+					map[string]any{
 						"err":   err.Error(),
 						"limit": "invalid limit",
 					},
@@ -359,13 +360,7 @@ func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
 		supportedDestinationCurrencies := []string{"eth", "matic", "sol", "usdc", "btc"}
 
 		// Check if requested DestinationNetwork is in the supported list
-		isValidNetwork := false
-		for _, network := range supportedDestinationNetworks {
-			if req.DestinationNetwork == network {
-				isValidNetwork = true
-				break
-			}
-		}
+		isValidNetwork := slices.Contains(supportedDestinationNetworks, req.DestinationNetwork)
 		if !isValidNetwork {
 			return handlers.WrapError(
 				fmt.Errorf("Invalid destination network: %s", req.DestinationNetwork),
@@ -376,14 +371,7 @@ func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
 
 		// Check if all SupportedDestinationNetworks in the request are in the supported list
 		for _, requestedNetwork := range req.SupportedDestinationNetworks {
-			isValidNetwork = false
-			for _, network := range supportedDestinationNetworks {
-				if requestedNetwork == network {
-					isValidNetwork = true
-					break
-				}
-			}
-			if !isValidNetwork {
+			if !slices.Contains(supportedDestinationNetworks, requestedNetwork) {
 				return handlers.WrapError(
 					fmt.Errorf("Unsupported network in SupportedDestinationNetworks: %s", requestedNetwork),
 					"Unsupported network in SupportedDestinationNetworks",
@@ -393,13 +381,7 @@ func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
 		}
 
 		// Check if requested DestinationCurrency is in the supported list
-		isValidCurrency := false
-		for _, currency := range supportedDestinationCurrencies {
-			if req.DestinationCurrency == currency {
-				isValidCurrency = true
-				break
-			}
-		}
+		isValidCurrency := slices.Contains(supportedDestinationCurrencies, req.DestinationCurrency)
 		if !isValidCurrency {
 			return handlers.WrapError(
 				fmt.Errorf("Invalid destination currency: %s", req.DestinationCurrency),

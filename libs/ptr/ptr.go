@@ -6,7 +6,7 @@ import (
 
 // FromString returns pointer to string
 func FromString(s string) *string {
-	return &s
+	return new(s)
 }
 
 // String returns value of pointer or empty string
@@ -24,9 +24,9 @@ func StringOr(s *string, or string) string {
 
 // FromTime - get the address of the time
 func FromTime(t time.Time) *time.Time {
-	return &t
+	return new(t)
 }
 
 func To[T any](v T) *T {
-	return &v
+	return new(v)
 }

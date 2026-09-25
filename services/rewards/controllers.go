@@ -25,7 +25,7 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 			lg.Error().Err(err).Msg("failed decode and validate")
 
 			if errors.Is(err, ErrBaseCurrencyInvalid) {
-				return handlers.ValidationError("Error validating currency url parameter", map[string]interface{}{
+				return handlers.ValidationError("Error validating currency url parameter", map[string]any{
 					"err":      err.Error(),
 					"currency": "invalid currency",
 				})
