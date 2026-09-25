@@ -144,7 +144,7 @@ func ListTransactions(
 			return err
 		}
 
-		for i := 0; i < len(txns); i++ {
+		for i := range txns {
 			t := txns[i]
 
 			value := t.AltCurrency.FromProbi(t.Probi).String()
