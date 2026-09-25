@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1119,12 +1120,7 @@ func canRetry(nonRetriableErrors []int) func(error) bool {
 		switch {
 		case errors.As(err, &eb):
 			if hs, ok := eb.Data().(clients.HTTPState); ok {
-				for _, httpStatusCode := range nonRetriableErrors {
-					if hs.Status == httpStatusCode {
-						return false
-					}
-				}
-				return true
+				return !slices.Contains(nonRetriableErrors, hs.Status)
 			}
 		}
 		return false

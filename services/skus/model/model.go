@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -743,13 +744,7 @@ func (s Slice[T]) Equal(target []T) bool {
 }
 
 func (s Slice[T]) Contains(target T) bool {
-	for _, v := range s {
-		if v == target {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(s, target)
 }
 
 // Issuer represents a credential issuer.

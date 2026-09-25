@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/asaskevich/govalidator"
@@ -846,13 +847,7 @@ func isAllowedOrigin(origin string, allowedOrigins []string) bool {
 		return false
 	}
 
-	for i := range allowedOrigins {
-		if allowedOrigins[i] == origin {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(allowedOrigins, origin)
 }
 
 func strOr(a string, b string) string {
