@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -359,13 +360,7 @@ func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
 		supportedDestinationCurrencies := []string{"eth", "matic", "sol", "usdc", "btc"}
 
 		// Check if requested DestinationNetwork is in the supported list
-		isValidNetwork := false
-		for _, network := range supportedDestinationNetworks {
-			if req.DestinationNetwork == network {
-				isValidNetwork = true
-				break
-			}
-		}
+		isValidNetwork := slices.Contains(supportedDestinationNetworks, req.DestinationNetwork)
 		if !isValidNetwork {
 			return handlers.WrapError(
 				fmt.Errorf("Invalid destination network: %s", req.DestinationNetwork),
@@ -376,14 +371,7 @@ func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
 
 		// Check if all SupportedDestinationNetworks in the request are in the supported list
 		for _, requestedNetwork := range req.SupportedDestinationNetworks {
-			isValidNetwork = false
-			for _, network := range supportedDestinationNetworks {
-				if requestedNetwork == network {
-					isValidNetwork = true
-					break
-				}
-			}
-			if !isValidNetwork {
+			if !slices.Contains(supportedDestinationNetworks, requestedNetwork) {
 				return handlers.WrapError(
 					fmt.Errorf("Unsupported network in SupportedDestinationNetworks: %s", requestedNetwork),
 					"Unsupported network in SupportedDestinationNetworks",
@@ -393,13 +381,7 @@ func CreateStripeOnrampSessionsHandler(service *Service) handlers.AppHandler {
 		}
 
 		// Check if requested DestinationCurrency is in the supported list
-		isValidCurrency := false
-		for _, currency := range supportedDestinationCurrencies {
-			if req.DestinationCurrency == currency {
-				isValidCurrency = true
-				break
-			}
-		}
+		isValidCurrency := slices.Contains(supportedDestinationCurrencies, req.DestinationCurrency)
 		if !isValidCurrency {
 			return handlers.WrapError(
 				fmt.Errorf("Invalid destination currency: %s", req.DestinationCurrency),

@@ -4,6 +4,7 @@ package set
 // which is safe. Intended for testing purposes
 
 import (
+	"slices"
 	"sync"
 )
 
@@ -24,12 +25,7 @@ func (set *UnsafeSliceSet) Cardinality() (int, error) {
 
 // Contains returns true if the given item is in the set
 func (set *UnsafeSliceSet) Contains(e string) (bool, error) {
-	for _, a := range set.slice {
-		if a == e {
-			return true, nil
-		}
-	}
-	return false, nil
+	return slices.Contains(set.slice, e), nil
 }
 
 // Add a single element to the set, return true if newly added
