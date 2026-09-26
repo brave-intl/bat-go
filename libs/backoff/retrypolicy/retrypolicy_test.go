@@ -89,8 +89,8 @@ func TestPolicy_CalculateNextDelay_Default(t *testing.T) {
 		// calculate minimumDuration to account for jitter
 		minimumDuration := time.Duration(0.8 * float64(expected))
 		assert.GreaterOrEqual(t, actual, minimumDuration)
-
-		time.Sleep(actual)
+		// jitter must never push the delay past the calculated interval
+		assert.LessOrEqual(t, actual, expected)
 	}
 }
 
