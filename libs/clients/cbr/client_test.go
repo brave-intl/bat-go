@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/ptr"
@@ -147,16 +147,17 @@ func TestSignAndRedeemCredentialsV3(t *testing.T) {
 	_, err = db.Exec("DELETE from v3_issuer_keys; DELETE FROM v3_issuers; DELETE from redemptions")
 	assert.NoError(t, err, "Must be able to clear issuers")
 
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
+	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion("us-west-2"))
+	assert.NoError(t, err)
 
-	var config = &aws.Config{
-		Region:   aws.String("us-west-2"),
-		Endpoint: aws.String(os.Getenv("DYNAMODB_ENDPOINT")),
+	var svc *dynamodb.Client
+	if endpoint := os.Getenv("DYNAMODB_ENDPOINT"); endpoint != "" {
+		svc = dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+			o.BaseEndpoint = &endpoint
+		})
+	} else {
+		svc = dynamodb.NewFromConfig(cfg)
 	}
-	config.DisableSSL = aws.Bool(true)
-	svc := dynamodb.New(sess, config)
 	err = setupDynamodbTables(svc)
 	assert.NoError(t, err)
 
@@ -204,29 +205,28 @@ func TestSignAndRedeemCredentialsV3(t *testing.T) {
 }
 
 // setupDynamodbTables this function sets up tables for use in dynamodb tests.
-func setupDynamodbTables(db *dynamodb.DynamoDB) error {
-	_, _ = db.DeleteTable(&dynamodb.DeleteTableInput{
+func setupDynamodbTables(db *dynamodb.Client) error {
+	_, _ = db.DeleteTable(context.Background(), &dynamodb.DeleteTableInput{
 		TableName: ptr.FromString("redemptions"),
 	})
 
 	input := &dynamodb.CreateTableInput{
 		TableName:   ptr.FromString("redemptions"),
-		BillingMode: ptr.FromString("PAY_PER_REQUEST"),
-		AttributeDefinitions: []*dynamodb.AttributeDefinition{
+		BillingMode: types.BillingModePayPerRequest,
+		AttributeDefinitions: []types.AttributeDefinition{
 			{
-				AttributeName: aws.String("id"),
-				AttributeType: aws.String("S"),
+				AttributeName: ptr.FromString("id"),
+				AttributeType: types.ScalarAttributeTypeS,
 			},
 		},
-		KeySchema: []*dynamodb.KeySchemaElement{
+		KeySchema: []types.KeySchemaElement{
 			{
-				AttributeName: aws.String("id"),
-				KeyType:       aws.String("HASH"),
+				AttributeName: ptr.FromString("id"),
+				KeyType:       types.KeyTypeHash,
 			},
 		},
 	}
-
-	_, err := db.CreateTable(input)
+	_, err := db.CreateTable(context.Background(), input)
 	if err != nil {
 		return fmt.Errorf("error creating dynamodb table %w", err)
 	}
@@ -239,7 +239,7 @@ func setupDynamodbTables(db *dynamodb.DynamoDB) error {
 	return nil
 }
 
-func tableIsActive(db *dynamodb.DynamoDB, tableName string, timeout, duration time.Duration) error {
+func tableIsActive(db *dynamodb.Client, tableName string, timeout, duration time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -248,13 +248,13 @@ func tableIsActive(db *dynamodb.DynamoDB, tableName string, timeout, duration ti
 		case <-ctx.Done():
 			return errors.New("timed out while waiting for table status to become ACTIVE")
 		case <-time.After(duration):
-			table, err := db.DescribeTable(&dynamodb.DescribeTableInput{
-				TableName: aws.String(tableName),
+			table, err := db.DescribeTable(context.Background(), &dynamodb.DescribeTableInput{
+				TableName: ptr.FromString(tableName),
 			})
 			if err != nil {
 				return fmt.Errorf("instance.DescribeTable error %w", err)
 			}
-			if table.Table == nil || table.Table.TableStatus == nil || *table.Table.TableStatus != "ACTIVE" {
+			if table.Table == nil || table.Table.TableStatus != types.TableStatusActive {
 				continue
 			}
 			return nil
