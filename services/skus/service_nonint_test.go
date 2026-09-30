@@ -28,6 +28,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	berrs "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/radom"
@@ -1753,6 +1754,307 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 			must.Equal(t, tc.exp.err, err)
 
 			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.ord, actual)
+		})
+	}
+}
+
+func TestCreateOrderPaid(t *testing.T) {
+	type tcGiven struct {
+		svc *mockPaidOrderCreator
+		req *model.CreateOrderRequestPaid
+	}
+
+	type tcExpected struct {
+		ord *model.Order
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	newValidReq := func(paymentProc string) *model.CreateOrderRequestPaid {
+		return &model.CreateOrderRequestPaid{
+			ExternalID:  "cs_test_123",
+			PaymentProc: paymentProc,
+			Email:       "you@example.com",
+			Currency:    "USD",
+			Items: []model.OrderItemRequestNew{
+				{
+					Quantity:                1,
+					SKU:                     "sku",
+					SKUVnt:                  "sku_vnt",
+					Location:                "location",
+					Description:             "description",
+					CredentialType:          "credential_type",
+					CredentialValidDuration: "P1M",
+				},
+			},
+			PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+			ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+		}
+	}
+
+	tests := []testCase{
+		{
+			name: "error_in_createOrderItems",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{},
+				req: func() *model.CreateOrderRequestPaid {
+					req := newValidReq(model.StripePaymentMethod)
+					req.Items[0].CredentialValidDuration = "invalid"
+					return req
+				}(),
+			},
+			exp: tcExpected{err: timeutils.ErrUnsupportedFormat},
+		},
+
+		{
+			name: "error_in_createOrderPremium",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return nil, model.Error("something_went_wrong")
+					},
+				},
+				req: newValidReq(model.StripePaymentMethod),
+			},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
+		},
+
+		{
+			name: "error_in_updateOrderWithExpPaidTime",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return &model.Order{}, nil
+					},
+					fnUpdateOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				req: newValidReq(model.StripePaymentMethod),
+			},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
+		},
+
+		{
+			name: "error_in_appendOrderMetadata",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return &model.Order{}, nil
+					},
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						return model.Error("something_went_wrong")
+					},
+				},
+				req: newValidReq(model.StripePaymentMethod),
+			},
+			exp: tcExpected{err: model.Error("something_went_wrong")},
+		},
+
+		{
+			name: "success_stripe_sets_checkout_session_id",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						if req.Email != "you@example.com" || req.Currency != "USD" {
+							return nil, model.Error("unexpected_oreq")
+						}
+
+						result := &model.Order{
+							ID:    uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
+							Items: []model.OrderItem{{ID: uuid.Must(uuid.FromString("22482ad4-e43b-44bd-860e-99e617ad9f6d"))}},
+						}
+
+						return result, nil
+					},
+
+					fnUpdateOrderWithExpPaidTime: func(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+						if !expt.Equal(time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC)) {
+							return model.Error("unexpected_expt")
+						}
+
+						if !paidt.Equal(time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC)) {
+							return model.Error("unexpected_paidt")
+						}
+
+						return nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						if mdata["externalID"] != "cs_test_123" {
+							return model.Error("unexpected_externalID")
+						}
+
+						if mdata["paymentProcessor"] != model.StripePaymentMethod {
+							return model.Error("unexpected_paymentProcessor")
+						}
+
+						if mdata["stripeCheckoutSessionId"] != "cs_test_123" {
+							return model.Error("unexpected_stripeCheckoutSessionId")
+						}
+
+						return nil
+					},
+				},
+				req: newValidReq(model.StripePaymentMethod),
+			},
+			exp: tcExpected{
+				ord: &model.Order{
+					ID:    uuid.Must(uuid.FromString("1b251573-a45a-4f57-89f7-93b7da538817")),
+					Items: []model.OrderItem{{ID: uuid.Must(uuid.FromString("22482ad4-e43b-44bd-860e-99e617ad9f6d"))}},
+				},
+			},
+		},
+
+		{
+			name: "success_non_stripe_omits_checkout_session_id",
+			given: tcGiven{
+				svc: &mockPaidOrderCreator{
+					fnCreateOrderPremium: func(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+						return &model.Order{}, nil
+					},
+
+					fnAppendOrderMetadata: func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+						if _, ok := mdata["stripeCheckoutSessionId"]; ok {
+							return model.Error("unexpected_stripeCheckoutSessionId")
+						}
+
+						if mdata["paymentProcessor"] != "radom" {
+							return model.Error("unexpected_paymentProcessor")
+						}
+
+						return nil
+					},
+				},
+				req: newValidReq("radom"),
+			},
+			exp: tcExpected{ord: &model.Order{}},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := createOrderPaid(context.Background(), tc.given.svc, tc.given.req)
+			must.Equal(t, true, errors.Is(err, tc.exp.err) || err == tc.exp.err)
+
+			if tc.exp.err != nil {
+				return
+			}
+
+			should.Equal(t, tc.exp.ord, actual)
+		})
+	}
+}
+
+func TestService_CreateOrderPaid(t *testing.T) {
+	type tcGiven struct {
+		req     *model.CreateOrderRequestPaid
+		ordRepo *repository.MockOrder
+		itmRepo *repository.MockOrderItem
+	}
+
+	type tcExpected struct {
+		ord *model.Order
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	existingOrd := &model.Order{ID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")), Status: model.OrderStatusPaid}
+	existingItms := []model.OrderItem{{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000"))}}
+
+	tests := []testCase{
+		{
+			name: "duplicate_external_id_returns_existing_order_unchanged",
+			given: tcGiven{
+				req: &model.CreateOrderRequestPaid{ExternalID: "cs_test_123"},
+				ordRepo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						if extID != "cs_test_123" {
+							return nil, model.Error("unexpected_extID")
+						}
+
+						return existingOrd, nil
+					},
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return existingOrd, nil
+					},
+				},
+				itmRepo: &repository.MockOrderItem{
+					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
+						return existingItms, nil
+					},
+				},
+			},
+			exp: tcExpected{
+				ord: &model.Order{ID: existingOrd.ID, Status: model.OrderStatusPaid, Items: existingItms},
+			},
+		},
+
+		{
+			name: "getOrderFull_error_on_duplicate_is_propagated",
+			given: tcGiven{
+				req: &model.CreateOrderRequestPaid{ExternalID: "cs_test_123"},
+				ordRepo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return existingOrd, nil
+					},
+					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+						return nil, model.Error("get_failed")
+					},
+				},
+			},
+			exp: tcExpected{err: model.Error("get_failed")},
+		},
+
+		{
+			name: "unexpected_dedup_lookup_error_is_propagated",
+			given: tcGiven{
+				req: &model.CreateOrderRequestPaid{ExternalID: "cs_test_123"},
+				ordRepo: &repository.MockOrder{
+					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
+						return nil, model.Error("dedup_lookup_failed")
+					},
+				},
+			},
+			exp: tcExpected{err: model.Error("dedup_lookup_failed")},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			ds := NewMockDatastore(ctrl)
+			ds.EXPECT().RawDB().AnyTimes().Return(nil)
+
+			svc := &Service{
+				Datastore:     ds,
+				orderRepo:     tc.given.ordRepo,
+				orderItemRepo: tc.given.itmRepo,
+			}
+
+			actual, err := svc.CreateOrderPaid(context.Background(), tc.given.req)
+			must.Equal(t, true, errors.Is(err, tc.exp.err) || err == tc.exp.err)
+
+			if tc.exp.ord == nil {
 				return
 			}
 
