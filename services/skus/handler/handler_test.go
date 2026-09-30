@@ -816,8 +816,6 @@ func TestOrder_CreatePaid(t *testing.T) {
 			given: tcGiven{
 				svc: &mockOrderService{
 					fnCreateOrderPaid: func(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error) {
-						// CreateOrderPaid is idempotent on ExternalID: a duplicate
-						// request returns the existing order with a nil error.
 						return newTestPaidOrder(), nil
 					},
 				},

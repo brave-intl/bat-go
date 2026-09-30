@@ -545,8 +545,6 @@ type CreateOrderRequestNew struct {
 	Locale         string                `json:"locale" validate:"omitempty,bcp47_language_tag"`
 }
 
-// CreateOrderRequestPaid requests an order be created already marked as paid,
-// for a payment confirmed elsewhere (e.g. guest checkout in Subscriptions).
 type CreateOrderRequestPaid struct {
 	ExternalID  string                `json:"external_id" validate:"required"`
 	PaymentProc string                `json:"payment_processor" validate:"required"`
