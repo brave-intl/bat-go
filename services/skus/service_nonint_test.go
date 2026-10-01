@@ -1779,38 +1779,30 @@ func TestCreateOrderPaid(t *testing.T) {
 		exp   tcExpected
 	}
 
-	newValidReq := func(paymentProc string) *model.CreateOrderRequestPaid {
-		return &model.CreateOrderRequestPaid{
-			ExternalID:  "cs_test_123",
-			PaymentProc: paymentProc,
-			Email:       "you@example.com",
-			Currency:    "USD",
-			Items: []model.OrderItemRequestNew{
-				{
-					Quantity:                1,
-					SKU:                     "sku",
-					SKUVnt:                  "sku_vnt",
-					Location:                "location",
-					Description:             "description",
-					CredentialType:          "credential_type",
-					CredentialValidDuration: "P1M",
-				},
-			},
-			PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
-			ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
-		}
-	}
-
 	tests := []testCase{
 		{
 			name: "error_in_createOrderItems",
 			given: tcGiven{
 				svc: &mockPaidOrderCreator{},
-				req: func() *model.CreateOrderRequestPaid {
-					req := newValidReq(model.StripePaymentMethod)
-					req.Items[0].CredentialValidDuration = "invalid"
-					return req
-				}(),
+				req: &model.CreateOrderRequestPaid{
+					ExternalID:  "cs_test_123",
+					PaymentProc: model.StripePaymentMethod,
+					Email:       "you@example.com",
+					Currency:    "USD",
+					Items: []model.OrderItemRequestNew{
+						{
+							Quantity:                1,
+							SKU:                     "sku",
+							SKUVnt:                  "sku_vnt",
+							Location:                "location",
+							Description:             "description",
+							CredentialType:          "credential_type",
+							CredentialValidDuration: "invalid",
+						},
+					},
+					PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
 			},
 			exp: tcExpected{err: timeutils.ErrUnsupportedFormat},
 		},
@@ -1823,7 +1815,25 @@ func TestCreateOrderPaid(t *testing.T) {
 						return nil, model.Error("something_went_wrong")
 					},
 				},
-				req: newValidReq(model.StripePaymentMethod),
+				req: &model.CreateOrderRequestPaid{
+					ExternalID:  "cs_test_123",
+					PaymentProc: model.StripePaymentMethod,
+					Email:       "you@example.com",
+					Currency:    "USD",
+					Items: []model.OrderItemRequestNew{
+						{
+							Quantity:                1,
+							SKU:                     "sku",
+							SKUVnt:                  "sku_vnt",
+							Location:                "location",
+							Description:             "description",
+							CredentialType:          "credential_type",
+							CredentialValidDuration: "P1M",
+						},
+					},
+					PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
 			},
 			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
@@ -1839,7 +1849,25 @@ func TestCreateOrderPaid(t *testing.T) {
 						return model.Error("something_went_wrong")
 					},
 				},
-				req: newValidReq(model.StripePaymentMethod),
+				req: &model.CreateOrderRequestPaid{
+					ExternalID:  "cs_test_123",
+					PaymentProc: model.StripePaymentMethod,
+					Email:       "you@example.com",
+					Currency:    "USD",
+					Items: []model.OrderItemRequestNew{
+						{
+							Quantity:                1,
+							SKU:                     "sku",
+							SKUVnt:                  "sku_vnt",
+							Location:                "location",
+							Description:             "description",
+							CredentialType:          "credential_type",
+							CredentialValidDuration: "P1M",
+						},
+					},
+					PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
 			},
 			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
@@ -1855,7 +1883,25 @@ func TestCreateOrderPaid(t *testing.T) {
 						return model.Error("something_went_wrong")
 					},
 				},
-				req: newValidReq(model.StripePaymentMethod),
+				req: &model.CreateOrderRequestPaid{
+					ExternalID:  "cs_test_123",
+					PaymentProc: model.StripePaymentMethod,
+					Email:       "you@example.com",
+					Currency:    "USD",
+					Items: []model.OrderItemRequestNew{
+						{
+							Quantity:                1,
+							SKU:                     "sku",
+							SKUVnt:                  "sku_vnt",
+							Location:                "location",
+							Description:             "description",
+							CredentialType:          "credential_type",
+							CredentialValidDuration: "P1M",
+						},
+					},
+					PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
 			},
 			exp: tcExpected{err: model.Error("something_went_wrong")},
 		},
@@ -1905,7 +1951,25 @@ func TestCreateOrderPaid(t *testing.T) {
 						return nil
 					},
 				},
-				req: newValidReq(model.StripePaymentMethod),
+				req: &model.CreateOrderRequestPaid{
+					ExternalID:  "cs_test_123",
+					PaymentProc: model.StripePaymentMethod,
+					Email:       "you@example.com",
+					Currency:    "USD",
+					Items: []model.OrderItemRequestNew{
+						{
+							Quantity:                1,
+							SKU:                     "sku",
+							SKUVnt:                  "sku_vnt",
+							Location:                "location",
+							Description:             "description",
+							CredentialType:          "credential_type",
+							CredentialValidDuration: "P1M",
+						},
+					},
+					PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
 			},
 			exp: tcExpected{
 				ord: &model.Order{
@@ -1935,7 +1999,25 @@ func TestCreateOrderPaid(t *testing.T) {
 						return nil
 					},
 				},
-				req: newValidReq("radom"),
+				req: &model.CreateOrderRequestPaid{
+					ExternalID:  "cs_test_123",
+					PaymentProc: "radom",
+					Email:       "you@example.com",
+					Currency:    "USD",
+					Items: []model.OrderItemRequestNew{
+						{
+							Quantity:                1,
+							SKU:                     "sku",
+							SKUVnt:                  "sku_vnt",
+							Location:                "location",
+							Description:             "description",
+							CredentialType:          "credential_type",
+							CredentialValidDuration: "P1M",
+						},
+					},
+					PaidAt:    time.Date(2024, time.July, 1, 0, 0, 1, 0, time.UTC),
+					ExpiresAt: time.Date(2024, time.August, 1, 0, 0, 0, 0, time.UTC),
+				},
 			},
 			exp: tcExpected{ord: &model.Order{}},
 		},
@@ -1975,9 +2057,6 @@ func TestService_CreateOrderPaid(t *testing.T) {
 		exp   tcExpected
 	}
 
-	existingOrd := &model.Order{ID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")), Status: model.OrderStatusPaid}
-	existingItms := []model.OrderItem{{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000"))}}
-
 	tests := []testCase{
 		{
 			name: "duplicate_external_id_returns_existing_order_unchanged",
@@ -1989,20 +2068,24 @@ func TestService_CreateOrderPaid(t *testing.T) {
 							return nil, model.Error("unexpected_extID")
 						}
 
-						return existingOrd, nil
+						return &model.Order{ID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")), Status: model.OrderStatusPaid}, nil
 					},
 					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
-						return existingOrd, nil
+						return &model.Order{ID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")), Status: model.OrderStatusPaid}, nil
 					},
 				},
 				itmRepo: &repository.MockOrderItem{
 					FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, orderID uuid.UUID) ([]model.OrderItem, error) {
-						return existingItms, nil
+						return []model.OrderItem{{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000"))}}, nil
 					},
 				},
 			},
 			exp: tcExpected{
-				ord: &model.Order{ID: existingOrd.ID, Status: model.OrderStatusPaid, Items: existingItms},
+				ord: &model.Order{
+					ID:     uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+					Status: model.OrderStatusPaid,
+					Items:  []model.OrderItem{{ID: uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000"))}},
+				},
 			},
 		},
 
@@ -2012,7 +2095,7 @@ func TestService_CreateOrderPaid(t *testing.T) {
 				req: &model.CreateOrderRequestPaid{ExternalID: "cs_test_123"},
 				ordRepo: &repository.MockOrder{
 					FnGetByExternalID: func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error) {
-						return existingOrd, nil
+						return &model.Order{ID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")), Status: model.OrderStatusPaid}, nil
 					},
 					FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
 						return nil, model.Error("get_failed")
