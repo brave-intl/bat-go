@@ -32,6 +32,7 @@ func TestMain(m *testing.M) {
 type mockOrderService struct {
 	fnCreateOrderFromRequest func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	fnCreateOrder            func(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
+	fnCreateOrderPaid        func(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error)
 	fnCancelOrder            func(ctx context.Context, id uuid.UUID) error
 	fnExpireOrder            func(ctx context.Context, id uuid.UUID) error
 }
@@ -50,6 +51,14 @@ func (s *mockOrderService) CreateOrder(ctx context.Context, req *model.CreateOrd
 	}
 
 	return s.fnCreateOrder(ctx, req)
+}
+
+func (s *mockOrderService) CreateOrderPaid(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error) {
+	if s.fnCreateOrderPaid == nil {
+		return &model.Order{Items: []model.OrderItem{{}}}, nil
+	}
+
+	return s.fnCreateOrderPaid(ctx, req)
 }
 
 func (s *mockOrderService) CancelOrder(ctx context.Context, id uuid.UUID) error {
@@ -645,6 +654,208 @@ func TestOrder_CreateNew(t *testing.T) {
 				should.Equal(t, exp, bytes.TrimSpace(resp))
 				return
 			}
+
+			resp := rw.Body.Bytes()
+			act2 := &model.Order{}
+
+			err := json.Unmarshal(resp, act2)
+			must.Equal(t, nil, err)
+
+			should.Equal(t, tc.exp.result, act2)
+		})
+	}
+}
+
+func newTestPaidOrder() *model.Order {
+	return &model.Order{
+		Status: model.OrderStatusPaid,
+		Location: datastore.NullString{
+			NullString: sql.NullString{
+				Valid:  true,
+				String: "location",
+			},
+		},
+		Items: []model.OrderItem{
+			{
+				SKU:      "sku",
+				SKUVnt:   "sku_vnt",
+				Quantity: 1,
+				Price:    mustDecimalFromString("1"),
+				Subtotal: mustDecimalFromString("1"),
+				Location: datastore.NullString{
+					NullString: sql.NullString{
+						Valid:  true,
+						String: "location",
+					},
+				},
+				Description: datastore.NullString{
+					NullString: sql.NullString{
+						Valid:  true,
+						String: "description",
+					},
+				},
+				CredentialType: "credential_type",
+				ValidForISO:    ptrTo("P1M"),
+			},
+		},
+		TotalPrice: mustDecimalFromString("1"),
+	}
+}
+
+func TestOrder_CreatePaid(t *testing.T) {
+	type tcGiven struct {
+		svc  *mockOrderService
+		body string
+	}
+
+	type tcExpected struct {
+		err    *handlers.AppError
+		status int
+		result *model.Order
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	validBody := `{
+		"external_id": "cs_test_123",
+		"payment_processor": "stripe",
+		"email": "you@example.com",
+		"currency": "USD",
+		"paid_at": "2024-01-01T00:00:00Z",
+		"expires_at": "2024-02-01T00:00:00Z",
+		"items": [
+			{
+				"quantity": 1,
+				"sku": "sku",
+				"sku_variant": "sku_vnt",
+				"location": "location",
+				"description": "description",
+				"credential_type": "credential_type",
+				"credential_valid_duration": "P1M"
+			}
+		]
+	}`
+
+	tests := []testCase{
+		{
+			name: "invalid_email",
+			given: tcGiven{
+				svc: &mockOrderService{},
+				body: `{
+					"external_id": "cs_test_123",
+					"payment_processor": "stripe",
+					"email": "you_example.com",
+					"currency": "USD",
+					"paid_at": "2024-01-01T00:00:00Z",
+					"expires_at": "2024-02-01T00:00:00Z",
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "sku_vnt",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M"
+						}
+					]
+				}`,
+			},
+			exp: tcExpected{
+				err: &handlers.AppError{
+					Message: "Validation failed",
+					Code:    http.StatusBadRequest,
+					Data: map[string]any{"validationErrors": map[string]string{
+						"Email": "Key: 'CreateOrderRequestPaid.Email' Error:Field validation for 'Email' failed on the 'email' tag",
+					}},
+				},
+			},
+		},
+
+		{
+			name: "some_error",
+			given: tcGiven{
+				svc: &mockOrderService{
+					fnCreateOrderPaid: func(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error) {
+						return nil, model.Error("some_error")
+					},
+				},
+				body: validBody,
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(
+					model.Error("something went wrong"),
+					"Couldn't finish creating order",
+					http.StatusInternalServerError,
+				),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				svc: &mockOrderService{
+					fnCreateOrderPaid: func(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error) {
+						return newTestPaidOrder(), nil
+					},
+				},
+				body: validBody,
+			},
+			exp: tcExpected{
+				status: http.StatusCreated,
+				result: newTestPaidOrder(),
+			},
+		},
+
+		{
+			name: "duplicate_returns_existing_order",
+			given: tcGiven{
+				svc: &mockOrderService{
+					fnCreateOrderPaid: func(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error) {
+						return newTestPaidOrder(), nil
+					},
+				},
+				body: validBody,
+			},
+			exp: tcExpected{
+				status: http.StatusCreated,
+				result: newTestPaidOrder(),
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewOrder(tc.given.svc)
+
+			body := bytes.NewBufferString(tc.given.body)
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			act1 := h.CreatePaid(rw, req)
+			must.Equal(t, tc.exp.err, act1)
+
+			if tc.exp.err != nil {
+				act1.ServeHTTP(rw, req)
+				resp := rw.Body.Bytes()
+
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+
+				should.Equal(t, exp, bytes.TrimSpace(resp))
+				return
+			}
+
+			should.Equal(t, tc.exp.status, rw.Code)
 
 			resp := rw.Body.Bytes()
 			act2 := &model.Order{}

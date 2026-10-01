@@ -542,6 +542,20 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		)
 
 		r.Mount("/v1/orders-new", subr)
+
+		subrPaid := chi.NewRouter()
+		corsMwrPaidPost := skus.NewCORSMwr(corsOpts, http.MethodPost)
+
+		subrPaid.Method(
+			http.MethodPost,
+			"/",
+			middleware.InstrumentHandler(
+				"CreateOrderPaid",
+				corsMwrPaidPost(authMwr(handlers.AppHandler(orderh.CreatePaid))),
+			),
+		)
+
+		r.Mount("/v1/orders-paid", subrPaid)
 	}
 
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))

@@ -2982,15 +2982,36 @@ type paidOrderCreator interface {
 	appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
 }
 
-// createOrderWithReceipt creates a paid order with the supplied inputs.
-//
-// The function does not re-fetch the order after the final update to metadata.
-// This might change if there is such a need.
-//
-// NOTE: This is expressed as a function and not a method on Service due to the ugly dependency on Datastore inside s.createOrderPremium.
-// That will eventually be refactored, and this will be promoted to a method once testing is possible without Datastore.
+func createPaidOrder(ctx context.Context, svc paidOrderCreator, oreq model.CreateOrderRequestNew, expiresAt, paidAt time.Time, mdata datastore.Metadata) (*model.Order, error) {
+	items, err := createOrderItems(&oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	ordNew, err := newOrderNewForReq(&oreq, items, model.MerchID, model.OrderStatusPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	order, err := svc.createOrderPremium(ctx, &oreq, ordNew, items)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := svc.updateOrderWithExpPaidTime(ctx, order.ID, expiresAt, paidAt); err != nil {
+		return nil, err
+	}
+
+	if err := svc.appendOrderMetadata(ctx, order.ID, mdata); err != nil {
+		return nil, err
+	}
+
+	return order, nil
+}
+
+// createOrderWithReceipt creates a paid order for a mobile in-app purchase receipt.
 func createOrderWithReceipt(ctx context.Context, svc paidOrderCreator, itemReqSet map[string]model.OrderItemRequestNew, ppcfg *premiumPaymentProcConfig, rcpt model.ReceiptData, paidt time.Time) (*model.Order, error) {
-	// 1. Find out what's being purchased from SubscriptionID.
+	// Find out what's being purchased from SubscriptionID.
 	/*
 		Android:
 		- brave.leo.monthly -> brave-leo-premium
@@ -3002,41 +3023,62 @@ func createOrderWithReceipt(ctx context.Context, svc paidOrderCreator, itemReqSe
 	}
 
 	oreq := newCreateOrderReqNewMobile(ppcfg, itemNew)
-
-	// 2. Craft a request for creating an order.
-	items, err := createOrderItems(&oreq)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use status paid as it's been already paid in-app.
-	ordNew, err := newOrderNewForReq(&oreq, items, model.MerchID, model.OrderStatusPaid)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Create an order.
-	order, err := svc.createOrderPremium(ctx, &oreq, ordNew, items)
-	if err != nil {
-		return nil, err
-	}
-
-	// 4. Mark order as paid with proper expiration.
-	if err := svc.updateOrderWithExpPaidTime(ctx, order.ID, rcpt.ExpiresAt, paidt); err != nil {
-		return nil, err
-	}
-
-	// 5. Save mobile metadata.
 	mdata := newMobileOrderMdata(rcpt.Type, rcpt.ExtID)
-	if err := svc.appendOrderMetadata(ctx, order.ID, mdata); err != nil {
+
+	return createPaidOrder(ctx, svc, oreq, rcpt.ExpiresAt, paidt, mdata)
+}
+
+func createOrderPaid(ctx context.Context, svc paidOrderCreator, req *model.CreateOrderRequestPaid) (*model.Order, error) {
+	oreq := newOrderReqNewForPaid(req)
+	mdata := newPaidOrderMdata(req)
+
+	return createPaidOrder(ctx, svc, oreq, req.ExpiresAt, req.PaidAt, mdata)
+}
+
+func newOrderReqNewForPaid(req *model.CreateOrderRequestPaid) model.CreateOrderRequestNew {
+	return model.CreateOrderRequestNew{
+		Email:          req.Email,
+		Currency:       req.Currency,
+		PaymentMethods: []string{req.PaymentProc},
+		Items:          req.Items,
+	}
+}
+
+func newPaidOrderMdata(req *model.CreateOrderRequestPaid) datastore.Metadata {
+	result := datastore.Metadata{}
+
+	for k, v := range req.Metadata {
+		result[k] = v
+	}
+
+	result["externalID"] = req.ExternalID
+	result["paymentProcessor"] = req.PaymentProc
+
+	if req.PaymentProc == model.StripePaymentMethod {
+		result["stripeCheckoutSessionId"] = req.ExternalID
+	}
+
+	return result
+}
+
+// CreateOrderPaid creates an order already marked as paid.
+// Idempotent on ExternalID: a duplicate request returns the existing order unchanged.
+func (s *Service) CreateOrderPaid(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error) {
+	existing, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), req.ExternalID)
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
 		return nil, err
 	}
 
-	// Not re-fetching the order after updating metadata.
-	// At the moment, the only caller of this code is only interested
-	// in the order id.
+	if existing != nil { // idempotency
+		return s.getOrderFull(ctx, existing.ID)
+	}
 
-	return order, nil
+	ord, err := createOrderPaid(ctx, s, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return ord, nil
 }
 
 func (s *Service) recordPayFailureStripe(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, subID string) error {

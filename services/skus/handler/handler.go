@@ -26,6 +26,7 @@ const (
 type orderService interface {
 	CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
+	CreateOrderPaid(ctx context.Context, req *model.CreateOrderRequestPaid) (*model.Order, error)
 	CancelOrder(ctx context.Context, id uuid.UUID) error
 	ExpireOrder(ctx context.Context, id uuid.UUID) error
 }
@@ -108,6 +109,48 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderNew").Logger()
 
 	result, err := h.svc.CreateOrder(ctx, req)
+	if err != nil {
+		lg.Err(err).Msg("failed to create order")
+
+		if errors.Is(err, model.ErrInvalidOrderRequest) {
+			return handlers.WrapError(err, "Invalid order data supplied", http.StatusUnprocessableEntity)
+		}
+
+		return handlers.WrapError(model.ErrSomethingWentWrong, "Couldn't finish creating order", http.StatusInternalServerError)
+	}
+
+	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
+}
+
+func (h *Order) CreatePaid(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return handlers.WrapError(err, "Failed to read request body", http.StatusBadRequest)
+	}
+
+	req := &model.CreateOrderRequestPaid{}
+	if err := json.Unmarshal(raw, req); err != nil {
+		return handlers.WrapError(err, "Failed to deserialize request", http.StatusBadRequest)
+	}
+
+	ctx := r.Context()
+
+	if err := h.valid.StructCtx(ctx, req); err != nil {
+		verrs, ok := collectValidationErrors(err)
+		if !ok {
+			return handlers.WrapError(err, "Failed to validate request", http.StatusBadRequest)
+		}
+
+		return &handlers.AppError{
+			Message: "Validation failed",
+			Code:    http.StatusBadRequest,
+			Data:    map[string]any{"validationErrors": verrs},
+		}
+	}
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderPaid").Logger()
+
+	result, err := h.svc.CreateOrderPaid(ctx, req)
 	if err != nil {
 		lg.Err(err).Msg("failed to create order")
 

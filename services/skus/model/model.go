@@ -545,6 +545,17 @@ type CreateOrderRequestNew struct {
 	Locale         string                `json:"locale" validate:"omitempty,bcp47_language_tag"`
 }
 
+type CreateOrderRequestPaid struct {
+	ExternalID  string                `json:"external_id" validate:"required"`
+	PaymentProc string                `json:"payment_processor" validate:"required"`
+	Email       string                `json:"email" validate:"required,email"`
+	Currency    string                `json:"currency" validate:"required,iso4217"`
+	Items       []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
+	Metadata    map[string]string     `json:"metadata"`
+	PaidAt      time.Time             `json:"paid_at" validate:"required"`
+	ExpiresAt   time.Time             `json:"expires_at" validate:"required"`
+}
+
 // OrderItemRequestNew represents an item in an order request.
 type OrderItemRequestNew struct {
 	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
