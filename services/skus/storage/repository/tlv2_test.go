@@ -72,7 +72,7 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 
 					for i := range qs {
 						if _, err := dbi.ExecContext(ctx, qs[i]); err != nil {
-							return nil
+							return err
 						}
 					}
 
@@ -109,7 +109,7 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 
 					for i := range qs {
 						if _, err := dbi.ExecContext(ctx, qs[i]); err != nil {
-							return nil
+							return err
 						}
 					}
 
@@ -118,6 +118,105 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 			},
 			exp: tcExpected{
 				val: model.TLV2CredSubmissionReport{ReqIDMismatch: true},
+			},
+		},
+
+		{
+			name: "no_rows",
+			given: tcGiven{
+				orderID:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:     uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				reqID:      uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				firstBCred: "cred_01",
+
+				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error { return nil },
+			},
+			exp: tcExpected{
+				val: model.TLV2CredSubmissionReport{},
+			},
+		},
+
+		{
+			name: "submitted_via_other_batch_no_mismatch",
+			given: tcGiven{
+				orderID:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:     uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				reqID:      uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				firstBCred: "cred_01",
+
+				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
+					qs := []string{
+						`INSERT INTO order_cred_issuers (id, merchant_id, public_key, created_at)
+							VALUES ('5ca1ab1e-0000-4000-a000-000000000000', 'brave.com', 'public_key_01', '2024-01-01 00:00:01');`,
+
+						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
+							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+
+						// Different batch (request_id) than reqID, but holds the matching blinded cred.
+						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
+							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000001', '2024-01-01 00:00:02', '2024-01-02 00:00:02', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
+
+						// The batch for reqID matches the submitted cred too, so no mismatch.
+						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
+							VALUES ('facade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000000', '2024-01-01 00:00:02', '2024-01-02 00:00:02', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_12", "cred_13"]', '["scred_11", "scred_12", "scred_13"]');`,
+					}
+
+					for i := range qs {
+						if _, err := dbi.ExecContext(ctx, qs[i]); err != nil {
+							return err
+						}
+					}
+
+					return nil
+				},
+			},
+			exp: tcExpected{
+				val: model.TLV2CredSubmissionReport{Submitted: true},
+			},
+		},
+
+		{
+			name: "submitted_and_mismatch_across_batches",
+			given: tcGiven{
+				orderID:    uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
+				itemID:     uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")),
+				reqID:      uuid.Must(uuid.FromString("f100ded0-0000-4000-a000-000000000000")),
+				firstBCred: "cred_01",
+
+				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
+					qs := []string{
+						`INSERT INTO order_cred_issuers (id, merchant_id, public_key, created_at)
+							VALUES ('5ca1ab1e-0000-4000-a000-000000000000', 'brave.com', 'public_key_01', '2024-01-01 00:00:01');`,
+
+						`INSERT INTO orders (id, merchant_id, status, currency, total_price, created_at, updated_at)
+							VALUES ('c0c0a000-0000-4000-a000-000000000000', 'brave.com', 'paid', 'USD', 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+
+						`INSERT INTO order_items (id, order_id, sku, sku_variant, credential_type, currency, quantity, price, subtotal, created_at, updated_at)
+							VALUES ('ad0be000-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'brave-vpn-premium', 'brave-vpn-premium', 'time-limited-v2', 'USD', 1, 9.99, 9.99, '2024-01-01 00:00:01', '2024-01-01 00:00:01');`,
+
+						// Different batch (request_id) than reqID, holds the matching blinded cred.
+						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
+							VALUES ('decade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000001', '2024-01-01 00:00:02', '2024-01-02 00:00:02', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_01", "cred_02", "cred_03"]', '["scred_01", "scred_02", "scred_03"]');`,
+
+						// The batch for reqID holds a different, mismatched cred.
+						`INSERT INTO time_limited_v2_order_creds (id, issuer_id, order_id, item_id, request_id, valid_from, valid_to, created_at, batch_proof, public_key, blinded_creds, signed_creds)
+							VALUES ('facade00-0000-4000-a000-000000000000', '5ca1ab1e-0000-4000-a000-000000000000', 'c0c0a000-0000-4000-a000-000000000000', 'ad0be000-0000-4000-a000-000000000000', 'f100ded0-0000-4000-a000-000000000000', '2024-01-01 00:00:02', '2024-01-02 00:00:02', '2024-01-01 00:00:01', 'proof_01', 'public_key_01', '["cred_99", "cred_12", "cred_13"]', '["scred_11", "scred_12", "scred_13"]');`,
+					}
+
+					for i := range qs {
+						if _, err := dbi.ExecContext(ctx, qs[i]); err != nil {
+							return err
+						}
+					}
+
+					return nil
+				},
+			},
+			exp: tcExpected{
+				val: model.TLV2CredSubmissionReport{Submitted: true, ReqIDMismatch: true},
 			},
 		},
 	}
@@ -137,8 +236,7 @@ func TestTLV2_GetCredSubmissionReport(t *testing.T) {
 
 			if tc.given.fnBefore != nil {
 				err := tc.given.fnBefore(ctx, tx)
-				t.Log(err)
-				must.Equal(t, nil, err)
+				must.NoError(t, err)
 			}
 
 			actual, err := repo.GetCredSubmissionReport(ctx, tx, tc.given.orderID, tc.given.itemID, tc.given.reqID, tc.given.firstBCred)
@@ -701,8 +799,11 @@ func TestTLV2_ActiveBatchesByOrder(t *testing.T) {
 			name: "item_id_filter",
 			given: tcGiven{
 				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				itemID:  func() *uuid.UUID { id := uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")); return &id }(),
-				now:     time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC),
+				itemID: func() *uuid.UUID {
+					id := uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000"))
+					return &id
+				}(),
+				now: time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC),
 
 				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
 					if err := sharedFixture(ctx, dbi); err != nil {
