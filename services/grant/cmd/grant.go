@@ -541,6 +541,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 			),
 		)
 
+		subr.Method(
+			http.MethodPost,
+			"/paid",
+			middleware.InstrumentHandler("CreateOrderNewPaid", authMwr(handlers.AppHandler(orderh.CreatePaid))),
+		)
+
 		r.Mount("/v1/orders-new", subr)
 	}
 

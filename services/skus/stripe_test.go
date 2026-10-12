@@ -276,6 +276,17 @@ func TestStripeNotification_shouldRenew(t *testing.T) {
 			},
 			exp: true,
 		},
+
+		{
+			name: "guest_checkout_session_excluded",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.paid"},
+				invoice: &stripe.Invoice{
+					Metadata:      map[string]string{"type": "guest"},
+					BillingReason: stripe.InvoiceBillingReasonSubscriptionCreate,
+				},
+			},
+		},
 	}
 
 	for i := range tests {
@@ -283,6 +294,74 @@ func TestStripeNotification_shouldRenew(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			actual := tc.given.shouldRenew()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestStripeNotification_isGuestCheckoutSession(t *testing.T) {
+	tests := []struct {
+		name  string
+		given *stripeNotification
+		exp   bool
+	}{
+		{
+			name: "no_invoice",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.paid"},
+			},
+		},
+
+		{
+			name: "wrong_type",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.updated"},
+				invoice: &stripe.Invoice{
+					Metadata:      map[string]string{"type": "guest"},
+					BillingReason: stripe.InvoiceBillingReasonSubscriptionCreate,
+				},
+			},
+		},
+
+		{
+			name: "not_guest_metadata",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.paid"},
+				invoice: &stripe.Invoice{
+					BillingReason: stripe.InvoiceBillingReasonSubscriptionCreate,
+				},
+			},
+		},
+
+		{
+			name: "not_subscription_create",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.paid"},
+				invoice: &stripe.Invoice{
+					Metadata:      map[string]string{"type": "guest"},
+					BillingReason: stripe.InvoiceBillingReasonSubscriptionCycle,
+				},
+			},
+		},
+
+		{
+			name: "guest_checkout_session",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.paid"},
+				invoice: &stripe.Invoice{
+					Metadata:      map[string]string{"type": "guest"},
+					BillingReason: stripe.InvoiceBillingReasonSubscriptionCreate,
+				},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.isGuestCheckoutSession()
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -947,6 +1026,187 @@ func TestStripeNotification_expiresTime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actual, err := tc.given.expiresTime()
 			must.Equal(t, tc.exp.err, err)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func TestStripeNotification_umaData(t *testing.T) {
+	type tcExpected struct {
+		val promoMonthlyAnnualData
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given *stripeNotification
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "no_lines",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{},
+			},
+			exp: tcExpected{
+				err: errStripeNoInvoiceLines,
+			},
+		},
+
+		{
+			name: "empty_lines",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{
+					Lines: &stripe.InvoiceLineList{},
+				},
+			},
+			exp: tcExpected{
+				err: errStripeNoInvoiceLines,
+			},
+		},
+
+		{
+			name: "incomplete_data",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{
+					Lines: &stripe.InvoiceLineList{
+						Data: []*stripe.InvoiceLine{
+							{Metadata: map[string]string{"uma__order_id": "order_id"}},
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				err: errStripeIncompleteUMAData,
+			},
+		},
+
+		{
+			name: "valid",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{
+					Lines: &stripe.InvoiceLineList{
+						Data: []*stripe.InvoiceLine{
+							{
+								Metadata: map[string]string{
+									"uma__st_sub_id": "st_sub_id",
+									"uma__sub_id":    "sub_id",
+									"uma__order_id":  "order_id",
+								},
+							},
+						},
+					},
+				},
+			},
+			exp: tcExpected{
+				val: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id",
+					subID:       "sub_id",
+					orderID:     "order_id",
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := tc.given.umaData()
+			must.ErrorIs(t, err, tc.exp.err)
+
+			should.Equal(t, tc.exp.val, actual)
+		})
+	}
+}
+
+func Test_extractUMA(t *testing.T) {
+	type tcExpected struct {
+		val promoMonthlyAnnualData
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given map[string]string
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "nil_metadata",
+			exp: tcExpected{
+				err: errStripeIncompleteUMAData,
+			},
+		},
+
+		{
+			name:  "missing_order_id",
+			given: map[string]string{"uma__st_sub_id": "st_sub_id", "uma__sub_id": "sub_id"},
+			exp: tcExpected{
+				err: errStripeIncompleteUMAData,
+			},
+		},
+
+		{
+			name:  "missing_sub_id",
+			given: map[string]string{"uma__st_sub_id": "st_sub_id", "uma__order_id": "order_id"},
+			exp: tcExpected{
+				err: errStripeIncompleteUMAData,
+			},
+		},
+
+		{
+			name:  "missing_st_sub_id",
+			given: map[string]string{"uma__sub_id": "sub_id", "uma__order_id": "order_id"},
+			exp: tcExpected{
+				err: errStripeIncompleteUMAData,
+			},
+		},
+
+		{
+			name: "valid_no_coupon",
+			given: map[string]string{
+				"uma__st_sub_id": "st_sub_id",
+				"uma__sub_id":    "sub_id",
+				"uma__order_id":  "order_id",
+			},
+			exp: tcExpected{
+				val: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id",
+					subID:       "sub_id",
+					orderID:     "order_id",
+				},
+			},
+		},
+
+		{
+			name: "valid_with_coupon",
+			given: map[string]string{
+				"uma__st_sub_id": "st_sub_id",
+				"uma__sub_id":    "sub_id",
+				"uma__order_id":  "order_id",
+				"uma__coupon_id": "coup_id",
+			},
+			exp: tcExpected{
+				val: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id",
+					subID:       "sub_id",
+					orderID:     "order_id",
+					coupID:      "coup_id",
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := extractUMA(tc.given)
+			must.ErrorIs(t, err, tc.exp.err)
 
 			should.Equal(t, tc.exp.val, actual)
 		})
