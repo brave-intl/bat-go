@@ -93,7 +93,7 @@ func (x *stripeNotification) shouldExpireIncompletePayment() bool {
 }
 
 func (x *stripeNotification) isGuestCheckoutSession() bool {
-	return x.invoice != nil && x.invoice.Metadata["type"] == "guest" && x.raw.Type == "invoice.paid" && x.invoice.BillingReason == stripe.InvoiceBillingReasonSubscriptionCreate
+	return x.invoice != nil && x.invoice.Metadata["checkout_type"] == "guest" && x.raw.Type == "invoice.paid" && x.invoice.BillingReason == stripe.InvoiceBillingReasonSubscriptionCreate
 }
 
 func (x *stripeNotification) ntfType() string {

@@ -282,7 +282,7 @@ func TestStripeNotification_shouldRenew(t *testing.T) {
 			given: &stripeNotification{
 				raw: &stripe.Event{Type: "invoice.paid"},
 				invoice: &stripe.Invoice{
-					Metadata:      map[string]string{"type": "guest"},
+					Metadata:      map[string]string{"checkout_type": "guest"},
 					BillingReason: stripe.InvoiceBillingReasonSubscriptionCreate,
 				},
 			},
@@ -317,7 +317,7 @@ func TestStripeNotification_isGuestCheckoutSession(t *testing.T) {
 			given: &stripeNotification{
 				raw: &stripe.Event{Type: "invoice.updated"},
 				invoice: &stripe.Invoice{
-					Metadata:      map[string]string{"type": "guest"},
+					Metadata:      map[string]string{"checkout_type": "guest"},
 					BillingReason: stripe.InvoiceBillingReasonSubscriptionCreate,
 				},
 			},
@@ -338,7 +338,7 @@ func TestStripeNotification_isGuestCheckoutSession(t *testing.T) {
 			given: &stripeNotification{
 				raw: &stripe.Event{Type: "invoice.paid"},
 				invoice: &stripe.Invoice{
-					Metadata:      map[string]string{"type": "guest"},
+					Metadata:      map[string]string{"checkout_type": "guest"},
 					BillingReason: stripe.InvoiceBillingReasonSubscriptionCycle,
 				},
 			},
@@ -349,7 +349,7 @@ func TestStripeNotification_isGuestCheckoutSession(t *testing.T) {
 			given: &stripeNotification{
 				raw: &stripe.Event{Type: "invoice.paid"},
 				invoice: &stripe.Invoice{
-					Metadata:      map[string]string{"type": "guest"},
+					Metadata:      map[string]string{"checkout_type": "guest"},
 					BillingReason: stripe.InvoiceBillingReasonSubscriptionCreate,
 				},
 			},

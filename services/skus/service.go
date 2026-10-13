@@ -2473,15 +2473,6 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 }
 
 func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrderRequest) (*Order, error) {
-	isOneOff := len(req.Items) == 1 && req.Items[0].IsOriginPL()
-
-	switch {
-	case isOneOff && req.PaymentIntentID == "":
-		return nil, model.ErrInvalidOrderRequest
-	case !isOneOff && req.SubscriptionID == "":
-		return nil, model.ErrInvalidOrderRequest
-	}
-
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
@@ -2541,12 +2532,10 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 	}
 
 	umaData, err := extractUMA(req.Metadata)
-	if err == nil {
+	if err == nil { // Must be an UMA order
 		if err := s.processStripeMtoA(ctx, tx, umaData); err != nil {
 			return nil, err
 		}
-	} else if !errors.Is(err, errStripeIncompleteUMAData) {
-		return nil, err
 	}
 
 	result, err := s.getOrderFullTx(ctx, tx, ord.ID)

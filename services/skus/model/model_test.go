@@ -2108,6 +2108,97 @@ func TestOrder_IsOneOffPayment(t *testing.T) {
 	}
 }
 
+func TestCreatePaidOrderRequest_IsValid(t *testing.T) {
+	type tcGiven struct {
+		req *model.CreatePaidOrderRequest
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "one_off_valid",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					PaymentIntentID: "pi_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+					},
+				},
+			},
+		},
+
+		{
+			name: "one_off_missing_payment_intent_id",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					SubscriptionID: "sub_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrPaymentIntentIDRequired},
+		},
+
+		{
+			name: "subscription_valid",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					SubscriptionID: "sub_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "sku_vnt"},
+					},
+				},
+			},
+		},
+
+		{
+			name: "subscription_missing_subscription_id",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					PaymentIntentID: "pi_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "sku_vnt"},
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrSubscriptionIDRequired},
+		},
+
+		{
+			name: "multiple_items_missing_subscription_id",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					PaymentIntentID: "pi_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrSubscriptionIDRequired},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.req.IsValid()
+			should.ErrorIs(t, actual, tc.exp.err)
+		})
+	}
+}
+
 func ptrTo[T any](v T) *T {
 	return new(v)
 }

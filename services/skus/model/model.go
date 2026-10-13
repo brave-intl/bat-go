@@ -71,6 +71,9 @@ const (
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 
 	ErrStripePaymentIntentMissing Error = "model: stripe payment intent id missing"
+
+	ErrPaymentIntentIDRequired Error = "model: payment_intent_id is required for one-off orders"
+	ErrSubscriptionIDRequired  Error = "model: subscription_id is required for subscription orders"
 )
 
 const (
@@ -555,6 +558,20 @@ type CreatePaidOrderRequest struct {
 	Metadata          map[string]string     `json:"metadata"`
 	PaidAt            time.Time             `json:"paid_at" validate:"required"`
 	ExpiresAt         time.Time             `json:"expires_at" validate:"required"`
+}
+
+func (r *CreatePaidOrderRequest) IsValid() error {
+	isOneOff := len(r.Items) == 1 && r.Items[0].IsOriginPL()
+
+	switch {
+	case isOneOff && r.PaymentIntentID == "":
+		return ErrPaymentIntentIDRequired
+
+	case !isOneOff && r.SubscriptionID == "":
+		return ErrSubscriptionIDRequired
+	}
+
+	return nil
 }
 
 // OrderItemRequestNew represents an item in an order request.

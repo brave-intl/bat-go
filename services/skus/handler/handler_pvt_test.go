@@ -190,18 +190,6 @@ func TestCollectValidationErrors_CreatePaidOrderRequest(t *testing.T) {
 		exp   tcExpected
 	}
 
-	validItems := []model.OrderItemRequestNew{
-		{
-			Quantity:                1,
-			SKU:                     "sku",
-			SKUVnt:                  "sku_vnt",
-			Location:                "location",
-			Description:             "description",
-			CredentialType:          "credential_type",
-			CredentialValidDuration: "P1M",
-		},
-	}
-
 	tests := []testCase{
 		{
 			name:  "invalid_type",
@@ -216,9 +204,19 @@ func TestCollectValidationErrors_CreatePaidOrderRequest(t *testing.T) {
 				SubscriptionID:    "sub_id",
 				PaymentProc:       "stripe",
 				Currency:          "USD",
-				Items:             validItems,
-				PaidAt:            time.Now(),
-				ExpiresAt:         time.Now(),
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                1,
+						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
+						Location:                "location",
+						Description:             "description",
+						CredentialType:          "credential_type",
+						CredentialValidDuration: "P1M",
+					},
+				},
+				PaidAt:    time.Now(),
+				ExpiresAt: time.Now(),
 			},
 			exp: tcExpected{noErr: true},
 		},
@@ -230,9 +228,19 @@ func TestCollectValidationErrors_CreatePaidOrderRequest(t *testing.T) {
 				PaymentIntentID:   "pi_id",
 				PaymentProc:       "stripe",
 				Currency:          "USD",
-				Items:             validItems,
-				PaidAt:            time.Now(),
-				ExpiresAt:         time.Now(),
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                1,
+						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
+						Location:                "location",
+						Description:             "description",
+						CredentialType:          "credential_type",
+						CredentialValidDuration: "P1M",
+					},
+				},
+				PaidAt:    time.Now(),
+				ExpiresAt: time.Now(),
 			},
 			exp: tcExpected{noErr: true},
 		},
@@ -243,9 +251,19 @@ func TestCollectValidationErrors_CreatePaidOrderRequest(t *testing.T) {
 				SubscriptionID: "sub_id",
 				PaymentProc:    "stripe",
 				Currency:       "USD",
-				Items:          validItems,
-				PaidAt:         time.Now(),
-				ExpiresAt:      time.Now(),
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                1,
+						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
+						Location:                "location",
+						Description:             "description",
+						CredentialType:          "credential_type",
+						CredentialValidDuration: "P1M",
+					},
+				},
+				PaidAt:    time.Now(),
+				ExpiresAt: time.Now(),
 			},
 			exp: tcExpected{
 				result: map[string]string{
@@ -260,7 +278,17 @@ func TestCollectValidationErrors_CreatePaidOrderRequest(t *testing.T) {
 			given: &model.CreatePaidOrderRequest{
 				PaymentProc: "stripe",
 				Currency:    "USDx",
-				Items:       validItems,
+				Items: []model.OrderItemRequestNew{
+					{
+						Quantity:                1,
+						SKU:                     "sku",
+						SKUVnt:                  "sku_vnt",
+						Location:                "location",
+						Description:             "description",
+						CredentialType:          "credential_type",
+						CredentialValidDuration: "P1M",
+					},
+				},
 			},
 			exp: tcExpected{
 				result: map[string]string{

@@ -719,6 +719,39 @@ func TestOrder_CreatePaid(t *testing.T) {
 		},
 
 		{
+			name: "one_off_missing_payment_intent_id",
+			given: tcGiven{
+				svc: &mockOrderService{},
+				body: `{
+					"checkout_session_id": "cs_id",
+					"subscription_id": "sub_id",
+					"payment_processor": "stripe",
+					"currency": "USD",
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "brave-origin-premium-perpetual-license",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M"
+						}
+					],
+					"paid_at": "2024-01-01T00:00:00Z",
+					"expires_at": "2024-02-01T00:00:00Z"
+				}`,
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(
+					model.ErrPaymentIntentIDRequired,
+					"Invalid order data supplied",
+					http.StatusUnprocessableEntity,
+				),
+			},
+		},
+
+		{
 			name: "some_error",
 			given: tcGiven{
 				svc: &mockOrderService{
@@ -886,7 +919,7 @@ func TestOrder_CreatePaid(t *testing.T) {
 			act2 := &model.Order{}
 
 			err := json.Unmarshal(resp, act2)
-			must.Equal(t, nil, err)
+			must.NoError(t, err)
 
 			should.Equal(t, tc.exp.result, act2)
 		})

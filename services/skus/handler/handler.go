@@ -148,6 +148,10 @@ func (h *Order) CreatePaid(w http.ResponseWriter, r *http.Request) *handlers.App
 		}
 	}
 
+	if err := req.IsValid(); err != nil {
+		return handlers.WrapError(err, "Invalid order data supplied", http.StatusUnprocessableEntity)
+	}
+
 	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderPaid").Logger()
 
 	result, err := h.svc.CreatePaidOrder(ctx, req)
