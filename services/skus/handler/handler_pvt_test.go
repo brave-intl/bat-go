@@ -210,10 +210,24 @@ func TestCollectValidationErrors_CreatePaidOrderRequest(t *testing.T) {
 		},
 
 		{
-			name: "no_errors",
+			name: "no_errors_subscription_id",
 			given: &model.CreatePaidOrderRequest{
 				CheckoutSessionID: "cs_id",
 				SubscriptionID:    "sub_id",
+				PaymentProc:       "stripe",
+				Currency:          "USD",
+				Items:             validItems,
+				PaidAt:            time.Now(),
+				ExpiresAt:         time.Now(),
+			},
+			exp: tcExpected{noErr: true},
+		},
+
+		{
+			name: "no_errors_payment_intent_id",
+			given: &model.CreatePaidOrderRequest{
+				CheckoutSessionID: "cs_id",
+				PaymentIntentID:   "pi_id",
 				PaymentProc:       "stripe",
 				Currency:          "USD",
 				Items:             validItems,
@@ -251,7 +265,8 @@ func TestCollectValidationErrors_CreatePaidOrderRequest(t *testing.T) {
 			exp: tcExpected{
 				result: map[string]string{
 					"CheckoutSessionID": "Key: 'CreatePaidOrderRequest.CheckoutSessionID' Error:Field validation for 'CheckoutSessionID' failed on the 'required' tag",
-					"SubscriptionID":    "Key: 'CreatePaidOrderRequest.SubscriptionID' Error:Field validation for 'SubscriptionID' failed on the 'required' tag",
+					"SubscriptionID":    "Key: 'CreatePaidOrderRequest.SubscriptionID' Error:Field validation for 'SubscriptionID' failed on the 'required_without' tag",
+					"PaymentIntentID":   "Key: 'CreatePaidOrderRequest.PaymentIntentID' Error:Field validation for 'PaymentIntentID' failed on the 'required_without' tag",
 					"Currency":          "Key: 'CreatePaidOrderRequest.Currency' Error:Field validation for 'Currency' failed on the 'iso4217' tag",
 					"PaidAt":            "Key: 'CreatePaidOrderRequest.PaidAt' Error:Field validation for 'PaidAt' failed on the 'required' tag",
 					"ExpiresAt":         "Key: 'CreatePaidOrderRequest.ExpiresAt' Error:Field validation for 'ExpiresAt' failed on the 'required' tag",

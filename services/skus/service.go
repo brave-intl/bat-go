@@ -2473,6 +2473,15 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 }
 
 func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrderRequest) (*Order, error) {
+	isOneOff := len(req.Items) == 1 && req.Items[0].IsOriginPL()
+
+	switch {
+	case isOneOff && req.PaymentIntentID == "":
+		return nil, model.ErrInvalidOrderRequest
+	case !isOneOff && req.SubscriptionID == "":
+		return nil, model.ErrInvalidOrderRequest
+	}
+
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
@@ -2513,8 +2522,18 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 		return nil, err
 	}
 
-	if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "stripeSubscriptionId", req.SubscriptionID); err != nil {
+	if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
 		return nil, err
+	}
+
+	if ord.IsOneOffPayment() {
+		if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "stripePaymentId", req.PaymentIntentID); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "stripeSubscriptionId", req.SubscriptionID); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := s.updateOrderWithExpPaidTimeTx(ctx, tx, ord.ID, req.ExpiresAt, req.PaidAt); err != nil {

@@ -547,7 +547,8 @@ type CreateOrderRequestNew struct {
 
 type CreatePaidOrderRequest struct {
 	CheckoutSessionID string                `json:"checkout_session_id" validate:"required"`
-	SubscriptionID    string                `json:"subscription_id" validate:"required"`
+	SubscriptionID    string                `json:"subscription_id" validate:"required_without=PaymentIntentID"`
+	PaymentIntentID   string                `json:"payment_intent_id" validate:"required_without=SubscriptionID"`
 	PaymentProc       string                `json:"payment_processor" validate:"required"`
 	Currency          string                `json:"currency" validate:"required,iso4217"`
 	Items             []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
@@ -574,6 +575,10 @@ type OrderItemRequestNew struct {
 	IssuanceInterval            *string             `json:"issuance_interval"`
 	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
 	RadomMetadata               *ItemRadomMetadata  `json:"radom_metadata"`
+}
+
+func (r *OrderItemRequestNew) IsOriginPL() bool {
+	return r.SKUVnt == "brave-origin-premium-perpetual-license"
 }
 
 func (r *OrderItemRequestNew) TokenBufferOrDefault() int {
