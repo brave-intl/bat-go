@@ -2535,7 +2535,7 @@ func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, re
 			return nil, err
 		}
 	} else {
-		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", req.SubscriptionID); err != nil {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", req.StripeSubscriptionID); err != nil {
 			return nil, err
 		}
 	}

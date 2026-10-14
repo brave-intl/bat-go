@@ -2004,10 +2004,10 @@ func (suite *ControllersTestSuite) TestOrder_CreatePaid() {
 	expiresAt := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
 
 	oreq := &model.CreatePaidOrderRequest{
-		CheckoutSessionID: "cs_test_" + uuid.NewV4().String(),
-		SubscriptionID:    "sub_test_" + uuid.NewV4().String(),
-		PaymentProc:       "stripe",
-		Currency:          "USD",
+		CheckoutSessionID:    "cs_test_" + uuid.NewV4().String(),
+		StripeSubscriptionID: "sub_test_" + uuid.NewV4().String(),
+		PaymentProc:          "stripe",
+		Currency:             "USD",
 		Items: []model.OrderItemRequestNew{
 			{
 				Quantity:                1,
@@ -2065,7 +2065,7 @@ func (suite *ControllersTestSuite) TestOrder_CreatePaid() {
 	suite.Require().NotNil(ord.ExpiresAt)
 	suite.Equal(expiresAt, ord.ExpiresAt.UTC())
 	suite.Equal(oreq.CheckoutSessionID, ord.Metadata["stripeCheckoutSessionId"])
-	suite.Equal(oreq.SubscriptionID, ord.Metadata["stripeSubscriptionId"])
+	suite.Equal(oreq.StripeSubscriptionID, ord.Metadata["stripeSubscriptionId"])
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic

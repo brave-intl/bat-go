@@ -549,15 +549,15 @@ type CreateOrderRequestNew struct {
 }
 
 type CreatePaidOrderRequest struct {
-	CheckoutSessionID string                `json:"checkout_session_id" validate:"required"`
-	SubscriptionID    string                `json:"subscription_id" validate:"required_without=PaymentIntentID"`
-	PaymentIntentID   string                `json:"payment_intent_id" validate:"required_without=SubscriptionID"`
-	PaymentProc       string                `json:"payment_processor" validate:"required"`
-	Currency          string                `json:"currency" validate:"required,iso4217"`
-	Items             []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
-	Metadata          map[string]string     `json:"metadata"`
-	PaidAt            time.Time             `json:"paid_at" validate:"required"`
-	ExpiresAt         time.Time             `json:"expires_at" validate:"required"`
+	CheckoutSessionID    string                `json:"checkout_session_id" validate:"required"`
+	StripeSubscriptionID string                `json:"stripe_subscription_id" validate:"required_without=PaymentIntentID"`
+	PaymentIntentID      string                `json:"payment_intent_id" validate:"required_without=StripeSubscriptionID"`
+	PaymentProc          string                `json:"payment_processor" validate:"required"`
+	Currency             string                `json:"currency" validate:"required,iso4217"`
+	Items                []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
+	Metadata             map[string]string     `json:"metadata"`
+	PaidAt               time.Time             `json:"paid_at" validate:"required"`
+	ExpiresAt            time.Time             `json:"expires_at" validate:"required"`
 }
 
 func (r *CreatePaidOrderRequest) IsValid() error {
@@ -567,7 +567,7 @@ func (r *CreatePaidOrderRequest) IsValid() error {
 	case isOneOff && r.PaymentIntentID == "":
 		return ErrPaymentIntentIDRequired
 
-	case !isOneOff && r.SubscriptionID == "":
+	case !isOneOff && r.StripeSubscriptionID == "":
 		return ErrSubscriptionIDRequired
 	}
 

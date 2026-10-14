@@ -689,7 +689,7 @@ func TestOrder_CreatePaid(t *testing.T) {
 			given: tcGiven{
 				svc: &mockOrderService{},
 				body: `{
-					"subscription_id": "sub_id",
+					"stripe_subscription_id": "sub_id",
 					"payment_processor": "stripe",
 					"currency": "USD",
 					"items": [
@@ -724,7 +724,7 @@ func TestOrder_CreatePaid(t *testing.T) {
 				svc: &mockOrderService{},
 				body: `{
 					"checkout_session_id": "cs_id",
-					"subscription_id": "sub_id",
+					"stripe_subscription_id": "sub_id",
 					"payment_processor": "stripe",
 					"currency": "USD",
 					"items": [
@@ -761,7 +761,7 @@ func TestOrder_CreatePaid(t *testing.T) {
 				},
 				body: `{
 					"checkout_session_id": "cs_id",
-					"subscription_id": "sub_id",
+					"stripe_subscription_id": "sub_id",
 					"payment_processor": "stripe",
 					"currency": "USD",
 					"items": [
@@ -832,7 +832,7 @@ func TestOrder_CreatePaid(t *testing.T) {
 				},
 				body: `{
 					"checkout_session_id": "cs_id",
-					"subscription_id": "sub_id",
+					"stripe_subscription_id": "sub_id",
 					"payment_processor": "stripe",
 					"currency": "USD",
 					"items": [

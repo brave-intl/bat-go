@@ -2140,7 +2140,7 @@ func TestCreatePaidOrderRequest_IsValid(t *testing.T) {
 			name: "one_off_missing_payment_intent_id",
 			given: tcGiven{
 				req: &model.CreatePaidOrderRequest{
-					SubscriptionID: "sub_id",
+					StripeSubscriptionID: "sub_id",
 					Items: []model.OrderItemRequestNew{
 						{SKUVnt: "brave-origin-premium-perpetual-license"},
 					},
@@ -2153,7 +2153,7 @@ func TestCreatePaidOrderRequest_IsValid(t *testing.T) {
 			name: "subscription_valid",
 			given: tcGiven{
 				req: &model.CreatePaidOrderRequest{
-					SubscriptionID: "sub_id",
+					StripeSubscriptionID: "sub_id",
 					Items: []model.OrderItemRequestNew{
 						{SKUVnt: "sku_vnt"},
 					},
