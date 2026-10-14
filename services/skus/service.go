@@ -2544,8 +2544,8 @@ func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, re
 		return nil, err
 	}
 
-	umaData, err := extractUMA(req.Metadata)
-	if err == nil { // Must be an UMA order
+	// Must be an UMA order
+	if umaData, err := extractUMA(req.Metadata); err == nil {
 		if err := s.processStripeMtoA(ctx, dbi, umaData); err != nil {
 			return nil, err
 		}
