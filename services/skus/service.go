@@ -2479,6 +2479,19 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	res, err := s.createPaidOrderTx(ctx, tx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreatePaidOrderRequest) (*Order, error) {
 	oreq := &model.CreateOrderRequestNew{
 		Currency: req.Currency,
 		Items:    req.Items,
@@ -2490,7 +2503,7 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 		return nil, err
 	}
 
-	numIntervals, err := s.createOrderIssuers(ctx, tx, model.MerchID, items)
+	numIntervals, err := s.createOrderIssuers(ctx, dbi, model.MerchID, items)
 	if err != nil {
 		return nil, err
 	}
@@ -2500,54 +2513,45 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 		return nil, err
 	}
 
-	ord, err := s.createOrderTx(ctx, tx, ordNew, items)
+	ord, err := s.createOrderTx(ctx, dbi, ordNew, items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
-	if err := s.updateOrderIntervals(ctx, tx, ord.ID, items, numIntervals); err != nil {
+	if err := s.updateOrderIntervals(ctx, dbi, ord.ID, items, numIntervals); err != nil {
 		return nil, fmt.Errorf("failed to update order metadata: %w", err)
 	}
 
-	if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "stripeCheckoutSessionId", req.CheckoutSessionID); err != nil {
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeCheckoutSessionId", req.CheckoutSessionID); err != nil {
 		return nil, err
 	}
 
-	if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
 		return nil, err
 	}
 
 	if ord.IsOneOffPayment() {
-		if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "stripePaymentId", req.PaymentIntentID); err != nil {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripePaymentId", req.PaymentIntentID); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := s.orderRepo.AppendMetadata(ctx, tx, ord.ID, "stripeSubscriptionId", req.SubscriptionID); err != nil {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", req.SubscriptionID); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := s.updateOrderWithExpPaidTimeTx(ctx, tx, ord.ID, req.ExpiresAt, req.PaidAt); err != nil {
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, req.ExpiresAt, req.PaidAt); err != nil {
 		return nil, err
 	}
 
 	umaData, err := extractUMA(req.Metadata)
 	if err == nil { // Must be an UMA order
-		if err := s.processStripeMtoA(ctx, tx, umaData); err != nil {
+		if err := s.processStripeMtoA(ctx, dbi, umaData); err != nil {
 			return nil, err
 		}
 	}
 
-	result, err := s.getOrderFullTx(ctx, tx, ord.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return s.getOrderFullTx(ctx, dbi, ord.ID)
 }
 
 func (s *Service) updateOrderIntervals(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
