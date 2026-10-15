@@ -71,6 +71,9 @@ const (
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 
 	ErrStripePaymentIntentMissing Error = "model: stripe payment intent id missing"
+
+	ErrPaymentIntentIDRequired Error = "model: payment_intent_id is required for one-off orders"
+	ErrSubscriptionIDRequired  Error = "model: subscription_id is required for subscription orders"
 )
 
 const (
@@ -545,6 +548,32 @@ type CreateOrderRequestNew struct {
 	Locale         string                `json:"locale" validate:"omitempty,bcp47_language_tag"`
 }
 
+type CreatePaidOrderRequest struct {
+	CheckoutSessionID    string                `json:"checkout_session_id" validate:"required"`
+	StripeSubscriptionID string                `json:"stripe_subscription_id" validate:"required_without=PaymentIntentID"`
+	PaymentIntentID      string                `json:"payment_intent_id" validate:"required_without=StripeSubscriptionID"`
+	PaymentProc          string                `json:"payment_processor" validate:"required"`
+	Currency             string                `json:"currency" validate:"required,iso4217"`
+	Items                []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
+	Metadata             map[string]string     `json:"metadata"`
+	PaidAt               time.Time             `json:"paid_at" validate:"required"`
+	ExpiresAt            time.Time             `json:"expires_at" validate:"required"`
+}
+
+func (r *CreatePaidOrderRequest) IsValid() error {
+	isOneOff := len(r.Items) == 1 && r.Items[0].IsOriginPL()
+
+	switch {
+	case isOneOff && r.PaymentIntentID == "":
+		return ErrPaymentIntentIDRequired
+
+	case !isOneOff && r.StripeSubscriptionID == "":
+		return ErrSubscriptionIDRequired
+	}
+
+	return nil
+}
+
 // OrderItemRequestNew represents an item in an order request.
 type OrderItemRequestNew struct {
 	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
@@ -563,6 +592,10 @@ type OrderItemRequestNew struct {
 	IssuanceInterval            *string             `json:"issuance_interval"`
 	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
 	RadomMetadata               *ItemRadomMetadata  `json:"radom_metadata"`
+}
+
+func (r *OrderItemRequestNew) IsOriginPL() bool {
+	return r.SKUVnt == "brave-origin-premium-perpetual-license"
 }
 
 func (r *OrderItemRequestNew) TokenBufferOrDefault() int {

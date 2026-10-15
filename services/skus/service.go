@@ -2188,7 +2188,16 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		return s.processStripeMtoA(ctx, dbi, ntf)
+		umaData, err := ntf.umaData()
+		if err != nil {
+			if errors.Is(err, errStripeIncompleteUMAData) {
+				return nil
+			}
+
+			return err
+		}
+
+		return s.processStripeMtoA(ctx, dbi, umaData)
 
 	case ntf.shouldCancel(), ntf.shouldExpireIncompletePayment():
 		oid, err := ntf.orderID()
@@ -2461,6 +2470,88 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 	}
 
 	return order, nil
+}
+
+func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrderRequest) (*Order, error) {
+	tx, err := s.Datastore.RawDB().Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := s.createPaidOrderTx(ctx, tx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreatePaidOrderRequest) (*Order, error) {
+	oreq := &model.CreateOrderRequestNew{
+		Currency: req.Currency,
+		Items:    req.Items,
+		Metadata: req.Metadata,
+	}
+
+	items, err := createOrderItems(oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	numIntervals, err := s.createOrderIssuers(ctx, dbi, model.MerchID, items)
+	if err != nil {
+		return nil, err
+	}
+
+	ordNew, err := newOrderNewForReq(oreq, items, model.MerchID, model.OrderStatusPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	ord, err := s.createOrderTx(ctx, dbi, ordNew, items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order: %w", err)
+	}
+
+	if err := s.updateOrderIntervals(ctx, dbi, ord.ID, items, numIntervals); err != nil {
+		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeCheckoutSessionId", req.CheckoutSessionID); err != nil {
+		return nil, err
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
+		return nil, err
+	}
+
+	if ord.IsOneOffPayment() {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripePaymentId", req.PaymentIntentID); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", req.StripeSubscriptionID); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, req.ExpiresAt, req.PaidAt); err != nil {
+		return nil, err
+	}
+
+	// Must be an UMA order
+	if umaData, err := extractUMA(req.Metadata); err == nil {
+		if err := s.processStripeMtoA(ctx, dbi, umaData); err != nil {
+			return nil, err
+		}
+	}
+
+	return s.getOrderFullTx(ctx, dbi, ord.ID)
 }
 
 func (s *Service) updateOrderIntervals(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
@@ -3097,18 +3188,7 @@ func (s *Service) activateStripePL(ctx context.Context, dbi sqlx.ExecerContext, 
 	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripePaymentId", paymentID)
 }
 
-func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
-	umaData, err := ntf.umaData()
-	if err != nil {
-		// Recover from the error is possible.
-		// Not all orders are migration orders, therefore must not fail.
-		if errors.Is(err, errStripeIncompleteUMAData) {
-			return nil
-		}
-
-		return err
-	}
-
+func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, umaData promoMonthlyAnnualData) error {
 	oid, err := uuid.FromString(umaData.orderID)
 	if err != nil {
 		return err
