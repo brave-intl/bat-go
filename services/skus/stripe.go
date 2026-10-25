@@ -73,7 +73,7 @@ func (x *stripeNotification) shouldProcess() bool {
 }
 
 func (x *stripeNotification) shouldRenew() bool {
-	return x.invoice != nil && x.raw.Type == "invoice.paid"
+	return x.invoice != nil && x.raw.Type == "invoice.paid" && !x.isGuestCheckoutSession()
 }
 
 func (x *stripeNotification) shouldCancel() bool {
@@ -90,6 +90,10 @@ func (x *stripeNotification) shouldRecordPayFailure() bool {
 
 func (x *stripeNotification) shouldExpireIncompletePayment() bool {
 	return x.sub != nil && x.raw.Type == "customer.subscription.updated" && x.sub.Status == stripe.SubscriptionStatusIncompleteExpired
+}
+
+func (x *stripeNotification) isGuestCheckoutSession() bool {
+	return x.invoice != nil && x.invoice.Metadata["checkout_type"] == "guest" && x.raw.Type == "invoice.paid" && x.invoice.BillingReason == stripe.InvoiceBillingReasonSubscriptionCreate
 }
 
 func (x *stripeNotification) ntfType() string {
@@ -227,14 +231,25 @@ func (x *stripeNotification) expiresTime() (time.Time, error) {
 	return time.Unix(sub.Period.End, 0).UTC(), nil
 }
 
+type promoMonthlyAnnualData struct {
+	subID       string
+	orderID     string
+	coupID      string
+	stripeSubID string
+}
+
 func (x *stripeNotification) umaData() (promoMonthlyAnnualData, error) {
 	if x.invoice.Lines == nil || len(x.invoice.Lines.Data) == 0 {
 		return promoMonthlyAnnualData{}, errStripeNoInvoiceLines
 	}
 
-	stSubID, ok1 := x.invoice.Lines.Data[0].Metadata["uma__st_sub_id"]
-	subID, ok2 := x.invoice.Lines.Data[0].Metadata["uma__sub_id"]
-	ordID, ok3 := x.invoice.Lines.Data[0].Metadata["uma__order_id"]
+	return extractUMA(x.invoice.Lines.Data[0].Metadata)
+}
+
+func extractUMA(metadata map[string]string) (promoMonthlyAnnualData, error) {
+	stSubID, ok1 := metadata["uma__st_sub_id"]
+	subID, ok2 := metadata["uma__sub_id"]
+	ordID, ok3 := metadata["uma__order_id"]
 
 	// For MtoA, there should be all three pieces.
 	// Other combinations are invalid.
@@ -246,7 +261,7 @@ func (x *stripeNotification) umaData() (promoMonthlyAnnualData, error) {
 		}
 
 		// Coupon is optional.
-		if coupID, ok := x.invoice.Lines.Data[0].Metadata["uma__coupon_id"]; ok {
+		if coupID, ok := metadata["uma__coupon_id"]; ok {
 			result.coupID = coupID
 		}
 
@@ -254,13 +269,6 @@ func (x *stripeNotification) umaData() (promoMonthlyAnnualData, error) {
 	}
 
 	return promoMonthlyAnnualData{}, errStripeIncompleteUMAData
-}
-
-type promoMonthlyAnnualData struct {
-	subID       string
-	orderID     string
-	coupID      string
-	stripeSubID string
 }
 
 func parseStripeEventData[T any](data []byte) (*T, error) {

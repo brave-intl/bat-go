@@ -1997,6 +1997,77 @@ func (suite *ControllersTestSuite) TestOrder_Cancel() {
 	suite.Equal(model.OrderStatusCanceled, ord2.Status)
 }
 
+func (suite *ControllersTestSuite) TestOrder_CreatePaid() {
+	suite.service.payHistRepo = repository.NewOrderPayHistory()
+
+	paidAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	expiresAt := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
+
+	oreq := &model.CreatePaidOrderRequest{
+		CheckoutSessionID:    "cs_test_" + uuid.NewV4().String(),
+		StripeSubscriptionID: "sub_test_" + uuid.NewV4().String(),
+		PaymentProc:          "stripe",
+		Currency:             "USD",
+		Items: []model.OrderItemRequestNew{
+			{
+				Quantity:                1,
+				SKU:                     "sku",
+				SKUVnt:                  "sku_vnt",
+				Location:                "location",
+				Description:             "description",
+				CredentialType:          timeLimited,
+				CredentialValidDuration: "P1M",
+				Price:                   decimal.NewFromInt(1),
+			},
+		},
+		PaidAt:    paidAt,
+		ExpiresAt: expiresAt,
+	}
+
+	b, err := json.Marshal(oreq)
+	suite.Require().NoError(err)
+
+	uri := "/v1/orders-new/paid"
+
+	req := httptest.NewRequest(http.MethodPost, uri, bytes.NewBuffer(b))
+
+	rw := httptest.NewRecorder()
+
+	oh := handler.NewOrder(suite.service)
+
+	rtr := chi.NewRouter()
+	subr := chi.NewRouter()
+	subr.Method(
+		http.MethodPost,
+		"/paid",
+		handlers.AppHandler(oh.CreatePaid),
+	)
+
+	rtr.Mount("/v1/orders-new", subr)
+
+	srv := &http.Server{Addr: ":8080", Handler: rtr}
+	srv.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusCreated, rw.Code, rw.Body.String())
+
+	var result model.Order
+	err = json.NewDecoder(rw.Body).Decode(&result)
+	suite.Require().NoError(err)
+
+	ctx := context.Background()
+
+	ord, err := suite.service.orderRepo.Get(ctx, suite.service.Datastore.RawDB(), result.ID)
+	suite.Require().NoError(err)
+
+	suite.Equal(model.OrderStatusPaid, ord.Status)
+	suite.Require().NotNil(ord.LastPaidAt)
+	suite.Equal(paidAt, ord.LastPaidAt.UTC())
+	suite.Require().NotNil(ord.ExpiresAt)
+	suite.Equal(expiresAt, ord.ExpiresAt.UTC())
+	suite.Equal(oreq.CheckoutSessionID, ord.Metadata["stripeCheckoutSessionId"])
+	suite.Equal(oreq.StripeSubscriptionID, ord.Metadata["stripeSubscriptionId"])
+}
+
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
 func (suite *ControllersTestSuite) ReadSigningOrderRequestMessage(ctx context.Context, topic string) SigningOrderRequest {
 	kafkaReader, err := kafkautils.NewKafkaReader(ctx, test.RandomString(), topic)
