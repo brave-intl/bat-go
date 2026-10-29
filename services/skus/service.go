@@ -2858,13 +2858,25 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		return nil, &receiptValidError{err: err}
 	}
 
-	// 2. Check for existence.
-	ord, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), rcpt.ExtID)
-	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+	paidt := time.Now()
+
+	// Serialize the existence check and creation per receipt: without the lock,
+	// concurrent submissions of the same receipt create duplicate paid orders.
+	tx, err := s.Datastore.RawDB().Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := waitAndLockTx(ctx, tx, rcpt.ExtID); err != nil {
 		return nil, err
 	}
 
-	paidt := time.Now()
+	// 2. Check for existence.
+	ord, err := s.orderRepo.GetByExternalID(ctx, tx, rcpt.ExtID)
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+		return nil, err
+	}
 
 	// 3. Return it if found. The caller must handle it accordingly.
 	if err == nil {
@@ -2880,8 +2892,18 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	}
 
 	// 4. Create if missing.
+	order, err := createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
+	if err != nil {
+		return nil, err
+	}
 
-	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
+	// Commit only once the order exists: the advisory lock guards creation until
+	// the order is durable.
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return order, nil
 }
 
 // Deprecated: use checkOrderReceiptTx and model.ReceiptValidError.
