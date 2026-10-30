@@ -3,8 +3,11 @@ package skus
 import (
 	"crypto/ecdsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +46,13 @@ const (
 	errInvalidASSNHeader     = model.Error("appstore: invalid assn header")
 	errInvalidASSNPubKeyType = model.Error("appstore: invalid public key type")
 	errInvalidASSNCertNum    = model.Error("appstore: invalid number of certificates")
+	errInvalidASSNCert       = model.Error("appstore: invalid certificate")
+)
+
+var (
+	// Extensions Apple sets on the App Store signing certificate and its intermediate.
+	assnLeafOID   = asn1.ObjectIdentifier{1, 2, 840, 113635, 100, 6, 11, 1}
+	assnIntermOID = asn1.ObjectIdentifier{1, 2, 840, 113635, 100, 6, 2, 1}
 )
 
 type assnHeader struct {
@@ -253,6 +263,10 @@ func newASSNCertVerifier() (*assnCertVerifier, error) {
 }
 
 func (x *assnCertVerifier) verifyChain(certs []*x509.Certificate, now time.Time) error {
+	if !hasExtension(certs[0], assnLeafOID) || !hasExtension(certs[1], assnIntermOID) {
+		return errInvalidASSNCert
+	}
+
 	// The leaf certificate is the first in certs so start adding intimidates from 1.
 	interm := x509.NewCertPool()
 	for _, c := range certs[1:] {
@@ -272,6 +286,12 @@ func (x *assnCertVerifier) verifyChain(certs []*x509.Certificate, now time.Time)
 	}
 
 	return nil
+}
+
+func hasExtension(cert *x509.Certificate, oid asn1.ObjectIdentifier) bool {
+	return slices.ContainsFunc(cert.Extensions, func(ext pkix.Extension) bool {
+		return ext.Id.Equal(oid)
+	})
 }
 
 func extractASSNCerts(token string) ([]*x509.Certificate, error) {
