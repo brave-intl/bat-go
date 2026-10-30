@@ -308,13 +308,13 @@ func (c *HTTPClient) FetchQuote(
 // PriceTokenInfo holds info from the price token
 type PriceTokenInfo struct {
 	ProductCode string          `json:"product_code,omitempty"`
-	Rate        decimal.Decimal `json:"rate,omitempty"`
+	Rate        decimal.Decimal `json:"rate,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	IssuedAt    int             `json:"iat,omitempty"`
 	Expiry      int             `json:"exp,omitempty"`
 }
 
 func parseExpiry(token string) (*time.Time, error) {
-	var claims map[string]interface{}
+	var claims map[string]any
 	parsed, err := jwt.ParseSigned(token)
 	if err != nil {
 		return nil, err

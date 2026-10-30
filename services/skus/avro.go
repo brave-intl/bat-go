@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/libs/ptr"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -215,11 +214,11 @@ func (s SignedOrderStatus) String() string {
 }
 
 // UnionNullString - type describing
-type UnionNullString map[string]interface{}
+type UnionNullString map[string]any
 
 // UnmarshalJSON - implement unmarshaling for union null string
 func (u *UnionNullString) UnmarshalJSON(data []byte) error {
-	var temp map[string]interface{}
+	var temp map[string]any
 	err := json.Unmarshal(data, &temp)
 	if err != nil {
 		return fmt.Errorf("error deserializing union: %w", err)
@@ -232,7 +231,7 @@ func (u *UnionNullString) UnmarshalJSON(data []byte) error {
 func (u UnionNullString) Value() *string {
 	s, ok := u["string"]
 	if ok {
-		return ptr.FromString(s.(string))
+		return new(s.(string))
 	}
 	_, ok = u["null"]
 	if ok {

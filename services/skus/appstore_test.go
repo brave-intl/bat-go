@@ -1,12 +1,17 @@
 package skus
 
 import (
+	"crypto/x509"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/awa/go-iap/appstore"
 	should "github.com/stretchr/testify/assert"
+	must "github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -704,6 +709,66 @@ func TestAppStoreInApp_expiresTime(t *testing.T) {
 			actual := (*appStoreInApp)(tc.given).expiresTime()
 
 			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
+func TestAssnCertVerifier_verifyChain(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "appstore_x5c.json"))
+	must.NoError(t, err)
+
+	fixture := map[string]string{}
+	must.NoError(t, json.Unmarshal(raw, &fixture))
+
+	certs := make(map[string]*x509.Certificate, len(fixture))
+	for k, v := range fixture {
+		cert, err := extractASSNCert(v)
+		must.NoError(t, err)
+
+		certs[k] = cert
+	}
+
+	vrf, err := newASSNCertVerifier()
+	must.NoError(t, err)
+
+	// The leaf in the fixture is valid between 2021-08-25 and 2023-09-24.
+	validAt := time.Date(2023, time.June, 1, 0, 0, 0, 0, time.UTC)
+
+	type testCase struct {
+		name  string
+		given []*x509.Certificate
+		now   time.Time
+		exp   error
+	}
+
+	tests := []testCase{
+		{
+			name:  "valid",
+			given: []*x509.Certificate{certs["leaf"], certs["interm"], certs["root"]},
+			now:   validAt,
+		},
+
+		{
+			name:  "invalid_leaf",
+			given: []*x509.Certificate{certs["interm"], certs["interm"], certs["root"]},
+			now:   validAt,
+			exp:   errInvalidASSNCert,
+		},
+
+		{
+			name:  "invalid_interm",
+			given: []*x509.Certificate{certs["leaf"], certs["other_interm"], certs["root"]},
+			now:   validAt,
+			exp:   errInvalidASSNCert,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := vrf.verifyChain(tc.given, tc.now)
+			should.ErrorIs(t, actual, tc.exp)
 		})
 	}
 }

@@ -115,11 +115,11 @@ func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceR
 	pipe := s.redis.Pipeline()
 
 	// Track all coins to add to our set
-	coinsToAdd := make([]interface{}, 0, len(resp))
+	coinsToAdd := make([]any, 0, len(resp))
 
 	for coin, rates := range resp {
 		coinKey := fmt.Sprintf("relative:%s", coin)
-		data := make(map[string]interface{})
+		data := make(map[string]any)
 
 		for currKey, value := range rates {
 			if strings.HasSuffix(currKey, "_24h_change") {

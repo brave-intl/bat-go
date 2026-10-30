@@ -13,7 +13,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/ptr"
 )
 
 type s3Getter interface {
@@ -24,7 +23,7 @@ func ExtractCustodianRegions(ctx context.Context, s3g s3Getter, bucket string) (
 	out, err := s3g.GetObject(
 		ctx, &s3.GetObjectInput{
 			Bucket: &bucket,
-			Key:    ptr.To("custodian-regions.json"),
+			Key:    new("custodian-regions.json"),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get custodian regions: %w", err)
@@ -53,7 +52,7 @@ func ExtractPayoutStatus(ctx context.Context, s3g s3Getter, bucket string) (*Pay
 	out, err := s3g.GetObject(
 		ctx, &s3.GetObjectInput{
 			Bucket: &bucket,
-			Key:    ptr.To("payout-status.json"),
+			Key:    new("payout-status.json"),
 		})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get payout status: %w", err)

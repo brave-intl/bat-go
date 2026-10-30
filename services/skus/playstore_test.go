@@ -215,7 +215,7 @@ func TestGPSNtfAuthenticator_authenticate(t *testing.T) {
 					func(ctx context.Context, token, aud string) (*idtoken.Payload, error) {
 						result := &idtoken.Payload{
 							Issuer: "issuer_01",
-							Claims: map[string]interface{}{"email": "account-02@appspot.gserviceaccount.com"},
+							Claims: map[string]any{"email": "account-02@appspot.gserviceaccount.com"},
 						}
 
 						return result, nil
@@ -237,7 +237,7 @@ func TestGPSNtfAuthenticator_authenticate(t *testing.T) {
 					func(ctx context.Context, token, aud string) (*idtoken.Payload, error) {
 						result := &idtoken.Payload{
 							Issuer: "issuer_01",
-							Claims: map[string]interface{}{"email": "account-01@appspot.gserviceaccount.com"},
+							Claims: map[string]any{"email": "account-01@appspot.gserviceaccount.com"},
 						}
 
 						return result, nil
@@ -259,7 +259,7 @@ func TestGPSNtfAuthenticator_authenticate(t *testing.T) {
 					func(ctx context.Context, token, aud string) (*idtoken.Payload, error) {
 						result := &idtoken.Payload{
 							Issuer: "issuer_01",
-							Claims: map[string]interface{}{
+							Claims: map[string]any{
 								"email":          "account-01@appspot.gserviceaccount.com",
 								"email_verified": true,
 							},
@@ -300,7 +300,7 @@ func TestParsePlayStoreDevNotification(t *testing.T) {
 		{
 			name: "invalid_input",
 			exp: tcExpected{
-				fnErr: func(tt must.TestingT, err error, i ...interface{}) {
+				fnErr: func(tt must.TestingT, err error, i ...any) {
 					must.ErrorContains(tt, err, "failed to unmarshal message:")
 				},
 			},
@@ -310,7 +310,7 @@ func TestParsePlayStoreDevNotification(t *testing.T) {
 			name:  "invalid_input_base64",
 			given: []byte(`{"message": {"data": "not-base64"}}`),
 			exp: tcExpected{
-				fnErr: func(tt must.TestingT, err error, i ...interface{}) {
+				fnErr: func(tt must.TestingT, err error, i ...any) {
 					must.ErrorContains(tt, err, "failed to decode message data:")
 				},
 			},
@@ -320,7 +320,7 @@ func TestParsePlayStoreDevNotification(t *testing.T) {
 			name:  "invalid_input_inner_data",
 			given: []byte(`{"message": {"data": "dGVzdA=="}}`),
 			exp: tcExpected{
-				fnErr: func(tt must.TestingT, err error, i ...interface{}) {
+				fnErr: func(tt must.TestingT, err error, i ...any) {
 					must.ErrorContains(tt, err, "failed to unmarshal notification:")
 				},
 			},

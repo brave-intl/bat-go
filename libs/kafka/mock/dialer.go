@@ -52,7 +52,7 @@ func (mr *MockConsumerMockRecorder) Close() *gomock.Call {
 // CommitMessages mocks base method.
 func (m *MockConsumer) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx}
+	varargs := []any{ctx}
 	for _, a := range messages {
 		varargs = append(varargs, a)
 	}
@@ -62,9 +62,9 @@ func (m *MockConsumer) CommitMessages(ctx context.Context, messages ...kafka.Mes
 }
 
 // CommitMessages indicates an expected call of CommitMessages.
-func (mr *MockConsumerMockRecorder) CommitMessages(ctx interface{}, messages ...interface{}) *gomock.Call {
+func (mr *MockConsumerMockRecorder) CommitMessages(ctx any, messages ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx}, messages...)
+	varargs := append([]any{ctx}, messages...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitMessages", reflect.TypeOf((*MockConsumer)(nil).CommitMessages), varargs...)
 }
 
@@ -78,7 +78,7 @@ func (m *MockConsumer) FetchMessage(ctx context.Context) (kafka.Message, error) 
 }
 
 // FetchMessage indicates an expected call of FetchMessage.
-func (mr *MockConsumerMockRecorder) FetchMessage(ctx interface{}) *gomock.Call {
+func (mr *MockConsumerMockRecorder) FetchMessage(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMessage", reflect.TypeOf((*MockConsumer)(nil).FetchMessage), ctx)
 }
@@ -93,7 +93,7 @@ func (m *MockConsumer) ReadMessage(ctx context.Context) (kafka.Message, error) {
 }
 
 // ReadMessage indicates an expected call of ReadMessage.
-func (mr *MockConsumerMockRecorder) ReadMessage(ctx interface{}) *gomock.Call {
+func (mr *MockConsumerMockRecorder) ReadMessage(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadMessage", reflect.TypeOf((*MockConsumer)(nil).ReadMessage), ctx)
 }

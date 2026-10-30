@@ -144,8 +144,7 @@ func (w *SolanaWaitlist) Delete(ctx context.Context, dbi sqlx.ExecerContext, pay
 }
 
 func isUniqueConstraintViolation(err error) bool {
-	var pe *pq.Error
-	if errors.As(err, &pe) {
+	if pe, ok := errors.AsType[*pq.Error](err); ok {
 		return pe.Code == "23505"
 	}
 

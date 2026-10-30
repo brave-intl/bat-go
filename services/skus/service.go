@@ -432,7 +432,7 @@ func InitService(
 
 	if enabled, ok := ctx.Value(appctx.SkusEnableStoreSignedOrderCredsConsumer).(bool); ok && enabled {
 		if consumers, ok := ctx.Value(appctx.SkusNumberStoreSignedOrderCredsConsumer).(int); ok {
-			for i := 0; i < consumers; i++ {
+			for range consumers {
 				go service.RunStoreSignedOrderCredentials(ctx, 1*time.Second)
 			}
 		}
@@ -1021,7 +1021,7 @@ func getUpholdCustodialTxWithRetries(ctx context.Context, txRef string) (*decima
 
 	// best effort to check that the tx is done processing
 OUTER:
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		select {
 		case <-ctx.Done():
 			break OUTER
@@ -1585,7 +1585,7 @@ func isValidBatchReq(ord *model.Order, itemID uuid.UUID) error {
 }
 
 // GetItemCredentials returns credentials based on the order, item and request id.
-func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID uuid.UUID) (any, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -1616,7 +1616,7 @@ func (s *Service) GetItemCredentials(ctx context.Context, orderID, itemID, reqID
 //
 // This is a legacy method.
 // For backward compatibility, similar to creating credentials, it uses item id as request id.
-func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
+func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (any, int, error) {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
@@ -1912,7 +1912,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order, itemID,
 	}
 
 	if item.IssuanceIntervalISO == nil {
-		item.IssuanceIntervalISO = ptrTo("P1D")
+		item.IssuanceIntervalISO = new("P1D")
 	}
 
 	interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
@@ -2188,7 +2188,16 @@ func (s *Service) processStripeNotificationTx(ctx context.Context, dbi sqlx.ExtC
 			return err
 		}
 
-		return s.processStripeMtoA(ctx, dbi, ntf)
+		umaData, err := ntf.umaData()
+		if err != nil {
+			if errors.Is(err, errStripeIncompleteUMAData) {
+				return nil
+			}
+
+			return err
+		}
+
+		return s.processStripeMtoA(ctx, dbi, umaData)
 
 	case ntf.shouldCancel(), ntf.shouldExpireIncompletePayment():
 		oid, err := ntf.orderID()
@@ -2461,6 +2470,88 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 	}
 
 	return order, nil
+}
+
+func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrderRequest) (*Order, error) {
+	tx, err := s.Datastore.RawDB().Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := s.createPaidOrderTx(ctx, tx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreatePaidOrderRequest) (*Order, error) {
+	oreq := &model.CreateOrderRequestNew{
+		Currency: req.Currency,
+		Items:    req.Items,
+		Metadata: req.Metadata,
+	}
+
+	items, err := createOrderItems(oreq)
+	if err != nil {
+		return nil, err
+	}
+
+	numIntervals, err := s.createOrderIssuers(ctx, dbi, model.MerchID, items)
+	if err != nil {
+		return nil, err
+	}
+
+	ordNew, err := newOrderNewForReq(oreq, items, model.MerchID, model.OrderStatusPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	ord, err := s.createOrderTx(ctx, dbi, ordNew, items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order: %w", err)
+	}
+
+	if err := s.updateOrderIntervals(ctx, dbi, ord.ID, items, numIntervals); err != nil {
+		return nil, fmt.Errorf("failed to update order metadata: %w", err)
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeCheckoutSessionId", req.CheckoutSessionID); err != nil {
+		return nil, err
+	}
+
+	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "paymentProcessor", model.StripePaymentMethod); err != nil {
+		return nil, err
+	}
+
+	if ord.IsOneOffPayment() {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripePaymentId", req.PaymentIntentID); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeSubscriptionId", req.StripeSubscriptionID); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := s.updateOrderWithExpPaidTimeTx(ctx, dbi, ord.ID, req.ExpiresAt, req.PaidAt); err != nil {
+		return nil, err
+	}
+
+	// Must be an UMA order
+	if umaData, err := extractUMA(req.Metadata); err == nil {
+		if err := s.processStripeMtoA(ctx, dbi, umaData); err != nil {
+			return nil, err
+		}
+	}
+
+	return s.getOrderFullTx(ctx, dbi, ord.ID)
 }
 
 func (s *Service) updateOrderIntervals(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, items []model.OrderItem, nintvals int) error {
@@ -3097,18 +3188,7 @@ func (s *Service) activateStripePL(ctx context.Context, dbi sqlx.ExecerContext, 
 	return s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripePaymentId", paymentID)
 }
 
-func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, ntf *stripeNotification) error {
-	umaData, err := ntf.umaData()
-	if err != nil {
-		// Recover from the error is possible.
-		// Not all orders are migration orders, therefore must not fail.
-		if errors.Is(err, errStripeIncompleteUMAData) {
-			return nil
-		}
-
-		return err
-	}
-
+func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, umaData promoMonthlyAnnualData) error {
 	oid, err := uuid.FromString(umaData.orderID)
 	if err != nil {
 		return err
@@ -3128,7 +3208,7 @@ func (s *Service) processStripeMtoA(ctx context.Context, dbi sqlx.ExtContext, nt
 }
 
 func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerContext, ord *model.Order, oldSessID, email string) (string, error) {
-	oldSess, err := s.stripeCl.Session(ctx, oldSessID, &stripe.CheckoutSessionParams{Params: stripe.Params{Expand: []*string{stripe.String("customer")}}})
+	oldSess, err := s.stripeCl.Session(ctx, oldSessID, &stripe.CheckoutSessionParams{Params: stripe.Params{Expand: []*string{new("customer")}}})
 	if err != nil {
 		return "", err
 	}
@@ -3311,7 +3391,7 @@ type tlv1CredPresentation struct {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 func isErrStripeNotFound(err error) bool {

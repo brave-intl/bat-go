@@ -60,7 +60,7 @@ func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.
 	}
 
 	// Restore the generated key backup
-	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
+	_, err = client.Logical().Write("transit/restore", map[string]any{
 		"backup": backup,
 		"name":   importName,
 	})
@@ -104,7 +104,7 @@ func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*Hm
 	}
 
 	// Restore the generated key backup
-	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
+	_, err = client.Logical().Write("transit/restore", map[string]any{
 		"backup": backup,
 		"name":   importName,
 	})
@@ -147,7 +147,7 @@ func (wc *WrappedClient) GenerateEd25519Signer(name string) (*Ed25519Signer, err
 		return nil, err
 	}
 	// Generate a new keypair
-	_, err = wc.Client.Logical().Write("transit/keys/"+name, map[string]interface{}{
+	_, err = wc.Client.Logical().Write("transit/keys/"+name, map[string]any{
 		"type": "ed25519",
 	})
 	if err != nil {

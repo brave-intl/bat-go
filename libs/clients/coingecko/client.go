@@ -242,7 +242,7 @@ type CoinInfo struct {
 	ID        string           `json:"id"`
 	Symbol    string           `json:"symbol"`
 	Name      string           `json:"name"`
-	Platforms CoinInfoPlatform `json:"platforms,omitempty"`
+	Platforms CoinInfoPlatform `json:"platforms,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 }
 
 // CoinListResponse is the response received from coingecko

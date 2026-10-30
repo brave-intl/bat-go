@@ -46,7 +46,7 @@ func (m *MockClient) CheckTxStatus(ctx context.Context, APIKEY, clientID, txRef 
 }
 
 // CheckTxStatus indicates an expected call of CheckTxStatus.
-func (mr *MockClientMockRecorder) CheckTxStatus(ctx, APIKEY, clientID, txRef interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CheckTxStatus(ctx, APIKEY, clientID, txRef any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTxStatus", reflect.TypeOf((*MockClient)(nil).CheckTxStatus), ctx, APIKEY, clientID, txRef)
 }
@@ -61,7 +61,7 @@ func (m *MockClient) FetchAccountList(ctx context.Context, APIKey string, signer
 }
 
 // FetchAccountList indicates an expected call of FetchAccountList.
-func (mr *MockClientMockRecorder) FetchAccountList(ctx, APIKey, signer, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchAccountList(ctx, APIKey, signer, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAccountList", reflect.TypeOf((*MockClient)(nil).FetchAccountList), ctx, APIKey, signer, payload)
 }
@@ -76,7 +76,7 @@ func (m *MockClient) FetchBalances(ctx context.Context, APIKey string, signer cr
 }
 
 // FetchBalances indicates an expected call of FetchBalances.
-func (mr *MockClientMockRecorder) FetchBalances(ctx, APIKey, signer, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchBalances(ctx, APIKey, signer, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchBalances", reflect.TypeOf((*MockClient)(nil).FetchBalances), ctx, APIKey, signer, payload)
 }
@@ -91,7 +91,7 @@ func (m *MockClient) FetchValidatedAccount(ctx context.Context, verificationToke
 }
 
 // FetchValidateAccount indicates an expected call of FetchValidateAccount.
-func (mr *MockClientMockRecorder) FetchValidateAccount(ctx, verificationToken, recipientID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchValidateAccount(ctx, verificationToken, recipientID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchValidatedAccount", reflect.TypeOf((*MockClient)(nil).FetchValidatedAccount), ctx, verificationToken, recipientID)
 }
@@ -106,7 +106,7 @@ func (m *MockClient) UploadBulkPayout(ctx context.Context, APIKey string, signer
 }
 
 // UploadBulkPayout indicates an expected call of UploadBulkPayout.
-func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, APIKey, signer, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, APIKey, signer, payload any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBulkPayout", reflect.TypeOf((*MockClient)(nil).UploadBulkPayout), ctx, APIKey, signer, payload)
 }

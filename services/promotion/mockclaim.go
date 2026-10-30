@@ -45,7 +45,7 @@ func (m *MockClaimWorker) SignClaimCreds(ctx context.Context, claimID go_uuid.UU
 }
 
 // SignClaimCreds indicates an expected call of SignClaimCreds.
-func (mr *MockClaimWorkerMockRecorder) SignClaimCreds(ctx, claimID, issuer, blindedCreds interface{}) *gomock.Call {
+func (mr *MockClaimWorkerMockRecorder) SignClaimCreds(ctx, claimID, issuer, blindedCreds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignClaimCreds", reflect.TypeOf((*MockClaimWorker)(nil).SignClaimCreds), ctx, claimID, issuer, blindedCreds)
 }

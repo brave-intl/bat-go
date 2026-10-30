@@ -32,6 +32,7 @@ func TestMain(m *testing.M) {
 type mockOrderService struct {
 	fnCreateOrderFromRequest func(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	fnCreateOrder            func(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
+	fnCreatePaidOrder        func(ctx context.Context, req *model.CreatePaidOrderRequest) (*model.Order, error)
 	fnCancelOrder            func(ctx context.Context, id uuid.UUID) error
 	fnExpireOrder            func(ctx context.Context, id uuid.UUID) error
 }
@@ -50,6 +51,14 @@ func (s *mockOrderService) CreateOrder(ctx context.Context, req *model.CreateOrd
 	}
 
 	return s.fnCreateOrder(ctx, req)
+}
+
+func (s *mockOrderService) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrderRequest) (*model.Order, error) {
+	if s.fnCreatePaidOrder == nil {
+		return &model.Order{Items: []model.OrderItem{{}}}, nil
+	}
+
+	return s.fnCreatePaidOrder(ctx, req)
 }
 
 func (s *mockOrderService) CancelOrder(ctx context.Context, id uuid.UUID) error {
@@ -98,7 +107,7 @@ func TestOrder_Create(t *testing.T) {
 			exp: tcExpected{
 				err: handlers.ValidationError(
 					"request body",
-					map[string]interface{}{
+					map[string]any{
 						"items": "array must contain at least one item",
 					},
 				),
@@ -333,7 +342,7 @@ func TestOrder_CreateNew(t *testing.T) {
 				err: &handlers.AppError{
 					Message: "Validation failed",
 					Code:    http.StatusBadRequest,
-					Data: map[string]interface{}{"validationErrors": map[string]string{
+					Data: map[string]any{"validationErrors": map[string]string{
 						"Email": "Key: 'CreateOrderRequestNew.Email' Error:Field validation for 'Email' failed on the 'email' tag",
 					}},
 				},
@@ -657,6 +666,266 @@ func TestOrder_CreateNew(t *testing.T) {
 	}
 }
 
+func TestOrder_CreatePaid(t *testing.T) {
+	type tcGiven struct {
+		svc  *mockOrderService
+		body string
+	}
+
+	type tcExpected struct {
+		err    *handlers.AppError
+		result *model.Order
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "invalid_data",
+			given: tcGiven{
+				svc: &mockOrderService{},
+				body: `{
+					"stripe_subscription_id": "sub_id",
+					"payment_processor": "stripe",
+					"currency": "USD",
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "sku_vnt",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M"
+						}
+					],
+					"paid_at": "2024-01-01T00:00:00Z",
+					"expires_at": "2024-02-01T00:00:00Z"
+				}`,
+			},
+			exp: tcExpected{
+				err: &handlers.AppError{
+					Message: "Validation failed",
+					Code:    http.StatusBadRequest,
+					Data: map[string]any{"validationErrors": map[string]string{
+						"CheckoutSessionID": "Key: 'CreatePaidOrderRequest.CheckoutSessionID' Error:Field validation for 'CheckoutSessionID' failed on the 'required' tag",
+					}},
+				},
+			},
+		},
+
+		{
+			name: "one_off_missing_payment_intent_id",
+			given: tcGiven{
+				svc: &mockOrderService{},
+				body: `{
+					"checkout_session_id": "cs_id",
+					"stripe_subscription_id": "sub_id",
+					"payment_processor": "stripe",
+					"currency": "USD",
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "brave-origin-premium-perpetual-license",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M"
+						}
+					],
+					"paid_at": "2024-01-01T00:00:00Z",
+					"expires_at": "2024-02-01T00:00:00Z"
+				}`,
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(
+					model.ErrPaymentIntentIDRequired,
+					"Invalid order data supplied",
+					http.StatusUnprocessableEntity,
+				),
+			},
+		},
+
+		{
+			name: "some_error",
+			given: tcGiven{
+				svc: &mockOrderService{
+					fnCreatePaidOrder: func(ctx context.Context, req *model.CreatePaidOrderRequest) (*model.Order, error) {
+						return nil, model.Error("some_error")
+					},
+				},
+				body: `{
+					"checkout_session_id": "cs_id",
+					"stripe_subscription_id": "sub_id",
+					"payment_processor": "stripe",
+					"currency": "USD",
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "sku_vnt",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M"
+						}
+					],
+					"paid_at": "2024-01-01T00:00:00Z",
+					"expires_at": "2024-02-01T00:00:00Z"
+				}`,
+			},
+			exp: tcExpected{
+				err: handlers.WrapError(
+					model.Error("something went wrong"),
+					"Couldn't finish creating order",
+					http.StatusInternalServerError,
+				),
+			},
+		},
+
+		{
+			name: "success",
+			given: tcGiven{
+				svc: &mockOrderService{
+					fnCreatePaidOrder: func(ctx context.Context, req *model.CreatePaidOrderRequest) (*model.Order, error) {
+						result := &model.Order{
+							Status: model.OrderStatusPaid,
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "location",
+								},
+							},
+							Items: []model.OrderItem{
+								{
+									SKU:      "sku",
+									SKUVnt:   "sku_vnt",
+									Quantity: 1,
+									Price:    mustDecimalFromString("1"),
+									Subtotal: mustDecimalFromString("1"),
+									Location: datastore.NullString{
+										NullString: sql.NullString{
+											Valid:  true,
+											String: "location",
+										},
+									},
+									Description: datastore.NullString{
+										NullString: sql.NullString{
+											Valid:  true,
+											String: "description",
+										},
+									},
+									CredentialType: "credential_type",
+									ValidForISO:    ptrTo("P1M"),
+								},
+							},
+							TotalPrice: mustDecimalFromString("1"),
+						}
+
+						return result, nil
+					},
+				},
+				body: `{
+					"checkout_session_id": "cs_id",
+					"stripe_subscription_id": "sub_id",
+					"payment_processor": "stripe",
+					"currency": "USD",
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "sku_vnt",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M"
+						}
+					],
+					"paid_at": "2024-01-01T00:00:00Z",
+					"expires_at": "2024-02-01T00:00:00Z"
+				}`,
+			},
+			exp: tcExpected{
+				result: &model.Order{
+					Status: model.OrderStatusPaid,
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "location",
+						},
+					},
+					Items: []model.OrderItem{
+						{
+							SKU:      "sku",
+							SKUVnt:   "sku_vnt",
+							Quantity: 1,
+							Price:    mustDecimalFromString("1"),
+							Subtotal: mustDecimalFromString("1"),
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "location",
+								},
+							},
+							Description: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "description",
+								},
+							},
+							CredentialType: "credential_type",
+							ValidForISO:    ptrTo("P1M"),
+						},
+					},
+					TotalPrice: mustDecimalFromString("1"),
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			h := handler.NewOrder(tc.given.svc)
+
+			body := bytes.NewBufferString(tc.given.body)
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost", body)
+
+			rw := httptest.NewRecorder()
+			rw.Header().Set("content-type", "application/json")
+
+			act1 := h.CreatePaid(rw, req)
+			must.Equal(t, tc.exp.err, act1)
+
+			if tc.exp.err != nil {
+				act1.ServeHTTP(rw, req)
+				resp := rw.Body.Bytes()
+
+				exp, err := json.Marshal(tc.exp.err)
+				must.Equal(t, nil, err)
+
+				should.Equal(t, exp, bytes.TrimSpace(resp))
+				return
+			}
+
+			resp := rw.Body.Bytes()
+			act2 := &model.Order{}
+
+			err := json.Unmarshal(resp, act2)
+			must.NoError(t, err)
+
+			should.Equal(t, tc.exp.result, act2)
+		})
+	}
+}
+
 func TestOrder_Cancel(t *testing.T) {
 	type tcGiven struct {
 		ctx context.Context
@@ -688,7 +957,7 @@ func TestOrder_Cancel(t *testing.T) {
 				oid: uuid.Nil,
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID}),
 			},
 		},
 
@@ -811,7 +1080,7 @@ func TestOrder_Expire(t *testing.T) {
 				oid: uuid.Nil,
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID}),
 			},
 		},
 
@@ -938,5 +1207,5 @@ func mustDecimalFromString(v string) decimal.Decimal {
 }
 
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }

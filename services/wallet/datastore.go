@@ -601,7 +601,7 @@ func (pg *Postgres) LinkWallet(ctx context.Context, id string, userDepositDestin
 			return ErrNoReputationClient
 		}
 
-		op := func() (interface{}, error) {
+		op := func() (any, error) {
 			return nil, repClient.UpdateReputationSummary(ctx, walletID.String(), true)
 		}
 
@@ -638,7 +638,7 @@ const depositProviderSolana = "solana"
 func NewSolanaCustodialLink(walletID uuid.UUID, depositDestination string) *CustodianLink {
 	return &CustodianLink{
 		WalletID:  &walletID,
-		LinkingID: ptrFromUUID(uuid.NewV5(ClaimNamespace, depositDestination)),
+		LinkingID: new(uuid.NewV5(ClaimNamespace, depositDestination)),
 		Custodian: depositProviderSolana,
 	}
 }
@@ -1020,7 +1020,7 @@ func (pg *Postgres) SendVerifiedWalletOutbox(ctx context.Context, client reputat
 		return false, fmt.Errorf("error get verified wallet: %w", err)
 	}
 
-	upsertReputationSummaryOp := func() (interface{}, error) {
+	upsertReputationSummaryOp := func() (any, error) {
 		return nil, client.UpdateReputationSummary(ctx, vw.PaymentID.String(), vw.VerifiedWallet)
 	}
 
@@ -1082,8 +1082,4 @@ func waitAndLockTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
 		return fmt.Errorf("failed to acquire tx lock id %s: %w", id.String(), err)
 	}
 	return nil
-}
-
-func ptrFromUUID(u uuid.UUID) *uuid.UUID {
-	return &u
 }

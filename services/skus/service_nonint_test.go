@@ -5529,7 +5529,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NotNil(t, err)
 				},
 			},
@@ -5547,7 +5547,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NotNil(t, err)
 				},
 			},
@@ -5567,7 +5567,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, errRadomProductIDNotFound)
 				},
 			},
@@ -5598,7 +5598,7 @@ func TestService_createRadomSessID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, model.Error("some error"))
 				},
 			},
@@ -5635,7 +5635,7 @@ func TestService_createRadomSessID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sessionID: "session_id",
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.Nil(t, err)
 				},
 			},
@@ -5691,12 +5691,12 @@ func Test_orderItemsToLineItems(t *testing.T) {
 			given: tcGiven{
 				orderItems: []OrderItem{
 					{
-						Metadata: map[string]interface{}{
+						Metadata: map[string]any{
 							"radom_product_id": "product_1",
 						},
 					},
 					{
-						Metadata: map[string]interface{}{
+						Metadata: map[string]any{
 							"radom_product_id": "product_2",
 						},
 					},
@@ -5935,7 +5935,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -5971,7 +5971,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6011,7 +6011,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("reset_payment_failed_error"))
 				},
 			},
@@ -6030,7 +6030,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6053,7 +6053,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("reset_payment_failed_error"))
 				},
 			},
@@ -6072,7 +6072,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6091,7 +6091,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6110,7 +6110,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				orderRepo: &repository.MockOrder{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -6122,7 +6122,7 @@ func TestService_processRadomNotificationTx(t *testing.T) {
 				event: &radom.Notification{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, errRadomUnknownAction)
 				},
 			},
@@ -6581,7 +6581,7 @@ func TestService_processStripeMtoA(t *testing.T) {
 	type tcGiven struct {
 		repo     *repository.MockOrder
 		stripeCl *xstripe.MockClient
-		ntf      *stripeNotification
+		data     promoMonthlyAnnualData
 	}
 
 	type testCase struct {
@@ -6592,55 +6592,14 @@ func TestService_processStripeMtoA(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "skip_incomplete_uma_data",
-			given: tcGiven{
-				repo:     &repository.MockOrder{},
-				stripeCl: &xstripe.MockClient{},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{Metadata: map[string]string{}},
-							},
-						},
-					},
-				},
-			},
-		},
-
-		{
-			name: "error_invalid_data",
-			given: tcGiven{
-				repo:     &repository.MockOrder{},
-				stripeCl: &xstripe.MockClient{},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{},
-					},
-				},
-			},
-			exp: errStripeNoInvoiceLines,
-		},
-
-		{
 			name: "error_invalid_order_id",
 			given: tcGiven{
 				repo:     &repository.MockOrder{},
 				stripeCl: &xstripe.MockClient{},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{
-									Metadata: map[string]string{
-										"uma__st_sub_id": "st_sub_id_01",
-										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
-										"uma__order_id":  "decade00-0000-4000-a000-00000000000",
-									},
-								},
-							},
-						},
-					},
+				data: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id_01",
+					subID:       "facade00-0000-4000-a000-000000000000",
+					orderID:     "decade00-0000-4000-a000-00000000000",
 				},
 			},
 			exp: errors.New("uuid: incorrect UUID length: decade00-0000-4000-a000-00000000000"),
@@ -6655,20 +6614,10 @@ func TestService_processStripeMtoA(t *testing.T) {
 					},
 				},
 				stripeCl: &xstripe.MockClient{},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{
-									Metadata: map[string]string{
-										"uma__st_sub_id": "st_sub_id_01",
-										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
-										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
-									},
-								},
-							},
-						},
-					},
+				data: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id_01",
+					subID:       "facade00-0000-4000-a000-000000000000",
+					orderID:     "decade00-0000-4000-a000-000000000000",
 				},
 			},
 			exp: model.Error("something_went_wrong"),
@@ -6683,27 +6632,17 @@ func TestService_processStripeMtoA(t *testing.T) {
 						return model.Error("something_went_wrong")
 					},
 				},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{
-									Metadata: map[string]string{
-										"uma__st_sub_id": "st_sub_id_01",
-										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
-										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
-									},
-								},
-							},
-						},
-					},
+				data: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id_01",
+					subID:       "facade00-0000-4000-a000-000000000000",
+					orderID:     "decade00-0000-4000-a000-000000000000",
 				},
 			},
 			exp: model.Error("something_went_wrong"),
 		},
 
 		{
-			name: "success_cancel_sub_not_found_no_coupon",
+			name: "success_cancel_sub_not_found",
 			given: tcGiven{
 				repo: &repository.MockOrder{},
 				stripeCl: &xstripe.MockClient{
@@ -6716,63 +6655,10 @@ func TestService_processStripeMtoA(t *testing.T) {
 						return rerr
 					},
 				},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{
-									Metadata: map[string]string{
-										"uma__st_sub_id": "st_sub_id_01",
-										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
-										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-
-		{
-			name: "success_no_coupon",
-			given: tcGiven{
-				repo: &repository.MockOrder{
-					FnSetStatus: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error {
-						if !uuid.Equal(id, uuid.Must(uuid.FromString("decade00-0000-4000-a000-000000000000"))) {
-							return model.Error("unexpected_cancel_order_id")
-						}
-
-						if status != model.OrderStatusCanceled {
-							return model.Error("unexpected_cancel_order_status")
-						}
-
-						return nil
-					},
-				},
-				stripeCl: &xstripe.MockClient{
-					FnCancelSub: func(ctx context.Context, id string, params *stripe.SubscriptionCancelParams) error {
-						if id != "st_sub_id_01" {
-							return model.Error("unexpected_cancel_sub_id")
-						}
-
-						return nil
-					},
-				},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{
-									Metadata: map[string]string{
-										"uma__st_sub_id": "st_sub_id_01",
-										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
-										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
-									},
-								},
-							},
-						},
-					},
+				data: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id_01",
+					subID:       "facade00-0000-4000-a000-000000000000",
+					orderID:     "decade00-0000-4000-a000-000000000000",
 				},
 			},
 		},
@@ -6802,24 +6688,11 @@ func TestService_processStripeMtoA(t *testing.T) {
 						return nil
 					},
 				},
-				ntf: &stripeNotification{
-					invoice: &stripe.Invoice{
-						Lines: &stripe.InvoiceLineList{
-							Data: []*stripe.InvoiceLine{
-								{
-									Metadata: map[string]string{
-										"uma__st_sub_id": "st_sub_id_01",
-										"uma__sub_id":    "facade00-0000-4000-a000-000000000000",
-										"uma__order_id":  "decade00-0000-4000-a000-000000000000",
-										"uma__coupon_id": "coup_id_01",
-									},
-								},
-							},
-						},
-						Discount: &stripe.Discount{
-							Coupon: &stripe.Coupon{ID: "coup_id_01"},
-						},
-					},
+				data: promoMonthlyAnnualData{
+					stripeSubID: "st_sub_id_01",
+					subID:       "facade00-0000-4000-a000-000000000000",
+					orderID:     "decade00-0000-4000-a000-000000000000",
+					coupID:      "coup_id_01",
 				},
 			},
 		},
@@ -6836,7 +6709,7 @@ func TestService_processStripeMtoA(t *testing.T) {
 
 			ctx := context.Background()
 
-			actual := svc.processStripeMtoA(ctx, nil, tc.given.ntf)
+			actual := svc.processStripeMtoA(ctx, nil, tc.given.data)
 			should.Equal(t, tc.exp, actual)
 		})
 	}
@@ -7313,7 +7186,7 @@ func TestService_activateStripePL(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_update_order_with_exp"))
 				},
 			},
@@ -7338,7 +7211,7 @@ func TestService_activateStripePL(t *testing.T) {
 				payRepo: &repository.MockOrderPayHistory{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_append_metadata_payment_processor"))
 				},
 			},
@@ -7363,7 +7236,7 @@ func TestService_activateStripePL(t *testing.T) {
 				payRepo: &repository.MockOrderPayHistory{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_append_metadata_stripe_payment_id"))
 				},
 			},
@@ -7384,7 +7257,7 @@ func TestService_activateStripePL(t *testing.T) {
 				payRepo: &repository.MockOrderPayHistory{},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.Nil(t, err)
 				},
 			},
@@ -7442,7 +7315,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_num_intervals"))
 				},
 			},
@@ -7462,7 +7335,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.ErrorIs(t, err, model.Error("error_num_per_intervals"))
 				},
 			},
@@ -7496,7 +7369,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -7535,7 +7408,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},
@@ -7574,7 +7447,7 @@ func TestService_updateOrderIntervals(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				shouldErr: func(t should.TestingT, err error, i ...interface{}) bool {
+				shouldErr: func(t should.TestingT, err error, i ...any) bool {
 					return should.NoError(t, err)
 				},
 			},

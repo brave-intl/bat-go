@@ -47,7 +47,7 @@ func (m *MockClient) GetReputationSummary(ctx context.Context, paymentID uuid.UU
 }
 
 // GetReputationSummary indicates an expected call of GetReputationSummary.
-func (mr *MockClientMockRecorder) GetReputationSummary(ctx, paymentID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) GetReputationSummary(ctx, paymentID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReputationSummary", reflect.TypeOf((*MockClient)(nil).GetReputationSummary), ctx, paymentID)
 }
@@ -63,7 +63,7 @@ func (m *MockClient) IsDrainReputable(ctx context.Context, id, promotionID uuid.
 }
 
 // IsDrainReputable indicates an expected call of IsDrainReputable.
-func (mr *MockClientMockRecorder) IsDrainReputable(ctx, id, promotionID, withdrawAmount interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) IsDrainReputable(ctx, id, promotionID, withdrawAmount any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDrainReputable", reflect.TypeOf((*MockClient)(nil).IsDrainReputable), ctx, id, promotionID, withdrawAmount)
 }
@@ -79,7 +79,7 @@ func (m *MockClient) IsLinkingReputable(ctx context.Context, id uuid.UUID, count
 }
 
 // IsLinkingReputable indicates an expected call of IsLinkingReputable.
-func (mr *MockClientMockRecorder) IsLinkingReputable(ctx, id, country interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) IsLinkingReputable(ctx, id, country any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsLinkingReputable", reflect.TypeOf((*MockClient)(nil).IsLinkingReputable), ctx, id, country)
 }
@@ -94,7 +94,7 @@ func (m *MockClient) IsWalletAdsReputable(ctx context.Context, id uuid.UUID, pla
 }
 
 // IsWalletAdsReputable indicates an expected call of IsWalletAdsReputable.
-func (mr *MockClientMockRecorder) IsWalletAdsReputable(ctx, id, platform interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) IsWalletAdsReputable(ctx, id, platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletAdsReputable", reflect.TypeOf((*MockClient)(nil).IsWalletAdsReputable), ctx, id, platform)
 }
@@ -109,7 +109,7 @@ func (m *MockClient) IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platf
 }
 
 // IsWalletOnPlatform indicates an expected call of IsWalletOnPlatform.
-func (mr *MockClientMockRecorder) IsWalletOnPlatform(ctx, id, platform interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) IsWalletOnPlatform(ctx, id, platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletOnPlatform", reflect.TypeOf((*MockClient)(nil).IsWalletOnPlatform), ctx, id, platform)
 }
@@ -124,7 +124,7 @@ func (m *MockClient) IsWalletReputable(ctx context.Context, id uuid.UUID, platfo
 }
 
 // IsWalletReputable indicates an expected call of IsWalletReputable.
-func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletReputable", reflect.TypeOf((*MockClient)(nil).IsWalletReputable), ctx, id, platform)
 }
@@ -138,7 +138,7 @@ func (m *MockClient) UpdateReputationSummary(ctx context.Context, paymentID stri
 }
 
 // UpdateReputationSummary indicates an expected call of UpdateReputationSummary.
-func (mr *MockClientMockRecorder) UpdateReputationSummary(ctx, paymentID, verifiedWallet interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) UpdateReputationSummary(ctx, paymentID, verifiedWallet any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReputationSummary", reflect.TypeOf((*MockClient)(nil).UpdateReputationSummary), ctx, paymentID, verifiedWallet)
 }
@@ -152,7 +152,7 @@ func (m *MockClient) UpsertReputationSummary(ctx context.Context, paymentID, geo
 }
 
 // UpsertReputationSummary indicates an expected call of UpsertReputationSummary.
-func (mr *MockClientMockRecorder) UpsertReputationSummary(ctx, paymentID, geoCountry interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) UpsertReputationSummary(ctx, paymentID, geoCountry any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertReputationSummary", reflect.TypeOf((*MockClient)(nil).UpsertReputationSummary), ctx, paymentID, geoCountry)
 }

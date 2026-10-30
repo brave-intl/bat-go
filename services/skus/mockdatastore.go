@@ -51,7 +51,7 @@ func (m *MockDatastore) AppendOrderMetadata(arg0 context.Context, arg1 *go_uuid.
 }
 
 // AppendOrderMetadata indicates an expected call of AppendOrderMetadata.
-func (mr *MockDatastoreMockRecorder) AppendOrderMetadata(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) AppendOrderMetadata(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadata", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadata), arg0, arg1, arg2, arg3)
 }
@@ -82,7 +82,7 @@ func (m *MockDatastore) CheckExpiredCheckoutSession(arg0 go_uuid.UUID) (bool, st
 }
 
 // CheckExpiredCheckoutSession indicates an expected call of CheckExpiredCheckoutSession.
-func (mr *MockDatastoreMockRecorder) CheckExpiredCheckoutSession(arg0 interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CheckExpiredCheckoutSession(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckExpiredCheckoutSession", reflect.TypeOf((*MockDatastore)(nil).CheckExpiredCheckoutSession), arg0)
 }
@@ -96,7 +96,7 @@ func (m *MockDatastore) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.
 }
 
 // CommitVote indicates an expected call of CommitVote.
-func (mr *MockDatastoreMockRecorder) CommitVote(ctx, vr, tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CommitVote(ctx, vr, tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitVote", reflect.TypeOf((*MockDatastore)(nil).CommitVote), ctx, vr, tx)
 }
@@ -111,7 +111,7 @@ func (m *MockDatastore) CreateKey(merchant, name, encryptedSecretKey, nonce stri
 }
 
 // CreateKey indicates an expected call of CreateKey.
-func (mr *MockDatastoreMockRecorder) CreateKey(merchant, name, encryptedSecretKey, nonce interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreateKey(merchant, name, encryptedSecretKey, nonce any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateKey", reflect.TypeOf((*MockDatastore)(nil).CreateKey), merchant, name, encryptedSecretKey, nonce)
 }
@@ -126,7 +126,7 @@ func (m *MockDatastore) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, or
 }
 
 // CreateOrder indicates an expected call of CreateOrder.
-func (mr *MockDatastoreMockRecorder) CreateOrder(ctx, dbi, oreq, items interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreateOrder(ctx, dbi, oreq, items any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrder", reflect.TypeOf((*MockDatastore)(nil).CreateOrder), ctx, dbi, oreq, items)
 }
@@ -141,7 +141,7 @@ func (m *MockDatastore) CreateTransaction(orderID go_uuid.UUID, externalTransact
 }
 
 // CreateTransaction indicates an expected call of CreateTransaction.
-func (mr *MockDatastoreMockRecorder) CreateTransaction(orderID, externalTransactionID, status, currency, kind, amount interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) CreateTransaction(orderID, externalTransactionID, status, currency, kind, amount any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransaction", reflect.TypeOf((*MockDatastore)(nil).CreateTransaction), orderID, externalTransactionID, status, currency, kind, amount)
 }
@@ -156,7 +156,7 @@ func (m *MockDatastore) DeleteKey(id go_uuid.UUID, delaySeconds int) (*Key, erro
 }
 
 // DeleteKey indicates an expected call of DeleteKey.
-func (mr *MockDatastoreMockRecorder) DeleteKey(id, delaySeconds interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) DeleteKey(id, delaySeconds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteKey", reflect.TypeOf((*MockDatastore)(nil).DeleteKey), id, delaySeconds)
 }
@@ -170,7 +170,7 @@ func (m *MockDatastore) DeleteSigningOrderRequestOutboxByOrderTx(ctx context.Con
 }
 
 // DeleteSigningOrderRequestOutboxByOrderTx indicates an expected call of DeleteSigningOrderRequestOutboxByOrderTx.
-func (mr *MockDatastoreMockRecorder) DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) DeleteSigningOrderRequestOutboxByOrderTx(ctx, tx, orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSigningOrderRequestOutboxByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteSigningOrderRequestOutboxByOrderTx), ctx, tx, orderID)
 }
@@ -184,7 +184,7 @@ func (m *MockDatastore) DeleteSingleUseOrderCredsByOrderTx(ctx context.Context, 
 }
 
 // DeleteSingleUseOrderCredsByOrderTx indicates an expected call of DeleteSingleUseOrderCredsByOrderTx.
-func (mr *MockDatastoreMockRecorder) DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) DeleteSingleUseOrderCredsByOrderTx(ctx, tx, orderID, isSigned any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSingleUseOrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteSingleUseOrderCredsByOrderTx), ctx, tx, orderID, isSigned)
 }
@@ -198,7 +198,7 @@ func (m *MockDatastore) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx context.Conte
 }
 
 // DeleteTimeLimitedV2OrderCredsByOrderTx indicates an expected call of DeleteTimeLimitedV2OrderCredsByOrderTx.
-func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) DeleteTimeLimitedV2OrderCredsByOrderTx(ctx, tx, orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTimeLimitedV2OrderCredsByOrderTx", reflect.TypeOf((*MockDatastore)(nil).DeleteTimeLimitedV2OrderCredsByOrderTx), ctx, tx, orderID)
 }
@@ -213,7 +213,7 @@ func (m *MockDatastore) GetIssuerByPublicKey(publicKey string) (*Issuer, error) 
 }
 
 // GetIssuerByPublicKey indicates an expected call of GetIssuerByPublicKey.
-func (mr *MockDatastoreMockRecorder) GetIssuerByPublicKey(publicKey interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetIssuerByPublicKey(publicKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuerByPublicKey", reflect.TypeOf((*MockDatastore)(nil).GetIssuerByPublicKey), publicKey)
 }
@@ -228,7 +228,7 @@ func (m *MockDatastore) GetKey(id go_uuid.UUID, showExpired bool) (*Key, error) 
 }
 
 // GetKey indicates an expected call of GetKey.
-func (mr *MockDatastoreMockRecorder) GetKey(id, showExpired interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetKey(id, showExpired any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockDatastore)(nil).GetKey), id, showExpired)
 }
@@ -243,7 +243,7 @@ func (m *MockDatastore) GetKeysByMerchant(merchant string, showExpired bool) (*[
 }
 
 // GetKeysByMerchant indicates an expected call of GetKeysByMerchant.
-func (mr *MockDatastoreMockRecorder) GetKeysByMerchant(merchant, showExpired interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetKeysByMerchant(merchant, showExpired any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKeysByMerchant", reflect.TypeOf((*MockDatastore)(nil).GetKeysByMerchant), merchant, showExpired)
 }
@@ -258,7 +258,7 @@ func (m *MockDatastore) GetOrder(orderID go_uuid.UUID) (*Order, error) {
 }
 
 // GetOrder indicates an expected call of GetOrder.
-func (mr *MockDatastoreMockRecorder) GetOrder(orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetOrder(orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrder", reflect.TypeOf((*MockDatastore)(nil).GetOrder), orderID)
 }
@@ -273,7 +273,7 @@ func (m *MockDatastore) GetOrderByExternalID(ctx context.Context, externalID str
 }
 
 // GetOrderByExternalID indicates an expected call of GetOrderByExternalID.
-func (mr *MockDatastoreMockRecorder) GetOrderByExternalID(ctx, externalID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetOrderByExternalID(ctx, externalID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderByExternalID", reflect.TypeOf((*MockDatastore)(nil).GetOrderByExternalID), ctx, externalID)
 }
@@ -288,7 +288,7 @@ func (m *MockDatastore) GetOrderCreds(orderID go_uuid.UUID, isSigned bool) ([]Or
 }
 
 // GetOrderCreds indicates an expected call of GetOrderCreds.
-func (mr *MockDatastoreMockRecorder) GetOrderCreds(orderID, isSigned interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetOrderCreds(orderID, isSigned any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderCreds", reflect.TypeOf((*MockDatastore)(nil).GetOrderCreds), orderID, isSigned)
 }
@@ -303,7 +303,7 @@ func (m *MockDatastore) GetOrderCredsByItemID(orderID, itemID go_uuid.UUID, isSi
 }
 
 // GetOrderCredsByItemID indicates an expected call of GetOrderCredsByItemID.
-func (mr *MockDatastoreMockRecorder) GetOrderCredsByItemID(orderID, itemID, isSigned interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetOrderCredsByItemID(orderID, itemID, isSigned any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderCredsByItemID", reflect.TypeOf((*MockDatastore)(nil).GetOrderCredsByItemID), orderID, itemID, isSigned)
 }
@@ -318,7 +318,7 @@ func (m *MockDatastore) GetOrderItem(ctx context.Context, itemID go_uuid.UUID) (
 }
 
 // GetOrderItem indicates an expected call of GetOrderItem.
-func (mr *MockDatastoreMockRecorder) GetOrderItem(ctx, itemID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetOrderItem(ctx, itemID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrderItem", reflect.TypeOf((*MockDatastore)(nil).GetOrderItem), ctx, itemID)
 }
@@ -349,7 +349,7 @@ func (m *MockDatastore) GetPagedMerchantTransactions(ctx context.Context, mercha
 }
 
 // GetPagedMerchantTransactions indicates an expected call of GetPagedMerchantTransactions.
-func (mr *MockDatastoreMockRecorder) GetPagedMerchantTransactions(ctx, merchantID, pagination interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetPagedMerchantTransactions(ctx, merchantID, pagination any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPagedMerchantTransactions", reflect.TypeOf((*MockDatastore)(nil).GetPagedMerchantTransactions), ctx, merchantID, pagination)
 }
@@ -364,7 +364,7 @@ func (m *MockDatastore) GetSigningOrderRequestOutboxByOrder(ctx context.Context,
 }
 
 // GetSigningOrderRequestOutboxByOrder indicates an expected call of GetSigningOrderRequestOutboxByOrder.
-func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByOrder(ctx, orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByOrder(ctx, orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSigningOrderRequestOutboxByOrder", reflect.TypeOf((*MockDatastore)(nil).GetSigningOrderRequestOutboxByOrder), ctx, orderID)
 }
@@ -379,7 +379,7 @@ func (m *MockDatastore) GetSigningOrderRequestOutboxByOrderItem(ctx context.Cont
 }
 
 // GetSigningOrderRequestOutboxByOrderItem indicates an expected call of GetSigningOrderRequestOutboxByOrderItem.
-func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByOrderItem(ctx, orderID, itemID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByOrderItem(ctx, orderID, itemID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSigningOrderRequestOutboxByOrderItem", reflect.TypeOf((*MockDatastore)(nil).GetSigningOrderRequestOutboxByOrderItem), ctx, orderID, itemID)
 }
@@ -394,7 +394,7 @@ func (m *MockDatastore) GetSigningOrderRequestOutboxByRequestID(ctx context.Cont
 }
 
 // GetSigningOrderRequestOutboxByRequestID indicates an expected call of GetSigningOrderRequestOutboxByRequestID.
-func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByRequestID(ctx, dbi, reqID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetSigningOrderRequestOutboxByRequestID(ctx, dbi, reqID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSigningOrderRequestOutboxByRequestID", reflect.TypeOf((*MockDatastore)(nil).GetSigningOrderRequestOutboxByRequestID), ctx, dbi, reqID)
 }
@@ -409,7 +409,7 @@ func (m *MockDatastore) GetSumForTransactions(orderID go_uuid.UUID) (decimal.Dec
 }
 
 // GetSumForTransactions indicates an expected call of GetSumForTransactions.
-func (mr *MockDatastoreMockRecorder) GetSumForTransactions(orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetSumForTransactions(orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSumForTransactions", reflect.TypeOf((*MockDatastore)(nil).GetSumForTransactions), orderID)
 }
@@ -424,7 +424,7 @@ func (m *MockDatastore) GetTLV2Creds(ctx context.Context, dbi sqlx.QueryerContex
 }
 
 // GetTLV2Creds indicates an expected call of GetTLV2Creds.
-func (mr *MockDatastoreMockRecorder) GetTLV2Creds(ctx, dbi, ordID, itemID, reqID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetTLV2Creds(ctx, dbi, ordID, itemID, reqID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTLV2Creds", reflect.TypeOf((*MockDatastore)(nil).GetTLV2Creds), ctx, dbi, ordID, itemID, reqID)
 }
@@ -439,7 +439,7 @@ func (m *MockDatastore) GetTimeLimitedV2OrderCredsByOrder(orderID go_uuid.UUID) 
 }
 
 // GetTimeLimitedV2OrderCredsByOrder indicates an expected call of GetTimeLimitedV2OrderCredsByOrder.
-func (mr *MockDatastoreMockRecorder) GetTimeLimitedV2OrderCredsByOrder(orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetTimeLimitedV2OrderCredsByOrder(orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeLimitedV2OrderCredsByOrder", reflect.TypeOf((*MockDatastore)(nil).GetTimeLimitedV2OrderCredsByOrder), orderID)
 }
@@ -454,7 +454,7 @@ func (m *MockDatastore) GetTimeLimitedV2OrderCredsByOrderItem(itemID go_uuid.UUI
 }
 
 // GetTimeLimitedV2OrderCredsByOrderItem indicates an expected call of GetTimeLimitedV2OrderCredsByOrderItem.
-func (mr *MockDatastoreMockRecorder) GetTimeLimitedV2OrderCredsByOrderItem(itemID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetTimeLimitedV2OrderCredsByOrderItem(itemID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeLimitedV2OrderCredsByOrderItem", reflect.TypeOf((*MockDatastore)(nil).GetTimeLimitedV2OrderCredsByOrderItem), itemID)
 }
@@ -469,7 +469,7 @@ func (m *MockDatastore) GetTransaction(externalTransactionID string) (*Transacti
 }
 
 // GetTransaction indicates an expected call of GetTransaction.
-func (mr *MockDatastoreMockRecorder) GetTransaction(externalTransactionID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetTransaction(externalTransactionID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransaction", reflect.TypeOf((*MockDatastore)(nil).GetTransaction), externalTransactionID)
 }
@@ -484,7 +484,7 @@ func (m *MockDatastore) GetTransactions(orderID go_uuid.UUID) (*[]Transaction, e
 }
 
 // GetTransactions indicates an expected call of GetTransactions.
-func (mr *MockDatastoreMockRecorder) GetTransactions(orderID interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetTransactions(orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactions", reflect.TypeOf((*MockDatastore)(nil).GetTransactions), orderID)
 }
@@ -500,7 +500,7 @@ func (m *MockDatastore) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx
 }
 
 // GetUncommittedVotesForUpdate indicates an expected call of GetUncommittedVotesForUpdate.
-func (mr *MockDatastoreMockRecorder) GetUncommittedVotesForUpdate(ctx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetUncommittedVotesForUpdate(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUncommittedVotesForUpdate", reflect.TypeOf((*MockDatastore)(nil).GetUncommittedVotesForUpdate), ctx)
 }
@@ -514,7 +514,7 @@ func (m *MockDatastore) InsertOrderCredsTx(ctx context.Context, tx *sqlx.Tx, cre
 }
 
 // InsertOrderCredsTx indicates an expected call of InsertOrderCredsTx.
-func (mr *MockDatastoreMockRecorder) InsertOrderCredsTx(ctx, tx, creds interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertOrderCredsTx(ctx, tx, creds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertOrderCredsTx", reflect.TypeOf((*MockDatastore)(nil).InsertOrderCredsTx), ctx, tx, creds)
 }
@@ -528,7 +528,7 @@ func (m *MockDatastore) InsertSignedOrderCredentialsTx(ctx context.Context, tx *
 }
 
 // InsertSignedOrderCredentialsTx indicates an expected call of InsertSignedOrderCredentialsTx.
-func (mr *MockDatastoreMockRecorder) InsertSignedOrderCredentialsTx(ctx, tx, signedOrderResult interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertSignedOrderCredentialsTx(ctx, tx, signedOrderResult any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSignedOrderCredentialsTx", reflect.TypeOf((*MockDatastore)(nil).InsertSignedOrderCredentialsTx), ctx, tx, signedOrderResult)
 }
@@ -542,7 +542,7 @@ func (m *MockDatastore) InsertSigningOrderRequestOutbox(ctx context.Context, req
 }
 
 // InsertSigningOrderRequestOutbox indicates an expected call of InsertSigningOrderRequestOutbox.
-func (mr *MockDatastoreMockRecorder) InsertSigningOrderRequestOutbox(ctx, requestID, orderID, itemID, signingOrderRequest interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertSigningOrderRequestOutbox(ctx, requestID, orderID, itemID, signingOrderRequest any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSigningOrderRequestOutbox", reflect.TypeOf((*MockDatastore)(nil).InsertSigningOrderRequestOutbox), ctx, requestID, orderID, itemID, signingOrderRequest)
 }
@@ -556,7 +556,7 @@ func (m *MockDatastore) InsertTimeLimitedV2OrderCredsTx(ctx context.Context, tx 
 }
 
 // InsertTimeLimitedV2OrderCredsTx indicates an expected call of InsertTimeLimitedV2OrderCredsTx.
-func (mr *MockDatastoreMockRecorder) InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2 interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertTimeLimitedV2OrderCredsTx(ctx, tx, tlv2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTimeLimitedV2OrderCredsTx", reflect.TypeOf((*MockDatastore)(nil).InsertTimeLimitedV2OrderCredsTx), ctx, tx, tlv2)
 }
@@ -570,7 +570,7 @@ func (m *MockDatastore) InsertVote(ctx context.Context, vr VoteRecord) error {
 }
 
 // InsertVote indicates an expected call of InsertVote.
-func (mr *MockDatastoreMockRecorder) InsertVote(ctx, vr interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertVote(ctx, vr any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertVote", reflect.TypeOf((*MockDatastore)(nil).InsertVote), ctx, vr)
 }
@@ -586,7 +586,7 @@ func (m *MockDatastore) IsStripeSub(arg0 go_uuid.UUID) (bool, string, error) {
 }
 
 // IsStripeSub indicates an expected call of IsStripeSub.
-func (mr *MockDatastoreMockRecorder) IsStripeSub(arg0 interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) IsStripeSub(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStripeSub", reflect.TypeOf((*MockDatastore)(nil).IsStripeSub), arg0)
 }
@@ -600,7 +600,7 @@ func (m *MockDatastore) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *
 }
 
 // MarkVoteErrored indicates an expected call of MarkVoteErrored.
-func (mr *MockDatastoreMockRecorder) MarkVoteErrored(ctx, vr, tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) MarkVoteErrored(ctx, vr, tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkVoteErrored", reflect.TypeOf((*MockDatastore)(nil).MarkVoteErrored), ctx, vr, tx)
 }
@@ -608,7 +608,7 @@ func (mr *MockDatastoreMockRecorder) MarkVoteErrored(ctx, vr, tx interface{}) *g
 // Migrate mocks base method.
 func (m *MockDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{}
+	varargs := []any{}
 	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
@@ -618,7 +618,7 @@ func (m *MockDatastore) Migrate(arg0 ...uint) error {
 }
 
 // Migrate indicates an expected call of Migrate.
-func (mr *MockDatastoreMockRecorder) Migrate(arg0 ...interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) Migrate(arg0 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockDatastore)(nil).Migrate), arg0...)
 }
@@ -659,7 +659,7 @@ func (m *MockDatastore) RollbackTx(tx *sqlx.Tx) {
 }
 
 // RollbackTx indicates an expected call of RollbackTx.
-func (mr *MockDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RollbackTx(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockDatastore)(nil).RollbackTx), tx)
 }
@@ -673,7 +673,7 @@ func (m *MockDatastore) RollbackTxAndHandle(tx *sqlx.Tx) error {
 }
 
 // RollbackTxAndHandle indicates an expected call of RollbackTxAndHandle.
-func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockDatastore)(nil).RollbackTxAndHandle), tx)
 }
@@ -687,7 +687,7 @@ func (m *MockDatastore) SendSigningRequest(ctx context.Context, signingRequestWr
 }
 
 // SendSigningRequest indicates an expected call of SendSigningRequest.
-func (mr *MockDatastoreMockRecorder) SendSigningRequest(ctx, signingRequestWriter interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) SendSigningRequest(ctx, signingRequestWriter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendSigningRequest", reflect.TypeOf((*MockDatastore)(nil).SendSigningRequest), ctx, signingRequestWriter)
 }
@@ -701,7 +701,7 @@ func (m *MockDatastore) UpdateOrder(orderID go_uuid.UUID, status string) error {
 }
 
 // UpdateOrder indicates an expected call of UpdateOrder.
-func (mr *MockDatastoreMockRecorder) UpdateOrder(orderID, status interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) UpdateOrder(orderID, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrder", reflect.TypeOf((*MockDatastore)(nil).UpdateOrder), orderID, status)
 }
@@ -715,7 +715,7 @@ func (m *MockDatastore) UpdateOrderMetadata(orderID go_uuid.UUID, key, value str
 }
 
 // UpdateOrderMetadata indicates an expected call of UpdateOrderMetadata.
-func (mr *MockDatastoreMockRecorder) UpdateOrderMetadata(orderID, key, value interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) UpdateOrderMetadata(orderID, key, value any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateOrderMetadata", reflect.TypeOf((*MockDatastore)(nil).UpdateOrderMetadata), orderID, key, value)
 }
@@ -729,7 +729,7 @@ func (m *MockDatastore) UpdateSigningOrderRequestOutboxTx(ctx context.Context, t
 }
 
 // UpdateSigningOrderRequestOutboxTx indicates an expected call of UpdateSigningOrderRequestOutboxTx.
-func (mr *MockDatastoreMockRecorder) UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, completedAt interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) UpdateSigningOrderRequestOutboxTx(ctx, tx, requestID, completedAt any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSigningOrderRequestOutboxTx", reflect.TypeOf((*MockDatastore)(nil).UpdateSigningOrderRequestOutboxTx), ctx, tx, requestID, completedAt)
 }
@@ -744,7 +744,7 @@ func (m *MockDatastore) UpdateTransaction(orderID go_uuid.UUID, externalTransact
 }
 
 // UpdateTransaction indicates an expected call of UpdateTransaction.
-func (mr *MockDatastoreMockRecorder) UpdateTransaction(orderID, externalTransactionID, status, currency, kind, amount interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) UpdateTransaction(orderID, externalTransactionID, status, currency, kind, amount any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTransaction", reflect.TypeOf((*MockDatastore)(nil).UpdateTransaction), orderID, externalTransactionID, status, currency, kind, amount)
 }
@@ -781,7 +781,7 @@ func (m *MockorderStore) AppendMetadata(ctx context.Context, dbi sqlx.ExecerCont
 }
 
 // AppendMetadata indicates an expected call of AppendMetadata.
-func (mr *MockorderStoreMockRecorder) AppendMetadata(ctx, dbi, id, key, val interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) AppendMetadata(ctx, dbi, id, key, val any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendMetadata", reflect.TypeOf((*MockorderStore)(nil).AppendMetadata), ctx, dbi, id, key, val)
 }
@@ -795,7 +795,7 @@ func (m *MockorderStore) AppendMetadataInt(ctx context.Context, dbi sqlx.ExecerC
 }
 
 // AppendMetadataInt indicates an expected call of AppendMetadataInt.
-func (mr *MockorderStoreMockRecorder) AppendMetadataInt(ctx, dbi, id, key, val interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) AppendMetadataInt(ctx, dbi, id, key, val any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendMetadataInt", reflect.TypeOf((*MockorderStore)(nil).AppendMetadataInt), ctx, dbi, id, key, val)
 }
@@ -809,7 +809,7 @@ func (m *MockorderStore) AppendMetadataInt64(ctx context.Context, dbi sqlx.Exece
 }
 
 // AppendMetadataInt64 indicates an expected call of AppendMetadataInt64.
-func (mr *MockorderStoreMockRecorder) AppendMetadataInt64(ctx, dbi, id, key, val interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) AppendMetadataInt64(ctx, dbi, id, key, val any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendMetadataInt64", reflect.TypeOf((*MockorderStore)(nil).AppendMetadataInt64), ctx, dbi, id, key, val)
 }
@@ -824,7 +824,7 @@ func (m *MockorderStore) Create(ctx context.Context, dbi sqlx.QueryerContext, or
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockorderStoreMockRecorder) Create(ctx, dbi, oreq interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) Create(ctx, dbi, oreq any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockorderStore)(nil).Create), ctx, dbi, oreq)
 }
@@ -839,7 +839,7 @@ func (m *MockorderStore) Get(ctx context.Context, dbi sqlx.QueryerContext, id go
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockorderStoreMockRecorder) Get(ctx, dbi, id interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) Get(ctx, dbi, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockorderStore)(nil).Get), ctx, dbi, id)
 }
@@ -854,7 +854,7 @@ func (m *MockorderStore) GetByExternalID(ctx context.Context, dbi sqlx.QueryerCo
 }
 
 // GetByExternalID indicates an expected call of GetByExternalID.
-func (mr *MockorderStoreMockRecorder) GetByExternalID(ctx, dbi, extID interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) GetByExternalID(ctx, dbi, extID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByExternalID", reflect.TypeOf((*MockorderStore)(nil).GetByExternalID), ctx, dbi, extID)
 }
@@ -869,7 +869,7 @@ func (m *MockorderStore) GetExpiredStripeCheckoutSessionID(ctx context.Context, 
 }
 
 // GetExpiredStripeCheckoutSessionID indicates an expected call of GetExpiredStripeCheckoutSessionID.
-func (mr *MockorderStoreMockRecorder) GetExpiredStripeCheckoutSessionID(ctx, dbi, orderID interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) GetExpiredStripeCheckoutSessionID(ctx, dbi, orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExpiredStripeCheckoutSessionID", reflect.TypeOf((*MockorderStore)(nil).GetExpiredStripeCheckoutSessionID), ctx, dbi, orderID)
 }
@@ -884,7 +884,7 @@ func (m *MockorderStore) GetExpiresAtAfterISOPeriod(ctx context.Context, dbi sql
 }
 
 // GetExpiresAtAfterISOPeriod indicates an expected call of GetExpiresAtAfterISOPeriod.
-func (mr *MockorderStoreMockRecorder) GetExpiresAtAfterISOPeriod(ctx, dbi, id interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) GetExpiresAtAfterISOPeriod(ctx, dbi, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExpiresAtAfterISOPeriod", reflect.TypeOf((*MockorderStore)(nil).GetExpiresAtAfterISOPeriod), ctx, dbi, id)
 }
@@ -899,7 +899,7 @@ func (m *MockorderStore) GetMetadata(ctx context.Context, dbi sqlx.QueryerContex
 }
 
 // GetMetadata indicates an expected call of GetMetadata.
-func (mr *MockorderStoreMockRecorder) GetMetadata(ctx, dbi, id interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) GetMetadata(ctx, dbi, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockorderStore)(nil).GetMetadata), ctx, dbi, id)
 }
@@ -914,7 +914,7 @@ func (m *MockorderStore) HasExternalID(ctx context.Context, dbi sqlx.QueryerCont
 }
 
 // HasExternalID indicates an expected call of HasExternalID.
-func (mr *MockorderStoreMockRecorder) HasExternalID(ctx, dbi, extID interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) HasExternalID(ctx, dbi, extID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasExternalID", reflect.TypeOf((*MockorderStore)(nil).HasExternalID), ctx, dbi, extID)
 }
@@ -928,7 +928,7 @@ func (m *MockorderStore) SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContex
 }
 
 // SetExpiresAt indicates an expected call of SetExpiresAt.
-func (mr *MockorderStoreMockRecorder) SetExpiresAt(ctx, dbi, id, when interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) SetExpiresAt(ctx, dbi, id, when any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetExpiresAt", reflect.TypeOf((*MockorderStore)(nil).SetExpiresAt), ctx, dbi, id, when)
 }
@@ -942,7 +942,7 @@ func (m *MockorderStore) SetLastPaidAt(ctx context.Context, dbi sqlx.ExecerConte
 }
 
 // SetLastPaidAt indicates an expected call of SetLastPaidAt.
-func (mr *MockorderStoreMockRecorder) SetLastPaidAt(ctx, dbi, id, when interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) SetLastPaidAt(ctx, dbi, id, when any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLastPaidAt", reflect.TypeOf((*MockorderStore)(nil).SetLastPaidAt), ctx, dbi, id, when)
 }
@@ -956,7 +956,7 @@ func (m *MockorderStore) SetStatus(ctx context.Context, dbi sqlx.ExecerContext, 
 }
 
 // SetStatus indicates an expected call of SetStatus.
-func (mr *MockorderStoreMockRecorder) SetStatus(ctx, dbi, id, status interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) SetStatus(ctx, dbi, id, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetStatus", reflect.TypeOf((*MockorderStore)(nil).SetStatus), ctx, dbi, id, status)
 }
@@ -970,7 +970,7 @@ func (m *MockorderStore) UpdateMetadata(ctx context.Context, dbi sqlx.ExecerCont
 }
 
 // UpdateMetadata indicates an expected call of UpdateMetadata.
-func (mr *MockorderStoreMockRecorder) UpdateMetadata(ctx, dbi, id, data interface{}) *gomock.Call {
+func (mr *MockorderStoreMockRecorder) UpdateMetadata(ctx, dbi, id, data any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetadata", reflect.TypeOf((*MockorderStore)(nil).UpdateMetadata), ctx, dbi, id, data)
 }
@@ -1008,7 +1008,7 @@ func (m *MockorderItemStore) FindByOrderID(ctx context.Context, dbi sqlx.Queryer
 }
 
 // FindByOrderID indicates an expected call of FindByOrderID.
-func (mr *MockorderItemStoreMockRecorder) FindByOrderID(ctx, dbi, orderID interface{}) *gomock.Call {
+func (mr *MockorderItemStoreMockRecorder) FindByOrderID(ctx, dbi, orderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByOrderID", reflect.TypeOf((*MockorderItemStore)(nil).FindByOrderID), ctx, dbi, orderID)
 }
@@ -1023,7 +1023,7 @@ func (m *MockorderItemStore) Get(ctx context.Context, dbi sqlx.QueryerContext, i
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockorderItemStoreMockRecorder) Get(ctx, dbi, id interface{}) *gomock.Call {
+func (mr *MockorderItemStoreMockRecorder) Get(ctx, dbi, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockorderItemStore)(nil).Get), ctx, dbi, id)
 }
@@ -1031,7 +1031,7 @@ func (mr *MockorderItemStoreMockRecorder) Get(ctx, dbi, id interface{}) *gomock.
 // InsertMany mocks base method.
 func (m *MockorderItemStore) InsertMany(ctx context.Context, dbi sqlx.ExtContext, items ...model.OrderItem) ([]model.OrderItem, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, dbi}
+	varargs := []any{ctx, dbi}
 	for _, a := range items {
 		varargs = append(varargs, a)
 	}
@@ -1042,9 +1042,9 @@ func (m *MockorderItemStore) InsertMany(ctx context.Context, dbi sqlx.ExtContext
 }
 
 // InsertMany indicates an expected call of InsertMany.
-func (mr *MockorderItemStoreMockRecorder) InsertMany(ctx, dbi interface{}, items ...interface{}) *gomock.Call {
+func (mr *MockorderItemStoreMockRecorder) InsertMany(ctx, dbi any, items ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, dbi}, items...)
+	varargs := append([]any{ctx, dbi}, items...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertMany", reflect.TypeOf((*MockorderItemStore)(nil).InsertMany), varargs...)
 }
 
@@ -1080,7 +1080,7 @@ func (m *MockorderPayHistoryStore) Insert(ctx context.Context, dbi sqlx.ExecerCo
 }
 
 // Insert indicates an expected call of Insert.
-func (mr *MockorderPayHistoryStoreMockRecorder) Insert(ctx, dbi, id, when interface{}) *gomock.Call {
+func (mr *MockorderPayHistoryStoreMockRecorder) Insert(ctx, dbi, id, when any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Insert", reflect.TypeOf((*MockorderPayHistoryStore)(nil).Insert), ctx, dbi, id, when)
 }
@@ -1118,7 +1118,7 @@ func (m *MockissuerStore) Create(ctx context.Context, dbi sqlx.QueryerContext, r
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockissuerStoreMockRecorder) Create(ctx, dbi, req interface{}) *gomock.Call {
+func (mr *MockissuerStoreMockRecorder) Create(ctx, dbi, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockissuerStore)(nil).Create), ctx, dbi, req)
 }
@@ -1133,7 +1133,7 @@ func (m *MockissuerStore) GetByMerchID(ctx context.Context, dbi sqlx.QueryerCont
 }
 
 // GetByMerchID indicates an expected call of GetByMerchID.
-func (mr *MockissuerStoreMockRecorder) GetByMerchID(ctx, dbi, merchID interface{}) *gomock.Call {
+func (mr *MockissuerStoreMockRecorder) GetByMerchID(ctx, dbi, merchID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByMerchID", reflect.TypeOf((*MockissuerStore)(nil).GetByMerchID), ctx, dbi, merchID)
 }
@@ -1148,7 +1148,7 @@ func (m *MockissuerStore) GetByPubKey(ctx context.Context, dbi sqlx.QueryerConte
 }
 
 // GetByPubKey indicates an expected call of GetByPubKey.
-func (mr *MockissuerStoreMockRecorder) GetByPubKey(ctx, dbi, pubKey interface{}) *gomock.Call {
+func (mr *MockissuerStoreMockRecorder) GetByPubKey(ctx, dbi, pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByPubKey", reflect.TypeOf((*MockissuerStore)(nil).GetByPubKey), ctx, dbi, pubKey)
 }
@@ -1177,9 +1177,9 @@ func (m *MockgetContext) EXPECT() *MockgetContextMockRecorder {
 }
 
 // GetContext mocks base method.
-func (m *MockgetContext) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (m *MockgetContext) GetContext(ctx context.Context, dest any, query string, args ...any) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, dest, query}
+	varargs := []any{ctx, dest, query}
 	for _, a := range args {
 		varargs = append(varargs, a)
 	}
@@ -1189,8 +1189,8 @@ func (m *MockgetContext) GetContext(ctx context.Context, dest interface{}, query
 }
 
 // GetContext indicates an expected call of GetContext.
-func (mr *MockgetContextMockRecorder) GetContext(ctx, dest, query interface{}, args ...interface{}) *gomock.Call {
+func (mr *MockgetContextMockRecorder) GetContext(ctx, dest, query any, args ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, dest, query}, args...)
+	varargs := append([]any{ctx, dest, query}, args...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContext", reflect.TypeOf((*MockgetContext)(nil).GetContext), varargs...)
 }

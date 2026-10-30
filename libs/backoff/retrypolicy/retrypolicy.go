@@ -80,10 +80,7 @@ func (p *policy) CalculateNextDelay() time.Duration {
 		return Done
 	}
 
-	jitter := int64(0.2 * nextInterval)
-	if jitter < 1 {
-		jitter = 1
-	}
+	jitter := max(int64(0.2*nextInterval), 1)
 
 	n, err := rand.Int(rand.Reader, big.NewInt(jitter))
 	if err != nil || n == nil {

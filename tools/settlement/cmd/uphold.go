@@ -230,7 +230,7 @@ func UpholdUpload(
 			Count:   0,
 		}},
 	}
-	for i := 0; i < total; i++ {
+	for i := range total {
 		settlementTransaction := &settlementState.Transactions[i]
 
 		if settlementTransaction.IsComplete() || settlementTransaction.IsFailed() {
@@ -297,7 +297,7 @@ func UpholdUpload(
 	// While there are transactions in the processing state, attempt to resolve them to complete or failed
 	for someProcessing {
 		someProcessing = false
-		for i := 0; i < total; i++ {
+		for i := range total {
 			settlementTransaction := &settlementState.Transactions[i]
 
 			if settlementTransaction.IsProcessing() {

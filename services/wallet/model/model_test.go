@@ -91,7 +91,7 @@ func TestChallenge_IsValid(t *testing.T) {
 				},
 				now: time.Now().Add(6 * time.Minute),
 			},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorIs(t, err, ErrChallengeExpired)
 			},
 		},
@@ -103,7 +103,7 @@ func TestChallenge_IsValid(t *testing.T) {
 				},
 				now: time.Now(),
 			},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.NoError(t, err)
 			},
 		},

@@ -314,8 +314,7 @@ func (c *HTTPClient) CheckTxStatus(ctx context.Context, APIKey string, clientID 
 	var body PayoutResult
 	_, err = c.client.Do(ctx, req, &body)
 	if err != nil {
-		var eb *errorutils.ErrorBundle
-		if errors.As(err, &eb) {
+		if eb, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 			if httpState, ok := eb.Data().(clients.HTTPState); ok {
 				if httpState.Status == http.StatusNotFound {
 					notFoundReason := "404 From Gemini"

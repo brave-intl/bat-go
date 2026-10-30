@@ -403,7 +403,7 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 		`
 
 	// $ numbered params for query
-	params := []interface{}{
+	params := []any{
 		merchantID,
 	}
 
@@ -1158,7 +1158,7 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	}()
 
 	soroIDs := make([]uuid.UUID, len(soro))
-	for i := 0; i < len(soroIDs); i++ {
+	for i := range soroIDs {
 		soroIDs[i] = soro[i].RequestID
 	}
 
@@ -1226,8 +1226,8 @@ func (pg *Postgres) InsertSignedOrderCredentialsTx(ctx context.Context, tx *sqlx
 				IssuerID:     metadata.IssuerID,
 				BlindedCreds: blindedCreds,
 				SignedCreds:  &signedTokens,
-				BatchProof:   ptrTo(soResult.Data[i].Proof),
-				PublicKey:    ptrTo(soResult.Data[i].PublicKey),
+				BatchProof:   new(soResult.Data[i].Proof),
+				PublicKey:    new(soResult.Data[i].PublicKey),
 			}
 
 			if err := pg.InsertOrderCredsTx(ctx, tx, cred); err != nil {

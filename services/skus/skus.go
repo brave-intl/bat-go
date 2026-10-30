@@ -3,6 +3,7 @@ package skus
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/shopspring/decimal"
 
@@ -112,10 +113,8 @@ func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 	// check sku white list from environment
 	whitelistSKUs, ok := ctx.Value(appctx.WhitelistSKUsCTXKey).([]string)
 	if ok {
-		for _, whitelistSKU := range whitelistSKUs {
-			if sku == whitelistSKU {
-				return true, nil
-			}
+		if slices.Contains(whitelistSKUs, sku) {
+			return true, nil
 		}
 	}
 

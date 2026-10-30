@@ -28,7 +28,7 @@ const maxConfirmTries = 5
 // AntifraudTransaction is a "v2" transaction, creators only atm
 type AntifraudTransaction struct {
 	custodian.Transaction
-	BAT                decimal.Decimal `json:"bat,omitempty"`
+	BAT                decimal.Decimal `json:"bat,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	PayoutReportID     string          `json:"payout_report_id,omitempty"`
 	WalletProviderInfo string          `json:"wallet_provider_id,omitempty"`
 }
@@ -119,7 +119,7 @@ func CheckForDuplicates(transactions []AntifraudTransaction) error {
 
 // PrepareTransactions by embedding signed transactions into the settlement documents
 func PrepareTransactions(wallet *uphold.Wallet, settlements []custodian.Transaction, purpose string, beneficiary *uphold.Beneficiary) error {
-	for i := 0; i < len(settlements); i++ {
+	for i := range settlements {
 		settlement := &settlements[i]
 
 		// Use the Note field if it exists, otherwise use the settlement ID
@@ -154,7 +154,7 @@ func checkTransactionAgainstSettlement(settlement *custodian.Transaction, txInfo
 // CheckPreparedTransactions performs sanity checks on an array of signed settlements
 func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []custodian.Transaction) error {
 	sumProbi := decimal.Zero
-	for i := 0; i < len(settlements); i++ {
+	for i := range settlements {
 		settlement := &settlements[i]
 
 		// make sure the signed transaction is well formed and the signature is valid
@@ -263,7 +263,7 @@ func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wa
 		return err
 	}
 
-	for i := 0; i < len(settlements); i++ {
+	for i := range settlements {
 		err = SubmitPreparedTransaction(ctx, settlementWallet, &settlements[i])
 		if err != nil {
 			return err
@@ -386,7 +386,7 @@ func ConfirmPreparedTransaction(
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be confirmed during an initial run can be confirmed in subsequent runs.
 func ConfirmPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []custodian.Transaction) error {
-	for i := 0; i < len(settlements); i++ {
+	for i := range settlements {
 		err := ConfirmPreparedTransaction(ctx, settlementWallet, &settlements[i], false)
 		if err != nil {
 			return err

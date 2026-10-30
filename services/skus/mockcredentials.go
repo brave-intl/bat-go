@@ -46,7 +46,7 @@ func (m *MockOrderWorker) SignOrderCreds(ctx context.Context, orderID go_uuid.UU
 }
 
 // SignOrderCreds indicates an expected call of SignOrderCreds.
-func (mr *MockOrderWorkerMockRecorder) SignOrderCreds(ctx, orderID, issuer, blindedCreds interface{}) *gomock.Call {
+func (mr *MockOrderWorkerMockRecorder) SignOrderCreds(ctx, orderID, issuer, blindedCreds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignOrderCreds", reflect.TypeOf((*MockOrderWorker)(nil).SignOrderCreds), ctx, orderID, issuer, blindedCreds)
 }
@@ -83,7 +83,7 @@ func (m *MockSigningRequestWriter) WriteMessage(ctx context.Context, message []b
 }
 
 // WriteMessage indicates an expected call of WriteMessage.
-func (mr *MockSigningRequestWriterMockRecorder) WriteMessage(ctx, message interface{}) *gomock.Call {
+func (mr *MockSigningRequestWriterMockRecorder) WriteMessage(ctx, message any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteMessage", reflect.TypeOf((*MockSigningRequestWriter)(nil).WriteMessage), ctx, message)
 }
@@ -97,7 +97,7 @@ func (m *MockSigningRequestWriter) WriteMessages(ctx context.Context, messages [
 }
 
 // WriteMessages indicates an expected call of WriteMessages.
-func (mr *MockSigningRequestWriterMockRecorder) WriteMessages(ctx, messages interface{}) *gomock.Call {
+func (mr *MockSigningRequestWriterMockRecorder) WriteMessages(ctx, messages any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteMessages", reflect.TypeOf((*MockSigningRequestWriter)(nil).WriteMessages), ctx, messages)
 }
@@ -135,7 +135,7 @@ func (m *MockDecoder) Decode(message kafka_go.Message) (*SigningOrderResult, err
 }
 
 // Decode indicates an expected call of Decode.
-func (mr *MockDecoderMockRecorder) Decode(message interface{}) *gomock.Call {
+func (mr *MockDecoderMockRecorder) Decode(message any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Decode", reflect.TypeOf((*MockDecoder)(nil).Decode), message)
 }

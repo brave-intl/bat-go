@@ -46,7 +46,7 @@ func (m *MockClient) FetchCoinList(ctx context.Context, includePlatform bool) (*
 }
 
 // FetchCoinList indicates an expected call of FetchCoinList.
-func (mr *MockClientMockRecorder) FetchCoinList(ctx, includePlatform interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchCoinList(ctx, includePlatform any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCoinList", reflect.TypeOf((*MockClient)(nil).FetchCoinList), ctx, includePlatform)
 }
@@ -62,7 +62,7 @@ func (m *MockClient) FetchCoinMarkets(ctx context.Context, vsCurrency string, li
 }
 
 // FetchCoinMarkets indicates an expected call of FetchCoinMarkets.
-func (mr *MockClientMockRecorder) FetchCoinMarkets(ctx, vsCurrency, limit interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchCoinMarkets(ctx, vsCurrency, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCoinMarkets", reflect.TypeOf((*MockClient)(nil).FetchCoinMarkets), ctx, vsCurrency, limit)
 }
@@ -78,7 +78,7 @@ func (m *MockClient) FetchMarketChart(ctx context.Context, id, vsCurrency string
 }
 
 // FetchMarketChart indicates an expected call of FetchMarketChart.
-func (mr *MockClientMockRecorder) FetchMarketChart(ctx, id, vsCurrency, days, cacheDurationSeconds interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchMarketChart(ctx, id, vsCurrency, days, cacheDurationSeconds any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMarketChart", reflect.TypeOf((*MockClient)(nil).FetchMarketChart), ctx, id, vsCurrency, days, cacheDurationSeconds)
 }
@@ -93,7 +93,7 @@ func (m *MockClient) FetchSimplePrice(ctx context.Context, ids, vsCurrencies str
 }
 
 // FetchSimplePrice indicates an expected call of FetchSimplePrice.
-func (mr *MockClientMockRecorder) FetchSimplePrice(ctx, ids, vsCurrencies, include24hrChange interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchSimplePrice(ctx, ids, vsCurrencies, include24hrChange any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchSimplePrice", reflect.TypeOf((*MockClient)(nil).FetchSimplePrice), ctx, ids, vsCurrencies, include24hrChange)
 }
@@ -108,7 +108,7 @@ func (m *MockClient) FetchSupportedVsCurrencies(ctx context.Context) (*coingecko
 }
 
 // FetchSupportedVsCurrencies indicates an expected call of FetchSupportedVsCurrencies.
-func (mr *MockClientMockRecorder) FetchSupportedVsCurrencies(ctx interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchSupportedVsCurrencies(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchSupportedVsCurrencies", reflect.TypeOf((*MockClient)(nil).FetchSupportedVsCurrencies), ctx)
 }

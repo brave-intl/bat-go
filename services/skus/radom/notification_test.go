@@ -69,7 +69,7 @@ func TestParseNotification(t *testing.T) {
 						},
 					},
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -114,7 +114,7 @@ func TestParseNotification(t *testing.T) {
 						},
 					},
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -141,7 +141,7 @@ func TestParseNotification(t *testing.T) {
 						},
 					},
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -168,7 +168,7 @@ func TestParseNotification(t *testing.T) {
 						},
 					},
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -195,7 +195,7 @@ func TestParseNotification(t *testing.T) {
 						},
 					},
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -222,7 +222,7 @@ func TestParseNotification(t *testing.T) {
 						},
 					},
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -245,7 +245,7 @@ func TestParseNotification(t *testing.T) {
 					EventType: "unknownEvent",
 					EventData: &EventData{},
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -267,7 +267,7 @@ func TestParseNotification(t *testing.T) {
 				ntf: &Notification{
 					EventType: "unknownEvent",
 				},
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -306,7 +306,7 @@ func TestEvent_OrderID(t *testing.T) {
 		{
 			name: "no_event_data",
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrUnsupportedEvent)
 				},
 			},
@@ -320,7 +320,7 @@ func TestEvent_OrderID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrUnsupportedEvent)
 				},
 			},
@@ -336,7 +336,7 @@ func TestEvent_OrderID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrNoCheckoutSessionData)
 				},
 			},
@@ -353,7 +353,7 @@ func TestEvent_OrderID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrNoCheckoutSessionData)
 				},
 			},
@@ -379,7 +379,7 @@ func TestEvent_OrderID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorContains(t, err, "incorrect UUID")
 				},
 			},
@@ -406,7 +406,7 @@ func TestEvent_OrderID(t *testing.T) {
 			},
 			exp: tcExpected{
 				oid: uuid.FromStringOrNil("053e0244-4e37-48c3-8539-49952ec73f37"),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -432,7 +432,7 @@ func TestEvent_OrderID(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrBraveOrderIDNotFound)
 				},
 			},
@@ -482,7 +482,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -499,7 +499,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.Nil,
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrNoRadomPaymentData)
 				},
 			},
@@ -518,7 +518,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.Nil,
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrNoRadomPaymentData)
 				},
 			},
@@ -541,7 +541,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -560,7 +560,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -579,7 +579,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -598,7 +598,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -617,7 +617,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.FromStringOrNil("d14c5b2e-b719-4504-b034-86e74a932295"),
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.NoError(t, err)
 				},
 			},
@@ -628,7 +628,7 @@ func TestNotification_SubID(t *testing.T) {
 			given: tcGiven{ntf: Notification{}},
 			exp: tcExpected{
 				sid: uuid.Nil,
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrUnsupportedEvent)
 				},
 			},
@@ -643,7 +643,7 @@ func TestNotification_SubID(t *testing.T) {
 			},
 			exp: tcExpected{
 				sid: uuid.Nil,
-				mustErr: func(t must.TestingT, err error, i ...interface{}) {
+				mustErr: func(t must.TestingT, err error, i ...any) {
 					must.ErrorIs(t, err, ErrUnsupportedEvent)
 				},
 			},

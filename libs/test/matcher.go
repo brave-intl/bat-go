@@ -14,7 +14,7 @@ type decMatcher struct {
 	x decimal.Decimal
 }
 
-func (e decMatcher) Matches(x interface{}) bool {
+func (e decMatcher) Matches(x any) bool {
 	switch v := x.(type) {
 	case decimal.Decimal:
 		return e.x.Equals(v)

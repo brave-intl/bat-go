@@ -13,7 +13,7 @@ type PaginationResponse struct {
 	Items   int         `json:"items,omitempty"`
 	MaxPage int         `json:"max_page,omitempty"`
 	Ordered []string    `json:"order,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+	Data    any `json:"data,omitempty"`
 }
 
 // Render - render response

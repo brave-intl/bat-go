@@ -83,7 +83,7 @@ func IsPlatform(platform string) bool {
 }
 
 // IsRequiredUUID checks if the uuid is present
-func IsRequiredUUID(i interface{}, context interface{}) bool {
+func IsRequiredUUID(i any, context any) bool {
 	switch v := i.(type) { // you can type switch on the context interface being validated
 	case uuid.UUID:
 		return !uuid.Equal(v, uuid.Nil)

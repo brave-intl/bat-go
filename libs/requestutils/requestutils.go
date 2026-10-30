@@ -43,7 +43,7 @@ func Read(ctx context.Context, body io.Reader) ([]byte, error) {
 }
 
 // ReadJSON reads a request body according to an interface and limits the size to 10MB
-func ReadJSON(ctx context.Context, body io.Reader, intr interface{}) error {
+func ReadJSON(ctx context.Context, body io.Reader, intr any) error {
 	logger := logging.Logger(ctx, "requestutils.ReadJSON")
 	if body == nil {
 		return errorutils.New(errors.New("body is nil"), "Error in request body", nil)

@@ -361,7 +361,7 @@ func (s *mockPolicyStore) GetPolicy(item *OrderItem) (model.CredExtensionPolicy,
 func genNumStrings(n int) []string {
 	result := make([]string, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		result[i] = strconv.Itoa(i)
 	}
 

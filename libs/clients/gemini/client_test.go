@@ -123,7 +123,7 @@ func findAccountByClass(accounts *[]Account, typ string) Account {
 	return Account{}
 }
 
-func (suite *GeminiTestSuite) preparePrivateRequest(payload interface{}) string {
+func (suite *GeminiTestSuite) preparePrivateRequest(payload any) string {
 	payloadSerialized, err := json.Marshal(payload)
 	suite.Require().NoError(err, "payload must be able to be serialized")
 

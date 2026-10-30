@@ -4,5 +4,5 @@ package responses
 type Meta struct {
 	Status  string                 `json:"status,omitempty"`
 	Message string                 `json:"message,omitempty"`
-	Context map[string]interface{} `json:"context,omitempty"`
+	Context map[string]any `json:"context,omitempty"`
 }

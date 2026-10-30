@@ -23,8 +23,8 @@ type ParametersV1 struct {
 	PayoutStatus     *custodian.PayoutStatus `json:"payoutStatus"`
 	CustodianRegions *custodian.Regions      `json:"custodianRegions"`
 	BATRate          float64                 `json:"batRate,omitempty"`
-	AutoContribute   AutoContribute          `json:"autocontribute,omitempty"`
-	Tips             Tips                    `json:"tips,omitempty"`
+	AutoContribute   AutoContribute          `json:"autocontribute,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
+	Tips             Tips                    `json:"tips,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	Transition       bool                    `json:"vbatExpired"`
 	VBATDeadline     *time.Time              `json:"vbatDeadline,omitempty"`
 	TOSVersion       int                     `json:"tosVersion,omitempty"`

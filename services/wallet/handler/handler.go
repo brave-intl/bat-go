@@ -68,13 +68,13 @@ func (h *Solana) PostWaitlist(w http.ResponseWriter, r *http.Request) *handlers.
 	if err != nil {
 		lg.Err(err).Msg("failed to get key id")
 
-		return handlers.ValidationError("request body", map[string]interface{}{"paymentId": err.Error()})
+		return handlers.ValidationError("request body", map[string]any{"paymentId": err.Error()})
 	}
 
 	if sk != req.PaymentID.String() {
 		lg.Err(model.ErrPaymentIDSignatureMismatch).Msg("paymentId signature mismatch")
 
-		return handlers.ValidationError("request body", map[string]interface{}{"paymentId": model.ErrPaymentIDSignatureMismatch})
+		return handlers.ValidationError("request body", map[string]any{"paymentId": model.ErrPaymentIDSignatureMismatch})
 	}
 
 	if err := h.svc.SolanaAddToWaitlist(ctx, req.PaymentID); err != nil {
@@ -106,13 +106,13 @@ func (h *Solana) DeleteWaitlist(w http.ResponseWriter, r *http.Request) *handler
 	if err != nil {
 		lg.Err(err).Msg("failed to get key id")
 
-		return handlers.ValidationError("request", map[string]interface{}{"paymentID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"paymentID": err.Error()})
 	}
 
 	if sk != paymentID.String() {
 		lg.Err(model.ErrPaymentIDSignatureMismatch).Msg("paymentId signature mismatch")
 
-		return handlers.ValidationError("request", map[string]interface{}{"paymentID": model.ErrPaymentIDSignatureMismatch})
+		return handlers.ValidationError("request", map[string]any{"paymentID": model.ErrPaymentIDSignatureMismatch})
 	}
 
 	if err := h.svc.SolanaDeleteFromWaitlist(ctx, *paymentID.UUID()); err != nil {

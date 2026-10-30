@@ -25,11 +25,11 @@ var (
 type HTTPState struct {
 	Status int
 	Path   string
-	Body   interface{}
+	Body   any
 }
 
 // NewHTTPError creates a new errors.ErrorBundle with an HTTPState wrapping the status, path and v.
-func NewHTTPError(err error, path, message string, status int, v interface{}) error {
+func NewHTTPError(err error, path, message string, status int, v any) error {
 	return errorutils.New(err, message, HTTPState{
 		Status: status,
 		Path:   path,

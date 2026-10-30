@@ -9,20 +9,20 @@ import (
 
 type (
 	// RetryFunc defines a retry function
-	RetryFunc func(ctx context.Context, operation Operation, retryPolicy retrypolicy.Retry, IsRetriable IsRetriable) (interface{}, error)
+	RetryFunc func(ctx context.Context, operation Operation, retryPolicy retrypolicy.Retry, IsRetriable IsRetriable) (any, error)
 
 	// Operation the operation to be executed with retry
-	Operation func() (interface{}, error)
+	Operation func() (any, error)
 
 	// IsRetriable a function to determine if an error caused by the executed operation is retriable
 	IsRetriable func(error) bool
 )
 
 // Retry executes the given Operation using the provided retrypolicy.Retry policy and IsRetriable conditions
-func Retry(ctx context.Context, operation Operation, retryPolicy retrypolicy.Retry, IsRetriable IsRetriable) (interface{}, error) {
+func Retry(ctx context.Context, operation Operation, retryPolicy retrypolicy.Retry, IsRetriable IsRetriable) (any, error) {
 
 	var err error
-	var response interface{}
+	var response any
 	var next time.Duration
 
 	for {

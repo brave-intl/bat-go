@@ -42,13 +42,13 @@ type upholdDenominationValidationErrors struct {
 
 type upholdDenominationErrors struct {
 	Code             string                             `json:"code"`
-	ValidationErrors upholdDenominationValidationErrors `json:"errors,omitempty"`
+	ValidationErrors upholdDenominationValidationErrors `json:"errors,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	Data             json.RawMessage                    `json:",omitempty"`
 }
 
 type upholdValidationErrors struct {
 	SignatureError     []upholdBaseError        `json:"signature,omitempty"`
-	DenominationErrors upholdDenominationErrors `json:"denomination,omitempty"`
+	DenominationErrors upholdDenominationErrors `json:"denomination,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	DestinationErrors  []upholdBaseError        `json:"destination,omitempty"`
 	Data               json.RawMessage          `json:",omitempty"`
 }
@@ -57,7 +57,7 @@ type upholdError struct {
 	Message          string                 `json:"error,omitempty"`
 	Code             string                 `json:"code"`
 	Restrictions     []string               `json:"restrictions,omitempty"`
-	ValidationErrors upholdValidationErrors `json:"errors,omitempty"`
+	ValidationErrors upholdValidationErrors `json:"errors,omitempty"` //nolint:modernize // omitzero would drop zero-valued JSON fields
 	Data             json.RawMessage        `json:",omitempty"`
 	RequestID        string                 `json:"requestId,omitempty"`
 }

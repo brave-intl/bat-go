@@ -44,7 +44,7 @@ func (m *MockGeoValidator) Validate(ctx context.Context, geolocation string) (bo
 }
 
 // Validate indicates an expected call of Validate.
-func (mr *MockGeoValidatorMockRecorder) Validate(ctx, geolocation interface{}) *gomock.Call {
+func (mr *MockGeoValidatorMockRecorder) Validate(ctx, geolocation any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockGeoValidator)(nil).Validate), ctx, geolocation)
 }
@@ -79,7 +79,7 @@ func (m *MockmetricSvc) LinkFailureZP(cc string) {
 }
 
 // LinkFailureZP indicates an expected call of LinkFailureZP.
-func (mr *MockmetricSvcMockRecorder) LinkFailureZP(cc interface{}) *gomock.Call {
+func (mr *MockmetricSvcMockRecorder) LinkFailureZP(cc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkFailureZP", reflect.TypeOf((*MockmetricSvc)(nil).LinkFailureZP), cc)
 }
@@ -91,7 +91,7 @@ func (m *MockmetricSvc) LinkSuccessZP(cc string) {
 }
 
 // LinkSuccessZP indicates an expected call of LinkSuccessZP.
-func (mr *MockmetricSvcMockRecorder) LinkSuccessZP(cc interface{}) *gomock.Call {
+func (mr *MockmetricSvcMockRecorder) LinkSuccessZP(cc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LinkSuccessZP", reflect.TypeOf((*MockmetricSvc)(nil).LinkSuccessZP), cc)
 }

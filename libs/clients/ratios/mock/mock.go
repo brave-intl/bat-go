@@ -45,7 +45,7 @@ func (m *MockClient) FetchRate(ctx context.Context, base, currency string) (*rat
 }
 
 // FetchRate indicates an expected call of FetchRate.
-func (mr *MockClientMockRecorder) FetchRate(ctx, base, currency interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchRate(ctx, base, currency any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchRate", reflect.TypeOf((*MockClient)(nil).FetchRate), ctx, base, currency)
 }

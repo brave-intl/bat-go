@@ -146,7 +146,7 @@ func (c *SimpleHTTPClient) newRequest(
 	ctx context.Context,
 	method,
 	path string,
-	body interface{},
+	body any,
 	qsb QueryStringBody,
 ) (*http.Request, int, error) {
 	var buf io.ReadWriter
@@ -204,7 +204,7 @@ func (c *SimpleHTTPClient) NewRequest(
 	ctx context.Context,
 	method,
 	path string,
-	body interface{},
+	body any,
 	qsb QueryStringBody,
 ) (*http.Request, error) {
 	req, status, err := c.newRequest(ctx, method, path, body, qsb)
@@ -215,7 +215,7 @@ func (c *SimpleHTTPClient) NewRequest(
 }
 
 // Do the specified http request, decoding the JSON result into v
-func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
+func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v any) (*http.Response, error) {
 
 	// concurrent client request instrumentation
 	concurrentClientRequests.With(
@@ -296,12 +296,12 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 
 // RespErrData - error data for http response
 type RespErrData struct {
-	ResponseHeaders interface{}
-	Body            interface{}
+	ResponseHeaders any
+	Body            any
 }
 
 // Do the specified http request, decoding the JSON result into v
-func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
+func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v any) (*http.Response, error) {
 	resp, err := c.do(ctx, req, v)
 	if err != nil {
 		// errors returned from c.do could be go errors or upstream api errors

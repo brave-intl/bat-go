@@ -42,13 +42,13 @@ func TestInfo_LinkSolanaAddress(t *testing.T) {
 					Nonce: "86d6f240-df9b-4167-a66e-5df6da80ac24",
 				},
 			},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.NoError(t, err)
 			},
 		},
 		{
 			name: "invalid_linking",
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				var expected *LinkSolanaAddressError
 				return assert.ErrorAs(t, err, &expected)
 			},
@@ -83,14 +83,14 @@ func TestVerifySolanaSignature(t *testing.T) {
 		{
 			name:  "invalid_public_key_length",
 			given: tcGiven{solPub: "123456789"},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorIs(t, err, errBadPublicKeyLength)
 			},
 		},
 		{
 			name:  "signature_has_illegal_character",
 			given: tcGiven{solPub: "32rbMEtgTphzVnHuSsuHEv3hKpm92UsgMerjDjZr72T1", solSig: "+"},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorContains(t, err, "error decoding solana signature")
 			},
 		},
@@ -101,7 +101,7 @@ func TestVerifySolanaSignature(t *testing.T) {
 				msg:    "invalid_message",
 				solSig: "zc2boTImAAhzraUplAlUy2L6hNF6l-DYGfOqq_4UfrDsJEBg26jaHIAXJF2i3tifCZxrvmu3ahqIdnm2kOwyBQ==",
 			},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorIs(t, err, errInvalidSolanaSignature)
 			},
 		},
@@ -112,7 +112,7 @@ func TestVerifySolanaSignature(t *testing.T) {
 				msg:    "test",
 				solSig: "zc2boTImAAhzraUplAlUy2L6hNF6l-DYGfOqq_4UfrDsJEBg26jaHIAXJF2i3tifCZxrvmu3ahqIdnm2kOwyBQ==",
 			},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.NoError(t, err)
 			},
 		},
@@ -253,14 +253,14 @@ func TestVerifyRewardsSignature(t *testing.T) {
 		{
 			name:  "error_decoding_public_key",
 			given: tcGiven{pub: "invalid_key"},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorContains(t, err, "error decoding rewards public key")
 			},
 		},
 		{
 			name:  "invalid_public_key_length",
 			given: tcGiven{pub: hex.EncodeToString([]byte("key"))},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorIs(t, err, errBadPublicKeyLength)
 			},
 		},
@@ -270,7 +270,7 @@ func TestVerifyRewardsSignature(t *testing.T) {
 				pub: "ac1e69da621a99cf29de8ac1b0ffc8ece154b98e99a0ebec2bfdf2af04b8ac53",
 				sig: "!",
 			},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorContains(t, err, "error decoding rewards signature")
 			},
 		},
@@ -280,7 +280,7 @@ func TestVerifyRewardsSignature(t *testing.T) {
 				pub: "e0e9196cfb3c98f8912c011ff46193167b7df72a166c595408c6ca6c690bb707",
 				msg: "invalid_message",
 				sig: "gJJptSk0lGBjpJOx7Mq_AwVtNkW5tg4esgbtYesQXLfabDZP4K_bFxpEn40TIBRISQho9oLzGfOnzWH88ntdAg=="},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.ErrorIs(t, err, errInvalidRewardsSignature)
 			},
 		},
@@ -291,7 +291,7 @@ func TestVerifyRewardsSignature(t *testing.T) {
 				msg: "test",
 				sig: "gJJptSk0lGBjpJOx7Mq_AwVtNkW5tg4esgbtYesQXLfabDZP4K_bFxpEn40TIBRISQho9oLzGfOnzWH88ntdAg==",
 			},
-			assertErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+			assertErr: func(t assert.TestingT, err error, i ...any) bool {
 				return assert.NoError(t, err)
 			},
 		},

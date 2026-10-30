@@ -664,7 +664,7 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
-	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
+	linkingInfo, err := jwt.Signed(sig).Claims(map[string]any{
 		"accountId":   accountID,
 		"depositId":   idTo,
 		"countryCode": "IN",
@@ -730,7 +730,7 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
 
-	linkingInfo, err := jwt.Signed(sig).Claims(map[string]interface{}{
+	linkingInfo, err := jwt.Signed(sig).Claims(map[string]any{
 		"accountId": accountID, "depositId": idTo, "iat": time.Now().Unix(), "exp": time.Now().Add(5 * time.Second).Unix(),
 		"isValid": true, "countryCode": "IN",
 	}).CompactSerialize()

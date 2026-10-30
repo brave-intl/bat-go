@@ -153,7 +153,7 @@ func TestISODuration_From(t *testing.T) {
 				duration: "P1M",
 			},
 			exp: tcExpected{
-				date: ptrTo(time.Date(2025, time.February, 1, 0, 0, 0, 0, time.UTC)),
+				date: new(time.Date(2025, time.February, 1, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 
@@ -164,7 +164,7 @@ func TestISODuration_From(t *testing.T) {
 				duration: "P1Y",
 			},
 			exp: tcExpected{
-				date: ptrTo(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)),
+				date: new(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)),
 			},
 		},
 
@@ -188,8 +188,4 @@ func TestISODuration_From(t *testing.T) {
 			should.Equal(t, tc.exp.date, actual)
 		})
 	}
-}
-
-func ptrTo[T any](v T) *T {
-	return &v
 }

@@ -109,7 +109,7 @@ func TestCred_CountBatches(t *testing.T) {
 				svc: &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: invalid_id"}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": "uuid: incorrect UUID length: invalid_id"}),
 			},
 		},
 
@@ -351,7 +351,7 @@ func TestCred_ListActiveBatches(t *testing.T) {
 				svc: &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
 			},
 		},
 
@@ -363,7 +363,7 @@ func TestCred_ListActiveBatches(t *testing.T) {
 				svc:    &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
+				err: handlers.ValidationError("request", map[string]any{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
 			},
 		},
 
@@ -578,7 +578,7 @@ func TestCred_DeleteBatches(t *testing.T) {
 				svc:  &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
 			},
 		},
 
@@ -606,7 +606,7 @@ func TestCred_DeleteBatches(t *testing.T) {
 				svc:  &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"seats": "must be a positive integer"}),
+				err: handlers.ValidationError("request", map[string]any{"seats": "must be a positive integer"}),
 			},
 		},
 
@@ -618,7 +618,7 @@ func TestCred_DeleteBatches(t *testing.T) {
 				svc:  &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
+				err: handlers.ValidationError("request", map[string]any{"item_id": "uuid: incorrect UUID length: not-a-uuid"}),
 			},
 		},
 
@@ -805,7 +805,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				svc:  &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
+				err: handlers.ValidationError("request", map[string]any{"orderID": "uuid: incorrect UUID length: not-a-uuid"}),
 			},
 		},
 
@@ -817,7 +817,7 @@ func TestCred_ExtendLinkingLimit(t *testing.T) {
 				svc:  &mockTLV2Svc{},
 			},
 			exp: tcExpected{
-				err: handlers.ValidationError("request", map[string]interface{}{"itemID": "uuid: incorrect UUID length: not-a-uuid"}),
+				err: handlers.ValidationError("request", map[string]any{"itemID": "uuid: incorrect UUID length: not-a-uuid"}),
 			},
 		},
 
@@ -1037,7 +1037,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 		code      int
 		errCode   string
 		message   string
-		data      interface{}
+		data      any
 		mustCause must.ErrorAssertionFunc
 	}
 
@@ -1069,8 +1069,8 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    http.StatusBadRequest,
 					message: "Error validating request",
-					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"orderID": "uuid: incorrect UUID length: "}},
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					data:    map[string]any{"validationErrors": map[string]any{"orderID": "uuid: incorrect UUID length: "}},
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.Nil(t, err)
 					},
 				},
@@ -1093,7 +1093,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusBadRequest,
 					errCode: model.ExtensionCodeMalformedBody,
 					message: "failed to parse request body",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.NotNil(t, err)
 					},
 				},
@@ -1121,7 +1121,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    model.StatusClientClosedConn,
 					message: "client ended request",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, context.Canceled)
 					},
 				},
@@ -1149,7 +1149,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    http.StatusGatewayTimeout,
 					message: "request timed out",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, context.DeadlineExceeded)
 					},
 				},
@@ -1178,7 +1178,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusNotFound,
 					errCode: model.ExtensionCodeOrderNotFound,
 					message: "order not found",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrOrderNotFound)
 					},
 				},
@@ -1207,7 +1207,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusNotFound,
 					errCode: model.ExtensionCodeOrderNotFound,
 					message: "order not found",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrInvalidOrderNoItems)
 					},
 				},
@@ -1236,7 +1236,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusNotFound,
 					errCode: model.ExtensionCodeOrderNotFound,
 					message: "order not found",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrOrderItemNotFound)
 					},
 				},
@@ -1265,7 +1265,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusPaymentRequired,
 					errCode: model.ExtensionCodeOrderNotPaid,
 					message: "order not paid",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrOrderNotPaid)
 					},
 				},
@@ -1294,7 +1294,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusBadRequest,
 					errCode: model.ExtensionCodeUnsupportedCredType,
 					message: "credential type not supported",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrUnsupportedCredType)
 					},
 				},
@@ -1323,7 +1323,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusUnprocessableEntity,
 					errCode: model.ExtensionCodeInvalidLimitX,
 					message: "extension new limit invalid",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrExtensionInvalidLimit)
 					},
 				},
@@ -1352,7 +1352,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusUnprocessableEntity,
 					errCode: model.ExtensionNotSupported,
 					message: "item does not support extension",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrNoExtensionPolicy)
 					},
 				},
@@ -1381,7 +1381,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusTooManyRequests,
 					errCode: model.ExtensionCodeRateLimited,
 					message: "extension rate limited",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrExtensionRateLimited)
 					},
 				},
@@ -1410,7 +1410,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusUnprocessableEntity,
 					errCode: model.ExtensionCodeMaxPerItem,
 					message: "max extensions per item reached",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrExtensionMaxPerItem)
 					},
 				},
@@ -1439,7 +1439,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusUnprocessableEntity,
 					errCode: model.ExtensionCodeNotAtLimit,
 					message: "not at limit; extension not needed",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrExtensionNotAtLimit)
 					},
 				},
@@ -1468,8 +1468,8 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusBadRequest,
 					errCode: "validation_failed",
 					message: "Error some_error",
-					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"receiptErrors": "some_error"}},
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					data:    map[string]any{"validationErrors": map[string]any{"receiptErrors": "some_error"}},
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.Nil(t, err)
 					},
 				},
@@ -1497,7 +1497,7 @@ func TestCred_ExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    http.StatusInternalServerError,
 					message: "something went wrong",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrSomethingWentWrong)
 					},
 				},
@@ -1578,7 +1578,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 		code      int
 		errCode   string
 		message   string
-		data      interface{}
+		data      any
 		mustCause must.ErrorAssertionFunc
 	}
 
@@ -1611,8 +1611,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    http.StatusBadRequest,
 					message: "Error validating request",
-					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"orderID": "uuid: incorrect UUID length: "}},
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					data:    map[string]any{"validationErrors": map[string]any{"orderID": "uuid: incorrect UUID length: "}},
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.Nil(t, err)
 					},
 				},
@@ -1635,7 +1635,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusBadRequest,
 					errCode: model.ExtensionCodeMalformedBody,
 					message: "failed to parse request body",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.NotNil(t, err)
 					},
 				},
@@ -1663,7 +1663,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    model.StatusClientClosedConn,
 					message: "client ended request",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, context.Canceled)
 					},
 				},
@@ -1691,7 +1691,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    http.StatusGatewayTimeout,
 					message: "request timed out",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, context.DeadlineExceeded)
 					},
 				},
@@ -1719,7 +1719,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    http.StatusConflict,
 					message: "order_id does not match receipt order",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrNoMatchOrderReceipt)
 					},
 				},
@@ -1748,7 +1748,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusNotFound,
 					errCode: model.ExtensionCodeOrderNotFound,
 					message: "order not found",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrOrderNotFound)
 					},
 				},
@@ -1777,7 +1777,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusNotFound,
 					errCode: model.ExtensionCodeOrderNotFound,
 					message: "order not found",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrInvalidOrderNoItems)
 					},
 				},
@@ -1806,7 +1806,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusNotFound,
 					errCode: model.ExtensionCodeOrderNotFound,
 					message: "order not found",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrOrderItemNotFound)
 					},
 				},
@@ -1835,7 +1835,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusPaymentRequired,
 					errCode: model.ExtensionCodeOrderNotPaid,
 					message: "order not paid",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrOrderNotPaid)
 					},
 				},
@@ -1864,7 +1864,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusBadRequest,
 					errCode: model.ExtensionCodeUnsupportedCredType,
 					message: "credential type not supported",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrUnsupportedCredType)
 					},
 				},
@@ -1893,7 +1893,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusUnprocessableEntity,
 					errCode: model.ExtensionNotSupported,
 					message: "item does not support extension",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrNoExtensionPolicy)
 					},
 				},
@@ -1922,8 +1922,8 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 					code:    http.StatusBadRequest,
 					errCode: "validation_failed",
 					message: "Error some_error",
-					data:    map[string]interface{}{"validationErrors": map[string]interface{}{"receiptErrors": "some_error"}},
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					data:    map[string]any{"validationErrors": map[string]any{"receiptErrors": "some_error"}},
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.Nil(t, err)
 					},
 				},
@@ -1951,7 +1951,7 @@ func TestCred_CanExtendLinkingLimitWithReceipt(t *testing.T) {
 				err: &appErrorExp{
 					code:    http.StatusInternalServerError,
 					message: "something went wrong",
-					mustCause: func(t must.TestingT, err error, i ...interface{}) {
+					mustCause: func(t must.TestingT, err error, i ...any) {
 						must.ErrorIs(t, err, model.ErrSomethingWentWrong)
 					},
 				},

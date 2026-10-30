@@ -19,7 +19,7 @@ func TestNewSrvStatusFromCtx(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DisableSolanaLinkingCTXKey, true)
 
 	act := newSrvStatusFromCtx(ctx)
-	exp := map[string]interface{}{
+	exp := map[string]any{
 		"wallet": map[string]bool{
 			"uphold":   false,
 			"gemini":   false,

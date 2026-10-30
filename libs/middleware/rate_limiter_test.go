@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,8 +13,7 @@ import (
 
 func TestRateLimiterMemoryMiddleware(t *testing.T) {
 	limit := 60
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	wrappedHandler := RateLimiter(ctx, limit)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server := httptest.NewServer(wrappedHandler)
 	defer server.Close()
@@ -48,8 +46,7 @@ func TestRateLimiterRedisMiddleware(t *testing.T) {
 	redis := redis.NewClient(&redis.Options{
 		Addr: mr.Addr(),
 	})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	wrappedHandler := RateLimiterRedisStore(ctx, limit, burst, redis, "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server := httptest.NewServer(wrappedHandler)
 	defer server.Close()

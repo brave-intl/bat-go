@@ -39,7 +39,7 @@ func (h *Cred) CountBatches(w http.ResponseWriter, r *http.Request) *handlers.Ap
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 	}
 
 	status, err := h.tlv2.UniqBatches(ctx, orderID, uuid.Nil)
@@ -74,14 +74,14 @@ func (h *Cred) ListActiveBatches(w http.ResponseWriter, r *http.Request) *handle
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 	}
 
 	itemID := uuid.Nil
 	if raw := r.URL.Query().Get("item_id"); raw != "" {
 		itemID, err = uuid.FromString(raw)
 		if err != nil {
-			return handlers.ValidationError("request", map[string]interface{}{"item_id": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"item_id": err.Error()})
 		}
 	}
 
@@ -130,7 +130,7 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
@@ -144,14 +144,14 @@ func (h *Cred) DeleteBatches(w http.ResponseWriter, r *http.Request) *handlers.A
 	}
 
 	if req.Seats <= 0 {
-		return handlers.ValidationError("request", map[string]interface{}{"seats": "must be a positive integer"})
+		return handlers.ValidationError("request", map[string]any{"seats": "must be a positive integer"})
 	}
 
 	itemID := uuid.Nil
 	if req.ItemID != "" {
 		itemID, err = uuid.FromString(req.ItemID)
 		if err != nil {
-			return handlers.ValidationError("request", map[string]interface{}{"item_id": err.Error()})
+			return handlers.ValidationError("request", map[string]any{"item_id": err.Error()})
 		}
 	}
 
@@ -191,12 +191,12 @@ func (h *Cred) ExtendLinkingLimit(w http.ResponseWriter, r *http.Request) *handl
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 	}
 
 	itemID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "itemID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"itemID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"itemID": err.Error()})
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
@@ -253,7 +253,7 @@ func (h *Cred) ExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		lg.Err(err).Msg("failed to parse orderID")
 
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))
@@ -333,7 +333,7 @@ func (h *Cred) CanExtendLinkingLimitWithReceipt(w http.ResponseWriter, r *http.R
 	if err != nil {
 		lg.Err(err).Msg("failed to parse orderID")
 
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": err.Error()})
+		return handlers.ValidationError("request", map[string]any{"orderID": err.Error()})
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, reqBodyLimit10MB))

@@ -47,11 +47,11 @@ var (
 type ErrorBundle struct {
 	cause   error
 	message string
-	data    interface{}
+	data    any
 }
 
 // New creates a new response error
-func New(cause error, message string, data interface{}) error {
+func New(cause error, message string, data any) error {
 	return &ErrorBundle{
 		cause,
 		message,
@@ -60,7 +60,7 @@ func New(cause error, message string, data interface{}) error {
 }
 
 // Data from error origin
-func (e ErrorBundle) Data() interface{} {
+func (e ErrorBundle) Data() any {
 	return e.data
 }
 
@@ -143,8 +143,8 @@ func (we *wErrs) Is(err error) bool {
 	return err == we.err
 }
 
-// As - implement interface{ As(target interface{}) bool } for equality check
-func (we *wErrs) As(target interface{}) bool {
+// As - implement interface{ As(target any) bool } for equality check
+func (we *wErrs) As(target any) bool {
 	return errors.As(we.err, target)
 }
 

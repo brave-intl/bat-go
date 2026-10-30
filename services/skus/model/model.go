@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -70,6 +71,9 @@ const (
 	errInvalidNumConversion Error = "model: invalid numeric conversion"
 
 	ErrStripePaymentIntentMissing Error = "model: stripe payment intent id missing"
+
+	ErrPaymentIntentIDRequired Error = "model: payment_intent_id is required for one-off orders"
+	ErrSubscriptionIDRequired  Error = "model: subscription_id is required for subscription orders"
 )
 
 const (
@@ -544,6 +548,32 @@ type CreateOrderRequestNew struct {
 	Locale         string                `json:"locale" validate:"omitempty,bcp47_language_tag"`
 }
 
+type CreatePaidOrderRequest struct {
+	CheckoutSessionID    string                `json:"checkout_session_id" validate:"required"`
+	StripeSubscriptionID string                `json:"stripe_subscription_id" validate:"required_without=PaymentIntentID"`
+	PaymentIntentID      string                `json:"payment_intent_id" validate:"required_without=StripeSubscriptionID"`
+	PaymentProc          string                `json:"payment_processor" validate:"required"`
+	Currency             string                `json:"currency" validate:"required,iso4217"`
+	Items                []OrderItemRequestNew `json:"items" validate:"required,gt=0,dive"`
+	Metadata             map[string]string     `json:"metadata"`
+	PaidAt               time.Time             `json:"paid_at" validate:"required"`
+	ExpiresAt            time.Time             `json:"expires_at" validate:"required"`
+}
+
+func (r *CreatePaidOrderRequest) IsValid() error {
+	isOneOff := len(r.Items) == 1 && r.Items[0].IsOriginPL()
+
+	switch {
+	case isOneOff && r.PaymentIntentID == "":
+		return ErrPaymentIntentIDRequired
+
+	case !isOneOff && r.StripeSubscriptionID == "":
+		return ErrSubscriptionIDRequired
+	}
+
+	return nil
+}
+
 // OrderItemRequestNew represents an item in an order request.
 type OrderItemRequestNew struct {
 	Quantity                    int                 `json:"quantity" validate:"required,gte=1"`
@@ -562,6 +592,10 @@ type OrderItemRequestNew struct {
 	IssuanceInterval            *string             `json:"issuance_interval"`
 	StripeMetadata              *ItemStripeMetadata `json:"stripe_metadata"`
 	RadomMetadata               *ItemRadomMetadata  `json:"radom_metadata"`
+}
+
+func (r *OrderItemRequestNew) IsOriginPL() bool {
+	return r.SKUVnt == "brave-origin-premium-perpetual-license"
 }
 
 func (r *OrderItemRequestNew) TokenBufferOrDefault() int {
@@ -604,7 +638,7 @@ func (r *OrderItemRequestNew) IsTLV2() bool {
 	return r.CredentialType == "time-limited-v2"
 }
 
-func (r *OrderItemRequestNew) Metadata() map[string]interface{} {
+func (r *OrderItemRequestNew) Metadata() map[string]any {
 	if r == nil {
 		return nil
 	}
@@ -651,12 +685,12 @@ type ItemStripeMetadata struct {
 // Metadata returns the contents of m as a map for datastore.Metadata.
 //
 // It can be called when m is nil.
-func (m *ItemStripeMetadata) Metadata() map[string]interface{} {
+func (m *ItemStripeMetadata) Metadata() map[string]any {
 	if m == nil {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	if m.ProductID != "" {
 		result["stripe_product_id"] = m.ProductID
 	}
@@ -699,12 +733,12 @@ type ItemRadomMetadata struct {
 // Metadata returns the contents of m as a map for datastore.Metadata.
 //
 // It can be called when m is nil.
-func (m *ItemRadomMetadata) Metadata() map[string]interface{} {
+func (m *ItemRadomMetadata) Metadata() map[string]any {
 	if m == nil {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	if m.ProductID != "" {
 		result["radom_product_id"] = m.ProductID
 	}
@@ -743,13 +777,7 @@ func (s Slice[T]) Equal(target []T) bool {
 }
 
 func (s Slice[T]) Contains(target T) bool {
-	for _, v := range s {
-		if v == target {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(s, target)
 }
 
 // Issuer represents a credential issuer.
@@ -944,7 +972,7 @@ func HandleReceiptErr(err error) *handlers.AppError {
 		return &handlers.AppError{
 			Message: "Unexpected error",
 			Code:    http.StatusInternalServerError,
-			Data:    map[string]interface{}{},
+			Data:    map[string]any{},
 		}
 	}
 
@@ -952,8 +980,8 @@ func HandleReceiptErr(err error) *handlers.AppError {
 	result := &handlers.AppError{
 		Message: "Error " + errStr,
 		Code:    http.StatusBadRequest,
-		Data: map[string]interface{}{
-			"validationErrors": map[string]interface{}{"receiptErrors": errStr},
+		Data: map[string]any{
+			"validationErrors": map[string]any{"receiptErrors": errStr},
 		},
 	}
 

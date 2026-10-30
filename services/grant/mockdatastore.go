@@ -61,7 +61,7 @@ func (m *MockDatastore) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionTy
 }
 
 // GetGrantsOrderedByExpiry indicates an expected call of GetGrantsOrderedByExpiry.
-func (mr *MockDatastoreMockRecorder) GetGrantsOrderedByExpiry(wallet, promotionType interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) GetGrantsOrderedByExpiry(wallet, promotionType any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGrantsOrderedByExpiry", reflect.TypeOf((*MockDatastore)(nil).GetGrantsOrderedByExpiry), wallet, promotionType)
 }
@@ -69,7 +69,7 @@ func (mr *MockDatastoreMockRecorder) GetGrantsOrderedByExpiry(wallet, promotionT
 // Migrate mocks base method.
 func (m *MockDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{}
+	varargs := []any{}
 	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
@@ -79,7 +79,7 @@ func (m *MockDatastore) Migrate(arg0 ...uint) error {
 }
 
 // Migrate indicates an expected call of Migrate.
-func (mr *MockDatastoreMockRecorder) Migrate(arg0 ...interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) Migrate(arg0 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockDatastore)(nil).Migrate), arg0...)
 }
@@ -120,7 +120,7 @@ func (m *MockDatastore) RollbackTx(tx *sqlx.Tx) {
 }
 
 // RollbackTx indicates an expected call of RollbackTx.
-func (mr *MockDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RollbackTx(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockDatastore)(nil).RollbackTx), tx)
 }
@@ -134,7 +134,7 @@ func (m *MockDatastore) RollbackTxAndHandle(tx *sqlx.Tx) error {
 }
 
 // RollbackTxAndHandle indicates an expected call of RollbackTxAndHandle.
-func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockDatastore)(nil).RollbackTxAndHandle), tx)
 }
@@ -187,7 +187,7 @@ func (m *MockReadOnlyDatastore) GetGrantsOrderedByExpiry(wallet wallet.Info, pro
 }
 
 // GetGrantsOrderedByExpiry indicates an expected call of GetGrantsOrderedByExpiry.
-func (mr *MockReadOnlyDatastoreMockRecorder) GetGrantsOrderedByExpiry(wallet, promotionType interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) GetGrantsOrderedByExpiry(wallet, promotionType any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGrantsOrderedByExpiry", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetGrantsOrderedByExpiry), wallet, promotionType)
 }
@@ -195,7 +195,7 @@ func (mr *MockReadOnlyDatastoreMockRecorder) GetGrantsOrderedByExpiry(wallet, pr
 // Migrate mocks base method.
 func (m *MockReadOnlyDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{}
+	varargs := []any{}
 	for _, a := range arg0 {
 		varargs = append(varargs, a)
 	}
@@ -205,7 +205,7 @@ func (m *MockReadOnlyDatastore) Migrate(arg0 ...uint) error {
 }
 
 // Migrate indicates an expected call of Migrate.
-func (mr *MockReadOnlyDatastoreMockRecorder) Migrate(arg0 ...interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) Migrate(arg0 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockReadOnlyDatastore)(nil).Migrate), arg0...)
 }
@@ -246,7 +246,7 @@ func (m *MockReadOnlyDatastore) RollbackTx(tx *sqlx.Tx) {
 }
 
 // RollbackTx indicates an expected call of RollbackTx.
-func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTx(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockReadOnlyDatastore)(nil).RollbackTx), tx)
 }
@@ -260,7 +260,7 @@ func (m *MockReadOnlyDatastore) RollbackTxAndHandle(tx *sqlx.Tx) error {
 }
 
 // RollbackTxAndHandle indicates an expected call of RollbackTxAndHandle.
-func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTxAndHandle(tx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockReadOnlyDatastore)(nil).RollbackTxAndHandle), tx)
 }

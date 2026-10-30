@@ -26,6 +26,7 @@ const (
 type orderService interface {
 	CreateOrderFromRequest(ctx context.Context, req model.CreateOrderRequest) (*model.Order, error)
 	CreateOrder(ctx context.Context, req *model.CreateOrderRequestNew) (*model.Order, error)
+	CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrderRequest) (*model.Order, error)
 	CancelOrder(ctx context.Context, id uuid.UUID) error
 	ExpireOrder(ctx context.Context, id uuid.UUID) error
 }
@@ -57,7 +58,7 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 	}
 
 	if len(req.Items) == 0 {
-		return handlers.ValidationError("request body", map[string]interface{}{"items": "array must contain at least one item"})
+		return handlers.ValidationError("request body", map[string]any{"items": "array must contain at least one item"})
 	}
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderHandler").Logger()
@@ -101,7 +102,7 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		return &handlers.AppError{
 			Message: "Validation failed",
 			Code:    http.StatusBadRequest,
-			Data:    map[string]interface{}{"validationErrors": verrs},
+			Data:    map[string]any{"validationErrors": verrs},
 		}
 	}
 
@@ -121,12 +122,58 @@ func (h *Order) CreateNew(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
 }
 
+func (h *Order) CreatePaid(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, reqBodyLimit10MB))
+	if err != nil {
+		return handlers.WrapError(err, "Failed to read request body", http.StatusBadRequest)
+	}
+
+	req := &model.CreatePaidOrderRequest{}
+	if err := json.Unmarshal(raw, req); err != nil {
+		return handlers.WrapError(err, "Failed to deserialize request", http.StatusBadRequest)
+	}
+
+	ctx := r.Context()
+
+	if err := h.valid.StructCtx(ctx, req); err != nil {
+		verrs, ok := collectValidationErrors(err)
+		if !ok {
+			return handlers.WrapError(err, "Failed to validate request", http.StatusBadRequest)
+		}
+
+		return &handlers.AppError{
+			Message: "Validation failed",
+			Code:    http.StatusBadRequest,
+			Data:    map[string]any{"validationErrors": verrs},
+		}
+	}
+
+	if err := req.IsValid(); err != nil {
+		return handlers.WrapError(err, "Invalid order data supplied", http.StatusUnprocessableEntity)
+	}
+
+	lg := logging.Logger(ctx, "skus").With().Str("func", "CreateOrderPaid").Logger()
+
+	result, err := h.svc.CreatePaidOrder(ctx, req)
+	if err != nil {
+		lg.Err(err).Msg("failed to create order")
+
+		if errors.Is(err, model.ErrInvalidOrderRequest) {
+			return handlers.WrapError(err, "Invalid order data supplied", http.StatusUnprocessableEntity)
+		}
+
+		return handlers.WrapError(model.ErrSomethingWentWrong, "Couldn't finish creating order", http.StatusInternalServerError)
+	}
+
+	return handlers.RenderContent(ctx, result, w, http.StatusCreated)
+}
+
 func (h *Order) Cancel(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	ctx := r.Context()
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID})
+		return handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID})
 	}
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "CancelOrderNew").Logger()
@@ -149,7 +196,7 @@ func (h *Order) Expire(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 
 	orderID, err := uuid.FromString(chi.URLParamFromCtx(ctx, "orderID"))
 	if err != nil {
-		return handlers.ValidationError("request", map[string]interface{}{"orderID": model.ErrInvalidUUID})
+		return handlers.ValidationError("request", map[string]any{"orderID": model.ErrInvalidUUID})
 	}
 
 	lg := logging.Logger(ctx, "skus").With().Str("func", "ExpireOrder").Logger()

@@ -10,7 +10,7 @@ type HealthCheckResponseData struct {
 	Commit    string `json:"commit"`
 	Version   string `json:"version"`
 	// service status is an accumulated map of service health structures mapped on service name
-	ServiceStatus map[string]interface{} `json:"serviceStatus,omitempty"`
+	ServiceStatus map[string]any `json:"serviceStatus,omitempty"`
 }
 
 // HealthCheckResponse - response structure for healthchecks
@@ -19,7 +19,7 @@ type HealthCheckResponse struct {
 }
 
 // HealthCheckHandler - function which generates a health check http.HandlerFunc
-func HealthCheckHandler(version, buildTime, commit string, serviceStatus map[string]interface{}, check func() error) http.HandlerFunc {
+func HealthCheckHandler(version, buildTime, commit string, serviceStatus map[string]any, check func() error) http.HandlerFunc {
 	return AppHandler(
 		func(w http.ResponseWriter, r *http.Request) *AppError {
 			var ctx = r.Context()

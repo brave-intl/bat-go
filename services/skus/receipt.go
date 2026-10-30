@@ -20,7 +20,7 @@ const (
 )
 
 type appStoreVerifier interface {
-	Verify(ctx context.Context, req appstore.IAPRequest, result interface{}) error
+	Verify(ctx context.Context, req appstore.IAPRequest, result any) error
 }
 
 type playStoreVerifier interface {

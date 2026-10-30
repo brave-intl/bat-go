@@ -22,7 +22,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
-	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/services/skus/model"
 )
@@ -73,7 +72,7 @@ func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, mer
 		return fmt.Errorf("error get issuer for issuerID %s: %w", encMerchID, err)
 	}
 
-	reqFn := func() (interface{}, error) {
+	reqFn := func() (any, error) {
 		return nil, s.cbClient.CreateIssuer(ctx, encMerchID, defaultMaxTokensPerIssuer)
 	}
 
@@ -83,7 +82,7 @@ func (s *Service) CreateIssuer(ctx context.Context, dbi sqlx.QueryerContext, mer
 		return fmt.Errorf("error calling cbr create issuer: %w", err)
 	}
 
-	reqFn = func() (interface{}, error) {
+	reqFn = func() (any, error) {
 		return s.cbClient.GetIssuer(ctx, encMerchID)
 	}
 
@@ -134,14 +133,14 @@ func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, m
 		Name:      encMerchID,
 		Cohort:    defaultCohort,
 		MaxTokens: defaultMaxTokensPerIssuer,
-		ValidFrom: ptr.FromTime(time.Now()),
-		ExpiresAt: ptr.FromTime(defaultExpiresAt),
+		ValidFrom: new(time.Now()),
+		ExpiresAt: new(defaultExpiresAt),
 		Duration:  *item.EachCredentialValidForISO,
 		Buffer:    issuerCfg.Buffer,
 		Overlap:   issuerCfg.Overlap,
 	}
 
-	reqFn := func() (interface{}, error) {
+	reqFn := func() (any, error) {
 		return nil, s.cbClient.CreateIssuerV3(ctx, req)
 	}
 
@@ -151,7 +150,7 @@ func (s *Service) CreateIssuerV3(ctx context.Context, dbi sqlx.QueryerContext, m
 		return fmt.Errorf("error calling cbr create issuer v3: %w", err)
 	}
 
-	reqFn = func() (interface{}, error) {
+	reqFn = func() (any, error) {
 		return s.cbClient.GetIssuerV3(ctx, req.Name)
 	}
 
@@ -194,8 +193,7 @@ func canRetry(nonRetrySet map[int]struct{}) func(error) bool {
 }
 
 func isConflict(err error) bool {
-	var eb *errorutils.ErrorBundle
-	if errors.As(err, &eb) {
+	if eb, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 		if httpState, ok := eb.Data().(clients.HTTPState); ok {
 			return httpState.Status == http.StatusConflict
 		}
@@ -436,7 +434,7 @@ func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
 func (s *Service) WriteMessages(ctx context.Context, messages []SigningOrderRequestOutbox) error {
 	msgs := make([]kafka.Message, len(messages))
 
-	for i := 0; i < len(messages); i++ {
+	for i := range messages {
 		native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(messages[i].Message)
 		if err != nil {
 			return fmt.Errorf("error converting native from textual: %w", err)

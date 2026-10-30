@@ -148,16 +148,16 @@ var (
 )
 
 // NewPagination - create a new Pagination struct and populate from url and order options
-func NewPagination(ctx context.Context, url string, v interface{}) (context.Context, *Pagination, error) {
+func NewPagination(ctx context.Context, url string, v any) (context.Context, *Pagination, error) {
 	var (
 		pagination = new(Pagination)
 		order      = map[string]string{}
 	)
 
 	// for the number of fields the struct v has
-	for i := 0; i < reflect.TypeOf(v).Elem().NumField(); i++ {
+	for field := range reflect.TypeOf(v).Elem().Fields() {
 		// get the struct tags to produce a mapping of json -> db
-		tag := string(reflect.TypeOf(v).Elem().Field(i).Tag)
+		tag := string(field.Tag)
 
 		// if we do have a tag
 		if tag != "" {
@@ -186,7 +186,7 @@ func NewPagination(ctx context.Context, url string, v interface{}) (context.Cont
 
 	if err := DecodeAndValidate(ctx, pagination, []byte(url)); err != nil {
 		var (
-			veParam = map[string]interface{}{}
+			veParam = map[string]any{}
 			message = err.Error()
 			me      *errorutils.MultiError
 		)

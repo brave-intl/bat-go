@@ -310,8 +310,7 @@ VALUES ($1, $2, $3)`
 	)
 	if err != nil {
 		// if this is a duplicate constraint error, conflict propogation
-		var pgErr *pq.Error
-		if errors.As(err, &pgErr) {
+		if pgErr, ok := errors.AsType[*pq.Error](err); ok {
 			if pgErr.Code == pq.ErrorCode("23505") {
 				// duplicate
 				return nil, errorutils.ErrConflictBAPReportEvent
@@ -1122,8 +1121,7 @@ func errToDrainCode(err error) (string, string, bool) {
 
 	status = "failed"
 
-	var eb *errorutils.ErrorBundle
-	if errors.As(err, &eb) {
+	if eb, ok := errors.AsType[*errorutils.ErrorBundle](err); ok {
 		// if this is an error bundle, check the "data" for a codified type
 		if c, ok := eb.Data().(errorutils.Codified); ok {
 			errCode, retriable = c.DrainCode()
@@ -1163,8 +1161,7 @@ func errToDrainCode(err error) (string, string, bool) {
 		retriable = false
 	} else {
 		errCode = "unknown"
-		var bfe *clients.BitflyerError
-		if errors.As(err, &bfe) {
+		if bfe, ok := errors.AsType[*clients.BitflyerError](err); ok {
 			// possible wallet provider specific errors
 			if len(bfe.ErrorIDs) > 0 {
 				errCode = fmt.Sprintf("bitflyer_%s", bfe.ErrorIDs[0])

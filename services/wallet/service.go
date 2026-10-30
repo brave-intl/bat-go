@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1001,8 +1002,7 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 
 	err = service.Datastore.InsertWalletTx(ctx, tx, info)
 	if err != nil {
-		var pgErr *pq.Error
-		if errors.As(err, &pgErr) {
+		if pgErr, ok := errors.AsType[*pq.Error](err); ok {
 			if pgErr.Code == "23505" { // unique constraint violation
 				if info != nil {
 					log.Error().Err(err).Interface("info", info).
@@ -1014,7 +1014,7 @@ func (service *Service) CreateRewardsWallet(ctx context.Context, publicKey strin
 		return nil, fmt.Errorf("error inserting rewards wallet: %w", err)
 	}
 
-	upsertReputationSummary := func() (interface{}, error) {
+	upsertReputationSummary := func() (any, error) {
 		return nil, service.repClient.UpsertReputationSummary(ctx, info.ID, geoCountry)
 	}
 
@@ -1119,12 +1119,7 @@ func canRetry(nonRetriableErrors []int) func(error) bool {
 		switch {
 		case errors.As(err, &eb):
 			if hs, ok := eb.Data().(clients.HTTPState); ok {
-				for _, httpStatusCode := range nonRetriableErrors {
-					if hs.Status == httpStatusCode {
-						return false
-					}
-				}
-				return true
+				return !slices.Contains(nonRetriableErrors, hs.Status)
 			}
 		}
 		return false

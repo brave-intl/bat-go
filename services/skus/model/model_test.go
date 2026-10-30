@@ -249,7 +249,7 @@ func TestItemStripeMetadata_Metadata(t *testing.T) {
 	type testCase struct {
 		name  string
 		given *model.ItemStripeMetadata
-		exp   map[string]interface{}
+		exp   map[string]any
 	}
 
 	tests := []testCase{
@@ -260,7 +260,7 @@ func TestItemStripeMetadata_Metadata(t *testing.T) {
 		{
 			name:  "empty",
 			given: &model.ItemStripeMetadata{},
-			exp:   map[string]interface{}{},
+			exp:   map[string]any{},
 		},
 
 		{
@@ -268,7 +268,7 @@ func TestItemStripeMetadata_Metadata(t *testing.T) {
 			given: &model.ItemStripeMetadata{
 				ProductID: "product_id",
 			},
-			exp: map[string]interface{}{
+			exp: map[string]any{
 				"stripe_product_id": "product_id",
 			},
 		},
@@ -278,7 +278,7 @@ func TestItemStripeMetadata_Metadata(t *testing.T) {
 			given: &model.ItemStripeMetadata{
 				ItemID: "item_id",
 			},
-			exp: map[string]interface{}{
+			exp: map[string]any{
 				"stripe_item_id": "item_id",
 			},
 		},
@@ -289,7 +289,7 @@ func TestItemStripeMetadata_Metadata(t *testing.T) {
 				ProductID: "product_id",
 				ItemID:    "item_id",
 			},
-			exp: map[string]interface{}{
+			exp: map[string]any{
 				"stripe_product_id": "product_id",
 				"stripe_item_id":    "item_id",
 			},
@@ -1693,7 +1693,7 @@ func TestOrderItemRequestNew_Metadata(t *testing.T) {
 	}
 
 	type tcExpected struct {
-		metadata map[string]interface{}
+		metadata map[string]any
 	}
 
 	type testCase struct {
@@ -1718,7 +1718,7 @@ func TestOrderItemRequestNew_Metadata(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				metadata: map[string]interface{}{
+				metadata: map[string]any{
 					"stripe_product_id": "product_1",
 					"stripe_item_id":    "item_1",
 				},
@@ -1735,7 +1735,7 @@ func TestOrderItemRequestNew_Metadata(t *testing.T) {
 				},
 			},
 			exp: tcExpected{
-				metadata: map[string]interface{}{
+				metadata: map[string]any{
 					"radom_product_id": "product_1",
 				},
 			},
@@ -2108,6 +2108,97 @@ func TestOrder_IsOneOffPayment(t *testing.T) {
 	}
 }
 
+func TestCreatePaidOrderRequest_IsValid(t *testing.T) {
+	type tcGiven struct {
+		req *model.CreatePaidOrderRequest
+	}
+
+	type tcExpected struct {
+		err error
+	}
+
+	type testCase struct {
+		name  string
+		given tcGiven
+		exp   tcExpected
+	}
+
+	tests := []testCase{
+		{
+			name: "one_off_valid",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					PaymentIntentID: "pi_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+					},
+				},
+			},
+		},
+
+		{
+			name: "one_off_missing_payment_intent_id",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					StripeSubscriptionID: "sub_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrPaymentIntentIDRequired},
+		},
+
+		{
+			name: "subscription_valid",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					StripeSubscriptionID: "sub_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "sku_vnt"},
+					},
+				},
+			},
+		},
+
+		{
+			name: "subscription_missing_subscription_id",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					PaymentIntentID: "pi_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "sku_vnt"},
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrSubscriptionIDRequired},
+		},
+
+		{
+			name: "multiple_items_missing_subscription_id",
+			given: tcGiven{
+				req: &model.CreatePaidOrderRequest{
+					PaymentIntentID: "pi_id",
+					Items: []model.OrderItemRequestNew{
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+						{SKUVnt: "brave-origin-premium-perpetual-license"},
+					},
+				},
+			},
+			exp: tcExpected{err: model.ErrSubscriptionIDRequired},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.req.IsValid()
+			should.ErrorIs(t, actual, tc.exp.err)
+		})
+	}
+}
+
 func ptrTo[T any](v T) *T {
-	return &v
+	return new(v)
 }
