@@ -2762,20 +2762,6 @@ func (s *Service) createOrderTx(ctx context.Context, dbi sqlx.ExtContext, oreq *
 	return result, nil
 }
 
-func (s *Service) updateOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.updateOrderWithExpPaidTimeTx(ctx, tx, id, expt, paidt); err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
 // TODO: Add a repo method to update all three fields at once.
 func (s *Service) updateOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, expt, paidt time.Time) error {
 	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
@@ -2813,20 +2799,6 @@ func (s *Service) getOrderFullTx(ctx context.Context, dbi sqlx.QueryerContext, i
 	}
 
 	return result, nil
-}
-
-func (s *Service) appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.appendOrderMetadataTx(ctx, tx, oid, mdata); err != nil {
-		return err
-	}
-
-	return tx.Commit()
 }
 
 func (s *Service) appendOrderMetadataTx(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, mdata datastore.Metadata) error {
