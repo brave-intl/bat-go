@@ -1749,7 +1749,7 @@ func TestCreateOrderWithReceipt(t *testing.T) {
 		tc := tests[i]
 
 		t.Run(tc.name, func(t *testing.T) {
-			actual, err := createOrderWithReceipt(context.Background(), tc.given.svc, tc.given.set, tc.given.ppcfg, tc.given.rcpt, tc.given.paidt)
+			actual, err := createOrderWithReceipt(context.Background(), tc.given.svc, nil, tc.given.set, tc.given.ppcfg, tc.given.rcpt, tc.given.paidt)
 			must.Equal(t, tc.exp.err, err)
 
 			if tc.exp.err != nil {
@@ -7506,7 +7506,7 @@ type mockPaidOrderCreator struct {
 	fnAppendOrderMetadata        func(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
 }
 
-func (s *mockPaidOrderCreator) createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+func (s *mockPaidOrderCreator) createOrderPremiumTx(ctx context.Context, _ sqlx.ExtContext, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
 	if s.fnCreateOrderPremium == nil {
 		return &model.Order{}, nil
 	}
@@ -7514,7 +7514,7 @@ func (s *mockPaidOrderCreator) createOrderPremium(ctx context.Context, req *mode
 	return s.fnCreateOrderPremium(ctx, req, ordNew, items)
 }
 
-func (s *mockPaidOrderCreator) updateOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
+func (s *mockPaidOrderCreator) updateOrderWithExpPaidTimeTx(ctx context.Context, _ sqlx.ExecerContext, id uuid.UUID, expt, paidt time.Time) error {
 	if s.fnUpdateOrderWithExpPaidTime == nil {
 		return nil
 	}
@@ -7522,7 +7522,7 @@ func (s *mockPaidOrderCreator) updateOrderWithExpPaidTime(ctx context.Context, i
 	return s.fnUpdateOrderWithExpPaidTime(ctx, id, expt, paidt)
 }
 
-func (s *mockPaidOrderCreator) appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
+func (s *mockPaidOrderCreator) appendOrderMetadataTx(ctx context.Context, _ sqlx.ExecerContext, oid uuid.UUID, mdata datastore.Metadata) error {
 	if s.fnAppendOrderMetadata == nil {
 		return nil
 	}

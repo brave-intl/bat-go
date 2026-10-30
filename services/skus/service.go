@@ -2409,21 +2409,16 @@ func (s *Service) CreateOrder(ctx context.Context, req *model.CreateOrderRequest
 	return s.createOrderPremium(ctx, req, ordNew, items)
 }
 
-func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error) {
+func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*Order, error) {
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	numIntervals, err := s.createOrderIssuers(ctx, tx, model.MerchID, items)
+	order, err := s.createOrderPremiumTx(ctx, tx, req, ordNew, items)
 	if err != nil {
 		return nil, err
-	}
-
-	order, err := s.createOrderTx(ctx, tx, ordNew, items)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -2461,12 +2456,28 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 		}
 	}
 
-	if err := s.updateOrderIntervals(ctx, tx2, order.ID, items, numIntervals); err != nil {
-		return nil, fmt.Errorf("failed to update order metadata: %w", err)
-	}
-
 	if err := tx2.Commit(); err != nil {
 		return nil, err
+	}
+
+	return order, nil
+}
+
+// createOrderPremiumTx creates the premium order, its issuers and interval
+// metadata on the caller's transaction.
+func (s *Service) createOrderPremiumTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*Order, error) {
+	numIntervals, err := s.createOrderIssuers(ctx, dbi, model.MerchID, items)
+	if err != nil {
+		return nil, err
+	}
+
+	order, err := s.createOrderTx(ctx, dbi, ordNew, items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order: %w", err)
+	}
+
+	if err := s.updateOrderIntervals(ctx, dbi, order.ID, items, numIntervals); err != nil {
+		return nil, fmt.Errorf("failed to update order metadata: %w", err)
 	}
 
 	return order, nil
@@ -2751,20 +2762,6 @@ func (s *Service) createOrderTx(ctx context.Context, dbi sqlx.ExtContext, oreq *
 	return result, nil
 }
 
-func (s *Service) updateOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error {
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.updateOrderWithExpPaidTimeTx(ctx, tx, id, expt, paidt); err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
 // TODO: Add a repo method to update all three fields at once.
 func (s *Service) updateOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, expt, paidt time.Time) error {
 	if err := s.orderRepo.SetStatus(ctx, dbi, id, model.OrderStatusPaid); err != nil {
@@ -2802,20 +2799,6 @@ func (s *Service) getOrderFullTx(ctx context.Context, dbi sqlx.QueryerContext, i
 	}
 
 	return result, nil
-}
-
-func (s *Service) appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error {
-	tx, err := s.Datastore.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.appendOrderMetadataTx(ctx, tx, oid, mdata); err != nil {
-		return err
-	}
-
-	return tx.Commit()
 }
 
 func (s *Service) appendOrderMetadataTx(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, mdata datastore.Metadata) error {
@@ -2858,13 +2841,26 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		return nil, &receiptValidError{err: err}
 	}
 
-	// 2. Check for existence.
-	ord, err := s.orderRepo.GetByExternalID(ctx, s.Datastore.RawDB(), rcpt.ExtID)
-	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+	paidt := time.Now()
+
+	// Serialize the existence check and creation per receipt: without the lock,
+	// concurrent submissions of the same receipt create duplicate paid orders.
+	// Every subsequent call shares this transaction.
+	tx, err := s.Datastore.RawDB().Beginx()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := waitAndLockTx(ctx, tx, rcpt.ExtID); err != nil {
 		return nil, err
 	}
 
-	paidt := time.Now()
+	// 2. Check for existence.
+	ord, err := s.orderRepo.GetByExternalID(ctx, tx, rcpt.ExtID)
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+		return nil, err
+	}
 
 	// 3. Return it if found. The caller must handle it accordingly.
 	if err == nil {
@@ -2872,7 +2868,11 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 		// Examples:
 		// - annual VPN users on mobile pre-July 2024;
 		// - mobile Developers and QAs using the same store id repeatedly.
-		if err := s.updateOrderWithExpPaidTime(ctx, ord.ID, rcpt.ExpiresAt, paidt); err != nil {
+		if err := s.updateOrderWithExpPaidTimeTx(ctx, tx, ord.ID, rcpt.ExpiresAt, paidt); err != nil {
+			return nil, err
+		}
+
+		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
 
@@ -2880,8 +2880,16 @@ func (s *Service) createOrderWithReceipt(ctx context.Context, req model.ReceiptR
 	}
 
 	// 4. Create if missing.
+	order, err := createOrderWithReceipt(ctx, s, tx, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
+	if err != nil {
+		return nil, err
+	}
 
-	return createOrderWithReceipt(ctx, s, s.newItemReqSet, s.payProcCfg, rcpt, paidt)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return order, nil
 }
 
 // Deprecated: use checkOrderReceiptTx and model.ReceiptValidError.
@@ -3064,13 +3072,14 @@ func checkOrderReceipt(ctx context.Context, dbi sqlx.QueryerContext, repo orderS
 	return nil
 }
 
-// paidOrderCreator creates an order and sets its status to paid.
+// paidOrderCreator creates an order and records its paid status on the
+// caller's transaction.
 //
 // This interface exists because in its current form Service is hardly testable.
 type paidOrderCreator interface {
-	createOrderPremium(ctx context.Context, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
-	updateOrderWithExpPaidTime(ctx context.Context, id uuid.UUID, expt, paidt time.Time) error
-	appendOrderMetadata(ctx context.Context, oid uuid.UUID, mdata datastore.Metadata) error
+	createOrderPremiumTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreateOrderRequestNew, ordNew *model.OrderNew, items []model.OrderItem) (*model.Order, error)
+	updateOrderWithExpPaidTimeTx(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, expt, paidt time.Time) error
+	appendOrderMetadataTx(ctx context.Context, dbi sqlx.ExecerContext, oid uuid.UUID, mdata datastore.Metadata) error
 }
 
 // createOrderWithReceipt creates a paid order with the supplied inputs.
@@ -3078,9 +3087,8 @@ type paidOrderCreator interface {
 // The function does not re-fetch the order after the final update to metadata.
 // This might change if there is such a need.
 //
-// NOTE: This is expressed as a function and not a method on Service due to the ugly dependency on Datastore inside s.createOrderPremium.
-// That will eventually be refactored, and this will be promoted to a method once testing is possible without Datastore.
-func createOrderWithReceipt(ctx context.Context, svc paidOrderCreator, itemReqSet map[string]model.OrderItemRequestNew, ppcfg *premiumPaymentProcConfig, rcpt model.ReceiptData, paidt time.Time) (*model.Order, error) {
+// NOTE: This is expressed as a function and not a method on Service to keep it testable with a mock.
+func createOrderWithReceipt(ctx context.Context, svc paidOrderCreator, dbi sqlx.ExtContext, itemReqSet map[string]model.OrderItemRequestNew, ppcfg *premiumPaymentProcConfig, rcpt model.ReceiptData, paidt time.Time) (*model.Order, error) {
 	// 1. Find out what's being purchased from SubscriptionID.
 	/*
 		Android:
@@ -3106,20 +3114,21 @@ func createOrderWithReceipt(ctx context.Context, svc paidOrderCreator, itemReqSe
 		return nil, err
 	}
 
-	// 3. Create an order.
-	order, err := svc.createOrderPremium(ctx, &oreq, ordNew, items)
+	// 3. Create the order and record its paid status on the caller's
+	// transaction, so everything happens under the caller's advisory lock.
+	order, err := svc.createOrderPremiumTx(ctx, dbi, &oreq, ordNew, items)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Mark order as paid with proper expiration.
-	if err := svc.updateOrderWithExpPaidTime(ctx, order.ID, rcpt.ExpiresAt, paidt); err != nil {
+	if err := svc.updateOrderWithExpPaidTimeTx(ctx, dbi, order.ID, rcpt.ExpiresAt, paidt); err != nil {
 		return nil, err
 	}
 
 	// 5. Save mobile metadata.
 	mdata := newMobileOrderMdata(rcpt.Type, rcpt.ExtID)
-	if err := svc.appendOrderMetadata(ctx, order.ID, mdata); err != nil {
+	if err := svc.appendOrderMetadataTx(ctx, dbi, order.ID, mdata); err != nil {
 		return nil, err
 	}
 
