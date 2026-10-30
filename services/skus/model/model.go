@@ -45,7 +45,7 @@ const (
 	ErrDifferentPaymentMethods Error = "all order items must have the same allowed payment methods"
 	ErrInvalidOrderRequest     Error = "model: no items to be created"
 	ErrReceiptAlreadyLinked    Error = "model: receipt already linked"
-	ErrInvalidQuantity         Error = "quantity must be at least 1"
+	ErrInvalidQuantity         Error = "model: quantity must be at least 1"
 	ErrInvalidVendor           Error = "model: invalid receipt vendor"
 
 	ErrTLV2InvalidCredNum Error = "model: invalid number of creds"

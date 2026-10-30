@@ -64,8 +64,7 @@ func TestCreateOrderWithReceiptSerialization(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectQuery(`SELECT (.+) FROM orders WHERE metadata->>'externalID' = \$1`).
 		WillReturnRows(orderRow)
-	// updateOrderWithExpPaidTime runs its own transaction while the lock is held.
-	mock.ExpectBegin()
+	// The found order's paid-status bookkeeping runs on the same transaction.
 	mock.ExpectExec("UPDATE orders SET status").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("UPDATE orders SET updated_at").
@@ -74,10 +73,8 @@ func TestCreateOrderWithReceiptSerialization(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO order_payment_history").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	// The serialization transaction commits, releasing the advisory lock.
 	mock.ExpectCommit()
-	// The found branch returns without writes in the serialization transaction;
-	// the deferred rollback releases the advisory lock.
-	mock.ExpectRollback()
 
 	svc := &Service{
 		Datastore: &Postgres{
@@ -142,31 +139,22 @@ func TestCreateOrderWithReceiptCreate(t *testing.T) {
 	mock.ExpectQuery(`SELECT (.+) FROM orders WHERE metadata->>'externalID' = \$1`).
 		WillReturnError(sql.ErrNoRows)
 
-	// createOrderPremium: its own transaction for the order and its items.
-	// The item credential type is time-limited, so no issuer creation happens.
-	mock.ExpectBegin()
+	// Everything runs on the same transaction under the advisory lock: the item
+	// credential type is time-limited, so no issuer creation happens.
 	mock.ExpectQuery("INSERT INTO orders").WillReturnRows(orderRow)
 	mock.ExpectQuery("INSERT INTO order_items").WillReturnRows(itemRow)
-	mock.ExpectCommit()
-	// createOrderPremium's second transaction writes numPerInterval.
-	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE orders").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
 
-	// updateOrderWithExpPaidTime: paid status, expiry, payment history.
-	mock.ExpectBegin()
+	// Paid status, expiry and payment history.
 	mock.ExpectExec("UPDATE orders SET status").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("UPDATE orders SET updated_at").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("UPDATE orders SET last_paid_at").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO order_payment_history").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
 
-	// appendOrderMetadata: externalID, paymentProcessor and vendor keys.
-	mock.ExpectBegin()
+	// Mobile metadata: externalID, paymentProcessor and vendor keys.
 	mock.ExpectExec("UPDATE orders").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("UPDATE orders").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("UPDATE orders").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
 
 	// The serialization transaction commits last, releasing the advisory lock
 	// only after the order is durable.
