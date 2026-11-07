@@ -12,6 +12,7 @@ require (
 	github.com/getsentry/sentry-go v0.14.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-jose/go-jose/v3 v3.0.5
+	github.com/go-jose/go-jose/v4 v4.1.7
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/golang/mock v1.6.0
 	github.com/google/go-querystring v1.2.0
