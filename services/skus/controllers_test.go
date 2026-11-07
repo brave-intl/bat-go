@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"

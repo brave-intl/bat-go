@@ -24,7 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/responses"
 	"github.com/brave-intl/bat-go/libs/useragent"
 	"github.com/brave-intl/bat-go/libs/validators"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"

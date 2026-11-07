@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"net"
 	"net/http"
 	// pprof imports
 	_ "net/http/pprof"
@@ -10,7 +12,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -57,7 +58,8 @@ func WalletRestRun(command *cobra.Command, args []string) {
 	// setup server, and run
 	srv := http.Server{
 		Addr:         viper.GetString("address"),
-		Handler:      chi.ServerBaseContext(ctx, router),
+		Handler:      router,
+		BaseContext:  func(_ net.Listener) context.Context { return ctx },
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}

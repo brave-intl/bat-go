@@ -9,7 +9,7 @@ import (
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/services/ratios"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 func newRouterTestContext() context.Context {

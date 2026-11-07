@@ -2,7 +2,7 @@ package ratios
 
 import (
 	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 // Router returns a router with the ratios REST routes registered.

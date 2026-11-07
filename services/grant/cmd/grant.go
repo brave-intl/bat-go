@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	_ "net/http/pprof" // Enable profiling.
 	"os"
@@ -13,8 +14,8 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
-	chiware "github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
+	chiware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
@@ -734,7 +735,8 @@ func GrantServer(
 
 	srv := http.Server{
 		Addr:         ":3333",
-		Handler:      chi.ServerBaseContext(ctx, r),
+		Handler:      r,
+		BaseContext:  func(_ net.Listener) context.Context { return ctx },
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
