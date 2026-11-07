@@ -68,8 +68,10 @@ func TestGetParametersController(t *testing.T) {
 
 	rw := httptest.NewRecorder()
 
-	svr := &http.Server{Addr: ":8080", Handler: setupRouter(s)}
-	svr.Handler.ServeHTTP(rw, req)
+	// Mount at the root to mirror the production wiring in cmd/rest_run.go.
+	router := chi.NewRouter()
+	router.Mount("/", Router(s))
+	router.ServeHTTP(rw, req)
 
 	require.Equal(t, http.StatusOK, rw.Code)
 
@@ -87,8 +89,33 @@ func TestGetParametersController(t *testing.T) {
 	assert.Equal(t, float64(10), params.BATRate)
 }
 
-func setupRouter(s *Service) *chi.Mux {
-	r := chi.NewRouter()
-	r.Get("/v1/parameters", GetParametersHandler(s).ServeHTTP)
-	return r
+func TestGetCardsController(t *testing.T) {
+	cards := CardBytes(`{"community-card":[],"merch-store-card":[]}`)
+
+	s := &Service{
+		cfg: &Config{
+			Cards: &CardsConfig{
+				Bucket: "bucket",
+				Key:    "cards.json",
+			},
+		},
+		s3g: &mockS3Getter{
+			fnGetObject: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+				return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(cards))}, nil
+			},
+		},
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "/v1/cards/", nil)
+	require.NoError(t, err)
+
+	rw := httptest.NewRecorder()
+
+	// Mount at the root to mirror the production wiring in cmd/rest_run.go.
+	router := chi.NewRouter()
+	router.Mount("/", Router(s))
+	router.ServeHTTP(rw, req)
+
+	require.Equal(t, http.StatusOK, rw.Code)
+	require.Equal(t, string(cards), rw.Body.String())
 }
