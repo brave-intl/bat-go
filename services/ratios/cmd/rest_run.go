@@ -54,19 +54,7 @@ func RestRun(command *cobra.Command, args []string) {
 
 	// do rest endpoints
 	r := cmd.SetupRouter(ctx)
-	r.Get(
-		"/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}",
-		ratios.XBraveHeaderInstrumentHandler(
-			"GetRelativeHandler",
-			middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)),
-		).ServeHTTP)
-	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
-	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
-	r.Get("/v2/market/provider/coingecko", middleware.InstrumentHandler("GetCoinMarketsHandler", ratios.GetCoinMarketsHandler(s)).ServeHTTP)
-	r.Post("/v2/stripe/onramp_sessions", middleware.InstrumentHandler(
-		"StripeOnrampSessionsHandler",
-		ratios.CreateStripeOnrampSessionsHandler(s)).ServeHTTP,
-	)
+	r.Mount("/", ratios.Router(s))
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {
