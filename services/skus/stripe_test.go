@@ -969,7 +969,7 @@ func TestStripeNotification_expiresTime(t *testing.T) {
 				raw: &stripe.Event{Type: "invoice.paid"},
 				invoice: &stripe.Invoice{
 					Lines: &stripe.InvoiceLineList{
-						Data: []*stripe.InvoiceLine{&stripe.InvoiceLine{}},
+						Data: []*stripe.InvoiceLine{{}},
 					},
 				},
 			},
@@ -985,7 +985,7 @@ func TestStripeNotification_expiresTime(t *testing.T) {
 				invoice: &stripe.Invoice{
 					Lines: &stripe.InvoiceLineList{
 						Data: []*stripe.InvoiceLine{
-							&stripe.InvoiceLine{
+							{
 								Period: &stripe.Period{},
 							},
 						},
@@ -1004,7 +1004,7 @@ func TestStripeNotification_expiresTime(t *testing.T) {
 				invoice: &stripe.Invoice{
 					Lines: &stripe.InvoiceLineList{
 						Data: []*stripe.InvoiceLine{
-							&stripe.InvoiceLine{
+							{
 								Period: &stripe.Period{
 									Start: 1719792000,
 									End:   1722470400,

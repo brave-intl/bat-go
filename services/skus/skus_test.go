@@ -279,7 +279,7 @@ func TestNewOrderItemReqForSubID(t *testing.T) {
 			given: tcGiven{
 				subID: "brave.leo.monthly",
 				set: map[string]model.OrderItemRequestNew{
-					"brave-leo-premium-year": model.OrderItemRequestNew{
+					"brave-leo-premium-year": {
 						SKU:    "brave-leo-premium",
 						SKUVnt: "brave-leo-premium-year",
 					},

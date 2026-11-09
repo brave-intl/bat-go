@@ -17,11 +17,11 @@ import (
 
 // AppError is error type for json HTTP responses
 type AppError struct {
-	Cause     error       `json:"-"`
-	Message   string      `json:"message"`             // description of failure
-	ErrorCode string      `json:"errorCode,omitempty"` // short error code string
-	Code      int         `json:"code"`                // status code for some reason
-	Data      any `json:"data,omitempty"`      // application specific data
+	Cause     error  `json:"-"`
+	Message   string `json:"message"`             // description of failure
+	ErrorCode string `json:"errorCode,omitempty"` // short error code string
+	Code      int    `json:"code"`                // status code for some reason
+	Data      any    `json:"data,omitempty"`      // application specific data
 }
 
 func WrapErrorWithErrorCode(err error, message string, code int, errCode string) *AppError {
