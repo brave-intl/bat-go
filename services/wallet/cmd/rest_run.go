@@ -40,10 +40,13 @@ func WalletRestRun(command *cobra.Command, args []string) {
 	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
 	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
 
-	corsOpts := wallet.NewCORSOpts(origins, dbg)
-	solMw := wallet.NewCORSMwr(corsOpts, http.MethodPost, http.MethodDelete)
-
-	wallet.RegisterRoutes(ctx, service, router, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO), solMw)
+	wallet.RegisterRoutes(ctx, service, router, wallet.RouterConfig{
+		DAppOrigins:       dappAO,
+		CORSOrigins:       origins,
+		Debug:             dbg,
+		LinkDrainEnabled:  viper.GetBool("enable-link-drain-flag"),
+		InstrumentHandler: middleware.InstrumentHandler,
+	})
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {

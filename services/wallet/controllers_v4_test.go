@@ -86,7 +86,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 	}
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: geoCountry,
@@ -136,7 +136,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 	}
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -191,7 +191,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlready
 	}
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: geoCountry,
@@ -266,7 +266,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 	}
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -337,7 +337,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -378,7 +378,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationM
 	paymentID := uuid.NewV5(ClaimNamespace, publicKey.String()).String()
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -431,7 +431,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_PaymentIDMism
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -502,7 +502,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlr
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, service, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, service, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -571,7 +571,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_ReputationCal
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	RegisterRoutes(ctx, s, router, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -705,5 +705,11 @@ func noOpMw() func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func testRouterConfig() RouterConfig {
+	return RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
 	}
 }

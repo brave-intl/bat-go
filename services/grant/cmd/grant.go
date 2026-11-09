@@ -365,10 +365,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	origins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
 	dbg, _ := strconv.ParseBool(os.Getenv("DEBUG"))
 
-	corsOpts := wallet.NewCORSOpts(origins, dbg)
-	solMw := wallet.NewCORSMwr(corsOpts, http.MethodPost, http.MethodDelete)
-
-	r = wallet.RegisterRoutes(ctx, walletService, r, middleware.InstrumentHandler, wallet.NewDAppCorsMw(dappAO), solMw)
+	r = wallet.RegisterRoutes(ctx, walletService, r, wallet.RouterConfig{
+		DAppOrigins:       dappAO,
+		CORSOrigins:       origins,
+		Debug:             dbg,
+		LinkDrainEnabled:  viper.GetBool("enable-link-drain-flag"),
+		InstrumentHandler: middleware.InstrumentHandler,
+	})
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
