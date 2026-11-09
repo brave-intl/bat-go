@@ -17,7 +17,6 @@ import (
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/wallet/storage"
 
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -692,12 +691,6 @@ func signUpdateRequest(req *http.Request, paymentID string, privateKey ed25519.P
 	s.KeyID = paymentID
 	s.Headers = []string{"digest", "(request-target)"}
 	return s.Sign(privateKey, crypto.Hash(0), req)
-}
-
-func noOpInstrumentHandler() middleware.InstrumentHandlerDef {
-	return func(name string, h http.Handler) http.Handler {
-		return h
-	}
 }
 
 func noOpMw() func(next http.Handler) http.Handler {
