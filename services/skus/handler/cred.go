@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/brave-intl/bat-go/libs/handlers"

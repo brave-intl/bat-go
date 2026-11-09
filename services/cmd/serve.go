@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-chi/chi"
-	chiware "github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5"
+	chiware "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/hlog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

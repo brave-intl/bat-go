@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
