@@ -12,8 +12,9 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet"
 
 	// re-using viper bind-env for wallet env variables
-	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
 	"github.com/stretchr/testify/suite"
+
+	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
 )
 
 type ServiceTestSuite struct {

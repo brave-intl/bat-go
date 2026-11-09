@@ -4,10 +4,11 @@ import (
 	"context"
 	"time"
 
+	sentry "github.com/getsentry/sentry-go"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/logging"
-	sentry "github.com/getsentry/sentry-go"
 )
 
 // JobFunc - type that defines what a Job Function should look like

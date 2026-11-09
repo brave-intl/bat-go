@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/libs/requestutils"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shengdoushi/base58"
+
+	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
 // RequestIDTransfer transfers the request id from header to context

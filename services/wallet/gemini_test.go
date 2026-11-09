@@ -3,8 +3,9 @@ package wallet
 import (
 	"testing"
 
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	should "github.com/stretchr/testify/assert"
+
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
 )
 
 func TestGetIssuingCountry(t *testing.T) {

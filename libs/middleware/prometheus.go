@@ -4,9 +4,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/brave-intl/bat-go/libs/handlers"
 )
 
 var (

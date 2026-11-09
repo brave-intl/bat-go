@@ -1,10 +1,11 @@
 package vault
 
 import (
+	"github.com/spf13/cobra"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	settlement "github.com/brave-intl/bat-go/tools/settlement"
-	"github.com/spf13/cobra"
 )
 
 var (

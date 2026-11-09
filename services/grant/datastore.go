@@ -4,12 +4,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/altcurrency"
-	"github.com/brave-intl/bat-go/libs/datastore"
-	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 
 	// needed magically?
 

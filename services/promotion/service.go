@@ -7,14 +7,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/linkedin/goavro"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/segmentio/kafka-go"
+
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	"github.com/brave-intl/bat-go/services/wallet"
-	"github.com/linkedin/goavro"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/segmentio/kafka-go"
 )
 
 const localEnv = "local"

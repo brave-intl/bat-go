@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+
+	"github.com/brave-intl/bat-go/libs/ptr"
 
 	"github.com/brave-intl/bat-go/libs/datastore"
 

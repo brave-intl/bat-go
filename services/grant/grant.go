@@ -1,10 +1,11 @@
 package grant
 
 import (
-	"github.com/brave-intl/bat-go/libs/altcurrency"
-	"github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/wallet"
 )
 
 // Grant - a "check" good for the amount inscribed, redeemable between maturityTime and expiryTime

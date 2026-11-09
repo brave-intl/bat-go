@@ -12,14 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-	mockbitflyer "github.com/brave-intl/bat-go/libs/clients/bitflyer/mock"
-	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
+	mockbitflyer "github.com/brave-intl/bat-go/libs/clients/bitflyer/mock"
+	"github.com/brave-intl/bat-go/libs/custodian"
 )
 
 type BitflyerMockSuite struct {

@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/suite"
 )
 
 type CoingeckoTestSuite struct {

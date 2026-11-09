@@ -4,8 +4,9 @@ import (
 	"regexp"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/libs/altcurrency"
 	uuid "github.com/satori/go.uuid"
+
+	"github.com/brave-intl/bat-go/libs/altcurrency"
 )
 
 func init() {

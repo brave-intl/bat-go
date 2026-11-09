@@ -5,11 +5,12 @@ import (
 	"crypto/tls"
 	"errors"
 
+	"github.com/spf13/cobra"
+
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/pindialer"
-	"github.com/spf13/cobra"
 )
 
 var (

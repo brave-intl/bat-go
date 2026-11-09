@@ -12,13 +12,14 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog/log"
+
 	"github.com/brave-intl/bat-go/libs/closers"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/requestutils"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/rs/zerolog/log"
 )
 
 // regular expression mapped to the replacement

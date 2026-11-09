@@ -16,6 +16,12 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
+	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/libs/clients/coingecko/mock"
 	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
@@ -25,11 +31,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/inputs"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/ratios"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
-	"github.com/redis/go-redis/v9"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
 )
 
 type ControllersTestSuite struct {

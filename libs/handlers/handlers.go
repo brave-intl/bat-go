@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
+
+	"github.com/brave-intl/bat-go/libs/requestutils"
 )
 
 // AppError is error type for json HTTP responses

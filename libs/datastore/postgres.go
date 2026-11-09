@@ -10,14 +10,15 @@ import (
 	"strings"
 	"time"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/metrics"
 	"github.com/getsentry/sentry-go"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
+
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/metrics"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"

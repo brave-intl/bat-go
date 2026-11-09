@@ -9,15 +9,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/rs/zerolog"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/rs/zerolog"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 )
 
 // CategorizeResponse categorizes a response from gemini as pending, complete, failed, or unknown

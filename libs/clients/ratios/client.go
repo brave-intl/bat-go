@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/clients/coingecko"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/google/go-querystring/query"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/clients/coingecko"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 )
 
 // Client abstracts over the underlying client

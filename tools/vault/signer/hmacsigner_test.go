@@ -6,8 +6,9 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/brave-intl/bat-go/libs/cryptography"
 	uuid "github.com/satori/go.uuid"
+
+	"github.com/brave-intl/bat-go/libs/cryptography"
 )
 
 func TestHmacSign(t *testing.T) {

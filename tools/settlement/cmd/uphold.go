@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -18,7 +20,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/tools/settlement"
-	"github.com/spf13/cobra"
 )
 
 var (

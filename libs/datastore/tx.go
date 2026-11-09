@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jmoiron/sqlx"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/jmoiron/sqlx"
 )
 
 // TxAble - something that is capable of beginning and rolling back a sqlx.Tx

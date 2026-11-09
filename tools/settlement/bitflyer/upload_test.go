@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	"github.com/brave-intl/bat-go/libs/custodian"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
 )
 
 type BitflyerSuite struct {

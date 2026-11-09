@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
@@ -16,7 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/tools/settlement"
 	geminisettlement "github.com/brave-intl/bat-go/tools/settlement/gemini"
-	"github.com/spf13/cobra"
 )
 
 var (

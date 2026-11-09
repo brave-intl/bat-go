@@ -22,6 +22,12 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"golang.org/x/crypto/ed25519"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -35,11 +41,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/validators"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/rs/zerolog"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"golang.org/x/crypto/ed25519"
 )
 
 // Wallet a wallet information using Uphold as the provider

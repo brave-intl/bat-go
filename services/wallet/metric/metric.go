@@ -1,8 +1,9 @@
 package metric
 
 import (
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
 )
 
 const (

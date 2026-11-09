@@ -8,15 +8,16 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
+	sentry "github.com/getsentry/sentry-go"
+	"github.com/go-chi/chi"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/ratios"
-	sentry "github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // RestRun - Main entrypoint of the REST subcommand
