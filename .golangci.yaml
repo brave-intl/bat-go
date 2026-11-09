@@ -39,6 +39,15 @@ linters:
       - builtin$
       - examples$
 formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/brave-intl/bat-go
   exclusions:
     generated: lax
     paths:
