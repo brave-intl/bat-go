@@ -84,8 +84,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: geoCountry,
@@ -134,8 +133,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -189,8 +187,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlready
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: geoCountry,
@@ -264,8 +261,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -335,8 +331,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -376,8 +371,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationM
 
 	paymentID := uuid.NewV5(ClaimNamespace, publicKey.String()).String()
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -429,8 +423,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_PaymentIDMism
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -500,8 +493,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlr
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, service, router, testRouterConfig())
+	router := Router(ctx, service, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -569,8 +561,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_ReputationCal
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, testRouterConfig())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
