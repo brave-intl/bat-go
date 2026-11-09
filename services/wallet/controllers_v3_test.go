@@ -131,12 +131,11 @@ func TestGetWalletV3(t *testing.T) {
 				},
 			})
 		// add the datastore to the context
-		ctx     = context.Background()
-		id      = uuid.NewV4()
-		r       = httptest.NewRequest("GET", fmt.Sprintf("/v3/wallet/%s", id), nil)
-		handler = GetWalletV3
-		rw      = httptest.NewRecorder()
-		rows    = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
+		ctx  = context.Background()
+		id   = uuid.NewV4()
+		r    = httptest.NewRequest("GET", fmt.Sprintf("/v3/wallet/%s", id), nil)
+		rw   = httptest.NewRecorder()
+		rows = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
 			AddRow(id, "brave", "", "12345", id, id)
 	)
 
@@ -146,10 +145,10 @@ func TestGetWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
+	router := Router(ctx, &Service{Datastore: datastore, RoDatastore: roDatastore}, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+	})
 	r = r.WithContext(ctx)
-
-	router := chi.NewRouter()
-	router.Get("/v3/wallet/{paymentID}", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(rw, r)
 
 	b := rw.Body.Bytes()
@@ -208,9 +207,13 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
 		s, mock        = initSvcWithMockDB(t)
-		handler        = LinkBitFlyerDepositAccountV3(s)
 		rw             = httptest.NewRecorder()
 	)
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	require.NoError(t, err)
+
+	mockKeystoreWalletLookup(mock, idFrom, publicKey)
 
 	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -264,8 +267,13 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/bitflyer/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	err = signRequestForKeyID(r, idFrom.String(), privKey)
+	require.NoError(t, err)
+
+	router := Router(ctx, s, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+		LinkDrainEnabled:  true,
+	})
 	router.ServeHTTP(rw, r)
 
 	b := rw.Body.Bytes()
@@ -310,9 +318,14 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 				}`, linkingInfo, idTo)),
 		)
 
-		handler = LinkGeminiDepositAccountV3(s)
+		handler func(w http.ResponseWriter, r *http.Request) *handlers.AppError
 		rw      = httptest.NewRecorder()
 	)
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	require.NoError(t, err)
+
+	mockKeystoreWalletLookup(mock, idFrom, publicKey)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
@@ -403,15 +416,20 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	err = signRequestForKeyID(r, idFrom.String(), privKey)
+	require.NoError(t, err)
+
+	router := Router(ctx, s, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+		LinkDrainEnabled:  true,
+	})
 	router.ServeHTTP(rw, r)
 
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
 	var l LinkDepositAccountResponse
-	err := json.Unmarshal(b, &l)
+	err = json.Unmarshal(b, &l)
 	require.NoError(t, err)
 
 	assert.Equal(t, "US", l.GeoCountry)
@@ -423,6 +441,12 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	handler = DisconnectCustodianLinkV3(s)
 	rw = httptest.NewRecorder()
+
+	// TODO: this exercises a route that no longer exists in production.
+	// The custodian disconnect route was removed in #1896 and
+	// DisconnectCustodianLinkV3 has no registration in RegisterRoutes.
+	// Migrating this test onto the real router is impossible until the
+	// handler is either re-registered or removed.
 
 	// create transaction
 	mock.ExpectBegin()
@@ -438,9 +462,9 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router = chi.NewRouter()
-	router.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
-	router.ServeHTTP(rw, r)
+	deleteRouter := chi.NewRouter()
+	deleteRouter.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	deleteRouter.ServeHTTP(rw, r)
 
 	if resp := rw.Result(); resp.StatusCode != http.StatusOK {
 		t.Errorf("invalid response expected %d, got %d", http.StatusOK, resp.StatusCode)
@@ -502,8 +526,10 @@ func TestLinkGeminiWalletV3RelinkBadRegion(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router = chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router = Router(ctx, s, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+		LinkDrainEnabled:  true,
+	})
 	router.ServeHTTP(rw, r)
 
 	b = rw.Body.Bytes()
@@ -542,9 +568,13 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 				}`, linkingInfo, idTo)),
 		)
 
-		handler = LinkGeminiDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
+		rw = httptest.NewRecorder()
 	)
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	require.NoError(t, err)
+
+	mockKeystoreWalletLookup(mock, idFrom, publicKey)
 
 	mockReputationClient.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
@@ -626,15 +656,20 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	err = signRequestForKeyID(r, idFrom.String(), privKey)
+	require.NoError(t, err)
+
+	router := Router(ctx, s, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+		LinkDrainEnabled:  true,
+	})
 	router.ServeHTTP(rw, r)
 
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
 	var l LinkDepositAccountResponse
-	err := json.Unmarshal(b, &l)
+	err = json.Unmarshal(b, &l)
 	require.NoError(t, err)
 }
 
@@ -656,10 +691,14 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
 		accountID = uuid.NewV4()
 		idTo      = accountID
-		s, _      = initSvcWithMockDB(t)
-		handler   = LinkZebPayDepositAccountV3(s)
+		s, mock   = initSvcWithMockDB(t)
 		rw        = httptest.NewRecorder()
 	)
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	require.NoError(t, err)
+
+	mockKeystoreWalletLookup(mock, idFrom, publicKey)
 
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 	ctx = context.WithValue(ctx, appctx.ZebPayLinkingKeyCTXKey, base64.StdEncoding.EncodeToString(secret))
@@ -687,8 +726,13 @@ func TestLinkZebPayWalletV3_InvalidKyc(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	err = signRequestForKeyID(r, idFrom.String(), privKey)
+	require.NoError(t, err)
+
+	router := Router(ctx, s, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+		LinkDrainEnabled:  true,
+	})
 	router.ServeHTTP(rw, r)
 
 	b := rw.Body.Bytes()
@@ -722,9 +766,13 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 
 		s, mock = initSvcWithMockDB(t)
 
-		handler = LinkZebPayDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
+		rw = httptest.NewRecorder()
 	)
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	require.NoError(t, err)
+
+	mockKeystoreWalletLookup(mock, idFrom, publicKey)
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
@@ -794,8 +842,13 @@ func TestLinkZebPayWalletV3(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/zebpay/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	err = signRequestForKeyID(r, idFrom.String(), privKey)
+	require.NoError(t, err)
+
+	router := Router(ctx, s, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+		LinkDrainEnabled:  true,
+	})
 	router.ServeHTTP(rw, r)
 
 	b := rw.Body.Bytes()
@@ -839,9 +892,13 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		)
 		s, mock = initSvcWithMockDB(t)
 
-		handler = LinkGeminiDepositAccountV3(s)
-		rw      = httptest.NewRecorder()
+		rw = httptest.NewRecorder()
 	)
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	require.NoError(t, err)
+
+	mockKeystoreWalletLookup(mock, idFrom, publicKey)
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
@@ -911,15 +968,20 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 
 	r = r.WithContext(ctx)
 
-	router := chi.NewRouter()
-	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	err = signRequestForKeyID(r, idFrom.String(), privKey)
+	require.NoError(t, err)
+
+	router := Router(ctx, s, RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
+		LinkDrainEnabled:  true,
+	})
 	router.ServeHTTP(rw, r)
 
 	b := rw.Body.Bytes()
 	require.Equal(t, http.StatusOK, rw.Code, string(b))
 
 	var l LinkDepositAccountResponse
-	err := json.Unmarshal(b, &l)
+	err = json.Unmarshal(b, &l)
 	require.NoError(t, err)
 
 	assert.Equal(t, "US", l.GeoCountry)
@@ -962,6 +1024,12 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
+
+	// TODO: this exercises a route that no longer exists in production.
+	// The custodian disconnect route was removed in #1896 and
+	// DisconnectCustodianLinkV3 has no registration in RegisterRoutes.
+	// Migrating this test onto the real router is impossible until the
+	// handler is either re-registered or removed.
 
 	router := chi.NewRouter()
 	router.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
@@ -1026,6 +1094,27 @@ func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, priva
 	s.KeyID = hex.EncodeToString(publicKey)
 	s.Headers = []string{"digest", "(request-target)"}
 	return s.Sign(privateKey, crypto.Hash(0), req)
+}
+
+func signRequestForKeyID(req *http.Request, keyID string, privateKey ed25519.PrivateKey) error {
+	var s httpsignature.SignatureParams
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = keyID
+	s.Headers = []string{"digest", "(request-target)"}
+	return s.Sign(privateKey, crypto.Hash(0), req)
+}
+
+// mockKeystoreWalletLookup mocks the wallets lookup performed by
+// Service.LookupVerifier when a route is guarded by HTTPSignedOnly. It must be
+// the first sqlmock expectation of the test.
+func mockKeystoreWalletLookup(mock sqlmock.Sqlmock, walletID uuid.UUID, publicKey httpsignature.Ed25519PubKey) {
+	rows := sqlmock.NewRows([]string{
+		"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address",
+		"user_deposit_account_provider", "user_deposit_destination",
+	}).AddRow(
+		walletID, "brave", "", hex.EncodeToString(publicKey), walletID, walletID, "", "",
+	)
+	mock.ExpectQuery("^select (.+)").WithArgs(walletID).WillReturnRows(rows)
 }
 
 type result struct{}
