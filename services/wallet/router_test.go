@@ -13,47 +13,40 @@ import (
 
 func TestRouterCORSPreflight(t *testing.T) {
 	type testCase struct {
-		name         string
-		dappOrigins  []string
-		requestHost  string
-		expectACAO   bool
-		allowedValue string
-		wildcard     bool
+		name        string
+		dappOrigins []string
+		requestHost string
+		expectACAO  string // "" means no Access-Control-Allow-Origin value is set
 	}
 
 	tests := []testCase{
 		{
-			name:         "origin on the allow list is echoed",
-			dappOrigins:  []string{"https://allowed.example.com"},
-			requestHost:  "https://allowed.example.com",
-			expectACAO:   true,
-			allowedValue: "https://allowed.example.com",
+			name:        "origin on the allow list is echoed",
+			dappOrigins: []string{"https://allowed.example.com"},
+			requestHost: "https://allowed.example.com",
+			expectACAO:  "https://allowed.example.com",
 		},
 		{
 			name:        "origin not on the allow list is not echoed",
 			dappOrigins: []string{"https://allowed.example.com"},
 			requestHost: "https://denied.example.com",
-			expectACAO:  false,
 		},
 		{
 			name:        "empty allow list falls back to wildcard",
 			dappOrigins: []string{},
 			requestHost: "https://allowed.example.com",
-			expectACAO:  true,
-			wildcard:    true,
+			expectACAO:  "*",
 		},
 		{
 			name:        "blank origin entry allows no origin",
 			dappOrigins: []string{""},
 			requestHost: "https://allowed.example.com",
-			expectACAO:  false,
 		},
 		{
-			name:         "second entry of the allow list is honored",
-			dappOrigins:  []string{"https://first.example.com", "https://second.example.com"},
-			requestHost:  "https://second.example.com",
-			expectACAO:   true,
-			allowedValue: "https://second.example.com",
+			name:        "second entry of the allow list is honored",
+			dappOrigins: []string{"https://first.example.com", "https://second.example.com"},
+			requestHost: "https://second.example.com",
+			expectACAO:  "https://second.example.com",
 		},
 	}
 
@@ -72,13 +65,7 @@ func TestRouterCORSPreflight(t *testing.T) {
 			router.ServeHTTP(rw, req)
 
 			acao := rw.Header().Get("Access-Control-Allow-Origin")
-			if tc.wildcard {
-				assert.Equal(t, "*", acao)
-			} else if tc.expectACAO {
-				assert.Equal(t, tc.allowedValue, acao)
-			} else {
-				assert.Empty(t, acao)
-			}
+			assert.Equal(t, tc.expectACAO, acao)
 		})
 	}
 }
