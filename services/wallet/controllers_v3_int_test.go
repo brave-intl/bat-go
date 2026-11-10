@@ -961,14 +961,12 @@ func (suite *WalletControllersTestSuite) SignRequest(req *http.Request, publicKe
 	suite.Require().NoError(err)
 }
 
-func setupRouter(service *Service) *chi.Mux {
-	r := chi.NewRouter()
-	RegisterRoutes(context.TODO(), service, r, RouterConfig{
+func setupRouter(service *Service) http.Handler {
+	return Router(context.TODO(), service, RouterConfig{
 		DAppOrigins:       []string{"https://my-dapp.com", "https://my-dapp-2.com"},
 		LinkDrainEnabled:  true,
 		InstrumentHandler: noOpInstrumentHandler(),
 	})
-	return r
 }
 
 func ptrTo[T any](v T) *T {

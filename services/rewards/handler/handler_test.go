@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/brave-intl/bat-go/libs/handlers"
-	"github.com/brave-intl/bat-go/services/rewards"
 	"github.com/brave-intl/bat-go/services/rewards/model"
 )
 
@@ -49,7 +48,7 @@ func TestService_GetCards(t *testing.T) {
 			name: "error_cards_as_bytes",
 			given: tcGiven{
 				cardSvc: &mockCardService{
-					fnGetCards: func(ctx context.Context) (rewards.CardBytes, error) {
+					fnGetCards: func(ctx context.Context) (model.CardBytes, error) {
 						return nil, model.Error("error")
 					},
 				},
@@ -68,8 +67,8 @@ func TestService_GetCards(t *testing.T) {
 			name: "success",
 			given: tcGiven{
 				cardSvc: &mockCardService{
-					fnGetCards: func(ctx context.Context) (rewards.CardBytes, error) {
-						cards := rewards.CardBytes(`{ "community-card": [{"title": "<string>", "description": "<string>", "url": "<string>", "thumbnail": "<string>"}], "merch-store-card": [{"title": "<string>", "description": "<string>", "url": "<string>", "thumbnail": "<string>"}] }`)
+					fnGetCards: func(ctx context.Context) (model.CardBytes, error) {
+						cards := model.CardBytes(`{ "community-card": [{"title": "<string>", "description": "<string>", "url": "<string>", "thumbnail": "<string>"}], "merch-store-card": [{"title": "<string>", "description": "<string>", "url": "<string>", "thumbnail": "<string>"}] }`)
 
 						return cards, nil
 					},
@@ -132,12 +131,12 @@ func TestService_GetCards(t *testing.T) {
 }
 
 type mockCardService struct {
-	fnGetCards func(ctx context.Context) (rewards.CardBytes, error)
+	fnGetCards func(ctx context.Context) (model.CardBytes, error)
 }
 
-func (m *mockCardService) GetCardsAsBytes(ctx context.Context) (rewards.CardBytes, error) {
+func (m *mockCardService) GetCardsAsBytes(ctx context.Context) (model.CardBytes, error) {
 	if m.fnGetCards == nil {
-		return rewards.CardBytes{}, nil
+		return model.CardBytes{}, nil
 	}
 
 	return m.fnGetCards(ctx)

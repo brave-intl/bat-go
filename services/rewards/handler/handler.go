@@ -6,12 +6,11 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/services/rewards"
 	"github.com/brave-intl/bat-go/services/rewards/model"
 )
 
 type cardService interface {
-	GetCardsAsBytes(ctx context.Context) (rewards.CardBytes, error)
+	GetCardsAsBytes(ctx context.Context) (model.CardBytes, error)
 }
 
 type CardsHandler struct {
