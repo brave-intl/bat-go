@@ -20,12 +20,10 @@ import (
 	"errors"
 
 	"github.com/brave-intl/bat-go/libs/cryptography"
-	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	srv "github.com/brave-intl/bat-go/libs/service"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
-	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
@@ -36,7 +34,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -659,79 +656,6 @@ func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTr
 	return transaction, err
 }
 
-// CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
-func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
-
-	sublogger := logging.Logger(ctx, "payments").With().
-		Str("func", "CreateAnonCardTransaction").
-		Logger()
-
-	txInfo, err := s.wallet.SubmitAnonCardTransaction(
-		ctx,
-		walletID,
-		transaction,
-		uphold.AnonCardSettlementAddress,
-	)
-	if err != nil {
-		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
-	}
-
-	txInfo, err = s.waitForUpholdTxStatus(ctx, walletID, txInfo.ID, "completed")
-	if err != nil {
-		return nil, errorutils.Wrap(err, "error waiting for completed status for transaction")
-	}
-
-	txn, err := s.Datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
-	if err != nil {
-		return nil, errorutils.Wrap(err, "error recording anon card transaction")
-	}
-
-	err = s.UpdateOrderStatus(orderID)
-	if err != nil {
-		sublogger.Error().Err(err).Msg("failed to update order status")
-		return nil, errorutils.Wrap(err, "error updating order status")
-	}
-
-	return txn, err
-}
-
-func (s *Service) waitForUpholdTxStatus(ctx context.Context, walletID uuid.UUID, txnID, status string) (*walletutils.TransactionInfo, error) {
-	info, err := s.wallet.GetWallet(ctx, walletID)
-	if err != nil {
-		return nil, err
-	}
-
-	providerWallet, err := provider.GetWallet(ctx, *info)
-	if err != nil {
-		return nil, err
-	}
-
-	upholdWallet, ok := providerWallet.(*uphold.Wallet)
-	if !ok {
-		return nil, errors.New("only uphold wallets are supported")
-	}
-
-	var txInfo = &walletutils.TransactionInfo{
-		ID: txnID,
-	}
-	// check status until it matches
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, errors.New("timeout waiting for correct status")
-		default:
-			txInfo, err = upholdWallet.GetTransaction(ctx, txInfo.ID)
-			if err != nil {
-				return nil, errorutils.Wrap(err, "error getting transaction")
-			}
-			if strings.ToLower(txInfo.Status) == status {
-				return txInfo, nil
-			}
-			<-time.After(1 * time.Second)
-		}
-	}
-}
-
 // IsOrderPaid determines if the order has been paid
 func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	// Now that the transaction has been created let's check to see if that fulfilled the order.
@@ -1191,7 +1115,7 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	}
 
 	// have order, now validate the receipt from the notification
-	_, err = s.validateReceipt(ctx, &o.ID, SubmitReceiptRequestV1{
+	_, err = s.validateReceipt(ctx, SubmitReceiptRequestV1{
 		Type:           "android",
 		Blob:           dn.SubscriptionNotification.PurchaseToken,
 		Package:        dn.PackageName,
@@ -1230,7 +1154,7 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 }
 
 // validateReceipt - perform receipt validation
-func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, receipt interface{}) (string, error) {
+func (s *Service) validateReceipt(ctx context.Context, receipt interface{}) (string, error) {
 	// based on the vendor call the vendor specific apis to check the status of the receipt,
 	if v, ok := receipt.(SubmitReceiptRequestV1); ok {
 		// and get back the external id
@@ -1240,26 +1164,4 @@ func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, recei
 	}
 
 	return "", errorutils.ErrNotImplemented
-}
-
-// UpdateOrderStatusPaidWithMetadata - update the order status with metadata
-func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
-	// create a tx for use in all datastore calls
-	ctx, _, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
-	defer rollback() // doesnt hurt to rollback incase we panic
-
-	if err != nil {
-		return fmt.Errorf("failed to get db transaction: %w", err)
-	}
-
-	for k, v := range metadata {
-		if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, v); err != nil {
-			return fmt.Errorf("failed to append order metadata: %w", err)
-		}
-	}
-	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {
-		return fmt.Errorf("failed to set order paid: %w", err)
-	}
-
-	return commit()
 }

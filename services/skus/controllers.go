@@ -12,7 +12,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -63,10 +62,6 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
-
-	// api routes for order receipt validation
-	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
@@ -74,8 +69,6 @@ func Router(service *Service) chi.Router {
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
 
 		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
-
-		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 	})
 
 	return r
@@ -526,45 +519,6 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 	})
 }
 
-// CreateAnonCardTransactionRequest includes information needed to create a anon card transaction
-type CreateAnonCardTransactionRequest struct {
-	WalletID    uuid.UUID `json:"paymentId"`
-	Transaction string    `json:"transaction"`
-}
-
-// CreateAnonCardTransaction creates a transaction against an order
-func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
-		sublogger := logging.Logger(ctx, "payments").With().
-			Str("func", "CreateAnonCardTransaction").
-			Logger()
-		var req CreateAnonCardTransactionRequest
-		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		var orderID = new(inputs.ID)
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				},
-			)
-		}
-
-		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, *orderID.UUID())
-		if err != nil {
-			sublogger.Error().Err(err).Msg("failed to create anon card transaction")
-			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
-	})
-}
-
 // CreateOrderCredsRequest includes the item ID and blinded credentials which to be signed
 type CreateOrderCredsRequest struct {
 	ItemID       uuid.UUID `json:"itemId" valid:"-"`
@@ -662,59 +616,6 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), "Order credentials successfully deleted", w, http.StatusOK)
-	})
-}
-
-// GetOrderCredsByID is the handler for fetching order credentials by an item id
-func GetOrderCredsByID(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		// get the IDs from the URL
-		var (
-			orderID           = new(inputs.ID)
-			itemID            = new(inputs.ID)
-			validationPayload = map[string]interface{}{}
-			err               error
-		)
-
-		// decode and validate orderID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			validationPayload["orderID"] = err.Error()
-		}
-
-		// decode and validate itemID url param
-		if err = inputs.DecodeAndValidateString(
-			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
-			validationPayload["itemID"] = err.Error()
-		}
-
-		// did we get any validation errors?
-		if len(validationPayload) > 0 {
-			return handlers.ValidationError(
-				"Error validating request url parameter",
-				validationPayload)
-		}
-
-		creds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), *itemID.UUID(), false)
-		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
-		}
-
-		if creds == nil {
-			return &handlers.AppError{
-				Message: "Could not find credentials",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
-			}
-		}
-
-		status := http.StatusOK
-		if creds.SignedCreds == nil {
-			status = http.StatusAccepted
-		}
-
-		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
 
@@ -1061,82 +962,5 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
-	})
-}
-
-// SubmitReceipt submit a vendor verifiable receipt that proves order is paid
-func SubmitReceipt(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		var (
-			ctx              = r.Context()
-			req              SubmitReceiptRequestV1     // the body of the request
-			orderID          = new(inputs.ID)           // the order id
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
-
-		logger := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
-
-		// validate the order id
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			logger.Warn().Err(err).Msg("Failed to decode/validate order id from url")
-			validationErrMap["orderID"] = err.Error()
-		}
-
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
-		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
-			validationErrMap["request-body"] = err.Error()
-		}
-
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
-			validationErrMap["request-body"] = err.Error()
-		}
-
-		// validate the receipt
-		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req)
-		if err != nil {
-			if errors.Is(err, errNotFound) {
-				return handlers.WrapError(err, "order not found", http.StatusNotFound)
-			}
-			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
-			validationErrMap["receiptErrors"] = err.Error()
-			// return codified errors for application
-			if errors.Is(err, errPurchaseFailed) {
-				return handlers.CodedValidationError(err.Error(), purchaseFailedErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchasePending) {
-				return handlers.CodedValidationError(err.Error(), purchasePendingErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseDeferred) {
-				return handlers.CodedValidationError(err.Error(), purchaseDeferredErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseStatusUnknown) {
-				return handlers.CodedValidationError(err.Error(), purchaseStatusUnknownErrCode, validationErrMap)
-			} else {
-				// unknown error
-				return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, validationErrMap)
-			}
-		}
-
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("error validating request", validationErrMap)
-		}
-
-		// set order paid and include the vendor and external id to metadata
-		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
-			"vendor":     req.Type.String(),
-			"externalID": externalID,
-		}); err != nil {
-			logger.Warn().Err(err).Msg("Failed to update the order with appropriate metadata")
-			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(r.Context(), SubmitReceiptResponseV1{
-			ExternalID: externalID,
-			Vendor:     req.Type.String(),
-		}, w, http.StatusOK)
 	})
 }
