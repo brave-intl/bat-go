@@ -12,6 +12,11 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	"github.com/prometheus/client_golang/prometheus"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -24,10 +29,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/responses"
 	"github.com/brave-intl/bat-go/libs/useragent"
 	"github.com/brave-intl/bat-go/libs/validators"
-	"github.com/go-chi/chi"
-	"github.com/prometheus/client_golang/prometheus"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 )
 
 // RouterV2 for promotion endpoints

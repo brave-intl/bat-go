@@ -10,11 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brave-intl/bat-go/libs/cryptography"
-	"github.com/brave-intl/bat-go/libs/custodian"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/custodian"
 )
 
 type GeminiTestSuite struct {

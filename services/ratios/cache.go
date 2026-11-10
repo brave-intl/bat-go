@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 )
 
 const (

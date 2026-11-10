@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/brave-intl/bat-go/libs/test"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brave-intl/bat-go/libs/test"
 )
 
 func TestGeoCountryValidator_Validate_Enabled(t *testing.T) {

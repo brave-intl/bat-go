@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/x509"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (

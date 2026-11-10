@@ -7,11 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/spf13/cobra"
 )
 
 func init() {

@@ -11,6 +11,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/asaskevich/govalidator"
+
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"

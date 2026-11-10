@@ -5,10 +5,11 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
-	cmdutils "github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	cmdutils "github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/services/cmd"
 )
 
 func init() {

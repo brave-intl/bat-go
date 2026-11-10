@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestFetchRate(t *testing.T) {

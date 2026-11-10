@@ -8,11 +8,12 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/clients"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/google/go-querystring/query"
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/clients"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 )
 
 const (

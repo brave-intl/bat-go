@@ -8,10 +8,11 @@ import (
 
 	mockretrypolicy "github.com/brave-intl/bat-go/libs/backoff/retrypolicy/mock"
 
-	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
-	testutils "github.com/brave-intl/bat-go/libs/test"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
+	testutils "github.com/brave-intl/bat-go/libs/test"
 )
 
 func TestRetry_CxtDone(t *testing.T) {

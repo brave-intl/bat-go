@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"github.com/brave-intl/bat-go/libs/logging"
 )
 

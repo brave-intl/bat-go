@@ -22,6 +22,11 @@ import (
 
 	"github.com/brave-intl/bat-go/libs/clients"
 
+	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
+	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
@@ -30,10 +35,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/test"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/services/wallet/wallettest"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
-	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/suite"
 )
 
 type WalletControllersV4TestSuite struct {

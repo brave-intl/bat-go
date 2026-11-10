@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -15,7 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/wallet/model"
-	"github.com/go-chi/chi"
 )
 
 var (

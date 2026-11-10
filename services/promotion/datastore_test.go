@@ -6,13 +6,14 @@ import (
 	"context"
 	"errors"
 
-	"github.com/brave-intl/bat-go/libs/jsonutils"
-	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/libs/jsonutils"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/services/wallet"
 )
 
 type PostgresTestSuite struct {

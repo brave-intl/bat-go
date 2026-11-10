@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ed25519"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
@@ -14,8 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
-	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ed25519"
 )
 
 // State contains the current state of the registration

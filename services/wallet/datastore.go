@@ -14,6 +14,13 @@ import (
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/services/wallet/model"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -23,12 +30,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	"github.com/getsentry/sentry-go"
-	"github.com/jmoiron/sqlx"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	uuid "github.com/satori/go.uuid"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"

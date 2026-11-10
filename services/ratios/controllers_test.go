@@ -16,6 +16,12 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
+	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/libs/clients/coingecko/mock"
 	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
@@ -25,11 +31,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/inputs"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/services/ratios"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
-	"github.com/redis/go-redis/v9"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
 )
 
 type ControllersTestSuite struct {
@@ -185,7 +186,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 		FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingecko.MarketChartResponse{
 			Prices: [][]decimal.Decimal{
-				[]decimal.Decimal{decimal.Zero},
+				{decimal.Zero},
 			},
 		}, time.Now(), nil)
 	rctx = chi.NewRouteContext()
@@ -216,7 +217,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 		FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingecko.MarketChartResponse{
 			Prices: [][]decimal.Decimal{
-				[]decimal.Decimal{decimal.Zero},
+				{decimal.Zero},
 			},
 		}, time.Now(), nil)
 	rctx = chi.NewRouteContext()
@@ -245,7 +246,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 		FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&coingecko.MarketChartResponse{
 			Prices: [][]decimal.Decimal{
-				[]decimal.Decimal{decimal.Zero},
+				{decimal.Zero},
 			},
 		}, time.Now(), nil)
 	rctx = chi.NewRouteContext()
@@ -278,7 +279,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 			FetchMarketChart(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(&coingecko.MarketChartResponse{
 				Prices: [][]decimal.Decimal{
-					[]decimal.Decimal{decimal.Zero},
+					{decimal.Zero},
 				},
 			}, time.Now(), nil)
 		rctx = chi.NewRouteContext()
@@ -389,7 +390,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 
 	// Test success case
 	respy := coingecko.SimplePriceResponse(map[string]map[string]decimal.Decimal{
-		"basic-attention-token": map[string]decimal.Decimal{"usd": decimal.Zero},
+		"basic-attention-token": {"usd": decimal.Zero},
 	})
 	suite.mockCoingeckoClient.EXPECT().
 		FetchSimplePrice(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).

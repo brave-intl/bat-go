@@ -5,8 +5,9 @@ import (
 	"fmt"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/libs/handlers"
 	uuid "github.com/satori/go.uuid"
+
+	"github.com/brave-intl/bat-go/libs/handlers"
 )
 
 // MerchantID - identifier of a merchant

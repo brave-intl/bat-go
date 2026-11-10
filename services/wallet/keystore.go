@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 
+	uuid "github.com/satori/go.uuid"
+
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	uuid "github.com/satori/go.uuid"
 )
 
 // LookupVerifier based on the HTTP signing keyID, which in our case is the walletID

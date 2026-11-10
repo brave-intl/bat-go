@@ -8,11 +8,12 @@ import (
 	"os"
 	"time"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/diode"
 	uuid "github.com/satori/go.uuid"
+
+	appctx "github.com/brave-intl/bat-go/libs/context"
 )
 
 var (

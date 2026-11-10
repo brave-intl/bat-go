@@ -12,6 +12,12 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/lib/pq"
+	"github.com/rs/zerolog/log"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -19,11 +25,6 @@ import (
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	"github.com/getsentry/sentry-go"
-	"github.com/lib/pq"
-	"github.com/rs/zerolog/log"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 )
 
 var desktopPlatforms = [...]string{"linux", "osx", "windows"}

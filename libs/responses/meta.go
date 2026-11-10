@@ -2,7 +2,7 @@ package responses
 
 // Meta - generic api output metadata
 type Meta struct {
-	Status  string                 `json:"status,omitempty"`
-	Message string                 `json:"message,omitempty"`
+	Status  string         `json:"status,omitempty"`
+	Message string         `json:"message,omitempty"`
 	Context map[string]any `json:"context,omitempty"`
 }

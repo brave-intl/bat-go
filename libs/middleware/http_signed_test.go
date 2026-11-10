@@ -12,8 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 )
 
 type mockKeystore struct {

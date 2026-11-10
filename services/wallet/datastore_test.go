@@ -10,6 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
@@ -18,9 +22,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/datastore"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/services/wallet/model"
-	"github.com/golang/mock/gomock"
-	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/suite"
 )
 
 type WalletPostgresTestSuite struct {
