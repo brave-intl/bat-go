@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi/middleware"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 
