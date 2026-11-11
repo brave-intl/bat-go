@@ -31,12 +31,6 @@ var (
 	errPurchaseDeferred      = errors.New("purchase is deferred")
 	errPurchaseStatusUnknown = errors.New("purchase status is unknown")
 	errPurchaseFailed        = errors.New("purchase failed")
-
-	purchasePendingErrCode       = "purchase_pending"
-	purchaseDeferredErrCode      = "purchase_deferred"
-	purchaseStatusUnknownErrCode = "purchase_status_unknown"
-	purchaseFailedErrCode        = "purchase_failed"
-	purchaseValidationErrCode    = "validation_failed"
 )
 
 func initClients(ctx context.Context) {

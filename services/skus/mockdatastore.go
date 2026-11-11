@@ -545,20 +545,6 @@ func (mr *MockDatastoreMockRecorder) RunNextOrderJob(ctx, worker interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextOrderJob", reflect.TypeOf((*MockDatastore)(nil).RunNextOrderJob), ctx, worker)
 }
 
-// SetOrderPaid mocks base method.
-func (m *MockDatastore) SetOrderPaid(arg0 context.Context, arg1 *go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetOrderPaid", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SetOrderPaid indicates an expected call of SetOrderPaid.
-func (mr *MockDatastoreMockRecorder) SetOrderPaid(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOrderPaid", reflect.TypeOf((*MockDatastore)(nil).SetOrderPaid), arg0, arg1)
-}
-
 // SetOrderTrialDays mocks base method.
 func (m *MockDatastore) SetOrderTrialDays(ctx context.Context, orderID *go_uuid.UUID, days int64) (*Order, error) {
 	m.ctrl.T.Helper()

@@ -91,7 +91,6 @@ type Datastore interface {
 
 	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
 	IsStripeSub(uuid.UUID) (bool, string, error)
-	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 }
 
@@ -586,7 +585,8 @@ func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, order
 }
 
 // RenewOrder updates the orders status to paid and paid at time, inserts record of this order
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
+//
+//	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 
 	// renew order is an update order with paid status
@@ -619,10 +619,6 @@ func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.T
 		return errors.New("no rows updated")
 	}
 
-	if err != nil {
-		return err
-	}
-
 	// record on order as well
 	result, err = tx.ExecContext(ctx, `
 		update orders set last_paid_at = $1
@@ -638,14 +634,12 @@ func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.T
 		return errors.New("no rows updated")
 	}
 
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
 // UpdateOrder updates the orders status.
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
+//
+//	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	ctx := context.Background()
 	// create tx

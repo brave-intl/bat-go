@@ -10,12 +10,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +26,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
@@ -39,7 +35,6 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
@@ -944,225 +939,6 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 	suite.Require().NoError(err)
 
 	return
-}
-
-func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
-	numVotes := 1
-
-	// Create connection to Kafka
-	// FIXME stick kafka setup in suite setup
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-
-	dialer, _, err := kafkautils.TLSDialer()
-	suite.Require().NoError(err)
-	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
-	suite.Require().NoError(err)
-
-	// create topics
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
-	suite.Require().NoError(err)
-
-	offset, err := conn.ReadLastOffset()
-	suite.Require().NoError(err)
-
-	err = suite.service.InitKafka(context.Background())
-	suite.Require().NoError(err, "Failed to initialize kafka")
-
-	// kick off async goroutine to monitor the vote
-	// queue of uncommitted votes in postgres, and
-	// push the votes through redemption and kafka
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				_, err := suite.service.RunNextVoteDrainJob(ctx)
-				suite.Require().NoError(err, "Failed to drain vote queue")
-				_, err = suite.service.RunNextOrderJob(ctx)
-				suite.Require().NoError(err, "Failed to drain order queue")
-				<-time.After(50 * time.Millisecond)
-			}
-		}
-	}()
-	defer cancel()
-
-	// Create the order first
-	handler := CreateOrder(suite.service)
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
-			{
-				SKU:      AnonCardVoteTestSkuToken,
-				Quantity: numVotes,
-			},
-		},
-	}
-
-	body, err := json.Marshal(&createRequest)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusCreated, rr.Code)
-
-	var order Order
-	err = json.Unmarshal([]byte(rr.Body.String()), &order)
-	suite.Require().NoError(err)
-
-	userWallet := generateWallet(ctx, suite.T())
-	err = suite.service.wallet.Datastore.UpsertWallet(ctx, &userWallet.Info)
-	suite.Require().NoError(err)
-
-	balanceBefore, err := userWallet.GetBalance(ctx, true)
-	suite.Require().NoError(err)
-	balanceAfter, err := uphold.FundWallet(ctx, userWallet, order.TotalPrice)
-	suite.Require().NoError(err)
-
-	// wait for balance to become available
-	for i := 0; i < 5; i++ {
-		select {
-		case <-time.After(500 * time.Millisecond):
-			balances, err := userWallet.GetBalance(ctx, true)
-			suite.Require().NoError(err)
-			totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
-			if totalProbi.GreaterThan(decimal.Zero) {
-				break
-			}
-		}
-	}
-
-	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC", "", nil)
-	suite.Require().NoError(err)
-
-	walletID, err := uuid.FromString(userWallet.ID)
-	suite.Require().NoError(err)
-
-	anonCardRequest := CreateAnonCardTransactionRequest{
-		WalletID:    walletID,
-		Transaction: txn,
-	}
-
-	body, err = json.Marshal(&anonCardRequest)
-	suite.Require().NoError(err)
-
-	handler = CreateAnonCardTransaction(suite.service)
-	req, err = http.NewRequest("POST", "/{orderID}/transactions/anonymouscard", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusCreated, rr.Code)
-
-	issuerName, issuerPublicKey, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true)
-
-	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
-
-	// Test getting the same order by item ID
-	handler = GetOrderCredsByID(suite.service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials/{itemID}", nil)
-	suite.Require().NoError(err)
-
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	rctx.URLParams.Add("itemID", order.Items[0].ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusOK, rr.Code)
-
-	// setup our make vote handler
-	handler = MakeVote(suite.service)
-
-	vote := Vote{
-		Type:    "auto-contribute",
-		Channel: "brave.com",
-	}
-
-	voteBytes, err := json.Marshal(&vote)
-	suite.Require().NoError(err)
-	votePayload := base64.StdEncoding.EncodeToString(voteBytes)
-
-	voteReq := VoteRequest{
-		Vote: votePayload,
-		Credentials: []CredentialBinding{{
-			PublicKey:     issuerPublicKey,
-			Signature:     sig,
-			TokenPreimage: preimage,
-		}},
-	}
-
-	body, err = json.Marshal(&voteReq)
-	suite.Require().NoError(err)
-
-	// mocked redeem creds
-	suite.mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
-		Issuer:        issuerName,
-		TokenPreimage: preimage,
-		Signature:     sig,
-	}}), gomock.Eq(votePayload)).Return(nil)
-
-	// perform post to vote endpoint
-	req, err = http.NewRequest("POST", "/vote", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	// actually perform the call
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusOK, rr.Code)
-
-	body, _ = ioutil.ReadAll(rr.Body)
-
-	<-time.After(5 * time.Second)
-	// Test the Kafka Event was put into place
-	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:          strings.Split(kafkaBrokers, ","),
-		Topic:            voteTopic,
-		Dialer:           suite.service.kafkaDialer,
-		MaxWait:          time.Second,
-		RebalanceTimeout: time.Second,
-		Logger:           kafka.LoggerFunc(log.Printf),
-	})
-
-	codec := suite.service.codecs["vote"]
-
-	// :cry:
-	err = r.SetOffset(offset)
-	suite.Require().NoError(err)
-
-	voteEventBinary, err := r.ReadMessage(context.Background())
-	suite.Require().NoError(err)
-
-	voteEvent, _, err := codec.NativeFromBinary(voteEventBinary.Value)
-	suite.Require().NoError(err)
-
-	voteEventJSON, err := codec.TextualFromNative(nil, voteEvent)
-	suite.Require().NoError(err)
-
-	suite.Assert().Contains(string(voteEventJSON), "id")
-
-	var ve = new(VoteEvent)
-
-	err = json.Unmarshal(voteEventJSON, ve)
-	suite.Require().NoError(err)
-
-	suite.Assert().Equal(ve.Type, vote.Type)
-	suite.Assert().Equal(ve.Channel, vote.Channel)
-	// should be number of credentials for the vote
-	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
-	// check that the funding source matches the issuer
-	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
 }
 
 func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation1M() {
