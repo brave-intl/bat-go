@@ -18,11 +18,9 @@ import (
 
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/rewards"
-	"github.com/brave-intl/bat-go/services/rewards/handler"
 )
 
 // RestRun - Main entrypoint of the REST subcommand
@@ -113,9 +111,7 @@ func RestRun(command *cobra.Command, args []string) {
 
 	r := cmd.SetupRouter(ctx)
 
-	r.Get("/v1/parameters", middleware.InstrumentHandler("GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
-
-	r.Mount("/v1/cards", newCardsRouter(s))
+	r.Mount("/", rewards.Router(s))
 
 	defer sentry.Flush(time.Second * 2)
 
@@ -138,14 +134,4 @@ func RestRun(command *cobra.Command, args []string) {
 		sentry.CaptureException(err)
 		lg.Fatal().Err(err).Msg("HTTP server start failed!")
 	}
-}
-
-func newCardsRouter(svc *rewards.Service) chi.Router {
-	cardsRouter := chi.NewRouter()
-
-	ch := handler.NewCardsHandler(svc)
-
-	cardsRouter.Method(http.MethodGet, "/", middleware.InstrumentHandler("GetCards", handlers.AppHandler(ch.GetCardsHandler)))
-
-	return cardsRouter
 }
