@@ -17,6 +17,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	srv "github.com/brave-intl/bat-go/libs/service"
+	"github.com/brave-intl/bat-go/services/rewards/model"
 )
 
 const (
@@ -168,7 +169,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 	return params, nil
 }
 
-type CardBytes []byte
+type CardBytes = model.CardBytes
 
 func (s *Service) GetCardsAsBytes(ctx context.Context) (CardBytes, error) {
 	out, err := s.s3g.GetObject(ctx, &s3.GetObjectInput{Bucket: &s.cfg.Cards.Bucket, Key: &s.cfg.Cards.Key})

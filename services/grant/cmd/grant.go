@@ -33,7 +33,6 @@ import (
 	"github.com/brave-intl/bat-go/services/grant"
 	"github.com/brave-intl/bat-go/services/promotion"
 	"github.com/brave-intl/bat-go/services/skus"
-	"github.com/brave-intl/bat-go/services/skus/handler"
 	"github.com/brave-intl/bat-go/services/skus/model"
 	"github.com/brave-intl/bat-go/services/skus/storage/repository"
 	"github.com/brave-intl/bat-go/services/wallet"
@@ -494,63 +493,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v2/credentials", skus.CredentialV2Router(skusService, authMwr))
 		r.Mount("/v1/orders", skus.Router(skusService, authMwr, middleware.InstrumentHandler, corsOpts))
 
-		subr := chi.NewRouter()
-		orderh := handler.NewOrder(skusService)
-
-		if os.Getenv("ENV") == "local" {
-			corsMwrPost := skus.NewCORSMwr(corsOpts, http.MethodPost)
-
-			subr.Method(
-				http.MethodOptions,
-				"/",
-				middleware.InstrumentHandler("CreateOrderNewOptions", corsMwrPost(nil)),
-			)
-
-			subr.Method(
-				http.MethodPost,
-				"/",
-				middleware.InstrumentHandler(
-					"CreateOrderNew",
-					corsMwrPost(handlers.AppHandler(orderh.CreateNew)),
-				),
-			)
-		} else {
-			subr.Method(
-				http.MethodPost,
-				"/",
-				middleware.InstrumentHandler("CreateOrderNew", authMwr(handlers.AppHandler(orderh.CreateNew))),
-			)
-		}
-
-		corsMwrDelete := skus.NewCORSMwr(corsOpts, http.MethodDelete)
-
-		subr.Method(
-			http.MethodDelete,
-			"/{orderID}",
-			middleware.InstrumentHandler(
-				"CancelOrderNew",
-				corsMwrDelete(authMwr(handlers.AppHandler(orderh.Cancel))),
-			),
-		)
-
-		corsMwrPatch := skus.NewCORSMwr(corsOpts, http.MethodPatch)
-
-		subr.Method(
-			http.MethodPatch,
-			"/{orderID}/expire",
-			middleware.InstrumentHandler(
-				"ExpireOrder",
-				corsMwrPatch(authMwr(handlers.AppHandler(orderh.Expire))),
-			),
-		)
-
-		subr.Method(
-			http.MethodPost,
-			"/paid",
-			middleware.InstrumentHandler("CreateOrderNewPaid", authMwr(handlers.AppHandler(orderh.CreatePaid))),
-		)
-
-		r.Mount("/v1/orders-new", subr)
+		r.Mount("/v1/orders-new", skus.OrdersNewRouter(skusService, authMwr, middleware.InstrumentHandler, corsOpts))
 	}
 
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))

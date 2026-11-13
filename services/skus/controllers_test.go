@@ -1974,20 +1974,15 @@ func (suite *ControllersTestSuite) TestOrder_Cancel() {
 
 	rw := httptest.NewRecorder()
 
-	oh := handler.NewOrder(suite.service)
-
 	rtr := chi.NewRouter()
-	subr := chi.NewRouter()
-	subr.Method(
-		http.MethodDelete,
-		"/{orderID}",
-		handlers.AppHandler(oh.Cancel),
-	)
+	rtr.Mount("/v1/orders-new", OrdersNewRouter(
+		suite.service,
+		func(next http.Handler) http.Handler { return next },
+		func(name string, h http.Handler) http.Handler { return h },
+		newCORSOptsEnv(),
+	))
 
-	rtr.Mount("/v1/orders-new", subr)
-
-	srv := &http.Server{Addr: ":8080", Handler: rtr}
-	srv.Handler.ServeHTTP(rw, req)
+	rtr.ServeHTTP(rw, req)
 
 	suite.Require().Equal(http.StatusOK, rw.Code)
 
@@ -2033,20 +2028,15 @@ func (suite *ControllersTestSuite) TestOrder_CreatePaid() {
 
 	rw := httptest.NewRecorder()
 
-	oh := handler.NewOrder(suite.service)
-
 	rtr := chi.NewRouter()
-	subr := chi.NewRouter()
-	subr.Method(
-		http.MethodPost,
-		"/paid",
-		handlers.AppHandler(oh.CreatePaid),
-	)
+	rtr.Mount("/v1/orders-new", OrdersNewRouter(
+		suite.service,
+		func(next http.Handler) http.Handler { return next },
+		func(name string, h http.Handler) http.Handler { return h },
+		newCORSOptsEnv(),
+	))
 
-	rtr.Mount("/v1/orders-new", subr)
-
-	srv := &http.Server{Addr: ":8080", Handler: rtr}
-	srv.Handler.ServeHTTP(rw, req)
+	rtr.ServeHTTP(rw, req)
 
 	suite.Require().Equal(http.StatusCreated, rw.Code, rw.Body.String())
 
