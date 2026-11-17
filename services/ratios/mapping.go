@@ -4,9 +4,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/shopspring/decimal"
 )
 
 var (

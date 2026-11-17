@@ -12,14 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-	mockbitflyer "github.com/brave-intl/bat-go/libs/clients/bitflyer/mock"
-	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
+	mockbitflyer "github.com/brave-intl/bat-go/libs/clients/bitflyer/mock"
+	"github.com/brave-intl/bat-go/libs/custodian"
 )
 
 type BitflyerMockSuite struct {
@@ -98,7 +99,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(4.1),
 				Available:    decimal.NewFromFloat(4.1),
@@ -107,7 +108,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(2.2),
 				Available:    decimal.NewFromFloat(2.2),
@@ -278,7 +279,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(4.1),
 				Available:    decimal.NewFromFloat(4.1),
@@ -287,7 +288,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(2.2),
 				Available:    decimal.NewFromFloat(2.2),
@@ -369,7 +370,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.client.EXPECT().
 		CheckInventory(ctx).
 		Return(map[string]bitflyer.Inventory{
-			"BAT": bitflyer.Inventory{
+			"BAT": {
 				CurrencyCode: "BAT",
 				Amount:       decimal.NewFromFloat(3.2),
 				Available:    decimal.NewFromFloat(3.2),

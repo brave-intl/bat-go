@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/ptr"
 	should "github.com/stretchr/testify/assert"
 	must "github.com/stretchr/testify/require"
+
+	"github.com/brave-intl/bat-go/libs/ptr"
 )
 
 func TestCustodianLink_isLinked(t *testing.T) {

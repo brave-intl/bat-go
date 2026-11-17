@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	testutils "github.com/brave-intl/bat-go/libs/test"
 	"github.com/stretchr/testify/assert"
+
+	testutils "github.com/brave-intl/bat-go/libs/test"
 
 	errutil "github.com/brave-intl/bat-go/libs/errors"
 )

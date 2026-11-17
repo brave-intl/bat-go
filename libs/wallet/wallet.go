@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/btcsuite/btcutil/base58"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/altcurrency"
 )
 
 // Info contains information about a wallet like associated identifiers, the denomination,

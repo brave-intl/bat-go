@@ -8,15 +8,16 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
+	sentry "github.com/getsentry/sentry-go"
+	"github.com/go-chi/chi"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/ratios"
-	sentry "github.com/getsentry/sentry-go"
-	"github.com/go-chi/chi"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // RestRun - Main entrypoint of the REST subcommand
@@ -54,19 +55,7 @@ func RestRun(command *cobra.Command, args []string) {
 
 	// do rest endpoints
 	r := cmd.SetupRouter(ctx)
-	r.Get(
-		"/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}",
-		ratios.XBraveHeaderInstrumentHandler(
-			"GetRelativeHandler",
-			middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)),
-		).ServeHTTP)
-	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
-	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
-	r.Get("/v2/market/provider/coingecko", middleware.InstrumentHandler("GetCoinMarketsHandler", ratios.GetCoinMarketsHandler(s)).ServeHTTP)
-	r.Post("/v2/stripe/onramp_sessions", middleware.InstrumentHandler(
-		"StripeOnrampSessionsHandler",
-		ratios.CreateStripeOnrampSessionsHandler(s)).ServeHTTP,
-	)
+	r.Mount("/", ratios.Router(s))
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {

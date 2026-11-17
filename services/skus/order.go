@@ -43,6 +43,10 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, []string, *model.IssuerConfig, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
+	if quantity < 1 {
+		return nil, nil, nil, model.ErrInvalidQuantity
+	}
+
 	// validation prior to decoding/unmarshalling
 	valid, err := validateHardcodedSku(ctx, sku)
 	if err != nil {

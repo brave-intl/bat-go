@@ -9,12 +9,13 @@ import (
 	"sort"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
-	"github.com/spf13/cobra"
 )
 
 const (

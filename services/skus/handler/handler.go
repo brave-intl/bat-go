@@ -72,6 +72,12 @@ func (h *Order) Create(w http.ResponseWriter, r *http.Request) *handlers.AppErro
 			return handlers.ValidationError(err.Error(), nil)
 		}
 
+		if errors.Is(err, model.ErrInvalidQuantity) {
+			lg.Err(err).Msg("invalid quantity")
+
+			return handlers.ValidationError(err.Error(), nil)
+		}
+
 		lg.Err(err).Msg("error creating the order")
 
 		return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)

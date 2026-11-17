@@ -5,6 +5,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-chi/chi"
+	chiware "github.com/go-chi/chi/middleware"
+	"github.com/rs/zerolog/hlog"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -12,11 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	srv "github.com/brave-intl/bat-go/libs/service"
-	"github.com/go-chi/chi"
-	chiware "github.com/go-chi/chi/middleware"
-	"github.com/rs/zerolog/hlog"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const (

@@ -17,10 +17,14 @@ import (
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/services/wallet/storage"
 
 	"github.com/brave-intl/bat-go/libs/clients"
+
+	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
+	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/backoff"
@@ -30,10 +34,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/test"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/services/wallet/wallettest"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
-	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/suite"
 )
 
 type WalletControllersV4TestSuite struct {
@@ -84,8 +84,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: geoCountry,
@@ -134,8 +133,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoCountryDis
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -189,8 +187,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_WalletAlready
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: geoCountry,
@@ -264,8 +261,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCal
 		dappConf:     DAppConfig{},
 	}
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -335,8 +331,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_Success() {
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -376,8 +371,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_VerificationM
 
 	paymentID := uuid.NewV5(ClaimNamespace, publicKey.String()).String()
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -429,8 +423,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_PaymentIDMism
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -500,8 +493,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_GeoCountryAlr
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, service, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, service, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -569,8 +561,7 @@ func (suite *WalletControllersV4TestSuite) TestUpdateBraveWalletV4_ReputationCal
 	err = suite.storage.InsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	router := chi.NewRouter()
-	RegisterRoutes(ctx, s, router, noOpInstrumentHandler(), noOpMw(), noOpMw())
+	router := Router(ctx, s, testRouterConfig())
 
 	data := V4Request{
 		GeoCountry: "AF",
@@ -693,16 +684,16 @@ func signUpdateRequest(req *http.Request, paymentID string, privateKey ed25519.P
 	return s.Sign(privateKey, crypto.Hash(0), req)
 }
 
-func noOpInstrumentHandler() middleware.InstrumentHandlerDef {
-	return func(name string, h http.Handler) http.Handler {
-		return h
-	}
-}
-
 func noOpMw() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func testRouterConfig() RouterConfig {
+	return RouterConfig{
+		InstrumentHandler: noOpInstrumentHandler(),
 	}
 }

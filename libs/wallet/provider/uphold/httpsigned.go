@@ -9,9 +9,10 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/net/http/httpguts"
+
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/requestutils"
-	"golang.org/x/net/http/httpguts"
 )
 
 // HTTPSignedRequest encapsulates a signed HTTP request

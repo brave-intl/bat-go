@@ -14,13 +14,14 @@ import (
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/custodian"
 
-	"github.com/brave-intl/bat-go/libs/closers"
-	"github.com/brave-intl/bat-go/tools/settlement"
-	"github.com/brave-intl/bat-go/tools/settlement/paypal"
 	"github.com/gocarina/gocsv"
 	"github.com/rs/zerolog"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
+
+	"github.com/brave-intl/bat-go/libs/closers"
+	"github.com/brave-intl/bat-go/tools/settlement"
+	"github.com/brave-intl/bat-go/tools/settlement/paypal"
 )
 
 func init() {

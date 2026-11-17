@@ -15,6 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
@@ -23,11 +29,6 @@ import (
 	"github.com/brave-intl/bat-go/libs/middleware"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/services/wallet"
-	"github.com/go-chi/chi"
-	"github.com/golang/mock/gomock"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
 )
 
 type ControllersTestSuite struct {

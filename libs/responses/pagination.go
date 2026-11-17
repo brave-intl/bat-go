@@ -9,11 +9,11 @@ import (
 
 // PaginationResponse - a response structure wrapper for pagination
 type PaginationResponse struct {
-	Page    int         `json:"page,omitempty"`
-	Items   int         `json:"items,omitempty"`
-	MaxPage int         `json:"max_page,omitempty"`
-	Ordered []string    `json:"order,omitempty"`
-	Data    any `json:"data,omitempty"`
+	Page    int      `json:"page,omitempty"`
+	Items   int      `json:"items,omitempty"`
+	MaxPage int      `json:"max_page,omitempty"`
+	Ordered []string `json:"order,omitempty"`
+	Data    any      `json:"data,omitempty"`
 }
 
 // Render - render response

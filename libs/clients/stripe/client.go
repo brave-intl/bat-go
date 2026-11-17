@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-querystring/query"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/google/go-querystring/query"
 )
 
 // Client abstracts over the underlying client

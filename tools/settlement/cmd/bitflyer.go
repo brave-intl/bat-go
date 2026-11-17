@@ -8,14 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	bitflyersettlement "github.com/brave-intl/bat-go/tools/settlement/bitflyer"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (

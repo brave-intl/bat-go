@@ -5,9 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/brave-intl/bat-go/libs/clients/ratios"
 	"github.com/brave-intl/bat-go/libs/custodian"
-	"github.com/shopspring/decimal"
 )
 
 // CalculateTransactionAmounts calculates the amount for each payout given a currency and rate

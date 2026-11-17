@@ -4,12 +4,13 @@ import (
 	"context"
 	"net/http"
 
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/redis/go-redis/v9"
 	"github.com/throttled/throttled/v2"
 	"github.com/throttled/throttled/v2/store/goredisstore.v9"
 	"github.com/throttled/throttled/v2/store/memstore"
+
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 // IPRateLimiterWithStore rate limits based on IP using

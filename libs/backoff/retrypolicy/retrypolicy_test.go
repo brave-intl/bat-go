@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	testutils "github.com/brave-intl/bat-go/libs/test"
 	"github.com/stretchr/testify/assert"
+
+	testutils "github.com/brave-intl/bat-go/libs/test"
 )
 
 func TestRetryPolicy_New(t *testing.T) {

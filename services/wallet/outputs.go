@@ -1,9 +1,10 @@
 package wallet
 
 import (
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	uuid "github.com/satori/go.uuid"
 )
 
 const (

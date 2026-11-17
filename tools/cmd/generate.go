@@ -7,10 +7,11 @@ import (
 	"strings"
 
 	"github.com/alecthomas/jsonschema"
-	cmdutils "github.com/brave-intl/bat-go/cmd"
-	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	cmdutils "github.com/brave-intl/bat-go/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 )
 
 func init() {

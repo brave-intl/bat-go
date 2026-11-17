@@ -1,8 +1,9 @@
 package uphold
 
 import (
-	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/custodian"
 )
 
 // GroupSettlements groups settlements under a single wallet provider id so that we can impose limits based on price

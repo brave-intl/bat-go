@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi"
+
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/requestutils"
-	"github.com/go-chi/chi"
 )
 
 // GetRelativeHandler - handler to get current relative exchange rates

@@ -10,15 +10,16 @@ import (
 	"testing"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"golang.org/x/crypto/ed25519"
+	"gotest.tools/assert"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/pindialer"
 	"github.com/brave-intl/bat-go/libs/wallet"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"golang.org/x/crypto/ed25519"
-	"gotest.tools/assert"
 )
 
 func TestGetCardDetails(t *testing.T) {

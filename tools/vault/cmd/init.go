@@ -13,14 +13,15 @@ import (
 
 	cmdutils "github.com/brave-intl/bat-go/cmd"
 
-	"github.com/brave-intl/bat-go/libs/closers"
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/hashicorp/vault/api"
 	"github.com/keybase/go-crypto/openpgp"
 	"github.com/keybase/go-crypto/openpgp/packet"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/brave-intl/bat-go/libs/closers"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 )
 
 var (

@@ -7,10 +7,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/brave-intl/bat-go/libs/clients/stripe"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	logutils "github.com/brave-intl/bat-go/libs/logging"
-	"github.com/stretchr/testify/suite"
 )
 
 type StripeTestSuite struct {

@@ -7,13 +7,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/shopspring/decimal"
+	"golang.org/x/crypto/ed25519"
+
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/shopspring/decimal"
-	"golang.org/x/crypto/ed25519"
 )
 
 func TestTransactions(t *testing.T) {

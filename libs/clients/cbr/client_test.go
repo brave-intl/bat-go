@@ -16,13 +16,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	_ "github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/ptr"
 	"github.com/brave-intl/bat-go/libs/test"
-	_ "github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateIssuerV1(t *testing.T) {

@@ -701,8 +701,11 @@ func TestTLV2_ActiveBatchesByOrder(t *testing.T) {
 			name: "item_id_filter",
 			given: tcGiven{
 				orderID: uuid.Must(uuid.FromString("c0c0a000-0000-4000-a000-000000000000")),
-				itemID:  func() *uuid.UUID { id := uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000")); return &id }(),
-				now:     time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC),
+				itemID: func() *uuid.UUID {
+					id := uuid.Must(uuid.FromString("ad0be000-0000-4000-a000-000000000000"))
+					return &id
+				}(),
+				now: time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC),
 
 				fnBefore: func(ctx context.Context, dbi sqlx.ExtContext) error {
 					if err := sharedFixture(ctx, dbi); err != nil {

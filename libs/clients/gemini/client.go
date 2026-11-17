@@ -14,14 +14,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-querystring/query"
+	"github.com/shengdoushi/base58"
+	"github.com/shopspring/decimal"
+
 	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
-	"github.com/google/go-querystring/query"
-	"github.com/shengdoushi/base58"
-	"github.com/shopspring/decimal"
 )
 
 // PrivateRequestSequence handles the ability to sign a request multiple times

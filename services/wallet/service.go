@@ -432,7 +432,16 @@ func (service *Service) getCustodianRegions() custodian.Regions {
 }
 
 // RegisterRoutes - register the wallet api routes given a chi.Mux
-func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middleware.InstrumentHandlerDef, dAppCorsMw func(next http.Handler) http.Handler, solMw func(next http.Handler) http.Handler) *chi.Mux {
+func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, cfg RouterConfig) *chi.Mux {
+	dAppCorsMw := NewDAppCorsMw(cfg.DAppOrigins)
+	solMw := NewCORSMwr(NewCORSOpts(cfg.CORSOrigins, cfg.Debug), http.MethodPost, http.MethodDelete)
+	metricsMw := cfg.InstrumentHandler
+	if metricsMw == nil {
+		metricsMw = func(name string, h http.Handler) http.Handler {
+			return h
+		}
+	}
+
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
@@ -443,7 +452,7 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux, metricsMw middl
 			"CreateBraveWallet", CreateBraveWalletV3)).ServeHTTP)
 
 		// if wallets are being migrated we do not want to over claim, we might go over the limit
-		if viper.GetBool("enable-link-drain-flag") {
+		if cfg.LinkDrainEnabled {
 			// create wallet claim routes for our wallet providers
 			r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
 				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))

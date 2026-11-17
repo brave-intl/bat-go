@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/altcurrency"
 )
 
 // Transaction describes a payout transaction from the settlement wallet to a publisher

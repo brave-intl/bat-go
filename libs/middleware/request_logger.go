@@ -37,11 +37,12 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
+
+	"github.com/brave-intl/bat-go/libs/handlers"
 )
 
 var ipPortRE = regexp.MustCompile(`[0-9]+(?:\.[0-9]+){3}(:[0-9]+)?`)

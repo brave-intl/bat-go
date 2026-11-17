@@ -7,14 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
+
 	"github.com/brave-intl/bat-go/libs/clients/coingecko"
 	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
 	"github.com/brave-intl/bat-go/libs/clients/stripe"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	srv "github.com/brave-intl/bat-go/libs/service"
-	"github.com/redis/go-redis/v9"
-	"github.com/shopspring/decimal"
 )
 
 // NewService - create a new ratios service structure

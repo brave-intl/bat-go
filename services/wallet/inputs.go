@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-jose/go-jose/v3/jwt"
+
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/go-jose/go-jose/v3/jwt"
 )
 
 var (

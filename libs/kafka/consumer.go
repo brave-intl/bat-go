@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/getsentry/sentry-go"
 	kafkago "github.com/segmentio/kafka-go"
+
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 // Handler defines a handler.

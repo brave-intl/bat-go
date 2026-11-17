@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	"github.com/stretchr/testify/assert"
+
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 )
 
 func TestDeduplicateCredentialBindings(t *testing.T) {
