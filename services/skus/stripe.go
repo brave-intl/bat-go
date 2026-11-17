@@ -20,6 +20,8 @@ const (
 	errStripeIncompleteUMAData = model.Error("stripe: incomplete upgrade monthly to annual data")
 )
 
+const meteredProductIDKey = "metered_product_id"
+
 type stripeNotification struct {
 	raw           *stripe.Event
 	invoice       *stripe.Invoice
@@ -68,7 +70,39 @@ func parseStripeNotification(raw *stripe.Event) (*stripeNotification, error) {
 	}
 }
 
+// isMeteredProduct reports whether the notification carries metered product metadata,
+// which marks it as belonging to the subscriptions service rather than to skus.
+func (x *stripeNotification) isMeteredProduct() bool {
+	switch {
+	case x.invoice != nil:
+		if x.invoice.Lines == nil || len(x.invoice.Lines.Data) == 0 {
+			return false
+		}
+
+		_, ok := x.invoice.Lines.Data[0].Metadata[meteredProductIDKey]
+
+		return ok
+
+	case x.sub != nil:
+		_, ok := x.sub.Metadata[meteredProductIDKey]
+
+		return ok
+
+	case x.paymentIntent != nil:
+		_, ok := x.paymentIntent.Metadata[meteredProductIDKey]
+
+		return ok
+
+	default:
+		return false
+	}
+}
+
 func (x *stripeNotification) shouldProcess() bool {
+	if x.isMeteredProduct() {
+		return false
+	}
+
 	return x.shouldRenew() || x.shouldCancel() || x.shouldRecordPayFailure() || x.shouldActivatePL() || x.shouldExpireIncompletePayment()
 }
 
@@ -118,6 +152,9 @@ func (x *stripeNotification) ntfSubType() string {
 
 func (x *stripeNotification) effect() string {
 	switch {
+	case x.isMeteredProduct():
+		return "skip_metered_product"
+
 	case x.shouldRenew():
 		return "renew"
 
