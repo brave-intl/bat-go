@@ -170,6 +170,173 @@ func TestParseStripeNotification(t *testing.T) {
 	})
 }
 
+func TestStripeNotification_shouldProcess_meteredProduct(t *testing.T) {
+	tests := []struct {
+		name  string
+		given *stripe.Event
+	}{
+		{
+			name: "invoice_paid",
+			given: &stripe.Event{
+				Type: "invoice.paid",
+				Data: &stripe.EventData{
+					Raw: json.RawMessage(`{"lines":{"data":[{"metadata":{"metered_product_id":"ai_usage_credits_prepaid"}}]}}`),
+				},
+			},
+		},
+
+		{
+			name: "invoice_payment_failed",
+			given: &stripe.Event{
+				Type: "invoice.payment_failed",
+				Data: &stripe.EventData{
+					Raw: json.RawMessage(`{"lines":{"data":[{"metadata":{"metered_product_id":"ai_usage_credits_prepaid"}}]}}`),
+				},
+			},
+		},
+
+		{
+			name: "customer_subscription_deleted",
+			given: &stripe.Event{
+				Type: "customer.subscription.deleted",
+				Data: &stripe.EventData{
+					Raw: json.RawMessage(`{"metadata":{"metered_product_id":"ai_usage_credits_prepaid"}}`),
+				},
+			},
+		},
+
+		{
+			name: "customer_subscription_updated",
+			given: &stripe.Event{
+				Type: "customer.subscription.updated",
+				Data: &stripe.EventData{
+					Raw: json.RawMessage(`{"metadata":{"metered_product_id":"ai_usage_credits_prepaid"}}`),
+				},
+			},
+		},
+
+		{
+			name: "payment_intent_succeeded",
+			given: &stripe.Event{
+				Type: "payment_intent.succeeded",
+				Data: &stripe.EventData{
+					Raw: json.RawMessage(`{"metadata":{"metered_product_id":"ai_usage_credits_prepaid"}}`),
+				},
+			},
+		},
+
+		{
+			name: "any_metered_product_id",
+			given: &stripe.Event{
+				Type: "payment_intent.succeeded",
+				Data: &stripe.EventData{
+					Raw: json.RawMessage(`{"metadata":{"metered_product_id":"something_else"}}`),
+				},
+			},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ntf, err := parseStripeNotification(tc.given)
+			must.NoError(t, err)
+
+			should.False(t, ntf.shouldProcess())
+		})
+	}
+}
+
+func TestStripeNotification_isMeteredProduct(t *testing.T) {
+	tests := []struct {
+		name  string
+		given *stripeNotification
+		exp   bool
+	}{
+		{
+			name:  "no_fields",
+			given: &stripeNotification{},
+		},
+
+		{
+			name: "invoice_no_lines",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{},
+			},
+		},
+
+		{
+			name: "invoice_empty_lines",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{Lines: &stripe.InvoiceLineList{}},
+			},
+		},
+
+		{
+			name: "invoice_no_metered_product_id",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{Lines: &stripe.InvoiceLineList{
+					Data: []*stripe.InvoiceLine{
+						{Metadata: map[string]string{"orderID": "f0eb952b-90df-4fd3-b079-c4ea1effb38d"}},
+					},
+				}},
+			},
+		},
+
+		{
+			name: "invoice_metered_product_id",
+			given: &stripeNotification{
+				invoice: &stripe.Invoice{Lines: &stripe.InvoiceLineList{
+					Data: []*stripe.InvoiceLine{
+						{Metadata: map[string]string{"metered_product_id": "ai_usage_credits_prepaid"}},
+					},
+				}},
+			},
+			exp: true,
+		},
+
+		{
+			name: "sub_no_metered_product_id",
+			given: &stripeNotification{
+				sub: &stripe.Subscription{Metadata: map[string]string{"orderID": "f0eb952b-90df-4fd3-b079-c4ea1effb38d"}},
+			},
+		},
+
+		{
+			name: "sub_metered_product_id",
+			given: &stripeNotification{
+				sub: &stripe.Subscription{Metadata: map[string]string{"metered_product_id": "ai_usage_credits_prepaid"}},
+			},
+			exp: true,
+		},
+
+		{
+			name: "payment_intent_no_metered_product_id",
+			given: &stripeNotification{
+				paymentIntent: &stripe.PaymentIntent{Metadata: map[string]string{"orderID": "f0eb952b-90df-4fd3-b079-c4ea1effb38d"}},
+			},
+		},
+
+		{
+			name: "payment_intent_metered_product_id",
+			given: &stripeNotification{
+				paymentIntent: &stripe.PaymentIntent{Metadata: map[string]string{"metered_product_id": "ai_usage_credits_prepaid"}},
+			},
+			exp: true,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.isMeteredProduct()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestStripeNotification_shouldProcess(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -682,6 +849,19 @@ func TestStripeNotification_effect(t *testing.T) {
 				invoice: &stripe.Invoice{},
 			},
 			exp: "skip",
+		},
+
+		{
+			name: "skip_metered_product",
+			given: &stripeNotification{
+				raw: &stripe.Event{Type: "invoice.paid"},
+				invoice: &stripe.Invoice{Lines: &stripe.InvoiceLineList{
+					Data: []*stripe.InvoiceLine{
+						{Metadata: map[string]string{"metered_product_id": "ai_usage_credits_prepaid"}},
+					},
+				}},
+			},
+			exp: "skip_metered_product",
 		},
 	}
 
