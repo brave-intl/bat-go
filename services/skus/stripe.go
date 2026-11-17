@@ -232,6 +232,12 @@ func (x *stripeNotification) payIntentInv() (*stripe.Invoice, error) {
 		return nil, errStripeUnsupportedEvent
 	}
 
+	// Stripe does not always set invoice on the payment intent for invoice-driven
+	// payments; the charge still carries the reference.
+	if x.paymentIntent.Invoice == nil && x.paymentIntent.Charges != nil && len(x.paymentIntent.Charges.Data) > 0 {
+		return x.paymentIntent.Charges.Data[0].Invoice, nil
+	}
+
 	return x.paymentIntent.Invoice, nil
 }
 
