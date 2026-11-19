@@ -8920,7 +8920,7 @@ func TestService_CreatePaidOrder_ExistingCheckoutSession(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec("SELECT pg_advisory_xact_lock").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
+	mock.ExpectRollback()
 
 	orderID := uuid.NewV4()
 	existing := &model.Order{ID: orderID, Status: model.OrderStatusPaid}

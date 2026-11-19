@@ -2492,20 +2492,25 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 	defer func() { _ = tx.Rollback() }()
 
 	res, err := s.createPaidOrderTx(ctx, tx, req)
-	if err != nil && !errors.Is(err, model.ErrOrderExistsForCheckoutSession) {
-		return nil, err
+	if err != nil {
+		switch {
+		case errors.Is(err, model.ErrOrderExistsForCheckoutSession):
+			return res, err
+
+		default:
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	return res, err
+	return res, nil
 }
 
 func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreatePaidOrderRequest) (*Order, error) {
-	// Serialize the existence check and creation per checkout session: without the lock,
-	// duplicate webhook deliveries for the same checkout session could create duplicate paid orders.
+	// Serialise existence check to prevent duplicate webhook deliveries for the same checkout session creating duplicate paid orders.
 	if err := waitAndLockTx(ctx, dbi, req.CheckoutSessionID); err != nil {
 		return nil, err
 	}
@@ -2515,8 +2520,9 @@ func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, re
 		return nil, err
 	}
 
-	// Return it if found. The caller must handle it accordingly.
-	if err == nil {
+	// Return it if found.
+
+	if err == nil { // a nil error
 		ord, err := s.getOrderFullTx(ctx, dbi, existing.ID)
 		if err != nil {
 			return nil, err
