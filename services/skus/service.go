@@ -94,6 +94,7 @@ type orderStoreSvc interface {
 	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	GetByCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, csID string) (*model.Order, error)
 	GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -2491,7 +2492,7 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 	defer func() { _ = tx.Rollback() }()
 
 	res, err := s.createPaidOrderTx(ctx, tx, req)
-	if err != nil {
+	if err != nil && !errors.Is(err, model.ErrOrderExistsForCheckoutSession) {
 		return nil, err
 	}
 
@@ -2499,10 +2500,31 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 		return nil, err
 	}
 
-	return res, nil
+	return res, err
 }
 
 func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreatePaidOrderRequest) (*Order, error) {
+	// Serialize the existence check and creation per checkout session: without the lock,
+	// duplicate webhook deliveries for the same checkout session could create duplicate paid orders.
+	if err := waitAndLockTx(ctx, dbi, req.CheckoutSessionID); err != nil {
+		return nil, err
+	}
+
+	existing, err := s.orderRepo.GetByCheckoutSessionID(ctx, dbi, req.CheckoutSessionID)
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+		return nil, err
+	}
+
+	// Return it if found. The caller must handle it accordingly.
+	if err == nil {
+		ord, err := s.getOrderFullTx(ctx, dbi, existing.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		return ord, model.ErrOrderExistsForCheckoutSession
+	}
+
 	oreq := &model.CreateOrderRequestNew{
 		Currency: req.Currency,
 		Items:    req.Items,

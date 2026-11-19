@@ -674,6 +674,7 @@ func TestOrder_CreatePaid(t *testing.T) {
 
 	type tcExpected struct {
 		err    *handlers.AppError
+		code   int
 		result *model.Order
 	}
 
@@ -851,6 +852,107 @@ func TestOrder_CreatePaid(t *testing.T) {
 				}`,
 			},
 			exp: tcExpected{
+				code: http.StatusCreated,
+				result: &model.Order{
+					Status: model.OrderStatusPaid,
+					Location: datastore.NullString{
+						NullString: sql.NullString{
+							Valid:  true,
+							String: "location",
+						},
+					},
+					Items: []model.OrderItem{
+						{
+							SKU:      "sku",
+							SKUVnt:   "sku_vnt",
+							Quantity: 1,
+							Price:    mustDecimalFromString("1"),
+							Subtotal: mustDecimalFromString("1"),
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "location",
+								},
+							},
+							Description: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "description",
+								},
+							},
+							CredentialType: "credential_type",
+							ValidForISO:    ptrTo("P1M"),
+						},
+					},
+					TotalPrice: mustDecimalFromString("1"),
+				},
+			},
+		},
+
+		{
+			name: "order_exists_for_checkout_session",
+			given: tcGiven{
+				svc: &mockOrderService{
+					fnCreatePaidOrder: func(ctx context.Context, req *model.CreatePaidOrderRequest) (*model.Order, error) {
+						result := &model.Order{
+							Status: model.OrderStatusPaid,
+							Location: datastore.NullString{
+								NullString: sql.NullString{
+									Valid:  true,
+									String: "location",
+								},
+							},
+							Items: []model.OrderItem{
+								{
+									SKU:      "sku",
+									SKUVnt:   "sku_vnt",
+									Quantity: 1,
+									Price:    mustDecimalFromString("1"),
+									Subtotal: mustDecimalFromString("1"),
+									Location: datastore.NullString{
+										NullString: sql.NullString{
+											Valid:  true,
+											String: "location",
+										},
+									},
+									Description: datastore.NullString{
+										NullString: sql.NullString{
+											Valid:  true,
+											String: "description",
+										},
+									},
+									CredentialType: "credential_type",
+									ValidForISO:    ptrTo("P1M"),
+								},
+							},
+							TotalPrice: mustDecimalFromString("1"),
+						}
+
+						return result, model.ErrOrderExistsForCheckoutSession
+					},
+				},
+				body: `{
+					"checkout_session_id": "cs_id",
+					"stripe_subscription_id": "sub_id",
+					"payment_processor": "stripe",
+					"currency": "USD",
+					"items": [
+						{
+							"quantity": 1,
+							"sku": "sku",
+							"sku_variant": "sku_vnt",
+							"location": "location",
+							"description": "description",
+							"credential_type": "credential_type",
+							"credential_valid_duration": "P1M"
+						}
+					],
+					"paid_at": "2024-01-01T00:00:00Z",
+					"expires_at": "2024-02-01T00:00:00Z"
+				}`,
+			},
+			exp: tcExpected{
+				code: http.StatusConflict,
 				result: &model.Order{
 					Status: model.OrderStatusPaid,
 					Location: datastore.NullString{
@@ -914,6 +1016,8 @@ func TestOrder_CreatePaid(t *testing.T) {
 				should.Equal(t, exp, bytes.TrimSpace(resp))
 				return
 			}
+
+			should.Equal(t, tc.exp.code, rw.Code)
 
 			resp := rw.Body.Bytes()
 			act2 := &model.Order{}
