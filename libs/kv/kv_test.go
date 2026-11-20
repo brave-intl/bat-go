@@ -27,7 +27,7 @@ func TestMapKv(t *testing.T) {
 	}
 
 	if _, err := store.Get("DEAD"); err == nil {
-		t.Error("Get should return an error on nonexistant key")
+		t.Error("Get should return an error on nonexistent key")
 	}
 
 	if r, err := store.Delete("FOO"); !r || err != nil {
