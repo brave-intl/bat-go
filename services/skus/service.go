@@ -2443,6 +2443,14 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 				return nil, fmt.Errorf("failed to update order metadata: %w", err)
 			}
 
+			// Persist the discounts so they can be reapplied if the checkout
+			// session needs to be recreated later (e.g. to set trial days).
+			if len(req.Discounts) > 0 {
+				if err := s.orderRepo.AppendMetadata(ctx, tx2, order.ID, "discounts", strings.Join(req.Discounts, ",")); err != nil {
+					return nil, fmt.Errorf("failed to update order metadata: %w", err)
+				}
+			}
+
 		// Backporting this from the legacy method CreateOrderFromRequest.
 		case order.IsRadomPayable():
 			ssid, err := s.createRadomSession(ctx, req, order)
@@ -3230,6 +3238,7 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 		cancelURL:  oldSess.CancelURL,
 		trialDays:  ord.GetTrialDays(),
 		items:      buildStripeLineItems(ord.Items),
+		discounts:  buildStripeDiscounts(ord.Discounts()),
 		Locale:     oldSess.Locale,
 		csMode:     string(oldSess.Mode),
 	}
@@ -3240,7 +3249,25 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 
 	sessID, err := createStripeSession(ctx, s.stripeCl, req, s.stripeLocaleValid)
 	if err != nil {
-		return "", err
+		if len(req.discounts) == 0 || !isErrStripeInvalidDiscount(err) {
+			return "", err
+		}
+
+		// A discount code attached to the session has since expired or been delete, retry without it
+
+		logging.Logger(ctx, "skus").Warn().Err(err).Str("orderID", ord.ID.String()).
+			Msg("recreateStripeSession: discount no longer valid, retrying without discount")
+
+		req.discounts = nil
+
+		sessID, err = createStripeSession(ctx, s.stripeCl, req, s.stripeLocaleValid)
+		if err != nil {
+			return "", err
+		}
+
+		if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "discounts", ""); err != nil {
+			return "", err
+		}
 	}
 
 	if err := s.orderRepo.AppendMetadata(ctx, dbi, ord.ID, "stripeCheckoutSessionId", sessID); err != nil {
@@ -3410,6 +3437,20 @@ func isErrStripeNotFound(err error) bool {
 	}
 
 	return serr.HTTPStatusCode == http.StatusNotFound && serr.Code == stripe.ErrorCodeResourceMissing
+}
+
+// true if a discount has been deleted or has expired
+func isErrStripeInvalidDiscount(err error) bool {
+	var serr *stripe.Error
+	if !errors.As(err, &serr) {
+		return false
+	}
+
+	if serr.Code == stripe.ErrorCodeCouponExpired {
+		return true
+	}
+
+	return serr.Code == stripe.ErrorCodeResourceMissing && strings.Contains(serr.Param, "discount")
 }
 
 type receiptValidError struct {

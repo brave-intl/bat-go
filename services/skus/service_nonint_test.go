@@ -4520,16 +4520,18 @@ func TestService_createStripeSession(t *testing.T) {
 
 func TestService_recreateStripeSession(t *testing.T) {
 	type tcGiven struct {
-		ordRepo   *repository.MockOrder
-		cl        *xstripe.MockClient
-		ord       *model.Order
-		oldSessID string
-		email     string
+		ordRepo          *repository.MockOrder
+		cl               *xstripe.MockClient
+		ord              *model.Order
+		oldSessID        string
+		email            string
+		discountsCleared *bool
 	}
 
 	type tcExpected struct {
-		val string
-		err error
+		val                  string
+		err                  error
+		wantDiscountsCleared bool
 	}
 
 	type testCase struct {
@@ -4900,6 +4902,211 @@ func TestService_recreateStripeSession(t *testing.T) {
 				val: "cs_test_id",
 			},
 		},
+
+		{
+			name: "success_discounts_carried_forward",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeCheckoutSessionId" && val == "cs_test_id" {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							ID:         "cs_test_id_old",
+							SuccessURL: "https://example.com/success",
+							CancelURL:  "https://example.com/cancel",
+							Customer:   &stripe.Customer{ID: "cus_id", Email: "you@example.com"},
+						}
+
+						return result, nil
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if len(params.Discounts) != 1 {
+							return nil, model.Error("unexpected_discounts")
+						}
+
+						if coup := params.Discounts[0].Coupon; coup == nil || *coup != "VPNBF26" {
+							return nil, model.Error("unexpected_discount_val")
+						}
+
+						if params.Extra != nil && params.Extra.Get("allow_promotion_codes") == "true" {
+							return nil, model.Error("unexpected_extra_allow_promotion_codes")
+						}
+
+						result := &stripe.CheckoutSession{
+							ID:                 "cs_test_id",
+							PaymentMethodTypes: []string{"card"},
+							Mode:               stripe.CheckoutSessionModeSubscription,
+							SuccessURL:         *params.SuccessURL,
+							CancelURL:          *params.CancelURL,
+							ClientReferenceID:  *params.ClientReferenceID,
+							Subscription: &stripe.Subscription{
+								ID: "sub_id",
+								Metadata: map[string]string{
+									"orderID": *params.ClientReferenceID,
+								},
+							},
+						}
+
+						return result, nil
+					},
+				},
+				ord: &model.Order{
+					ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{"discounts": "VPNBF26"},
+					Items: []model.OrderItem{
+						{
+							Quantity: 1,
+							Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+						},
+					},
+				},
+				oldSessID: "cs_test_id_old",
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
+
+		func() testCase {
+			discountsCleared := new(bool)
+
+			return testCase{
+				name: "success_invalid_discount_falls_back_without_discount",
+				given: tcGiven{
+					discountsCleared: discountsCleared,
+					ordRepo: &repository.MockOrder{
+						FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+							switch {
+							case key == "discounts" && val == "":
+								*discountsCleared = true
+								return nil
+							case key == "stripeCheckoutSessionId" && val == "cs_test_id":
+								return nil
+							default:
+								return model.Error("unexpected")
+							}
+						},
+					},
+					cl: &xstripe.MockClient{
+						FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+							result := &stripe.CheckoutSession{
+								ID:         "cs_test_id_old",
+								SuccessURL: "https://example.com/success",
+								CancelURL:  "https://example.com/cancel",
+								Customer:   &stripe.Customer{ID: "cus_id", Email: "you@example.com"},
+							}
+
+							return result, nil
+						},
+
+						FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+							// First attempt: discount still attached, simulate Stripe rejecting
+							// it because the coupon no longer exists (e.g. deleted after the
+							// promo ended).
+							if len(params.Discounts) > 0 {
+								return nil, &stripe.Error{
+									Type:  stripe.ErrorTypeInvalidRequest,
+									Code:  stripe.ErrorCodeResourceMissing,
+									Param: "discounts[0][coupon]",
+									Msg:   "No such coupon: 'VPNBF26'",
+								}
+							}
+
+							// Retry attempt: discount dropped, should succeed.
+							result := &stripe.CheckoutSession{
+								ID:                 "cs_test_id",
+								PaymentMethodTypes: []string{"card"},
+								Mode:               stripe.CheckoutSessionModeSubscription,
+								SuccessURL:         *params.SuccessURL,
+								CancelURL:          *params.CancelURL,
+								ClientReferenceID:  *params.ClientReferenceID,
+								Subscription: &stripe.Subscription{
+									ID: "sub_id",
+									Metadata: map[string]string{
+										"orderID": *params.ClientReferenceID,
+									},
+								},
+								AllowPromotionCodes: true,
+							}
+
+							return result, nil
+						},
+					},
+					ord: &model.Order{
+						ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+						Metadata: datastore.Metadata{"discounts": "VPNBF26"},
+						Items: []model.OrderItem{
+							{
+								Quantity: 1,
+								Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+							},
+						},
+					},
+					oldSessID: "cs_test_id_old",
+				},
+				exp: tcExpected{
+					val:                  "cs_test_id",
+					wantDiscountsCleared: true,
+				},
+			}
+		}(),
+
+		{
+			name: "error_non_discount_stripe_error_not_retried",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							ID:         "cs_test_id_old",
+							SuccessURL: "https://example.com/success",
+							CancelURL:  "https://example.com/cancel",
+							Customer:   &stripe.Customer{ID: "cus_id", Email: "you@example.com"},
+						}
+
+						return result, nil
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						// Unrelated Stripe error: must not be treated as a discount
+						// problem, and must not be retried without the discount.
+						return nil, &stripe.Error{
+							Type:  stripe.ErrorTypeInvalidRequest,
+							Code:  stripe.ErrorCodeResourceMissing,
+							Param: "customer",
+							Msg:   "No such customer: 'cus_id'",
+						}
+					},
+				},
+				ord: &model.Order{
+					ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{"discounts": "VPNBF26"},
+					Items: []model.OrderItem{
+						{
+							Quantity: 1,
+							Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+						},
+					},
+				},
+				oldSessID: "cs_test_id_old",
+			},
+			exp: tcExpected{
+				err: &stripe.Error{
+					Type:  stripe.ErrorTypeInvalidRequest,
+					Code:  stripe.ErrorCodeResourceMissing,
+					Param: "customer",
+					Msg:   "No such customer: 'cus_id'",
+				},
+			},
+		},
 	}
 
 	for i := range tests {
@@ -4914,6 +5121,10 @@ func TestService_recreateStripeSession(t *testing.T) {
 			must.Equal(t, tc.exp.err, err)
 
 			should.Equal(t, tc.exp.val, actual)
+
+			if tc.given.discountsCleared != nil {
+				should.Equal(t, tc.exp.wantDiscountsCleared, *tc.given.discountsCleared)
+			}
 		})
 	}
 }

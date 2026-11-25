@@ -725,6 +725,75 @@ func TestOrder_StripeSessID(t *testing.T) {
 	}
 }
 
+func TestOrder_Discounts(t *testing.T) {
+	type testCase struct {
+		name  string
+		given model.Order
+		exp   []string
+	}
+
+	tests := []testCase{
+		{
+			// Metadata is nil here (zero value), exercising the nil-map read path.
+			name: "nil_metadata",
+		},
+
+		{
+			name: "no_field",
+			given: model.Order{
+				Metadata: datastore.Metadata{"key": "value"},
+			},
+		},
+
+		{
+			name: "not_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"discounts": 42,
+				},
+			},
+		},
+
+		{
+			name: "empty_string",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"discounts": "",
+				},
+			},
+		},
+
+		{
+			name: "one",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"discounts": "VPNBF26",
+				},
+			},
+			exp: []string{"VPNBF26"},
+		},
+
+		{
+			name: "multiple",
+			given: model.Order{
+				Metadata: datastore.Metadata{
+					"discounts": "coup_id_01,coup_id_02",
+				},
+			},
+			exp: []string{"coup_id_01", "coup_id_02"},
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.given.Discounts()
+			should.Equal(t, tc.exp, actual)
+		})
+	}
+}
+
 func TestOrder_NumPaymentFailed(t *testing.T) {
 	type testCase struct {
 		name  string
