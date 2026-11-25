@@ -2443,6 +2443,14 @@ func (s *Service) createOrderPremium(ctx context.Context, req *model.CreateOrder
 				return nil, fmt.Errorf("failed to update order metadata: %w", err)
 			}
 
+			// Persist the discounts so they can be reapplied if the checkout
+			// session needs to be recreated later (e.g. to set trial days).
+			if len(req.Discounts) > 0 {
+				if err := s.orderRepo.AppendMetadata(ctx, tx2, order.ID, "discounts", strings.Join(req.Discounts, ",")); err != nil {
+					return nil, fmt.Errorf("failed to update order metadata: %w", err)
+				}
+			}
+
 		// Backporting this from the legacy method CreateOrderFromRequest.
 		case order.IsRadomPayable():
 			ssid, err := s.createRadomSession(ctx, req, order)
@@ -3230,6 +3238,7 @@ func (s *Service) recreateStripeSession(ctx context.Context, dbi sqlx.ExecerCont
 		cancelURL:  oldSess.CancelURL,
 		trialDays:  ord.GetTrialDays(),
 		items:      buildStripeLineItems(ord.Items),
+		discounts:  buildStripeDiscounts(ord.Discounts()),
 		Locale:     oldSess.Locale,
 		csMode:     string(oldSess.Mode),
 	}

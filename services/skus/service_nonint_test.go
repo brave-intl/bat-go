@@ -4900,6 +4900,78 @@ func TestService_recreateStripeSession(t *testing.T) {
 				val: "cs_test_id",
 			},
 		},
+
+		{
+			name: "success_discounts_carried_forward",
+			given: tcGiven{
+				ordRepo: &repository.MockOrder{
+					FnAppendMetadata: func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, key, val string) error {
+						if key == "stripeCheckoutSessionId" && val == "cs_test_id" {
+							return nil
+						}
+
+						return model.Error("unexpected")
+					},
+				},
+				cl: &xstripe.MockClient{
+					FnSession: func(ctx context.Context, id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						result := &stripe.CheckoutSession{
+							ID:         "cs_test_id_old",
+							SuccessURL: "https://example.com/success",
+							CancelURL:  "https://example.com/cancel",
+							Customer:   &stripe.Customer{ID: "cus_id", Email: "you@example.com"},
+						}
+
+						return result, nil
+					},
+
+					FnCreateSession: func(ctx context.Context, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+						if len(params.Discounts) != 1 {
+							return nil, model.Error("unexpected_discounts")
+						}
+
+						if coup := params.Discounts[0].Coupon; coup == nil || *coup != "VPNBF26" {
+							return nil, model.Error("unexpected_discount_val")
+						}
+
+						if params.Extra != nil && params.Extra.Get("allow_promotion_codes") == "true" {
+							return nil, model.Error("unexpected_extra_allow_promotion_codes")
+						}
+
+						result := &stripe.CheckoutSession{
+							ID:                 "cs_test_id",
+							PaymentMethodTypes: []string{"card"},
+							Mode:               stripe.CheckoutSessionModeSubscription,
+							SuccessURL:         *params.SuccessURL,
+							CancelURL:          *params.CancelURL,
+							ClientReferenceID:  *params.ClientReferenceID,
+							Subscription: &stripe.Subscription{
+								ID: "sub_id",
+								Metadata: map[string]string{
+									"orderID": *params.ClientReferenceID,
+								},
+							},
+						}
+
+						return result, nil
+					},
+				},
+				ord: &model.Order{
+					ID:       uuid.Must(uuid.FromString("facade00-0000-4000-a000-000000000000")),
+					Metadata: datastore.Metadata{"discounts": "VPNBF26"},
+					Items: []model.OrderItem{
+						{
+							Quantity: 1,
+							Metadata: datastore.Metadata{"stripe_item_id": "stripe_item_id"},
+						},
+					},
+				},
+				oldSessID: "cs_test_id_old",
+			},
+			exp: tcExpected{
+				val: "cs_test_id",
+			},
+		},
 	}
 
 	for i := range tests {

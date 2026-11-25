@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -268,6 +269,16 @@ func (o *Order) StripeSessID() (string, bool) {
 	sessID, ok := o.Metadata["stripeCheckoutSessionId"].(string)
 
 	return sessID, ok
+}
+
+// Discounts returns the discount codes that were applied when the order was created.
+func (o *Order) Discounts() []string {
+	raw, ok := o.Metadata["discounts"].(string)
+	if !ok || raw == "" {
+		return nil
+	}
+
+	return strings.Split(raw, ",")
 }
 
 func (o *Order) RadomSubID() (string, bool) {
