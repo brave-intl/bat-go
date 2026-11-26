@@ -293,7 +293,7 @@ func (pg *Postgres) CreateOrder(ctx context.Context, dbi sqlx.ExtContext, oreq *
 
 // waitAndLockTx acquires a transaction advisory lock for id, automatically
 // released when the transaction ends.
-func waitAndLockTx(ctx context.Context, tx *sqlx.Tx, id string) error {
+func waitAndLockTx(ctx context.Context, tx sqlx.ExecerContext, id string) error {
 	query := "SELECT pg_advisory_xact_lock(hashtext($1))"
 	if _, err := tx.ExecContext(ctx, query, id); err != nil {
 		return fmt.Errorf("failed to acquire tx lock id %s: %w", id, err)

@@ -15,6 +15,7 @@ import (
 type MockOrder struct {
 	FnGet                               func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	FnGetByExternalID                   func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	FnGetByCheckoutSessionID            func(ctx context.Context, dbi sqlx.QueryerContext, csID string) (*model.Order, error)
 	FnGetByRadomSubscriptionID          func(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
 	FnCreate                            func(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	FnSetStatus                         func(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
@@ -50,6 +51,18 @@ func (r *MockOrder) GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext
 	}
 
 	return r.FnGetByExternalID(ctx, dbi, extID)
+}
+
+func (r *MockOrder) GetByCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, csID string) (*model.Order, error) {
+	if r.FnGetByCheckoutSessionID == nil {
+		result := &model.Order{
+			ID: uuid.NewV4(),
+		}
+
+		return result, nil
+	}
+
+	return r.FnGetByCheckoutSessionID(ctx, dbi, csID)
 }
 
 func (r *MockOrder) GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error) {

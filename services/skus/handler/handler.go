@@ -162,6 +162,13 @@ func (h *Order) CreatePaid(w http.ResponseWriter, r *http.Request) *handlers.App
 
 	result, err := h.svc.CreatePaidOrder(ctx, req)
 	if err != nil {
+		// Found an existing order, respond with the id (result guaranteed not to be nil).
+		if errors.Is(err, model.ErrOrderExistsForCheckoutSession) {
+			lg.Err(err).Msg("failed order already exists for checkout session")
+
+			return handlers.RenderContent(ctx, result, w, http.StatusConflict)
+		}
+
 		lg.Err(err).Msg("failed to create order")
 
 		if errors.Is(err, model.ErrInvalidOrderRequest) {

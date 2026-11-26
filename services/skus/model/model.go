@@ -33,13 +33,14 @@ const (
 	ErrInvalidOrderMetadataType               Error = "model: order: invalid metadata type"
 	ErrInvalidUUID                            Error = "model: invalid uuid"
 
-	ErrNumPerIntervalNotSet  Error = "model: invalid order: numPerInterval must be set"
-	ErrNumIntervalsNotSet    Error = "model: invalid order: numIntervals must be set"
-	ErrInvalidNumPerInterval Error = "model: invalid order: invalid numPerInterval"
-	ErrInvalidNumIntervals   Error = "model: invalid order: invalid numIntervals"
-	ErrInvalidMobileProduct  Error = "model: invalid mobile product"
-	ErrNoMatchOrderReceipt   Error = "model: order_id does not match receipt order"
-	ErrOrderExistsForReceipt Error = "model: order already exists for receipt"
+	ErrNumPerIntervalNotSet          Error = "model: invalid order: numPerInterval must be set"
+	ErrNumIntervalsNotSet            Error = "model: invalid order: numIntervals must be set"
+	ErrInvalidNumPerInterval         Error = "model: invalid order: invalid numPerInterval"
+	ErrInvalidNumIntervals           Error = "model: invalid order: invalid numIntervals"
+	ErrInvalidMobileProduct          Error = "model: invalid mobile product"
+	ErrNoMatchOrderReceipt           Error = "model: order_id does not match receipt order"
+	ErrOrderExistsForReceipt         Error = "model: order already exists for receipt"
+	ErrOrderExistsForCheckoutSession Error = "model: order already exists for checkout session"
 
 	// The text of the following errors is preserved as is, in case anything depends on them.
 	ErrInvalidSKU              Error = "Invalid SKU Token provided in request"

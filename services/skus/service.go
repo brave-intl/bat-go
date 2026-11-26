@@ -94,6 +94,7 @@ type orderStoreSvc interface {
 	Create(ctx context.Context, dbi sqlx.QueryerContext, oreq *model.OrderNew) (*model.Order, error)
 	Get(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error)
 	GetByExternalID(ctx context.Context, dbi sqlx.QueryerContext, extID string) (*model.Order, error)
+	GetByCheckoutSessionID(ctx context.Context, dbi sqlx.QueryerContext, csID string) (*model.Order, error)
 	GetByRadomSubscriptionID(ctx context.Context, dbi sqlx.QueryerContext, rsid string) (*model.Order, error)
 	SetStatus(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, status string) error
 	SetExpiresAt(ctx context.Context, dbi sqlx.ExecerContext, id uuid.UUID, when time.Time) error
@@ -2500,7 +2501,13 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 
 	res, err := s.createPaidOrderTx(ctx, tx, req)
 	if err != nil {
-		return nil, err
+		switch {
+		case errors.Is(err, model.ErrOrderExistsForCheckoutSession):
+			return res, err
+
+		default:
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -2511,6 +2518,27 @@ func (s *Service) CreatePaidOrder(ctx context.Context, req *model.CreatePaidOrde
 }
 
 func (s *Service) createPaidOrderTx(ctx context.Context, dbi sqlx.ExtContext, req *model.CreatePaidOrderRequest) (*Order, error) {
+	// Serialise existence check to prevent duplicate webhook deliveries for the same checkout session creating duplicate paid orders.
+	if err := waitAndLockTx(ctx, dbi, req.CheckoutSessionID); err != nil {
+		return nil, err
+	}
+
+	existing, err := s.orderRepo.GetByCheckoutSessionID(ctx, dbi, req.CheckoutSessionID)
+	if err != nil && !errors.Is(err, model.ErrOrderNotFound) {
+		return nil, err
+	}
+
+	// Return it if found.
+
+	if err == nil { // a nil error
+		ord, err := s.getOrderFullTx(ctx, dbi, existing.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		return ord, model.ErrOrderExistsForCheckoutSession
+	}
+
 	oreq := &model.CreateOrderRequestNew{
 		Currency: req.Currency,
 		Items:    req.Items,

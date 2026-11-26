@@ -9122,3 +9122,56 @@ func (e *mockCredExtender) GetExtensionFor(ctx context.Context, dbi sqlx.Queryer
 
 	return e.fnGetExtensionFor(ctx, dbi, item, now)
 }
+
+func TestService_CreatePaidOrder_ExistingCheckoutSession(t *testing.T) {
+	mockDB, mock, err := sqlmock.New()
+	must.NoError(t, err)
+	defer func() { _ = mockDB.Close() }()
+
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT pg_advisory_xact_lock").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectRollback()
+
+	orderID := uuid.NewV4()
+	existing := &model.Order{ID: orderID, Status: model.OrderStatusPaid}
+
+	svc := &Service{
+		Datastore: &Postgres{
+			Postgres: datastore.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")},
+		},
+		orderRepo: &repository.MockOrder{
+			FnGetByCheckoutSessionID: func(ctx context.Context, dbi sqlx.QueryerContext, csID string) (*model.Order, error) {
+				must.Equal(t, "cs_id", csID)
+
+				return existing, nil
+			},
+			FnGet: func(ctx context.Context, dbi sqlx.QueryerContext, id uuid.UUID) (*model.Order, error) {
+				must.Equal(t, orderID, id)
+
+				return existing, nil
+			},
+		},
+		orderItemRepo: &repository.MockOrderItem{
+			FnFindByOrderID: func(ctx context.Context, dbi sqlx.QueryerContext, oid uuid.UUID) ([]model.OrderItem, error) {
+				return []model.OrderItem{{ID: uuid.NewV4(), OrderID: oid}}, nil
+			},
+		},
+	}
+
+	req := &model.CreatePaidOrderRequest{
+		CheckoutSessionID:    "cs_id",
+		StripeSubscriptionID: "sub_id",
+		PaymentProc:          "stripe",
+		Currency:             "USD",
+		Items:                []model.OrderItemRequestNew{{Quantity: 1, SKU: "sku", SKUVnt: "sku_vnt"}},
+		PaidAt:               time.Now(),
+		ExpiresAt:            time.Now().Add(30 * 24 * time.Hour),
+	}
+
+	ord, err := svc.CreatePaidOrder(context.Background(), req)
+	must.ErrorIs(t, err, model.ErrOrderExistsForCheckoutSession)
+	must.NotNil(t, ord)
+	should.Equal(t, orderID, ord.ID)
+	must.NoError(t, mock.ExpectationsWereMet())
+}
